@@ -72,6 +72,10 @@ sudo pacman -U cewka-0.7.20-1-x86_64.pkg.tar.zst
 
 Just download `Cewka.exe` and run it. No installer needed.
 
+The file is not signed with a certificate, so Windows will show a SmartScreen warning the first
+time it runs. You can confirm where the file came from with its checksum — every release ships
+a `SHA256SUMS.txt`, and `Get-FileHash Cewka.exe` in PowerShell gives you the hash to compare.
+
 ### AAC, M4A, and ALAC on Linux
 
 These three formats are handled by GStreamer, and the AAC decoder comes from a separate package.

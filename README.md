@@ -73,6 +73,10 @@ sudo pacman -U cewka-0.7.20-1-x86_64.pkg.tar.zst
 
 Wystarczy pobrać `Cewka.exe` i uruchomić. Instalator nie jest potrzebny.
 
+Plik nie jest podpisany certyfikatem, więc przy pierwszym uruchomieniu Windows pokaże ostrzeżenie
+SmartScreen. Pochodzenie pliku można potwierdzić sumą kontrolną — każde wydanie ma dołączony
+`SHA256SUMS.txt`, a sumę pobranego pliku podaje `Get-FileHash Cewka.exe` w PowerShellu.
+
 ### AAC, M4A i ALAC w Linuksie
 
 Te trzy formaty obsługuje GStreamer, a dekoder AAC dostarcza osobny pakiet. Bez niego pozostałe
