@@ -193,9 +193,10 @@ Próbne instalacje można uruchomić także u siebie, jeśli jest dostępny dock
 
 ## Znane ograniczenia
 
-- Pakiet `.deb` jest sprawdzony instalacją w Ubuntu 24.04: program z niego gra i odinstalowuje się
-  bez pozostałości. Pakiety `.rpm` i Arch sprawdzałem zawartością, zależnościami oraz tym, czy plik
-  wykonywalny wychodzi z nich nietknięty — ale nie instalacją na docelowej dystrybucji.
+- Wszystkie trzy pakiety są sprawdzane instalacją przy każdej zmianie — w kontenerach Ubuntu 24.04,
+  bieżącej Fedory i Archa. Próba obejmuje instalację, poprawność wpisu w menu, komplet ikon,
+  rozwiązanie zależności, uruchomienie programu pod serwerem X bez ekranu oraz odinstalowanie bez
+  pozostałości. Kontener to jednak nie pulpit: nie mówi nic o wyglądzie ani o dźwięku.
 - Pakiet Arch powstaje bez `makepkg`, więc nie ma pliku `.MTREE`. `pacman -U` go przyjmuje,
   choć może o tym wspomnieć. W repozytorium jest też [`PKGBUILD`](packaging/arch/PKGBUILD).
 - Tryb ograniczania efektów na baterii nie był sprawdzony na laptopie.

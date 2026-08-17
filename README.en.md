@@ -192,10 +192,11 @@ The installation trials can be run locally too, if docker is available:
 
 ## Known limitations
 
-- The `.deb` package is verified by installing it on Ubuntu 24.04: the app plays from it and
-  uninstalls without leftovers. I checked the `.rpm` and Arch packages by contents, dependencies
-  and whether the executable comes out of them untouched — but not by installing them on the
-  target distribution.
+- All three packages are verified by installation on every change — in Ubuntu 24.04, current
+  Fedora and Arch containers. The trial covers installing, the validity of the menu entry, the
+  full set of icons, dependency resolution, running the app under a headless X server, and
+  uninstalling without leftovers. A container is not a desktop, though: it says nothing about
+  how the app looks or sounds.
 - The Arch package is built without `makepkg`, so it has no `.MTREE` file. `pacman -U` accepts
   it, though it may mention this. The repository also has [`PKGBUILD`](packaging/arch/PKGBUILD).
 - The effects-throttling mode on battery hasn't been tested on a laptop.
