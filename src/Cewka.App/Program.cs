@@ -45,5 +45,6 @@ internal static class Program
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            .With(App.FontOptions)
             .LogToTrace();
 }

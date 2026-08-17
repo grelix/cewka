@@ -252,6 +252,7 @@ internal static class Program
         AppBuilder.Configure<CewkaApplication>()
             .UseSkia()
             .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+            .With(CewkaApplication.FontOptions)
             .SetupWithoutStarting();
 
         // No desktop lifetime runs here, so the shared services must be created by hand.
