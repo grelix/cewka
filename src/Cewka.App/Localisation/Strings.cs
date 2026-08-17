@@ -1,8 +1,8 @@
 using System.ComponentModel;
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Avalonia.Platform;
+using Cewka.Platform;
 
 namespace Cewka.App.Localisation;
 
@@ -30,7 +30,15 @@ public sealed class Strings : INotifyPropertyChanged
     /// <summary>Language used when a key is missing anywhere else.</summary>
     public const string FallbackCode = "pl";
 
-    private static readonly string[] Codes = ["pl", "en", "es", "de", "fr"];
+    /// <summary>
+    /// Języki, w jakich program jest dostępny. Kolejność jest kolejnością na liście wyboru:
+    /// polski i angielski na początku, dalej alfabetycznie po kodzie.
+    /// </summary>
+    private static readonly string[] Codes =
+    [
+        "pl", "en",
+        "cs", "de", "el", "es", "fr", "hu", "id", "it", "nl", "pt", "ro", "ru", "tr", "uk", "vi",
+    ];
 
     private Dictionary<string, string> _active = [];
     private Dictionary<string, string> _fallback = [];
@@ -79,8 +87,13 @@ public sealed class Strings : INotifyPropertyChanged
         if (!string.IsNullOrWhiteSpace(code) && !code.Equals("auto", StringComparison.OrdinalIgnoreCase))
             return Codes.Contains(code, StringComparer.OrdinalIgnoreCase) ? code.ToLowerInvariant() : FallbackCode;
 
-        var system = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
-        return Codes.Contains(system, StringComparer.OrdinalIgnoreCase) ? system : FallbackCode;
+        // Nie CultureInfo: przy InvariantGlobalization jest zawsze kulturą niezmienną, więc to
+        // dopasowanie nie mogło się udać dla żadnego języka. Szczegóły w SystemLanguage.
+        var system = SystemLanguage.TwoLetterCode();
+
+        return system is not null && Codes.Contains(system, StringComparer.OrdinalIgnoreCase)
+            ? system
+            : FallbackCode;
     }
 
     private static Dictionary<string, string> Load(string code)

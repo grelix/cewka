@@ -38,6 +38,18 @@
   "Queue": "Kolejka",
   "QueueEmpty": "pusta",
 
+  "TooltipPlaylistLoad": "Wczytanie listy odtwarzania na miejsce kolejki",
+  "TooltipPlaylistSave": "Zapisanie kolejki jako listy odtwarzania",
+  "PlaylistLoadTitle": "Wczytanie listy odtwarzania",
+  "PlaylistSaveTitle": "Zapisanie listy odtwarzania",
+  "PlaylistFilter": "Listy odtwarzania",
+  "PlaylistDefaultName": "kolejka",
+  "PlaylistSaved": "Lista zapisana w pliku {0}.",
+  "PlaylistMissing": "Lista wczytana. Pominięte pozycje, których plików już nie ma: {0}.",
+  "PlaylistEmpty": "Wskazana lista nie zawiera żadnego istniejącego pliku.",
+  "PlaylistLoadFailed": "Nie udało się wczytać listy odtwarzania.",
+  "PlaylistSaveFailed": "Nie udało się zapisać listy odtwarzania.",
+
   "UnknownArtist": "Nieznany wykonawca",
   "NoTrack": "Brak utworu w kolejce",
   "NoFormat": "—",
@@ -46,6 +58,7 @@
 
   "Settings": "Ustawienia",
   "SectionAppearance": "Wygląd",
+  "SectionLanguage": "Język",
   "SectionAudio": "Dźwięk",
   "SectionPlayback": "Odtwarzanie",
   "SectionSystem": "Integracja z systemem",
@@ -59,6 +72,8 @@
 
   "SettingLanguage": "Język interfejsu",
   "LanguageAuto": "Systemowy",
+  "HintMachineTranslation": "Tłumaczenia interfejsu powstały maszynowo. Za błędy i niezręczne sformułowania przepraszam — zgłoszenie w repozytorium pozwoli je poprawić.",
+  "LanguageReportLink": "Zgłoszenie błędu w tłumaczeniu",
 
   "SettingWindowControls": "Przyciski okna",
   "ControlsRight": "Po prawej",
@@ -70,6 +85,24 @@
   "EffectsFull": "Pełne",
   "EffectsReduced": "Ograniczone",
   "HintEffects": "Tryb automatyczny ogranicza ruch tła i obrót płyty podczas pracy na baterii.",
+
+  "SettingColours": "Intensywność barw",
+  "ColoursSubtle": "Subtelna",
+  "ColoursRecommended": "Zalecana",
+  "ColoursIntense": "Intensywna",
+  "HintColours": "Siła, z jaką barwy okładki przenoszą się na tło okna. Plamy tła powoli rozjaśniają się i przygasają, każda własnym rytmem, a ustawienie wyznacza dolną i górną granicę tego wahania. Zalecane odpowiada wartościom, z jakimi program został zaprojektowany.",
+
+  "SettingFormatBadge": "Informacja o jakości źródła",
+  "HintFormatBadge": "Plakietka obok płyty z nazwą kodeka, rozdzielczością bitową, przepływnością i częstotliwością próbkowania.",
+
+  "SettingPlaceholder": "Barwa domyślnej okładki",
+  "HintPlaceholder": "Spirala pokazywana dla plików bez własnej okładki. Barwy przechodzą jedna w drugą wzdłuż zwoju, a tło okna składane jest z nich tak samo jak z prawdziwej okładki.",
+  "PaletteBlueViolet": "Błękit i fiolet",
+  "PaletteTurquoise": "Turkus i róż",
+  "PaletteAmber": "Bursztyn i karmazyn",
+  "PaletteLime": "Limonka i szmaragd",
+  "PaletteGraphite": "Grafit i miedź",
+  "PaletteRandom": "Losowanie co utwór",
 
   "SettingOutputDevice": "Urządzenie wyjściowe",
   "DeviceRefresh": "Odśwież listę",
@@ -107,6 +140,12 @@
   "SettingSeekStep": "Krok przewijania strzałkami",
   "HintSeekStep": "Odległość, o jaką strzałki w lewo i w prawo przesuwają odtwarzanie.",
 
+  "SettingFileOpen": "Plik otwarty z zewnątrz",
+  "FileOpenAppend": "Na koniec kolejki",
+  "FileOpenAppendPlay": "Odtworzenie zaraz",
+  "FileOpenReplace": "Zamiast kolejki",
+  "HintFileOpen": "Postępowanie z plikiem otwartym poza programem — z menedżera plików, z listy „Otwórz za pomocą” albo upuszczonym na okno. Wybór plików wewnątrz programu zawsze dołącza je na koniec kolejki.",
+
   "SettingMediaKeys": "Klawisze multimedialne",
   "HintMediaKeys": "Klawisze odtwarzania, zatrzymania i przewijania utworów działają również wtedy, gdy okno programu nie jest aktywne. W systemie Linux przekazuje je pulpit przez panel multimediów, więc ustawienie nie ma tam zastosowania.",
 
@@ -127,6 +166,18 @@
   "AssociationsFailed": "Operacja nie powiodła się:",
 
   "AboutAuthor": "Autor",
+  "AboutRepository": "Repozytorium",
+  "AboutReleases": "Wydania i pliki instalacyjne",
+  "AboutUpdates": "Nowsze wydanie",
+  "UpdateCheckNow": "Sprawdź teraz",
+  "UpdateChecking": "Sprawdzanie…",
+  "UpdateAvailable": "Dostępna jest wersja {0}.",
+  "UpdateCurrent": "To jest najnowsza wersja.",
+  "UpdateFailed": "Nie udało się sprawdzić — brak połączenia albo serwis nie odpowiedział.",
+  "SettingUpdateCheck": "Sprawdzanie przy uruchomieniu",
+  "HintUpdateCheck": "Po uruchomieniu program jednorazowo pyta serwis GitHuba o numer najnowszego wydania, nie częściej niż raz na dobę. Nie wysyła niczego o odtwarzanych plikach ani o użytkowniku, ale serwis — jak każdy serwer — widzi adres sieciowy. Przycisk powyżej działa niezależnie od tego ustawienia.",
+  "UpdateNotice": "Dostępna jest wersja {0}.",
+  "UpdateNoticeLink": "Strona wydań",
   "TooltipRepeatOff": "Powtarzanie wyłączone — kliknięcie włącza powtarzanie kolejki",
   "TooltipRepeatQueue": "Powtarzanie kolejki — kliknięcie włącza powtarzanie jednego utworu",
   "TooltipRepeatTrack": "Powtarzanie jednego utworu — kliknięcie wyłącza powtarzanie",

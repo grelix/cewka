@@ -69,6 +69,64 @@ public enum LoudnessTarget
     Streaming,
 }
 
+/// <summary>
+/// Jak mocno barwa okładki przenosi się na wygląd okna.
+/// <para>
+/// Skaluje wszystko, co bierze barwę z okładki naraz — nasycenie wyciągniętych barw, krycie
+/// tła, poświatę pod płytą i barwę akcentu. Osobne pokrętła dla każdego z tych miejsc dałyby
+/// zestawy, w których tło jest intensywne, a akcent blady, czyli wynik wyglądający na
+/// niedokończony.
+/// </para>
+/// </summary>
+public enum ColourIntensity
+{
+    /// <summary>Barwa okładki ledwie zaznaczona; tło bliżej neutralnego.</summary>
+    Subtle,
+
+    /// <summary>Wartości, z jakimi program był projektowany.</summary>
+    Recommended,
+
+    /// <summary>Barwa okładki wyraźnie mocniejsza, tło bardziej nasycone.</summary>
+    Intense,
+}
+
+/// <summary>
+/// Para barw domyślnej okładki — spirali rysowanej dla plików bez własnej okładki.
+/// Spirala przechodzi od pierwszej barwy do drugiej wzdłuż zwoju.
+/// </summary>
+public enum PlaceholderPalette
+{
+    /// <summary>Błękit i fiolet. Najbliższa wyglądowi z poprzednich wydań.</summary>
+    BlueViolet,
+
+    Turquoise,
+    Amber,
+    Lime,
+    Graphite,
+
+    /// <summary>
+    /// Para dobierana losowo przy każdym wczytaniu utworu. Ten sam plik odtworzony ponownie
+    /// dostanie inną parę — także przy przełączeniu motywu, bo okładka jest wtedy rysowana od nowa.
+    /// </summary>
+    Random,
+}
+
+/// <summary>
+/// Co program robi z plikiem otwartym poza nim — z menedżera plików, z wiersza polecenia
+/// albo upuszczonym na okno.
+/// </summary>
+public enum FileOpenAction
+{
+    /// <summary>Dołącza na koniec kolejki i nie przerywa tego, co gra.</summary>
+    Append,
+
+    /// <summary>Dołącza na koniec kolejki i od razu przechodzi do tego pliku.</summary>
+    AppendAndPlay,
+
+    /// <summary>Czyści kolejkę i odtwarza wyłącznie ten plik.</summary>
+    ReplaceAndPlay,
+}
+
 /// <summary>Where the minimise, maximise and close buttons sit.</summary>
 public enum WindowControlsPosition
 {
@@ -130,6 +188,15 @@ public sealed class AppSettings
 
     public EffectsMode Effects { get; set; } = EffectsMode.Auto;
 
+    public ColourIntensity ColourIntensity { get; set; } = ColourIntensity.Recommended;
+
+    public PlaceholderPalette PlaceholderPalette { get; set; } = PlaceholderPalette.BlueViolet;
+
+    /// <summary>Whether the codec, bit depth, bitrate and sample rate are shown beside the record.</summary>
+    public bool ShowFormatBadge { get; set; } = true;
+
+    public FileOpenAction FileOpenAction { get; set; } = FileOpenAction.Append;
+
     /// <summary>
     /// Name of the output device, exactly as the system reports it; <c>null</c> follows the
     /// system default. Stored by name rather than by index because indices are only meaningful
@@ -158,6 +225,21 @@ public sealed class AppSettings
     /// <summary>Whether opening a file hands it to the running copy instead of starting another.</summary>
     public bool SingleInstance { get; set; } = true;
 
+    /// <summary>
+    /// Czy program przy uruchomieniu pyta serwis GitHuba o najnowsze wydanie.
+    ///
+    /// <para>Domyślnie wyłączone i to jest rozstrzygnięcie celowe: odtwarzacz plików z dysku nie
+    /// powinien łączyć się z niczym, dopóki nikt go o to nie poprosi. Przycisk sprawdzenia
+    /// na żądanie działa niezależnie od tego ustawienia.</para>
+    /// </summary>
+    public bool CheckForUpdates { get; set; }
+
+    /// <summary>
+    /// Kiedy sprawdzano ostatni raz. Zapisywane wyłącznie po to, żeby sprawdzanie automatyczne
+    /// nie odpytywało serwisu częściej niż raz na dobę.
+    /// </summary>
+    public DateTimeOffset? LastUpdateCheck { get; set; }
+
     public AppSettings Clone() => new()
     {
         Theme = Theme,
@@ -175,6 +257,10 @@ public sealed class AppSettings
         LimiterEnabled = LimiterEnabled,
         NormalisationEnabled = NormalisationEnabled,
         Effects = Effects,
+        ColourIntensity = ColourIntensity,
+        PlaceholderPalette = PlaceholderPalette,
+        ShowFormatBadge = ShowFormatBadge,
+        FileOpenAction = FileOpenAction,
         OutputDevice = OutputDevice,
         ResamplerQuality = ResamplerQuality,
         OutputLatency = OutputLatency,
@@ -184,6 +270,8 @@ public sealed class AppSettings
         SeekStep = SeekStep,
         MediaKeys = MediaKeys,
         SingleInstance = SingleInstance,
+        CheckForUpdates = CheckForUpdates,
+        LastUpdateCheck = LastUpdateCheck,
     };
 }
 

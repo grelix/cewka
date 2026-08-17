@@ -11,6 +11,7 @@ using Cewka.App.Localisation;
 using Cewka.Audio.Decoding;
 using Cewka.App.Controls;
 using Cewka.App.Models;
+using Cewka.App.Services;
 using Cewka.App.ViewModels;
 using Cewka.Platform;
 using Cewka.Platform.Linux;
@@ -21,6 +22,16 @@ public partial class MainWindow : Window
 {
     /// <summary>One revolution every nine seconds, as in the design.</summary>
     private const double DegreesPerSecond = 360.0 / 9.0;
+
+    /// <summary>
+    /// How long the record takes to come to rest upright once the effects are cut back.
+    /// <para>
+    /// Long enough to read as slowing down rather than snapping, short enough that nobody waits
+    /// for it. The rotation always finishes forwards, never backwards: a record that reverses
+    /// to reach the top looks broken.
+    /// </para>
+    /// </summary>
+    private const double UprightReturnSeconds = 0.45;
 
     /// <summary>
     /// Breakpoints for the layout. Avalonia has no equivalent of CSS media queries, and
@@ -64,6 +75,19 @@ public partial class MainWindow : Window
     private TimeSpan _lastRotationFrame;
     private double _angle;
 
+    /// <summary>
+    /// Height the window had before expanding the panel forced it taller, and the height that
+    /// was forced. Both are needed: the first is where to go back to, the second is how to tell
+    /// whether the user has resized the window since.
+    /// </summary>
+    private double? _heightBeforePanel;
+    private double _forcedHeight;
+
+    /// <summary>Set while the record is coasting to a stop at the top of its revolution.</summary>
+    private bool _returningUpright;
+    private double _returnFrom;
+    private double _returnElapsed;
+
     public MainWindow()
     {
         // InitializeComponent, not AvaloniaXamlLoader.Load: only the generated method
@@ -88,6 +112,7 @@ public partial class MainWindow : Window
         {
             if (e.PropertyName == nameof(MainViewModel.CurrentIndex)) SyncQueueSelection();
             else if (e.PropertyName == nameof(MainViewModel.PanelOpen)) ApplyHeightConstraint();
+            else if (e.PropertyName == nameof(MainViewModel.ReducedEffects)) BeginUprightReturn();
         };
     }
 
@@ -95,13 +120,34 @@ public partial class MainWindow : Window
     /// Keeps the window tall enough for what it currently shows. Rozwinięcie panelu w oknie
     /// niższym niż jego zawartość podnosi okno do wysokości minimalnej — inaczej nie ma
     /// fizycznie miejsca, w którym blok odtwarzania mógłby się zmieścić.
+    ///
+    /// <para>Podniesienie jest odwracalne: wysokość sprzed rozwinięcia wraca po schowaniu
+    /// panelu. Bez tego okno rosło w jedną stronę — każde pokazanie korektora zostawiało je
+    /// wyższym na stałe, choć powód, dla którego urosło, już nie istniał.</para>
     /// </summary>
     private void ApplyHeightConstraint()
     {
         var minimum = _viewModel.PanelOpen ? MinHeightWithPanel : MinHeightWithoutPanel;
         MinHeight = minimum;
 
-        if (WindowState == WindowState.Normal && Height < minimum) Height = minimum;
+        if (WindowState != WindowState.Normal) return;
+
+        if (Height < minimum)
+        {
+            _heightBeforePanel = Height;
+            _forcedHeight = minimum;
+            Height = minimum;
+            return;
+        }
+
+        if (_viewModel.PanelOpen || _heightBeforePanel is not { } wanted) return;
+
+        // Przywracamy tylko wtedy, gdy od naszego podniesienia nikt nie chwycił krawędzi okna.
+        // Porównanie z zapamiętaną wysokością wystarcza i nie zależy od kolejności zdarzeń
+        // rozmiaru: jeśli użytkownik ustawił okno sam, cofanie tego byłoby odebraniem mu decyzji.
+        if (Math.Abs(Height - _forcedHeight) < 0.5) Height = Math.Max(wanted, minimum);
+
+        _heightBeforePanel = null;
     }
 
     // ================= Cykl zycia =================
@@ -115,11 +161,15 @@ public partial class MainWindow : Window
 
         // Sciezki z wiersza polecen maja pierwszenstwo przed kolejka z poprzedniej sesji:
         // uruchomienie przez "Otworz za pomoca" ma zagrac wskazany plik, nie poprzedni.
-        if (App.StartupPaths.Length > 0) _viewModel.OpenPaths(App.StartupPaths);
+        if (App.StartupPaths.Length > 0) _viewModel.OpenFromOutside(App.StartupPaths);
         else _viewModel.RestoreQueueState();
 
         if (QueueList is not null)
             QueueList.SelectedItem = _viewModel.Queue.FirstOrDefault(item => item.IsCurrent);
+
+        // Bez oczekiwania na wynik: uruchomienie programu nie ma zalezec od tego, czy siec
+        // odpowiada. Przy wylaczonym ustawieniu — a tak jest domyslnie — nic sie nie dzieje.
+        _ = _viewModel.CheckForUpdatesIfDueAsync();
 
         AttachMediaPanel();
 
@@ -222,6 +272,11 @@ public partial class MainWindow : Window
         }
 
         if (saved.Maximized) WindowState = WindowState.Maximized;
+
+        // Wysokość zapamiętana chwilę wcześniej przez ApplyHeightConstraint dotyczyła rozmiaru
+        // projektowego, a nie rozmiaru z poprzedniego uruchomienia. Po odtworzeniu geometrii
+        // nie ma już do czego wracać: to, co widzi użytkownik, jest jego własnym wyborem.
+        _heightBeforePanel = null;
     }
 
     private void PersistGeometry()
@@ -297,7 +352,12 @@ public partial class MainWindow : Window
             PanelGrid.ColumnDefinitions[0].Width = new GridLength(step.EqColumn);
 
         // Wyzsze okno pokazuje wiecej kolejki, zamiast zostawiac pusty pas.
-        if (QueueHost is not null) QueueHost.MaxHeight = Math.Clamp(height * 0.26, 176, 420);
+        //
+        // Dolna granica zeszla ze 176 na 168, bo naglowek kolejki zrownal wysokosc z naglowkiem
+        // korektora i przez to urosl o 16 px. Bez tej korekty przy dlugiej kolejce ta kolumna
+        // stalaby sie wyzsza od kolumny korektora i caly panel potrzebowalby 8 px wiecej - czyli
+        // zmierzona wysokosc minimalna okna (MinHeightWithPanel) przestalaby byc prawdziwa.
+        if (QueueHost is not null) QueueHost.MaxHeight = Math.Clamp(height * 0.26, 168, 420);
     }
 
     // ================= Obrot plyty i tla =================
@@ -316,11 +376,86 @@ public partial class MainWindow : Window
         // to obrot bitmapy okladki.
         if (_viewModel.IsPlaying && !_viewModel.ReducedEffects)
         {
+            _returningUpright = false;
             _angle = (_angle + delta * DegreesPerSecond) % 360;
-
-            if (Disc is not null) Disc.Angle = _angle;
-            if (Backdrop?.RenderTransform is RotateTransform rotate) rotate.Angle = _angle;
+            ApplyAngle();
         }
+        else if (_returningUpright)
+        {
+            AdvanceUprightReturn(delta);
+        }
+    }
+
+    /// <summary>
+    /// Starts the record coasting to rest with the cover the right way up.
+    /// <para>
+    /// Cutting the effects used to leave the rotation wherever it happened to be, so the sleeve
+    /// ended up on its side or upside down and stayed there — the one state in which a still
+    /// picture of a record looks wrong.
+    /// </para>
+    /// </summary>
+    private void BeginUprightReturn()
+    {
+        if (!_viewModel.ReducedEffects || _angle <= 0)
+        {
+            _returningUpright = false;
+            return;
+        }
+
+        _returningUpright = true;
+        _returnFrom = _angle;
+        _returnElapsed = 0;
+    }
+
+    /// <summary>
+    /// Carries the coast-to-rest forward by one frame. The easing is cubic on the way out, so
+    /// the record leaves at close to playing speed and settles gently instead of stopping dead.
+    /// </summary>
+    private void AdvanceUprightReturn(double delta)
+    {
+        _returnElapsed += delta;
+
+        var progress = Math.Clamp(_returnElapsed / UprightReturnSeconds, 0, 1);
+        var eased = 1 - Math.Pow(1 - progress, 3);
+
+        // Zawsze w przod, do najblizszego pelnego obrotu: 360 stopni to ta sama pozycja co zero,
+        // wiec plyta dojezdza na gore, nie cofa sie do niej.
+        _angle = _returnFrom + (360 - _returnFrom) * eased;
+
+        if (progress >= 1)
+        {
+            _angle = 0;
+            _returningUpright = false;
+        }
+
+        ApplyAngle();
+    }
+
+    /// <summary>
+    /// Brings every moving part to a fixed, repeatable state: the record upright, the background
+    /// blobs at the start of their paths, the waveform at the start of its cycle.
+    /// <para>
+    /// This is for the snapshot tool. All three animations run off wall-clock time, so two runs
+    /// of the same code produced two different pictures — which made the snapshots useless for
+    /// the one job they exist to do, namely comparing one version of the interface against the
+    /// next. Photographs of a paused player, so nothing here invents motion that isn't there.
+    /// </para>
+    /// </summary>
+    public void FreezeAnimationsForCapture()
+    {
+        _rotation.Stop();
+        _returningUpright = false;
+        _angle = 0;
+        ApplyAngle();
+
+        Backdrop?.FreezeForCapture();
+        Wave?.FreezeForCapture();
+    }
+
+    private void ApplyAngle()
+    {
+        if (Disc is not null) Disc.Angle = _angle;
+        if (Backdrop?.RenderTransform is RotateTransform rotate) rotate.Angle = _angle;
     }
 
     // ================= Poswiata pod kursorem =================
@@ -497,6 +632,78 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnOpenReleases(object? sender, RoutedEventArgs e) =>
+        WebLink.Open(_viewModel.UpdateNoticeUrl);
+
+    // ================= Listy odtwarzania =================
+
+    /// <summary>
+    /// Wczytuje listę M3U na miejsce obecnej kolejki.
+    /// <para>
+    /// O plikach z listy, których już nie ma, program mówi wprost, w miejscu przeznaczonym na
+    /// komunikaty. Milczące pominięcie ich znaczyłoby, że wczytana kolejka jest krótsza od
+    /// zapisanej, a użytkownik dowiaduje się o tym najwcześniej wtedy, gdy czegoś w niej szuka.
+    /// </para>
+    /// </summary>
+    private async void OnLoadPlaylist(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = Strings.Current["PlaylistLoadTitle"],
+                AllowMultiple = false,
+                FileTypeFilter = [BuildPlaylistFilter()],
+            });
+
+            var path = files.FirstOrDefault()?.TryGetLocalPath();
+            if (string.IsNullOrEmpty(path)) return;
+
+            var load = _viewModel.LoadPlaylist(path);
+
+            if (load.Paths.Count == 0)
+                _viewModel.ShowNotice(Strings.Current["PlaylistEmpty"]);
+            else if (load.Missing > 0)
+                _viewModel.ShowNotice(string.Format(Strings.Current["PlaylistMissing"], load.Missing));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cewka] wczytanie listy: {ex.Message}");
+            _viewModel.ShowNotice(Strings.Current["PlaylistLoadFailed"]);
+        }
+    }
+
+    private async void OnSavePlaylist(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = Strings.Current["PlaylistSaveTitle"],
+                SuggestedFileName = Strings.Current["PlaylistDefaultName"],
+                DefaultExtension = "m3u8",
+                FileTypeChoices = [BuildPlaylistFilter()],
+            });
+
+            var path = file?.TryGetLocalPath();
+            if (string.IsNullOrEmpty(path)) return;
+
+            _viewModel.SavePlaylist(path);
+            _viewModel.ShowNotice(string.Format(
+                Strings.Current["PlaylistSaved"], Path.GetFileName(path)));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cewka] zapis listy: {ex.Message}");
+            _viewModel.ShowNotice(Strings.Current["PlaylistSaveFailed"]);
+        }
+    }
+
+    private static FilePickerFileType BuildPlaylistFilter() => new(Strings.Current["PlaylistFilter"])
+    {
+        Patterns = PlaylistFile.Extensions.Select(extension => "*" + extension).ToArray(),
+    };
+
     private async void OnOpenFolder(object? sender, RoutedEventArgs e)
     {
         try
@@ -549,9 +756,7 @@ public partial class MainWindow : Window
 
         if (paths.Count == 0) return;
 
-        // Upuszczenie na pustą kolejkę zaczyna odtwarzanie; na niepustą tylko dopisuje,
-        // żeby nie przerywać tego, co właśnie gra.
-        _viewModel.OpenPaths(paths, replace: _viewModel.IsQueueEmpty);
+        _viewModel.OpenFromOutside(paths);
     }
 
     // ================= Wywolania z innych kopii i z klawiatury multimedialnej =================
@@ -560,7 +765,7 @@ public partial class MainWindow : Window
     public void ReceivePaths(string[] paths)
     {
         if (paths.Length == 0) return;
-        _viewModel.OpenPaths(paths, replace: _viewModel.IsQueueEmpty);
+        _viewModel.OpenFromOutside(paths);
     }
 
     /// <summary>

@@ -38,6 +38,18 @@
   "Queue": "Queue",
   "QueueEmpty": "empty",
 
+  "TooltipPlaylistLoad": "Load a playlist in place of the queue",
+  "TooltipPlaylistSave": "Save the queue as a playlist",
+  "PlaylistLoadTitle": "Load a playlist",
+  "PlaylistSaveTitle": "Save the playlist",
+  "PlaylistFilter": "Playlists",
+  "PlaylistDefaultName": "queue",
+  "PlaylistSaved": "Playlist saved to {0}.",
+  "PlaylistMissing": "Playlist loaded. Entries skipped because the files are gone: {0}.",
+  "PlaylistEmpty": "That playlist names no file that still exists.",
+  "PlaylistLoadFailed": "The playlist could not be loaded.",
+  "PlaylistSaveFailed": "The playlist could not be saved.",
+
   "UnknownArtist": "Unknown artist",
   "NoTrack": "Nothing in the queue",
   "NoFormat": "—",
@@ -46,6 +58,7 @@
 
   "Settings": "Settings",
   "SectionAppearance": "Appearance",
+  "SectionLanguage": "Language",
   "SectionAudio": "Audio",
   "SectionPlayback": "Playback",
   "SectionSystem": "System integration",
@@ -59,6 +72,8 @@
 
   "SettingLanguage": "Interface language",
   "LanguageAuto": "System",
+  "HintMachineTranslation": "The interface translations were produced by machine. I apologise for any mistakes and awkward wording — reporting them in the repository is what lets them be fixed.",
+  "LanguageReportLink": "Report a translation mistake",
 
   "SettingWindowControls": "Window buttons",
   "ControlsRight": "Right",
@@ -70,6 +85,24 @@
   "EffectsFull": "Full",
   "EffectsReduced": "Reduced",
   "HintEffects": "The automatic mode calms the moving background and the spinning record while on battery.",
+
+  "SettingColours": "Colour intensity",
+  "ColoursSubtle": "Subtle",
+  "ColoursRecommended": "Recommended",
+  "ColoursIntense": "Intense",
+  "HintColours": "How strongly the cover's colours carry over to the window background. The blobs slowly brighten and dim, each to its own rhythm, and this setting fixes the lower and upper bound of that swing. The recommended setting is the strength the application was designed at.",
+
+  "SettingFormatBadge": "Source quality badge",
+  "HintFormatBadge": "The badge beside the record showing codec, bit depth, bitrate and sample rate.",
+
+  "SettingPlaceholder": "Default cover colours",
+  "HintPlaceholder": "The coil shown for files with no cover of their own. The colours run into one another along the spiral, and the window background is built from them exactly as from a real cover.",
+  "PaletteBlueViolet": "Blue and violet",
+  "PaletteTurquoise": "Turquoise and pink",
+  "PaletteAmber": "Amber and crimson",
+  "PaletteLime": "Lime and emerald",
+  "PaletteGraphite": "Graphite and copper",
+  "PaletteRandom": "Random each track",
 
   "SettingOutputDevice": "Output device",
   "DeviceRefresh": "Refresh list",
@@ -107,6 +140,12 @@
   "SettingSeekStep": "Arrow-key seek step",
   "HintSeekStep": "How far the left and right arrow keys move playback.",
 
+  "SettingFileOpen": "A file opened from outside",
+  "FileOpenAppend": "End of the queue",
+  "FileOpenAppendPlay": "Play it at once",
+  "FileOpenReplace": "Replace the queue",
+  "HintFileOpen": "What happens to a file opened outside the application — from the file manager, from the „Open with” list, or dropped onto the window. Choosing files inside the application always adds them to the end of the queue.",
+
   "SettingMediaKeys": "Multimedia keys",
   "HintMediaKeys": "The play, stop and track keys work even when the window is not in the foreground. On Linux the desktop routes them through the media panel, so the setting does not apply there.",
 
@@ -127,6 +166,18 @@
   "AssociationsFailed": "The operation failed:",
 
   "AboutAuthor": "Author",
+  "AboutRepository": "Repository",
+  "AboutReleases": "Releases and installers",
+  "AboutUpdates": "Newer release",
+  "UpdateCheckNow": "Check now",
+  "UpdateChecking": "Checking…",
+  "UpdateAvailable": "Version {0} is available.",
+  "UpdateCurrent": "This is the latest version.",
+  "UpdateFailed": "The check failed — no connection, or the service did not answer.",
+  "SettingUpdateCheck": "Check at start-up",
+  "HintUpdateCheck": "At start-up the application asks GitHub once for the number of the latest release, no more than once a day. It sends nothing about the files being played or about the user, though the service — like any server — sees the network address. The button above works regardless of this setting.",
+  "UpdateNotice": "Version {0} is available.",
+  "UpdateNoticeLink": "Releases page",
   "TooltipRepeatOff": "Repeat off — click to repeat the queue",
   "TooltipRepeatQueue": "Repeating the queue — click to repeat one track",
   "TooltipRepeatTrack": "Repeating one track — click to turn repeating off",

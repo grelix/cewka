@@ -65,9 +65,17 @@ public sealed class TrackMetadata
         if (IsVariableBitrate && liveBitrate is > 0 && rate is not null)
             return $"{codec} VBR {liveBitrate} kbps / {rate}";
 
-        // Lossless formats are described by bit depth, lossy ones by bitrate.
+        // Formaty bezstratne opisuje glebia bitowa razem z przeplywnoscia. Sama glebia nie mowi,
+        // ile miejsca zajmuje material — 16 bitow przy 44,1 kHz to i 1411 kbps bez kompresji,
+        // i okolo 900 kbps po niej — a sama przeplywnosc nie mowi, z jakiej rozdzielczosci
+        // powstal. Przy stratnych glebia bitowa nie istnieje: zapisuja wspolczynniki
+        // przeksztalcenia, nie probki, i dlatego tam zostaje tylko przeplywnosc.
         if (BitDepth > 0 && rate is not null)
-            return $"{codec} {BitDepth} bit / {rate}";
+        {
+            return Bitrate > 0
+                ? $"{codec} {BitDepth} bit / {Bitrate} kbps / {rate}"
+                : $"{codec} {BitDepth} bit / {rate}";
+        }
 
         if (Bitrate > 0 && rate is not null)
         {

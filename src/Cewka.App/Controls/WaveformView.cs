@@ -90,6 +90,26 @@ public sealed class WaveformView : Control
         InvalidateVisual();
     }
 
+    /// <summary>
+    /// Stops the travelling waves at the start of their cycle, for the snapshot tool.
+    /// <para>
+    /// The amplitude is set to whatever the current <see cref="IsActive"/> state calls for
+    /// instead of being carried over. Easing towards the idle line takes a couple of seconds,
+    /// so a snapshot taken shortly after pausing used to catch the wave somewhere along the
+    /// way — a different place on every run.
+    /// </para>
+    /// </summary>
+    public void FreezeForCapture()
+    {
+        _loop.Stop();
+
+        _primed = true;
+        _phase = 0;
+        _amplitude = IsActive ? Math.Clamp(Level, 0, 1) : 0.06;
+
+        InvalidateVisual();
+    }
+
     public override void Render(DrawingContext context)
     {
         var brush = Stroke;

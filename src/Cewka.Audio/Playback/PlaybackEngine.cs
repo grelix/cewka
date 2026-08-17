@@ -683,7 +683,18 @@ public sealed class PlaybackEngine : IDisposable
             return;
         }
 
-        if (index != _decodingIndex) { CloseDecoder(); _decodingIndex = index; }
+        // Numer pozycji nie jest tożsamością utworu.
+        //
+        // Zastąpienie kolejki nowym plikiem wstawia go pod numer 0 — czyli ten sam, pod którym
+        // stał utwór właśnie odtwarzany. Sam numer się wtedy nie zmienia, więc dekoder zostawał
+        // otwarty na poprzednim pliku i był tylko przewijany na początek: stary utwór grał od
+        // nowa, choć kolejka pokazywała już nowy. Rozstrzyga porównanie z wpisem, który dekoder
+        // faktycznie otworzył — tak samo jak w RemoveAt, gdzie ta sama wątpliwość wraca.
+        if (index != _decodingIndex || !ReferenceEquals(_playingEntry, EntryAt(index)))
+        {
+            CloseDecoder();
+            _decodingIndex = index;
+        }
 
         if (_decoder is null && !OpenTrack(index)) { _producerParked = false; return; }
 
@@ -846,6 +857,12 @@ public sealed class PlaybackEngine : IDisposable
 
     private void ReportFailure(int index, string reason) =>
         ThreadPool.UnsafeQueueUserWorkItem(_ => TrackFailed?.Invoke(index, reason), null);
+
+    /// <summary>Wpis stojący pod danym numerem, albo <c>null</c>, gdy numer wychodzi poza kolejkę.</summary>
+    private QueueEntry? EntryAt(int index)
+    {
+        lock (_sync) return index >= 0 && index < _queue.Count ? _queue[index] : null;
+    }
 
     private void CloseDecoder()
     {

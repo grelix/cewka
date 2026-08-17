@@ -103,11 +103,69 @@
                       <c:SegmentBar Group="{Binding Effects}" />
                       <TextBlock Classes="setting-hint" Text="{l:Translate HintEffects}" />
                     </StackPanel>
+
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingColours}" />
+                      <c:SegmentBar Group="{Binding Colours}" />
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintColours}" />
+                    </StackPanel>
+
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,16,0">
+                        <TextBlock Classes="setting-label" Text="{l:Translate SettingFormatBadge}" />
+                        <TextBlock Classes="setting-hint" Text="{l:Translate HintFormatBadge}" />
+                      </StackPanel>
+                      <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
+                                     IsChecked="{Binding ShowFormatBadge, Mode=TwoWay}"
+                                     OffBrush="{DynamicResource TrackBrush}"
+                                     OnBrush="{DynamicResource AccentBrush}"
+                                     BorderBrush="{DynamicResource StrokeBrush}" />
+                    </Grid>
                   </StackPanel>
                 </Border>
 
-                <!-- Jezyk osobno: przy szesciu pozycjach pasek segmentow nie miesci sie w wierszu,
-                     wiec wybor ma postac listy, tak jak wybor urzadzenia wyjsciowego -->
+                <!-- Barwa domyslnej okladki: wybor wzrokiem, wiec kazda pozycja pokazuje
+                     przejscie barw takie, jakie faktycznie wyjdzie w obecnym motywie -->
+                <Border Classes="section">
+                  <StackPanel Spacing="10">
+                    <TextBlock Classes="section-title" Text="{l:Translate SettingPlaceholder}" />
+                    <TextBlock Classes="setting-hint" Text="{l:Translate HintPlaceholder}" />
+                    <ItemsControl ItemsSource="{Binding Palettes}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <WrapPanel />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:PaletteOption">
+                          <Button Classes="option wide" Classes.on="{Binding IsSelected}"
+                                  Click="OnPaletteClick"
+                                  Width="168" Height="34" Margin="0,0,8,6"
+                                  HorizontalContentAlignment="Left">
+                            <StackPanel Orientation="Horizontal" Spacing="9">
+                              <Border Width="34" Height="12" CornerRadius="6"
+                                      VerticalAlignment="Center"
+                                      Background="{Binding Preview}" />
+                              <TextBlock Text="{Binding Label}" FontSize="11.5"
+                                         TextTrimming="CharacterEllipsis"
+                                         Foreground="{Binding $parent[Button].Foreground}" />
+                            </StackPanel>
+                          </Button>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Border>
+
+              </StackPanel>
+
+              <!-- ========== Jezyk ========== -->
+              <StackPanel Spacing="18" IsVisible="{Binding LanguageSection.IsSelected}">
+
+                <!-- Wybor ma postac listy, nie paska segmentow: przy czternastu pozycjach pasek
+                     nie miesci sie w wierszu. Kafel ma 168 px, zeby przy szerokosci domyslnej
+                     okna w wierszu stawaly trzy pozycje; przy oknie scisnietym do minimum
+                     WrapPanel sam zwija je do dwoch. -->
                 <Border Classes="section">
                   <StackPanel Spacing="10">
                     <TextBlock Classes="section-title" Text="{l:Translate SettingLanguage}" />
@@ -121,7 +179,7 @@
                         <DataTemplate x:DataType="vm:SegmentOption">
                           <Button Classes="option wide" Classes.on="{Binding IsSelected}"
                                   Click="OnLanguageClick"
-                                  Width="182" Height="30" Margin="0,0,8,6"
+                                  Width="168" Height="30" Margin="0,0,8,6"
                                   HorizontalContentAlignment="Left">
                             <StackPanel Orientation="Horizontal" Spacing="9">
                               <Ellipse Width="7" Height="7" VerticalAlignment="Center" />
@@ -133,6 +191,21 @@
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                  </StackPanel>
+                </Border>
+
+                <!--
+                  Skad wziely sie tlumaczenia. Stoi w tej zakladce, a nie w informacjach
+                  o programie, bo tutaj ktos wlasnie wybiera jezyk i tutaj ta wiedza jest mu
+                  potrzebna. Odsylacz do zgloszen na koncu: prosba o poprawke bez wskazania,
+                  gdzie ja zlozyc, jest prosba bez adresata.
+                -->
+                <Border Classes="section">
+                  <StackPanel Spacing="8">
+                    <TextBlock Classes="setting-hint" Text="{l:Translate HintMachineTranslation}" />
+                    <Button Classes="link" Click="OnOpenIssues"
+                            IsVisible="{Binding HasRepository}"
+                            Content="{l:Translate LanguageReportLink}" />
                   </StackPanel>
                 </Border>
               </StackPanel>
@@ -261,6 +334,12 @@
                       <c:SegmentBar Group="{Binding SeekStep}" />
                       <TextBlock Classes="setting-hint" Text="{l:Translate HintSeekStep}" />
                     </StackPanel>
+
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingFileOpen}" />
+                      <c:SegmentBar Group="{Binding FileOpen}" />
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintFileOpen}" />
+                    </StackPanel>
                   </StackPanel>
                 </Border>
               </StackPanel>
@@ -339,6 +418,58 @@
                     <StackPanel Spacing="4">
                       <TextBlock Classes="setting-label" Text="{l:Translate AboutLicences}" />
                       <TextBlock Classes="setting-hint" Text="{Binding LicenceText}" />
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+
+                <!--
+                  Karta druga: sprawdzanie nowszego wydania. Jedyna rzecz w tej zakladce, ktora
+                  cokolwiek robi — przycisk i przelacznik. Karta pierwsza podaje fakty do
+                  przeczytania, ta wymaga decyzji, wiec stoi osobno.
+
+                  Domyslnie nic sie nie dzieje samo: przycisk dziala na zadanie, a przelacznik
+                  dopiero wlacza sprawdzanie przy uruchomieniu.
+                -->
+                <Border Classes="section" IsVisible="{Binding CanCheckForUpdates}">
+                  <StackPanel Spacing="10">
+                    <TextBlock Classes="setting-label" Text="{l:Translate AboutUpdates}" />
+
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                      <Button Classes="pill" Height="26" Padding="14,0"
+                              Click="OnCheckForUpdates"
+                              IsEnabled="{Binding NotChecking}"
+                              Content="{l:Translate UpdateCheckNow}" />
+                      <TextBlock Classes="setting-hint" VerticalAlignment="Center"
+                                 IsVisible="{Binding HasUpdateStatus}"
+                                 Text="{Binding UpdateStatus}" />
+                    </StackPanel>
+
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
+                        <TextBlock Classes="setting-label" Text="{l:Translate SettingUpdateCheck}" />
+                        <TextBlock Classes="setting-hint" Text="{l:Translate HintUpdateCheck}" />
+                      </StackPanel>
+                      <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
+                                     IsChecked="{Binding CheckForUpdatesEnabled, Mode=TwoWay}"
+                                     OffBrush="{DynamicResource TrackBrush}"
+                                     OnBrush="{DynamicResource AccentBrush}"
+                                     BorderBrush="{DynamicResource StrokeBrush}" />
+                    </Grid>
+                  </StackPanel>
+                </Border>
+
+                <!--
+                  Karta ostatnia: repozytorium. Dwa odsylacze wyprowadzajace poza program, wiec
+                  na samym koncu zakladki — po tym, co o programie mowi on sam.
+                -->
+                <Border Classes="section" IsVisible="{Binding HasRepository}">
+                  <StackPanel Spacing="4">
+                    <TextBlock Classes="setting-label" Text="{l:Translate AboutRepository}" />
+                    <StackPanel Orientation="Horizontal" Spacing="14">
+                      <Button Classes="link" Click="OnOpenRepository"
+                              Content="{Binding RepositoryLabel}" />
+                      <Button Classes="link" Click="OnOpenReleases"
+                              Content="{l:Translate AboutReleases}" />
                     </StackPanel>
                   </StackPanel>
                 </Border>

@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Reflection;
+using Avalonia;
+using Avalonia.Media;
 using Cewka.App.Localisation;
 using Cewka.App.Models;
 using Cewka.App.Services;
@@ -26,6 +28,49 @@ public sealed class DeviceOption(string label, string? name) : ObservableObject
 }
 
 /// <summary>
+/// Jedna para barw domyślnej okładki, razem z próbką pokazującą przejście.
+/// </summary>
+public sealed class PaletteOption(string labelKey, PlaceholderPalette value) : ObservableObject
+{
+    private bool _isSelected;
+    private IBrush _preview = Brushes.Transparent;
+
+    public string LabelKey => labelKey;
+
+    public string Label => Strings.Current[labelKey];
+
+    public PlaceholderPalette Value => value;
+
+    public bool IsSelected { get => _isSelected; set => Set(ref _isSelected, value); }
+
+    /// <summary>Przejście barw takie, jakie wyjdzie na okładce w obecnym motywie.</summary>
+    public IBrush Preview { get => _preview; private set => Set(ref _preview, value); }
+
+    public void RefreshPreview(bool darkTheme)
+    {
+        var colours = CoilCover.RampColours(value, darkTheme);
+
+        var brush = new LinearGradientBrush
+        {
+            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+            EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+        };
+
+        // Barwy rozłożone równomiernie, bez zakładania, ile ich jest: para ma trzy punkty,
+        // a pozycja „losowo" — po jednym z każdej pary.
+        for (var i = 0; i < colours.Length; i++)
+        {
+            var offset = colours.Length == 1 ? 0 : (double)i / (colours.Length - 1);
+            brush.GradientStops.Add(new GradientStop(colours[i], offset));
+        }
+
+        Preview = brush;
+    }
+
+    public void RefreshLabel() => Raise(nameof(Label));
+}
+
+/// <summary>
 /// State behind the settings window.
 ///
 /// <para><b>Zmiany działają od razu.</b> Okno nie ma przycisków „Zastosuj" ani „Anuluj": każda
@@ -48,12 +93,19 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         _player = player;
 
         Appearance = new SettingsSection("SectionAppearance");
+
+        // Język osobno, zaraz po wyglądzie: lista ma trzynaście pozycji i będzie rosła, a przy
+        // takiej długości zajmowała w zakładce wyglądu więcej miejsca niż wszystkie ustawienia
+        // wyglądu razem. Nazwa własności nie brzmi „Language", bo tak nazywa się już pasek
+        // wyboru języka w tej samej klasie.
+        LanguageSection = new SettingsSection("SectionLanguage");
+
         Audio = new SettingsSection("SectionAudio");
         Playback = new SettingsSection("SectionPlayback");
         Integration = new SettingsSection("SectionSystem");
         About = new SettingsSection("SectionAbout");
 
-        Sections = [Appearance, Audio, Playback, Integration, About];
+        Sections = [Appearance, LanguageSection, Audio, Playback, Integration, About];
         Appearance.IsSelected = true;
 
         Theme = new SegmentGroup(
@@ -81,6 +133,30 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             ("EffectsAuto", EffectsMode.Auto),
             ("EffectsFull", EffectsMode.Full),
             ("EffectsReduced", EffectsMode.Reduced));
+
+        Colours = new SegmentGroup(
+            value => _player.SetColourIntensity((ColourIntensity)value),
+            ("ColoursSubtle", ColourIntensity.Subtle),
+            ("ColoursRecommended", ColourIntensity.Recommended),
+            ("ColoursIntense", ColourIntensity.Intense));
+
+        Palettes =
+        [
+            new PaletteOption("PaletteBlueViolet", PlaceholderPalette.BlueViolet),
+            new PaletteOption("PaletteTurquoise", PlaceholderPalette.Turquoise),
+            new PaletteOption("PaletteAmber", PlaceholderPalette.Amber),
+            new PaletteOption("PaletteLime", PlaceholderPalette.Lime),
+            new PaletteOption("PaletteGraphite", PlaceholderPalette.Graphite),
+            new PaletteOption("PaletteRandom", PlaceholderPalette.Random),
+        ];
+
+        RefreshPalettePreviews();
+
+        FileOpen = new SegmentGroup(
+            value => ApplyFileOpenAction((FileOpenAction)value),
+            ("FileOpenAppend", FileOpenAction.Append),
+            ("FileOpenAppendPlay", FileOpenAction.AppendAndPlay),
+            ("FileOpenReplace", FileOpenAction.ReplaceAndPlay));
 
         Quality = new SegmentGroup(
             value => _player.SetResamplerQuality((ResamplerQuality)value),
@@ -124,6 +200,26 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         // Pozycja „zgodnie z systemem" i etykiety segmentów muszą zmienić język razem z resztą.
         _languageWatcher = (_, _) => OnLanguageChanged();
         Strings.Current.PropertyChanged += _languageWatcher;
+
+        // Próbki barw zależą od motywu, a motyw można przełączyć w tym samym oknie, o dwa
+        // ustawienia wyżej. Bez tego próbki zostawałyby w barwach poprzedniego motywu.
+        _themeWatcher = (_, _) => RefreshPalettePreviews();
+        App.Theme.Changed += _themeWatcher;
+    }
+
+    private readonly EventHandler _themeWatcher;
+
+    private void RefreshPalettePreviews()
+    {
+        foreach (var option in Palettes) option.RefreshPreview(App.Theme.IsDark);
+    }
+
+    private void ApplyFileOpenAction(FileOpenAction action)
+    {
+        if (_settings.Current.FileOpenAction == action) return;
+
+        _settings.Current.FileOpenAction = action;
+        _settings.Touch();
     }
 
     // ---------- Zakładki ----------
@@ -131,6 +227,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public IReadOnlyList<SettingsSection> Sections { get; }
 
     public SettingsSection Appearance { get; }
+    public SettingsSection LanguageSection { get; }
     public SettingsSection Audio { get; }
     public SettingsSection Playback { get; }
     public SettingsSection Integration { get; }
@@ -157,6 +254,17 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public SegmentGroup WindowControls { get; }
 
     public SegmentGroup Effects { get; }
+
+    public SegmentGroup Colours { get; }
+
+    public IReadOnlyList<PaletteOption> Palettes { get; }
+
+    /// <summary>Whether the codec, bit depth, bitrate and rate are shown beside the record.</summary>
+    public bool ShowFormatBadge
+    {
+        get => _settings.Current.ShowFormatBadge;
+        set { _player.SetShowFormatBadge(value); Raise(); }
+    }
 
     private void ApplyTheme(ThemeMode mode)
     {
@@ -264,6 +372,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     // ---------- Odtwarzanie ----------
 
     public SegmentGroup SeekStep { get; }
+
+    public SegmentGroup FileOpen { get; }
 
     public bool RestoreSessionEnabled
     {
@@ -376,6 +486,110 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     public string CopyrightText => Read<AssemblyCopyrightAttribute>(a => a.Copyright) ?? string.Empty;
 
+    // ---------- Repozytorium i sprawdzanie wersji ----------
+
+    /// <summary>Adres repozytorium, odczytany raz z metadanych zestawu.</summary>
+    public string RepositoryUrl => UpdateCheck.Repository;
+
+    /// <summary>Adres pokazywany w oknie — bez schematu, bo ten niczego czytelnikowi nie mówi.</summary>
+    public string RepositoryLabel => RepositoryUrl
+        .Replace("https://", string.Empty, StringComparison.OrdinalIgnoreCase)
+        .Replace("http://", string.Empty, StringComparison.OrdinalIgnoreCase);
+
+    public string ReleasesUrl => UpdateCheck.ReleasesUrl(RepositoryUrl) ?? string.Empty;
+
+    /// <summary>
+    /// Strona zgłoszeń. Odsyłacz do niej stoi przy wyborze języka, bo tłumaczenia powstały
+    /// maszynowo i to jedyne miejsce, w którym prośba o poprawkę ma naturalne umiejscowienie.
+    /// </summary>
+    public string IssuesUrl => WebLink.IsSafe(RepositoryUrl)
+        ? RepositoryUrl.TrimEnd('/') + "/issues"
+        : string.Empty;
+
+    public bool HasRepository => WebLink.IsSafe(RepositoryUrl);
+
+    /// <summary>Sprawdzanie ma sens tylko wtedy, gdy z adresu da się zbudować adres usługi.</summary>
+    public bool CanCheckForUpdates => UpdateCheck.ApiUrl(RepositoryUrl) is not null;
+
+    private string _updateStatus = string.Empty;
+    private bool _checking;
+
+    /// <summary>Wynik ostatniego sprawdzenia, przeznaczony do pokazania w oknie.</summary>
+    public string UpdateStatus
+    {
+        get => _updateStatus;
+        private set
+        {
+            if (!Set(ref _updateStatus, value)) return;
+            Raise(nameof(HasUpdateStatus));
+        }
+    }
+
+    public bool HasUpdateStatus => _updateStatus.Length > 0;
+
+    /// <summary>Blokuje przycisk na czas jednego żądania, żeby nie dało się go zwielokrotnić.</summary>
+    public bool NotChecking => !_checking;
+
+    /// <summary>
+    /// Czy program pyta o nowsze wydanie sam, przy uruchomieniu. Wyłączenie nie odbiera
+    /// przycisku sprawdzenia na żądanie.
+    /// </summary>
+    public bool CheckForUpdatesEnabled
+    {
+        get => _settings.Current.CheckForUpdates;
+        set
+        {
+            if (_settings.Current.CheckForUpdates == value) return;
+
+            _settings.Current.CheckForUpdates = value;
+            _settings.Touch();
+            Raise();
+        }
+    }
+
+    /// <summary>
+    /// Sprawdza dostępność nowszego wydania i opisuje wynik słowami.
+    ///
+    /// <para>Wynik nie jest nigdzie zapisywany: zapisana zostaje wyłącznie data sprawdzenia,
+    /// żeby sprawdzanie automatyczne nie powtarzało żądania częściej niż raz na dobę. Powód
+    /// niepowodzenia trafia do dziennika, a w oknie staje jedno zdanie — użytkownikowi
+    /// niepotrzebny jest numer błędu HTTP.</para>
+    /// </summary>
+    public async Task CheckForUpdatesNowAsync()
+    {
+        if (_checking || !CanCheckForUpdates) return;
+
+        _checking = true;
+        Raise(nameof(NotChecking));
+        UpdateStatus = Strings.Current["UpdateChecking"];
+
+        try
+        {
+            var result = await UpdateCheck.LatestAsync(RepositoryUrl, UpdateCheck.Current);
+
+            _settings.Current.LastUpdateCheck = DateTimeOffset.UtcNow;
+            _settings.Touch();
+
+            if (!result.Succeeded)
+            {
+                Console.Error.WriteLine($"[cewka] sprawdzanie wersji: {result.Failure}");
+                UpdateStatus = Strings.Current["UpdateFailed"];
+                return;
+            }
+
+            var latest = result.Latest!;
+
+            UpdateStatus = latest > UpdateCheck.Current
+                ? string.Format(Strings.Current["UpdateAvailable"], latest.ToString(3))
+                : Strings.Current["UpdateCurrent"];
+        }
+        finally
+        {
+            _checking = false;
+            Raise(nameof(NotChecking));
+        }
+    }
+
     private static string? Read<T>(Func<T, string> select) where T : Attribute
     {
         var attribute = typeof(SettingsViewModel).Assembly.GetCustomAttribute<T>();
@@ -422,11 +636,14 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         Language.RefreshLabels();
         WindowControls.RefreshLabels();
         Effects.RefreshLabels();
+        Colours.RefreshLabels();
         Quality.RefreshLabels();
         Latency.RefreshLabels();
         Loudness.RefreshLabels();
+        FileOpen.RefreshLabels();
 
         foreach (var section in Sections) section.RefreshLabel();
+        foreach (var palette in Palettes) palette.RefreshLabel();
 
         RefreshAssociationStatus();
 
@@ -444,11 +661,28 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         Language.Mark(_settings.Current.Language);
         WindowControls.Mark(_settings.Current.WindowControls);
         Effects.Mark(_settings.Current.Effects);
+        Colours.Mark(_settings.Current.ColourIntensity);
         Quality.Mark(_settings.Current.ResamplerQuality);
         Latency.Mark(_settings.Current.OutputLatency);
         Loudness.Mark(_settings.Current.LoudnessTarget);
         SeekStep.Mark(_settings.Current.SeekStep);
+        FileOpen.Mark(_settings.Current.FileOpenAction);
+
+        foreach (var palette in Palettes)
+            palette.IsSelected = palette.Value == _settings.Current.PlaceholderPalette;
     }
 
-    public void Dispose() => Strings.Current.PropertyChanged -= _languageWatcher;
+    /// <summary>Applies a colour pair for the default cover and moves the mark onto it.</summary>
+    public void SelectPalette(PaletteOption option)
+    {
+        _player.SetPlaceholderPalette(option.Value);
+
+        foreach (var palette in Palettes) palette.IsSelected = ReferenceEquals(palette, option);
+    }
+
+    public void Dispose()
+    {
+        Strings.Current.PropertyChanged -= _languageWatcher;
+        App.Theme.Changed -= _themeWatcher;
+    }
 }

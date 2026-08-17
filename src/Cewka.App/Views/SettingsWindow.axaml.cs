@@ -3,6 +3,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Cewka.App.Models;
 using Cewka.App.ViewModels;
+using Cewka.Platform;
 
 namespace Cewka.App.Views;
 
@@ -98,12 +99,33 @@ public partial class SettingsWindow : Window
         if (sender is Button { DataContext: SegmentOption option }) _viewModel?.Language.Choose(option);
     }
 
+    private void OnPaletteClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: PaletteOption option }) _viewModel?.SelectPalette(option);
+    }
+
     private void OnRefreshDevices(object? sender, RoutedEventArgs e) => _viewModel?.RefreshDevices();
 
     private void OnDeviceClick(object? sender, RoutedEventArgs e)
     {
         if (sender is Button { DataContext: DeviceOption device }) _viewModel?.ChooseDevice(device);
     }
+
+    private void OnOpenRepository(object? sender, RoutedEventArgs e) =>
+        WebLink.Open(_viewModel?.RepositoryUrl);
+
+    private void OnOpenReleases(object? sender, RoutedEventArgs e) =>
+        WebLink.Open(_viewModel?.ReleasesUrl);
+
+    private void OnOpenIssues(object? sender, RoutedEventArgs e) =>
+        WebLink.Open(_viewModel?.IssuesUrl);
+
+    /// <summary>
+    /// Sprawdzenie idzie bez oczekiwania na wynik: żądanie sieciowe nie może zatrzymać okna,
+    /// a stan i tak dociera przez wiązania.
+    /// </summary>
+    private void OnCheckForUpdates(object? sender, RoutedEventArgs e) =>
+        _ = _viewModel?.CheckForUpdatesNowAsync();
 
     private void OnRegisterAssociations(object? sender, RoutedEventArgs e) => _viewModel?.RegisterAssociations();
 

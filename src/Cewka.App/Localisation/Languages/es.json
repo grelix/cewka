@@ -38,6 +38,18 @@
   "Queue": "Cola",
   "QueueEmpty": "vacía",
 
+  "TooltipPlaylistLoad": "Cargar una lista de reproducción en lugar de la cola",
+  "TooltipPlaylistSave": "Guardar la cola como lista de reproducción",
+  "PlaylistLoadTitle": "Cargar una lista de reproducción",
+  "PlaylistSaveTitle": "Guardar la lista de reproducción",
+  "PlaylistFilter": "Listas de reproducción",
+  "PlaylistDefaultName": "cola",
+  "PlaylistSaved": "Lista guardada en {0}.",
+  "PlaylistMissing": "Lista cargada. Posiciones omitidas porque sus archivos ya no existen: {0}.",
+  "PlaylistEmpty": "La lista indicada no contiene ningún archivo existente.",
+  "PlaylistLoadFailed": "No se pudo cargar la lista de reproducción.",
+  "PlaylistSaveFailed": "No se pudo guardar la lista de reproducción.",
+
   "UnknownArtist": "Artista desconocido",
   "NoTrack": "No hay nada en la cola",
   "NoFormat": "—",
@@ -46,6 +58,7 @@
 
   "Settings": "Ajustes",
   "SectionAppearance": "Apariencia",
+  "SectionLanguage": "Idioma",
   "SectionAudio": "Audio",
   "SectionPlayback": "Reproducción",
   "SectionSystem": "Integración con el sistema",
@@ -59,6 +72,8 @@
 
   "SettingLanguage": "Idioma de la interfaz",
   "LanguageAuto": "Sistema",
+  "HintMachineTranslation": "Las traducciones de la interfaz se generaron automáticamente. Pido disculpas por los errores y las formulaciones torpes — comunicarlos en el repositorio permite corregirlos.",
+  "LanguageReportLink": "Aviso de error de traducción",
 
   "SettingWindowControls": "Botones de la ventana",
   "ControlsRight": "Derecha",
@@ -70,6 +85,24 @@
   "EffectsFull": "Completos",
   "EffectsReduced": "Reducidos",
   "HintEffects": "El modo automático reduce el movimiento del fondo y el giro del disco cuando el equipo funciona con batería.",
+
+  "SettingColours": "Intensidad del color",
+  "ColoursSubtle": "Sutil",
+  "ColoursRecommended": "Recomendada",
+  "ColoursIntense": "Intensa",
+  "HintColours": "Intensidad con la que los colores de la portada se trasladan al fondo de la ventana. Las manchas de color se aclaran y oscurecen lentamente, cada una a su propio ritmo, y este ajuste fija el límite inferior y superior de esa oscilación. El ajuste recomendado corresponde a los valores con los que se diseñó la aplicación.",
+
+  "SettingFormatBadge": "Distintivo de calidad de origen",
+  "HintFormatBadge": "Distintivo junto al disco que muestra el códec, la profundidad de bits, la tasa de bits y la frecuencia de muestreo.",
+
+  "SettingPlaceholder": "Colores de la portada predeterminada",
+  "HintPlaceholder": "Espiral que se muestra en los archivos sin portada propia. Los colores se funden unos con otros a lo largo de la espiral, y el fondo de la ventana se compone a partir de ellos igual que a partir de una portada real.",
+  "PaletteBlueViolet": "Azul y violeta",
+  "PaletteTurquoise": "Turquesa y rosa",
+  "PaletteAmber": "Ámbar y carmesí",
+  "PaletteLime": "Lima y esmeralda",
+  "PaletteGraphite": "Grafito y cobre",
+  "PaletteRandom": "Aleatoria por pista",
 
   "SettingOutputDevice": "Dispositivo de salida",
   "DeviceRefresh": "Recargar lista",
@@ -107,6 +140,12 @@
   "SettingSeekStep": "Paso de avance con flechas",
   "HintSeekStep": "Distancia que desplazan la reproducción las flechas izquierda y derecha.",
 
+  "SettingFileOpen": "Archivo abierto desde fuera",
+  "FileOpenAppend": "Final de la cola",
+  "FileOpenAppendPlay": "Reproducir ahora",
+  "FileOpenReplace": "Sustituir la cola",
+  "HintFileOpen": "Comportamiento ante un archivo abierto fuera de la aplicación: desde el explorador de archivos, desde la lista «Abrir con» o soltado sobre la ventana. Elegir archivos dentro de la aplicación siempre los añade al final de la cola.",
+
   "SettingMediaKeys": "Teclas multimedia",
   "HintMediaKeys": "Las teclas de reproducción, detención y cambio de pista funcionan incluso cuando la ventana no está en primer plano. En Linux, el escritorio las gestiona a través del panel multimedia, por lo que este ajuste no se aplica allí.",
 
@@ -127,6 +166,18 @@
   "AssociationsFailed": "La operación no se pudo completar:",
 
   "AboutAuthor": "Autor",
+  "AboutRepository": "Repositorio",
+  "AboutReleases": "Versiones y archivos de instalación",
+  "AboutUpdates": "Versión más reciente",
+  "UpdateCheckNow": "Comprobar ahora",
+  "UpdateChecking": "Comprobando…",
+  "UpdateAvailable": "La versión {0} está disponible.",
+  "UpdateCurrent": "Esta es la versión más reciente.",
+  "UpdateFailed": "La comprobación no se pudo completar — sin conexión, o el servicio no respondió.",
+  "SettingUpdateCheck": "Comprobación al inicio",
+  "HintUpdateCheck": "Al iniciarse, la aplicación consulta una vez a GitHub el número de la versión más reciente, como máximo una vez al día. No envía nada sobre los archivos reproducidos ni sobre el usuario, aunque el servicio — como cualquier servidor — ve la dirección de red. El botón de arriba funciona con independencia de este ajuste.",
+  "UpdateNotice": "La versión {0} está disponible.",
+  "UpdateNoticeLink": "Ver versiones",
   "TooltipRepeatOff": "Repetición desactivada — clic para repetir la cola",
   "TooltipRepeatQueue": "Repitiendo la cola — clic para repetir una pista",
   "TooltipRepeatTrack": "Repitiendo una pista — clic para desactivar la repetición",

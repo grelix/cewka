@@ -43,6 +43,25 @@ public sealed class LiveBackdrop : Control
         (0.023, 0.046, 5.6, 2.1, 0.44),
     ];
 
+    /// <summary>
+    /// Okres i faza rozjaśniania każdej plamy, w sekundach i radianach.
+    ///
+    /// <para>Okresy są liczbami pierwszymi i wzajemnie niewspółmierne, tak samo jak prędkości
+    /// w <see cref="Paths"/>. Gdyby dwie plamy jaśniały w tym samym rytmie, tło pulsowałoby jako
+    /// całość — a to wygląda jak migotanie, nie jak cztery światła o własnym życiu. Przy takich
+    /// okresach ten sam układ jasności nie wraca w rozsądnym czasie.</para>
+    ///
+    /// <para>Rytm liczony jest z tego samego zegara co dryf, więc przy pauzie zwalnia razem z nim
+    /// do jednej czwartej, a w trybie ograniczonych efektów jeszcze dwa i pół raza bardziej.</para>
+    /// </summary>
+    private static readonly (double Period, double Phase)[] Pulses =
+    [
+        (13.0, 0.0),
+        (17.0, 1.9),
+        (11.0, 3.4),
+        (19.0, 5.1),
+    ];
+
     /// <summary>How far from the centre a blob travels, as a fraction of the window.</summary>
     private const double DriftX = 0.40;
     private const double DriftY = 0.36;
@@ -63,6 +82,16 @@ public sealed class LiveBackdrop : Control
     public static readonly StyledProperty<IBrush?> BaseBrushProperty =
         AvaloniaProperty.Register<LiveBackdrop, IBrush?>(nameof(BaseBrush));
 
+    /// <summary>
+    /// Dolny i górny próg siły plam, z ustawienia intensywności barw. Każda plama waha się
+    /// między nimi własnym rytmem; jedność to siła, z jaką tło było projektowane.
+    /// </summary>
+    public static readonly StyledProperty<double> MinimumStrengthProperty =
+        AvaloniaProperty.Register<LiveBackdrop, double>(nameof(MinimumStrength), 0.88);
+
+    public static readonly StyledProperty<double> MaximumStrengthProperty =
+        AvaloniaProperty.Register<LiveBackdrop, double>(nameof(MaximumStrength), 1.12);
+
     private readonly RenderLoop _loop;
     private readonly Color[] _shown = new Color[CoverPaletteSize];
     private readonly Color[] _from = new Color[CoverPaletteSize];
@@ -79,7 +108,8 @@ public sealed class LiveBackdrop : Control
 
     static LiveBackdrop()
     {
-        AffectsRender<LiveBackdrop>(BaseBrushProperty);
+        AffectsRender<LiveBackdrop>(
+            BaseBrushProperty, MinimumStrengthProperty, MaximumStrengthProperty);
     }
 
     public LiveBackdrop()
@@ -104,6 +134,20 @@ public sealed class LiveBackdrop : Control
 
     /// <summary>Colour painted underneath the blobs.</summary>
     public IBrush? BaseBrush { get => GetValue(BaseBrushProperty); set => SetValue(BaseBrushProperty, value); }
+
+    /// <summary>Najsłabszy moment cyklu jasności plamy; 1 to siła, z jaką tło było projektowane.</summary>
+    public double MinimumStrength
+    {
+        get => GetValue(MinimumStrengthProperty);
+        set => SetValue(MinimumStrengthProperty, value);
+    }
+
+    /// <summary>Najjaśniejszy moment cyklu.</summary>
+    public double MaximumStrength
+    {
+        get => GetValue(MaximumStrengthProperty);
+        set => SetValue(MaximumStrengthProperty, value);
+    }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
@@ -169,6 +213,35 @@ public sealed class LiveBackdrop : Control
         InvalidateVisual();
     }
 
+    /// <summary>
+    /// Stops the drift and puts it at a fixed point on its path, for the snapshot tool.
+    /// <para>
+    /// The blobs travel on wall-clock time, so two runs of the same code photographed the
+    /// background in two different arrangements. Zero is the arrangement the phase constants in
+    /// <see cref="Paths"/> were chosen to give, which makes it the one defensible choice.
+    /// </para>
+    /// <para>
+    /// Any pending cross-fade is completed rather than interrupted: freezing mid-fade would
+    /// photograph a blend of the previous track's colours and this one's.
+    /// </para>
+    /// </summary>
+    /// <param name="atSeconds">
+    /// Moment na osi czasu tła. Zero to układ, jaki dają same stałe fazowe. Inne wartości służą
+    /// do sfotografowania kilku chwil jednego cyklu — bez tego nie da się na nieruchomym obrazie
+    /// pokazać, że plamy jaśnieją niezależnie od siebie.
+    /// </param>
+    public void FreezeForCapture(double atSeconds = 0)
+    {
+        _loop.Stop();
+
+        _time = atSeconds;
+        _breathing = 0;
+        _fade = 1;
+        if (_hasPalette) Array.Copy(_to, _shown, CoverPaletteSize);
+
+        InvalidateVisual();
+    }
+
     private static double Easing(double t) => t * t * (3 - 2 * t);
 
     private static Color Lerp(Color a, Color b, double t) => Color.FromRgb(
@@ -202,7 +275,16 @@ public sealed class LiveBackdrop : Control
             var radius = span * path.Radius * (1 + 0.06 * _breathing);
 
             // Kazda plama nieco slabsza od poprzedniej, zeby nie zlewaly sie w jedna plaszczyzne.
-            var strength = (0.86 - i * 0.11) * (1 + 0.18 * _breathing);
+            //
+            // Do tego wlasny cykl jasnienia: sinus o okresie i fazie wzietych z Pulses, przelozony
+            // na zakres miedzy progami z ustawienia intensywnosci. Mnoznik intensywnosci wchodzi
+            // tutaj, a nie w barwe — to samo pokretlo ma zmieniac sile calego tla, nie odcien
+            // poszczegolnej plamy.
+            var pulse = Pulses[i];
+            var cycle = 0.5 + 0.5 * Math.Sin(_time * 2 * Math.PI / pulse.Period + pulse.Phase);
+            var level = MinimumStrength + (MaximumStrength - MinimumStrength) * cycle;
+
+            var strength = (0.86 - i * 0.11) * (1 + 0.18 * _breathing) * level;
             var colour = _shown[i];
 
             // Barwa trzyma sie dluzej przy srodku i opada szybciej przy brzegu, zamiast gasnac

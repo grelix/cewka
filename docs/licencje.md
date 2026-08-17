@@ -20,14 +20,49 @@ zachowanie noty o prawach autorskich.
 Oba fonty osadzone są w pliku wykonywalnym, aby interfejs wyglądał identycznie niezależnie od
 tego, co użytkownik ma zainstalowane w systemie.
 
-| Font | Zastosowanie | Licencja | Tekst licencji |
-|------|--------------|----------|----------------|
-| Cantarell | Tekst interfejsu | SIL Open Font License 1.1 | `src/Cewka.App/Assets/Fonts/OFL-Cantarell.txt` |
-| JetBrains Mono | Liczby, czasy, dane techniczne | SIL Open Font License 1.1 | `src/Cewka.App/Assets/Fonts/OFL-JetBrainsMono.txt` |
+| Font | Wersja | Zastosowanie | Licencja | Tekst licencji |
+|------|--------|--------------|----------|----------------|
+| Cantarell | 0.303 | Tekst interfejsu | SIL Open Font License 1.1 | `src/Cewka.App/Assets/Fonts/OFL-Cantarell.txt` |
+| JetBrains Mono | 2.304 | Liczby, czasy, dane techniczne | SIL Open Font License 1.1 | `src/Cewka.App/Assets/Fonts/OFL-JetBrainsMono.txt` |
 
 Licencja OFL zezwala na osadzanie i rozpowszechnianie fontów wraz z oprogramowaniem, także
 komercyjnym, pod warunkiem dołączenia tekstu licencji i niesprzedawania samych fontów. Oba
 warunki są spełnione.
+
+Do wydania 0.6.0 osadzony był Cantarell w wydaniu oznaczonym wewnętrznie jako 1.004 — 388 glifów,
+samo pismo łacińskie. Wydanie 0.303 z projektu GNOME ma 1223 glify i dlatego zastąpiło poprzednie:
+bez niego rosyjski i ukraiński wyświetlałyby się jako puste prostokąty.
+
+Zmierzone pokrycie bloków Unicode, bo ono rozstrzyga o doborze kolejnych języków:
+
+| Blok | Pokrycie |
+|------|----------|
+| Latin-1 (U+00A0–00FF) | 96 z 96 |
+| Latin rozszerzony A (U+0100–017F) | 124 z 128 |
+| Latin rozszerzony B (U+0180–024F) | 78 z 208 |
+| Greka (U+0370–03FF) | 74 z 144 |
+| Cyrylica (U+0400–04FF) | 178 z 256 |
+| Wietnamski (U+1E00–1EFF) | 166 z 256 |
+
+Pokrycie cyrylicy sięga więc poza zakres podstawowy U+0400–U+045F i obejmuje między innymi
+litery kazachskie. Sprawdzenie trzydziestu dwóch kandydatur — od niderlandzkiego przez greckiego
+i serbskiego cyrylicą po kazachski i islandzki — nie wykazało ani jednego znaku, którego font
+nie zawiera. Font przestał być ograniczeniem dla języków pisanych łaciną, cyrylicą i greką;
+poza jego zasięgiem zostają pisma chińskie, japońskie, koreańskie, dewanagari, arabskie
+i perskie.
+
+Kompletność pokrycia sprawdza test, który czyta tablicę znaków tego właśnie pliku i porównuje ją
+ze wszystkimi tekstami interfejsu. Osobny test pilnuje, żeby znaki z diakrytyką były zapisane
+w postaci złożonej: font zawiera dwadzieścia dziewięć znaków łączących, więc zapis rozłożony
+przeszedłby pierwsze sprawdzenie, a wyświetlił się źle — nie ma zakotwiczeń pozwalających ułożyć
+dwa znaki diakrytyczne jeden nad drugim, czego wymaga wietnamski.
+
+Języki poza zasięgiem tego kroju to pisma niełacińskie inne niż cyrylica i greka: chiński,
+japoński, koreański, hindi, arabski, perski. Wymagałyby osadzenia Noto CJK albo Noto
+odpowiedniego pisma — w przypadku CJK około 40 MB przed kompresją przy 47 MB obecnego pliku
+wykonywalnego. Okrojenie fontu do znaków użytych w interfejsie byłoby tanie, ale rozwiązywałoby
+połowę zadania: tytuły utworów pochodzą z plików użytkownika, więc chiński interfejs pokazywałby
+chiński tytuł jako prostokąty.
 
 ## Warstwa audio
 
@@ -49,10 +84,11 @@ publikacji jednoplikowej rodzi ten sam problem, przez który odpadł FFmpeg.
 
 ## Okładki domyślne i ikona
 
-Pliki `src/Cewka.App/Assets/Covers/cover-dark.png` i `cover-light.png` powstały na potrzeby
-tego projektu — przedstawiają cewkę, od której wzięła się nazwa aplikacji. Podlegają licencji
-MIT razem z resztą repozytorium. Pojawiają się wtedy, gdy plik nie zawiera osadzonej okładki,
-a wariant dobierany jest do aktywnego motywu.
+Domyślna okładka przedstawia cewkę, od której wzięła się nazwa aplikacji, i pojawia się wtedy,
+gdy plik nie zawiera osadzonej okładki. Do wydania 0.6.0 były to dwa pliki PNG, po jednym na
+motyw; od 0.7.0 spiralę rysuje kod (`src/Cewka.App/Services/CoilCover.cs`), bo pięć par barw
+w dwóch motywach to dziesięć plików, a przejście barwy wzdłuż zwoju trzeba by i tak było
+wygenerować programem. Rysunek podlega licencji MIT razem z resztą repozytorium.
 
 Ikona aplikacji (`src/Cewka.App/Assets/cewka.ico`, `cewka.png` oraz osobne rozmiary dla pakietów
 linuksowych w `packaging/linux/icons/`) przedstawia ten sam znak i również powstała na potrzeby

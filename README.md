@@ -5,7 +5,7 @@ bez środowiska .NET.
 
 ![Licencja](https://img.shields.io/badge/licencja-MIT-blue)
 ![Platformy](https://img.shields.io/badge/platformy-Linux%20%7C%20Windows-lightgrey)
-![Wersja](https://img.shields.io/badge/wersja-0.6.0-brightgreen)
+![Wersja](https://img.shields.io/badge/wersja-0.7.11-brightgreen)
 
 *[English version](README.en.md)*
 
@@ -28,13 +28,21 @@ Kod pisałem przy wsparciu Claude Code, które pisało automatyczne testy i wysz
 - **Korektor dziesięciopasmowy** z przedwzmacniaczem i miękkim limiterem na wyjściu
 - **Wyrównanie głośności** według tagów ReplayGain albo własnej analizy EBU R128, z wyborem
   poziomu docelowego (−23, −18 albo −14 LUFS)
-- **Tło z barw okładki**, animowane w rytm muzyki
+- **Listy odtwarzania** w formacie M3U — kolejkę można zapisać i wczytać, także w innym programie
+- **Tło z barw okładki**, animowane w rytm muzyki; plamy oddychają niezależnie od siebie,
+  a intensywność barw ma trzy stopnie
 - **Motyw jasny i ciemny**, domyślnie zgodny z systemem
-- **Pięć języków**: polski, angielski, hiszpański, niemiecki i francuski
+- **Siedemnaście języków**: polski, angielski, czeski, niemiecki, grecki, hiszpański,
+  francuski, węgierski, indonezyjski, włoski, niderlandzki, portugalski, rumuński, rosyjski,
+  turecki, ukraiński i wietnamski
 - **Integracja z pulpitem**: panel multimediów (MPRIS w Linuksie, nakładka w Windowsie),
   klawisze multimedialne, jedna instancja z przekazywaniem plików
+- **Sprawdzanie nowszego wydania** — na żądanie albo przy uruchomieniu, domyślnie wyłączone.
+  To jedyne miejsce, w którym program łączy się z siecią: jedno pytanie do GitHuba o numer
+  najnowszego wydania, nie częściej niż raz na dobę
 - **Ustawienia**: urządzenie wyjściowe, rozmiar bufora, jakość konwersji częstotliwości,
-  krok przewijania, przywracanie poprzedniej sesji
+  krok przewijania, przywracanie poprzedniej sesji, barwa domyślnej okładki (pięć par
+  albo losowanie co utwór), zachowanie przy otwarciu pliku z eksploratora
 
 <img src="docs/obrazy/cewka-ustawienia.png" width="640" alt="Ustawienia">
 
@@ -46,19 +54,19 @@ pojawia się w menu aplikacji.
 **Fedora, RHEL, openSUSE**
 
 ```bash
-sudo dnf install ./cewka-0.6.0-1.x86_64.rpm
+sudo dnf install ./cewka-0.7.11-1.x86_64.rpm
 ```
 
 **Debian, Ubuntu, Linux Mint**
 
 ```bash
-sudo apt install ./cewka_0.6.0_amd64.deb
+sudo apt install ./cewka_0.7.11_amd64.deb
 ```
 
 **Arch, Manjaro**
 
 ```bash
-sudo pacman -U cewka-0.6.0-1-x86_64.pkg.tar.zst
+sudo pacman -U cewka-0.7.11-1-x86_64.pkg.tar.zst
 ```
 
 **Windows**
@@ -124,7 +132,7 @@ W Windowsie odpowiednikami są `native\build-windows.cmd` i `tools\publish-windo
 dotnet test Cewka.sln
 ```
 
-103 testy: przetwarzanie sygnału, logika modelu widoku, zgodność ustawień między wersjami
+326 testów: przetwarzanie sygnału, logika modelu widoku, zgodność ustawień między wersjami
 i kompletność plików językowych.
 
 Zrzuty interfejsu można wyrenderować bez otwierania okna — przydaje się do porównywania
@@ -132,6 +140,15 @@ kolejnych wersji wyglądu:
 
 ```bash
 dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots
+```
+
+Podanie pliku dźwiękowego jako drugiego argumentu wpuszcza go do okna tak, jak zrobiłoby to
+otwarcie z menedżera plików — z tytułem, okładką i czasem. Wszystkie animacje są przy zrzucie
+zatrzymywane w ustalonym miejscu, więc dwa przebiegi na tym samym kodzie dają te same obrazy
+i można je porównywać piksel w piksel:
+
+```bash
+dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots ~/Muzyka/Album/utwor.mp3
 ```
 
 ## Znane ograniczenia

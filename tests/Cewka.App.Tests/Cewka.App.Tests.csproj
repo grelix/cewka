@@ -27,4 +27,15 @@
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!--
+    Font interfejsu kopiowany obok testów. Sprawdzenie, czy tekst w danym języku da się wyświetlić,
+    wymaga tablicy znaków tego samego pliku, który trafia do wydania — nie listy zakresów
+    dopisanej z pamięci.
+  -->
+  <ItemGroup>
+    <Content Include="..\..\src\Cewka.App\Assets\Fonts\Cantarell-Regular.otf"
+             Link="Fonts\Cantarell-Regular.otf"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

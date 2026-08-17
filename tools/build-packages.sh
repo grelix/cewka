@@ -27,6 +27,19 @@ if [ -z "$WERSJA" ]; then
     exit 1
 fi
 
+# Czy plik wykonywalny jest z TEJ wersji.
+#
+# Sprawdzenie samego istnienia pliku nie wystarcza i kosztowalo juz raz trzy pakiety nazwane
+# nowa wersja, a zawierajace poprzednia: publikacja przerwala sie bledem, stary plik zostal
+# na dysku, a pakowanie poszlo dalej jak gdyby nigdy nic. Numer wersji jest wpisany
+# w metadane zestawu, wiec wystepuje w pliku doslownie; jego brak znaczy, ze plik pochodzi
+# z innej kompilacji.
+if ! grep -a -q "$WERSJA" "$BINARKA"; then
+    echo "Plik $BINARKA nie zawiera numeru wersji $WERSJA." >&2
+    echo "Pochodzi z innej kompilacji — uruchom najpierw ./tools/publish-linux.sh" >&2
+    exit 1
+fi
+
 OPIEKUN="Maciej Grela <51171746+grelix@users.noreply.github.com>"
 STRONA="https://github.com/grelix/cewka"
 SKROT="Minimalistyczny odtwarzacz plikow lokalnych"

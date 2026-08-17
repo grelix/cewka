@@ -38,6 +38,18 @@
   "Queue": "Warteschlange",
   "QueueEmpty": "leer",
 
+  "TooltipPlaylistLoad": "Wiedergabeliste anstelle der Warteschlange laden",
+  "TooltipPlaylistSave": "Warteschlange als Wiedergabeliste speichern",
+  "PlaylistLoadTitle": "Wiedergabeliste laden",
+  "PlaylistSaveTitle": "Wiedergabeliste speichern",
+  "PlaylistFilter": "Wiedergabelisten",
+  "PlaylistDefaultName": "warteschlange",
+  "PlaylistSaved": "Wiedergabeliste gespeichert unter {0}.",
+  "PlaylistMissing": "Wiedergabeliste geladen. Übersprungene Einträge, deren Dateien fehlen: {0}.",
+  "PlaylistEmpty": "Die angegebene Wiedergabeliste enthält keine noch vorhandene Datei.",
+  "PlaylistLoadFailed": "Die Wiedergabeliste konnte nicht geladen werden.",
+  "PlaylistSaveFailed": "Die Wiedergabeliste konnte nicht gespeichert werden.",
+
   "UnknownArtist": "Unbekannter Interpret",
   "NoTrack": "Nichts in der Warteschlange",
   "NoFormat": "—",
@@ -46,6 +58,7 @@
 
   "Settings": "Einstellungen",
   "SectionAppearance": "Erscheinungsbild",
+  "SectionLanguage": "Sprache",
   "SectionAudio": "Audio",
   "SectionPlayback": "Wiedergabe",
   "SectionSystem": "Systemintegration",
@@ -59,6 +72,8 @@
 
   "SettingLanguage": "Oberflächensprache",
   "LanguageAuto": "System",
+  "HintMachineTranslation": "Die Übersetzungen der Oberfläche entstanden maschinell. Für Fehler und unbeholfene Formulierungen entschuldige ich mich — eine Meldung im Repository hilft, sie zu korrigieren.",
+  "LanguageReportLink": "Meldung von Übersetzungsfehlern",
 
   "SettingWindowControls": "Fensterschaltflächen",
   "ControlsRight": "Rechts",
@@ -70,6 +85,24 @@
   "EffectsFull": "Voll",
   "EffectsReduced": "Reduziert",
   "HintEffects": "Der automatische Modus reduziert die Hintergrundbewegung und die Plattendrehung im Akkubetrieb.",
+
+  "SettingColours": "Farbintensität",
+  "ColoursSubtle": "Dezent",
+  "ColoursRecommended": "Empfohlen",
+  "ColoursIntense": "Intensiv",
+  "HintColours": "Stärke, mit der die Farben des Covers auf den Fensterhintergrund übertragen werden. Die Farbflecken werden langsam heller und dunkler, jeder in seinem eigenen Rhythmus, und die Einstellung legt die untere und obere Grenze dieser Schwankung fest. Die empfohlene Einstellung entspricht der Stärke, für die die Anwendung entworfen wurde.",
+
+  "SettingFormatBadge": "Anzeige der Quellqualität",
+  "HintFormatBadge": "Die Anzeige neben der Platte mit Codec, Bittiefe, Bitrate und Abtastrate.",
+
+  "SettingPlaceholder": "Farben des Standardcovers",
+  "HintPlaceholder": "Die Spirale, die bei Dateien ohne eigenes Cover angezeigt wird. Die Farben gehen entlang der Windung ineinander über, und der Fensterhintergrund wird daraus genauso aufgebaut wie aus einem echten Cover.",
+  "PaletteBlueViolet": "Blau und Violett",
+  "PaletteTurquoise": "Türkis und Pink",
+  "PaletteAmber": "Bernstein und Karmin",
+  "PaletteLime": "Limette und Smaragd",
+  "PaletteGraphite": "Graphit und Kupfer",
+  "PaletteRandom": "Zufällig je Titel",
 
   "SettingOutputDevice": "Ausgabegerät",
   "DeviceRefresh": "Aktualisieren",
@@ -107,6 +140,12 @@
   "SettingSeekStep": "Sprungweite der Pfeiltasten",
   "HintSeekStep": "Wie weit die Wiedergabe durch die Pfeiltasten links und rechts verschoben wird.",
 
+  "SettingFileOpen": "Von außen geöffnete Datei",
+  "FileOpenAppend": "Anhängen",
+  "FileOpenAppendPlay": "Sofort abspielen",
+  "FileOpenReplace": "Ersetzen",
+  "HintFileOpen": "Verhalten bei einer außerhalb der Anwendung geöffneten Datei — aus dem Dateimanager, aus der Liste „Öffnen mit“ oder auf das Fenster gezogen. Die Auswahl von Dateien innerhalb der Anwendung fügt sie stets an das Ende der Warteschlange an.",
+
   "SettingMediaKeys": "Multimedia-Tasten",
   "HintMediaKeys": "Die Tasten für Wiedergabe, Stopp und Titelwechsel funktionieren auch, wenn das Fenster nicht im Vordergrund ist. Unter Linux leitet der Desktop sie über das Medienpanel weiter, weshalb die Einstellung dort keine Wirkung hat.",
 
@@ -127,6 +166,18 @@
   "AssociationsFailed": "Der Vorgang ist fehlgeschlagen:",
 
   "AboutAuthor": "Autor",
+  "AboutRepository": "Repository",
+  "AboutReleases": "Versionen und Installationsdateien",
+  "AboutUpdates": "Neuere Version",
+  "UpdateCheckNow": "Jetzt prüfen",
+  "UpdateChecking": "Wird geprüft…",
+  "UpdateAvailable": "Version {0} ist verfügbar.",
+  "UpdateCurrent": "Dies ist die neueste Version.",
+  "UpdateFailed": "Die Prüfung ist fehlgeschlagen — keine Verbindung, oder der Dienst hat nicht geantwortet.",
+  "SettingUpdateCheck": "Prüfung beim Start",
+  "HintUpdateCheck": "Beim Start fragt die Anwendung GitHub einmalig nach der Nummer der neuesten Version, höchstens einmal pro Tag. Sie sendet nichts über die abgespielten Dateien oder über den Benutzer, wobei der Dienst — wie jeder Server — die Netzwerkadresse sieht. Die Schaltfläche oben funktioniert unabhängig von dieser Einstellung.",
+  "UpdateNotice": "Version {0} ist verfügbar.",
+  "UpdateNoticeLink": "Versionsseite",
   "TooltipRepeatOff": "Wiederholen aus — Klick wiederholt die Warteschlange",
   "TooltipRepeatQueue": "Warteschlange wird wiederholt — Klick wiederholt einen Titel",
   "TooltipRepeatTrack": "Titel wird wiederholt — Klick schaltet die Wiederholung aus",

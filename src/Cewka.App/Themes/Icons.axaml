@@ -33,6 +33,18 @@
   <!-- Dodawanie plików -->
   <StreamGeometry x:Key="IconFolder">M2.3,3.3 H6.3 L7.7,5.1 H13.7 A1.3,1.3 0 0 1 15,6.4 V12 A1.3,1.3 0 0 1 13.7,13.3 H2.3 A1.3,1.3 0 0 1 1,12 V4.6 A1.3,1.3 0 0 1 2.3,3.3 Z</StreamGeometry>
 
+  <!--
+    Otwarcie i zapis listy odtwarzania, w obszarze kolejki.
+
+    Folder konturowy, a nie ten sam wypelniony co przy dodawaniu plikow: dwa jednakowe znaki
+    na dwie rozne czynnosci w jednym oknie sa gorsze niz brak znaku. Metafora zostaje ta sama,
+    o ktora prosil uzytkownik, a rysunek jest wyraznie inny.
+  -->
+  <StreamGeometry x:Key="IconFolderStroke">M2.6,3.9 H6.1 L7.5,5.7 H13.4 A1.1,1.1 0 0 1 14.5,6.8 V11.9 A1.1,1.1 0 0 1 13.4,13 H2.6 A1.1,1.1 0 0 1 1.5,11.9 V5 A1.1,1.1 0 0 1 2.6,3.9 Z</StreamGeometry>
+
+  <!-- Dyskietka: korpus ze scietym naroznikiem, przesuwka u gory, etykieta u dolu. -->
+  <StreamGeometry x:Key="IconSave">M2,3.4 A1.4,1.4 0 0 1 3.4,2 H10.2 L14,5.8 V12.6 A1.4,1.4 0 0 1 12.6,14 H3.4 A1.4,1.4 0 0 1 2,12.6 Z M6,2.9 H9.6 V5.9 H6 Z M5,9 H11 V13.1 H5 Z</StreamGeometry>
+
   <!-- Głośność -->
   <StreamGeometry x:Key="IconSpeaker">M2.4 6h2.4L8.4 3v10L4.8 10H2.4z</StreamGeometry>
   <StreamGeometry x:Key="IconSpeakerWavesStroke">M10.8 5.6a3.6 3.6 0 0 1 0 4.8M12.8 3.8a6 6 0 0 1 0 8.4</StreamGeometry>

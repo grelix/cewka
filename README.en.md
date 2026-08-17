@@ -5,7 +5,7 @@ no .NET runtime required.
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-0.6.0-brightgreen)
+![Version](https://img.shields.io/badge/version-0.7.11-brightgreen)
 
 *[Wersja polska](README.md)*
 
@@ -28,13 +28,20 @@ I wrote the code with help from Claude Code, which wrote automated tests and hun
 - **Ten-band equalizer** with a preamp and a soft limiter on the output
 - **Volume normalization** using ReplayGain tags or its own EBU R128 analysis, with a choice
   of target level (−23, −18, or −14 LUFS)
-- **Background from cover art colors**, animated to the beat
+- **M3U playlists** — the queue can be saved and loaded, including in another player
+- **Background from cover art colors**, animated to the beat; the blobs breathe independently
+  of one another, and the colour intensity has three settings
 - **Light and dark theme**, following the system by default
-- **Five languages**: Polish, English, Spanish, German, and French
+- **Seventeen languages**: Polish, English, Czech, German, Greek, Spanish, French, Hungarian,
+  Indonesian, Italian, Dutch, Portuguese, Romanian, Russian, Turkish, Ukrainian, and Vietnamese
 - **Desktop integration**: media panel (MPRIS on Linux, an overlay on Windows),
   media keys, single instance with file handoff
-- **Settings**: output device, buffer size, sample rate conversion quality,
-  seek step, restoring the previous session
+- **Update check** — on demand or at start-up, off by default. This is the only place the
+  application touches the network: one question to GitHub for the number of the latest
+  release, no more than once a day
+- **Settings**: output device, buffer size, sample rate conversion quality, seek step,
+  restoring the previous session, default cover colours (five pairs, or a fresh one for every
+  track), what happens to a file opened from the file manager
 
 <img src="docs/obrazy/cewka-ustawienia.png" width="640" alt="Settings">
 
@@ -46,19 +53,19 @@ the app shows up in the application menu.
 **Fedora, RHEL, openSUSE**
 
 ```bash
-sudo dnf install ./cewka-0.6.0-1.x86_64.rpm
+sudo dnf install ./cewka-0.7.11-1.x86_64.rpm
 ```
 
 **Debian, Ubuntu, Linux Mint**
 
 ```bash
-sudo apt install ./cewka_0.6.0_amd64.deb
+sudo apt install ./cewka_0.7.11_amd64.deb
 ```
 
 **Arch, Manjaro**
 
 ```bash
-sudo pacman -U cewka-0.6.0-1-x86_64.pkg.tar.zst
+sudo pacman -U cewka-0.7.11-1-x86_64.pkg.tar.zst
 ```
 
 **Windows**
@@ -124,7 +131,7 @@ On Windows the equivalents are `native\build-windows.cmd` and `tools\publish-win
 dotnet test Cewka.sln
 ```
 
-103 tests: signal processing, view model logic, settings compatibility across versions,
+326 tests: signal processing, view model logic, settings compatibility across versions,
 and completeness of the language files.
 
 UI screenshots can be rendered without opening a window — useful for comparing
@@ -132,6 +139,15 @@ successive versions of the look:
 
 ```bash
 dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots
+```
+
+Passing an audio file as the second argument feeds it into the window exactly as opening it from
+the file manager would — with title, cover art and duration. Every animation is stopped at a
+fixed point while capturing, so two runs of the same code produce the same images and they can
+be compared pixel by pixel:
+
+```bash
+dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots ~/Music/Album/track.mp3
 ```
 
 ## Known limitations

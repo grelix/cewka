@@ -9,6 +9,17 @@
       oklch(0.55 0.13 250) -> #2A75BA   (jasny)
   -->
 
+  <!--
+    Wysokosc wiersza naglowkowego w panelu korektora i kolejki, wspolna dla obu stron.
+
+    Po stronie korektora wiersz ma taka wysokosc sam z siebie, bo stoi w nim przelacznik
+    i przyciski trybow. Po stronie kolejki byl wysoki jedynie na tyle, co sam napis, wiec
+    oba naglowki rozjezdzaly sie w pionie o 8 px - dokladnie o polowe tej roznicy. Jedna
+    wartosc dla obu stron zamyka mozliwosc, zeby rozjechaly sie ponownie, a narzedzie
+    zrzutow i tak mierzy to przy kazdym przebiegu.
+  -->
+  <x:Double x:Key="PanelHeaderRowHeight">34</x:Double>
+
   <ResourceDictionary.ThemeDictionaries>
 
     <!-- ================= CIEMNY ================= -->

@@ -38,6 +38,18 @@
   "Queue": "File d'attente",
   "QueueEmpty": "vide",
 
+  "TooltipPlaylistLoad": "Charger une liste de lecture à la place de la file d'attente",
+  "TooltipPlaylistSave": "Enregistrer la file d'attente comme liste de lecture",
+  "PlaylistLoadTitle": "Charger une liste de lecture",
+  "PlaylistSaveTitle": "Enregistrer la liste de lecture",
+  "PlaylistFilter": "Listes de lecture",
+  "PlaylistDefaultName": "file",
+  "PlaylistSaved": "Liste de lecture enregistrée dans {0}.",
+  "PlaylistMissing": "Liste de lecture chargée. Entrées ignorées car les fichiers ont disparu : {0}.",
+  "PlaylistEmpty": "La liste indiquée ne contient aucun fichier encore existant.",
+  "PlaylistLoadFailed": "Impossible de charger la liste de lecture.",
+  "PlaylistSaveFailed": "Impossible d'enregistrer la liste de lecture.",
+
   "UnknownArtist": "Artiste inconnu",
   "NoTrack": "Aucune piste dans la file d'attente",
   "NoFormat": "—",
@@ -46,6 +58,7 @@
 
   "Settings": "Paramètres",
   "SectionAppearance": "Apparence",
+  "SectionLanguage": "Langue",
   "SectionAudio": "Audio",
   "SectionPlayback": "Lecture",
   "SectionSystem": "Intégration système",
@@ -59,6 +72,8 @@
 
   "SettingLanguage": "Langue de l'interface",
   "LanguageAuto": "Système",
+  "HintMachineTranslation": "Les traductions de l'interface ont été réalisées automatiquement. Je m'excuse pour les erreurs et les formulations maladroites — les signaler dans le dépôt permettra de les corriger.",
+  "LanguageReportLink": "Rapport d'erreur de traduction",
 
   "SettingWindowControls": "Boutons de la fenêtre",
   "ControlsRight": "À droite",
@@ -70,6 +85,24 @@
   "EffectsFull": "Complets",
   "EffectsReduced": "Réduits",
   "HintEffects": "Le mode automatique limite le mouvement du fond et la rotation du disque sur batterie.",
+
+  "SettingColours": "Intensité des couleurs",
+  "ColoursSubtle": "Discrète",
+  "ColoursRecommended": "Recommandée",
+  "ColoursIntense": "Intense",
+  "HintColours": "Intensité avec laquelle les couleurs de la pochette se reportent sur le fond de la fenêtre. Les taches de couleur s'éclaircissent et s'assombrissent lentement, chacune selon son propre rythme, et ce réglage fixe la limite inférieure et supérieure de cette oscillation. Le réglage recommandé correspond à l'intensité pour laquelle l'application a été conçue.",
+
+  "SettingFormatBadge": "Indicateur de qualité de la source",
+  "HintFormatBadge": "Indicateur affiché à côté du disque, indiquant le codec, la profondeur de bits, le débit binaire et la fréquence d'échantillonnage.",
+
+  "SettingPlaceholder": "Couleurs de la pochette par défaut",
+  "HintPlaceholder": "Spirale affichée pour les fichiers sans pochette propre. Les couleurs se fondent les unes dans les autres le long de la spirale, et le fond de la fenêtre est composé à partir d'elles exactement comme à partir d'une véritable pochette.",
+  "PaletteBlueViolet": "Bleu et violet",
+  "PaletteTurquoise": "Turquoise et rose",
+  "PaletteAmber": "Ambre et carmin",
+  "PaletteLime": "Citron et émeraude",
+  "PaletteGraphite": "Graphite et cuivre",
+  "PaletteRandom": "Aléatoire par piste",
 
   "SettingOutputDevice": "Périphérique de sortie",
   "DeviceRefresh": "Actualiser",
@@ -107,6 +140,12 @@
   "SettingSeekStep": "Pas de déplacement par flèches",
   "HintSeekStep": "Distance dont les flèches gauche et droite déplacent la lecture.",
 
+  "SettingFileOpen": "Fichier ouvert depuis l'extérieur",
+  "FileOpenAppend": "Fin de la file",
+  "FileOpenAppendPlay": "Lecture immédiate",
+  "FileOpenReplace": "Remplacer la file",
+  "HintFileOpen": "Ce qu'il advient d'un fichier ouvert en dehors de l'application — depuis le gestionnaire de fichiers, depuis la liste « Ouvrir avec » ou déposé sur la fenêtre. Le choix de fichiers depuis l'application les ajoute toujours à la fin de la file d'attente.",
+
   "SettingMediaKeys": "Touches multimédias",
   "HintMediaKeys": "Les touches de lecture, d'arrêt et de piste fonctionnent même lorsque la fenêtre de l'application n'est pas active. Sous Linux, le bureau les transmet par le panneau multimédia ; ce réglage n'y a donc pas d'effet.",
 
@@ -127,6 +166,18 @@
   "AssociationsFailed": "L'opération a échoué :",
 
   "AboutAuthor": "Auteur",
+  "AboutRepository": "Dépôt",
+  "AboutReleases": "Versions et fichiers d'installation",
+  "AboutUpdates": "Nouvelle version",
+  "UpdateCheckNow": "Vérifier",
+  "UpdateChecking": "Vérification…",
+  "UpdateAvailable": "La version {0} est disponible.",
+  "UpdateCurrent": "C'est la version la plus récente.",
+  "UpdateFailed": "La vérification a échoué — absence de connexion, ou le service n'a pas répondu.",
+  "SettingUpdateCheck": "Vérification au démarrage",
+  "HintUpdateCheck": "Au démarrage, l'application interroge une fois GitHub sur le numéro de la version la plus récente, au plus une fois par jour. Elle n'envoie rien au sujet des fichiers lus ni de l'utilisateur, bien que le service — comme tout serveur — voie l'adresse réseau. Le bouton ci-dessus fonctionne indépendamment de ce réglage.",
+  "UpdateNotice": "La version {0} est disponible.",
+  "UpdateNoticeLink": "Page des versions",
   "TooltipRepeatOff": "Répétition désactivée — cliquer pour répéter la file d'attente",
   "TooltipRepeatQueue": "Répétition de la file d'attente — cliquer pour répéter une seule piste",
   "TooltipRepeatTrack": "Répétition d'une seule piste — cliquer pour désactiver la répétition",

@@ -10,6 +10,7 @@ using Cewka.App.Models;
 using Cewka.App.Services;
 using Cewka.App.ViewModels;
 using Cewka.App.Views;
+using Cewka.Platform;
 
 // "Cewka.App" is both a namespace and the Application subclass inside it,
 // so the type needs an alias to be usable here.
@@ -32,7 +33,8 @@ internal static class Program
 {
     private sealed record Shot(string Name, int Width, int Height, ThemeVariant Variant, bool PanelOpen,
         WindowControlsPosition Controls = WindowControlsPosition.Right, string Language = "pl",
-        string Section = "Appearance");
+        string Section = "Appearance",
+        ColourIntensity Intensity = ColourIntensity.Recommended);
 
     private static readonly Shot[] Shots =
     [
@@ -55,6 +57,14 @@ internal static class Program
         // Interfejs po angielsku: sprawdzenie, ze przelaczenie jezyka faktycznie dociera
         // do wszystkich napisow, a nie tylko do tych zlozonych na nowo.
         new("angielski", 1180, 680, ThemeVariant.Dark, true, Language: "en"),
+
+        // Skrajne intensywnosci barw. Wariant zalecany jest juz sfotografowany jako
+        // "ciemny-1180" i sluzy za odniesienie: musi wyjsc identyczny jak przed dodaniem
+        // tego ustawienia, bo mnozniki wynosza tam dokladnie jeden.
+        new("barwy-subtelne", 1180, 680, ThemeVariant.Dark, true, Intensity: ColourIntensity.Subtle),
+        new("barwy-intensywne", 1180, 680, ThemeVariant.Dark, true, Intensity: ColourIntensity.Intense),
+        new("barwy-subtelne-jasny", 1180, 680, ThemeVariant.Light, true, Intensity: ColourIntensity.Subtle),
+        new("barwy-intensywne-jasny", 1180, 680, ThemeVariant.Light, true, Intensity: ColourIntensity.Intense),
     ];
 
     /// <summary>
@@ -93,18 +103,63 @@ internal static class Program
         new("ustawienia-dzwiek", 820, 640, ThemeVariant.Dark, true, Section: "Audio"),
         new("ustawienia-odtwarzanie", 820, 640, ThemeVariant.Dark, true, Section: "Playback"),
         new("ustawienia-system", 820, 640, ThemeVariant.Dark, true, Section: "Integration"),
+        // Zakladka informacji urosla o wpis o repozytorium i o sprawdzanie nowszego wydania,
+        // wiec doszedl zrzut wyzszy, pokazujacy ja calosciowo.
         new("ustawienia-informacje", 820, 640, ThemeVariant.Dark, true, Section: "About"),
+        new("ustawienia-informacje-cala", 820, 820, ThemeVariant.Dark, true, Section: "About"),
+        new("ustawienia-informacje-jasny", 820, 820, ThemeVariant.Light, true, Section: "About"),
         new("ustawienia-jasny", 820, 640, ThemeVariant.Light, true),
 
         // Okno w rozmiarze najmniejszym dopuszczalnym, na zakladce o najbogatszej zawartosci.
         new("ustawienia-minimum", 700, 520, ThemeVariant.Dark, true, Section: "Audio"),
 
-        // Jezyki dolozone: etykiety paskow segmentowych i nazwy zakladek sa tu najdluzsze,
-        // a niemiecki jest wsrod nich przypadkiem najtrudniejszym.
+        // Zakladka wygladu jest teraz najwyzsza z wszystkich — doszly intensywnosc barw,
+        // przelacznik plakietki i piec probek barw domyslnej okladki. Osobny, wysoki zrzut
+        // pokazuje ja calosciowo; ten w rozmiarze 820x640 pokazuje, co widac bez przewijania.
+        new("ustawienia-wyglad-cala", 820, 1000, ThemeVariant.Dark, true),
+        new("ustawienia-wyglad-cala-jasny", 820, 1000, ThemeVariant.Light, true),
+
+        // Kazdy jezyk osobno, na zakladce dzwieku: tam etykiety paskow segmentowych sa
+        // najdluzsze. To zarazem jedyne miejsce, ktore sprawdza, czy jezyk jest w ogole
+        // zarejestrowany w klasie Strings — plik jezykowy bez wpisu na liscie kodow nie
+        // zmienilby tutaj niczego i zrzut wyszedlby po polsku.
         new("ustawienia-niemiecki", 820, 640, ThemeVariant.Dark, true, Language: "de"),
         new("ustawienia-niemiecki-dzwiek", 820, 640, ThemeVariant.Dark, true, Language: "de", Section: "Audio"),
         new("ustawienia-hiszpanski", 820, 640, ThemeVariant.Dark, true, Language: "es", Section: "Audio"),
         new("ustawienia-francuski", 820, 640, ThemeVariant.Dark, true, Language: "fr", Section: "Audio"),
+        new("ustawienia-wloski", 820, 640, ThemeVariant.Dark, true, Language: "it", Section: "Audio"),
+        new("ustawienia-portugalski", 820, 640, ThemeVariant.Dark, true, Language: "pt", Section: "Audio"),
+        new("ustawienia-rosyjski", 820, 640, ThemeVariant.Dark, true, Language: "ru", Section: "Audio"),
+        new("ustawienia-ukrainski", 820, 640, ThemeVariant.Dark, true, Language: "uk", Section: "Audio"),
+        new("ustawienia-czeski", 820, 640, ThemeVariant.Dark, true, Language: "cs", Section: "Audio"),
+        new("ustawienia-indonezyjski", 820, 640, ThemeVariant.Dark, true, Language: "id", Section: "Audio"),
+        new("ustawienia-turecki", 820, 640, ThemeVariant.Dark, true, Language: "tr", Section: "Audio"),
+        new("ustawienia-wietnamski", 820, 640, ThemeVariant.Dark, true, Language: "vi", Section: "Audio"),
+
+        // Wietnamski takze w zakladce wygladu: tam stoja nazwy par barw, a wietnamski zapis
+        // rozbija wyrazy na sylaby, wiec akurat te etykiety sa tam najbardziej narazone.
+        new("ustawienia-wietnamski-wyglad", 820, 1000, ThemeVariant.Dark, true, Language: "vi"),
+
+        // Zakladka jezyka: lista trzynastu pozycji i nota o tlumaczeniu maszynowym.
+        new("ustawienia-jezyk", 820, 640, ThemeVariant.Dark, true, Section: "Language"),
+        new("ustawienia-jezyk-jasny", 820, 640, ThemeVariant.Light, true, Section: "Language"),
+        new("ustawienia-jezyk-waski", 700, 640, ThemeVariant.Dark, true, Section: "Language"),
+        new("ustawienia-jezyk-rosyjski", 820, 640, ThemeVariant.Dark, true, Language: "ru", Section: "Language"),
+        new("ustawienia-jezyk-wietnamski", 820, 640, ThemeVariant.Dark, true, Language: "vi", Section: "Language"),
+        new("ustawienia-jezyk-grecki", 820, 640, ThemeVariant.Dark, true, Language: "el", Section: "Language"),
+
+        // Jezyki dolozone w 0.7.0. Grecki jest wsrod nich przypadkiem osobnym: to pierwsze
+        // w programie pismo inne niz lacinskie i cyrylica.
+        new("ustawienia-grecki", 820, 640, ThemeVariant.Dark, true, Language: "el", Section: "Audio"),
+        new("ustawienia-grecki-wyglad", 820, 1000, ThemeVariant.Dark, true, Language: "el"),
+        new("ustawienia-niderlandzki", 820, 640, ThemeVariant.Dark, true, Language: "nl", Section: "Audio"),
+        new("ustawienia-rumunski", 820, 640, ThemeVariant.Dark, true, Language: "ro", Section: "Audio"),
+        new("ustawienia-wegierski", 820, 640, ThemeVariant.Dark, true, Language: "hu", Section: "Audio"),
+        new("ustawienia-wegierski-odtwarzanie", 820, 640, ThemeVariant.Dark, true, Language: "hu", Section: "Playback"),
+
+        // Cyrylica takze w zakladce wygladu: tam stoja nazwy par barw.
+        new("ustawienia-rosyjski-wyglad", 820, 940, ThemeVariant.Dark, true, Language: "ru"),
+        new("ustawienia-ukrainski-odtwarzanie", 820, 640, ThemeVariant.Dark, true, Language: "uk", Section: "Playback"),
     ];
 
     [STAThread]
@@ -123,17 +178,42 @@ internal static class Program
             return 1;
         }
 
+        // Trzeci argument, opcjonalny: drugi plik dzwiekowy o innym czasie trwania. Sluzy
+        // wylacznie sprawdzeniu, czy zastapienie kolejki plikiem z zewnatrz faktycznie
+        // przelacza dekoder.
+        var second = args.Length > 2 ? args[2] : null;
+        if (second is not null && !File.Exists(second))
+        {
+            Console.Error.WriteLine($"Nie ma pliku: {second}");
+            return 1;
+        }
+
+        // Everything the running player would write goes to a throwaway directory instead of the
+        // real one. Photographing the interface closes a genuine MainWindow, and closing it saves
+        // the queue — so without this, taking snapshots would replace my own saved queue with
+        // whatever track this run happened to be given.
+        var scratchRoot = Path.Combine(Path.GetTempPath(), "cewka-zrzuty");
+        if (Directory.Exists(scratchRoot)) Directory.Delete(scratchRoot, recursive: true);
+        AppPaths.Redirect(scratchRoot);
+
         AppBuilder.Configure<CewkaApplication>()
             .UseSkia()
             .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
             .SetupWithoutStarting();
 
         // No desktop lifetime runs here, so the shared services must be created by hand.
-        // A throwaway settings file keeps my own configuration untouched.
-        var scratchSettings = Path.Combine(Path.GetTempPath(), "cewka-snapshots-settings.json");
-        if (File.Exists(scratchSettings)) File.Delete(scratchSettings);
         ((CewkaApplication)Application.Current!).InitialiseServicesForHeadless(
-            new SettingsStore(scratchSettings), track is null ? null : [track]);
+            new SettingsStore(AppPaths.SettingsFile), track is null ? null : [track]);
+
+        // Sprawdziany zachowania okna idą przed zrzutami: obracają stanem panelu i rozmiarem,
+        // a zrzuty mają zastać ustawienia takie, jakie sobie ustawiają same.
+        var zachowanieOk = CheckPanelHeightMemory();
+
+        if (track is not null && second is not null)
+            zachowanieOk &= CheckReplaceQueue(track, second);
+
+        CaptureCoils(outputDirectory);
+        CaptureBackdropPulse(outputDirectory);
 
         foreach (var shot in Shots.Concat(SettingsShots).Concat(BackdropShots))
         {
@@ -153,7 +233,19 @@ internal static class Program
         }
 
         Console.WriteLine($"Zrzuty zapisane w: {outputDirectory}");
-        return 0;
+
+        if (_worstHeadingOffset > HeadingTolerance)
+        {
+            Console.Error.WriteLine(
+                $"BLAD wyrownania: naglowki Korektor i Kolejka rozjezdzaja sie o " +
+                $"{_worstHeadingOffset:F2} px (dopuszczalne {HeadingTolerance:F2}).");
+            return 1;
+        }
+
+        Console.WriteLine(
+            $"Naglowki panelu wyrownane w pionie (najwiekszy rozjazd {_worstHeadingOffset:F2} px).");
+
+        return zachowanieOk ? 0 : 1;
     }
 
     /// <summary>
@@ -166,6 +258,7 @@ internal static class Program
         Application.Current!.RequestedThemeVariant = shot.Variant;
         CewkaApplication.Settings.Current.WindowControls = shot.Controls;
         CewkaApplication.Settings.Current.Language = shot.Language;
+        CewkaApplication.Settings.Current.ColourIntensity = shot.Intensity;
         Cewka.App.Localisation.Strings.Current.SetLanguage(shot.Language);
 
         var player = new MainViewModel(CewkaApplication.Settings);
@@ -196,7 +289,7 @@ internal static class Program
     /// Brings the loaded track to the state it should be photographed in: tags and cover read,
     /// playback moved into the track and then stopped.
     /// </summary>
-    private static void PrepareTrack(Window window)
+    private static void PrepareTrack(MainWindow window)
     {
         if (window.DataContext is not MainViewModel player || player.Queue.Count == 0) return;
 
@@ -212,9 +305,193 @@ internal static class Program
         SettleAfterSeek(player);
         player.Pause();
 
+        // Obrot plyty, dryf plam tla i faza fali liczyly sie od czasu rzeczywistego, wiec dwa
+        // przebiegi tego samego kodu dawaly rozne obrazy - a wtedy zrzuty nie nadaja sie do
+        // porownywania wersji, czyli do tego, po co istnieja. Tu wszystkie trzy staja.
+        window.FreezeAnimationsForCapture();
+
         Console.WriteLine(player.AudioFailure.Length > 0
             ? $"       uwaga: {player.AudioFailure}"
             : $"       {player.Title} — {player.Elapsed} / {player.Total}");
+    }
+
+    /// <summary>
+    /// Checks that replacing the queue with a file opened from outside actually plays that file.
+    ///
+    /// <para>Sprawdzane jest czas trwania, a nie numer pozycji ani tytuł. Numer i tytuł biorą się
+    /// z listy kolejki i po podmianie są poprawne nawet wtedy, gdy dekoder trzyma jeszcze
+    /// poprzedni plik — a to był właśnie błąd. Czas trwania czytany jest z otwartego dekodera,
+    /// więc mówi, co gra naprawdę.</para>
+    /// </summary>
+    private static bool CheckReplaceQueue(string first, string second)
+    {
+        CewkaApplication.Settings.Current.Window = null;
+        CewkaApplication.Settings.Current.FileOpenAction = FileOpenAction.ReplaceAndPlay;
+        CewkaApplication.Settings.Current.RestoreSession = false;
+
+        var player = new MainViewModel(CewkaApplication.Settings);
+
+        try
+        {
+            player.OpenFromOutside([first]);
+            var pierwszy = WaitForDuration(player);
+
+            player.OpenFromOutside([second]);
+            var drugi = WaitForDuration(player, avoid: pierwszy);
+
+            Console.WriteLine($"       zastapienie kolejki: {Path.GetFileName(first)} -> {pierwszy}" +
+                              $"   {Path.GetFileName(second)} -> {drugi}");
+
+            if (player.Queue.Count != 1)
+            {
+                Console.Error.WriteLine($"  BLAD: po zastapieniu kolejka ma {player.Queue.Count} pozycji, a ma miec 1.");
+                return false;
+            }
+
+            if (pierwszy == drugi)
+            {
+                Console.Error.WriteLine(
+                    "  BLAD: po zastapieniu kolejki gra nadal poprzedni plik — czas trwania sie nie zmienil " +
+                    $"({drugi}). Numer pozycji zostal ten sam, wiec dekoder nie zostal wymieniony.");
+                return false;
+            }
+
+            Console.WriteLine("  ok   zastapienie kolejki plikiem z zewnatrz odtwarza ten plik");
+            return true;
+        }
+        finally
+        {
+            player.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Czeka, aż dekoder poda czas trwania. <paramref name="avoid"/> pozwala odczekać na zmianę:
+    /// bez tego odczyt mógłby trafić w moment, w którym nowy plik jeszcze się nie otworzył.
+    /// </summary>
+    private static string WaitForDuration(MainViewModel player, string? avoid = null)
+    {
+        for (var i = 0; i < 80; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+
+            var total = player.Total;
+            if (total != "0:00" && total != avoid) return total;
+
+            Thread.Sleep(50);
+        }
+
+        return player.Total;
+    }
+
+    /// <summary>
+    /// Checks that expanding the panel in a window too short for it is reversible: the height
+    /// from before comes back when the panel is collapsed again, unless the user has resized
+    /// the window in between.
+    /// <para>
+    /// Three cases, because only the first two are obvious and the third is the one that used to
+    /// be wrong in the opposite direction — restoring a height the user had since overruled.
+    /// </para>
+    /// </summary>
+    private static bool CheckPanelHeightMemory()
+    {
+        // Zadnej zapamietanej geometrii: inaczej odtworzenie rozmiaru z ustawien nadpisalo by
+        // wysokosc, ktora ten sprawdzian wlasnie ustawia.
+        CewkaApplication.Settings.Current.Window = null;
+        CewkaApplication.Settings.Current.PanelOpen = false;
+
+        const double startingHeight = 500;
+        var window = new MainWindow { Width = 1180, Height = startingHeight };
+        var player = (MainViewModel)window.DataContext!;
+        var dobrze = true;
+
+        try
+        {
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            player.TogglePanel();
+            Dispatcher.UIThread.RunJobs();
+            var rozwiniete = window.Height;
+
+            player.TogglePanel();
+            Dispatcher.UIThread.RunJobs();
+            var zwiniete = window.Height;
+
+            Console.WriteLine($"       wysokosc: start {startingHeight}  -> panel {rozwiniete}" +
+                              $"  -> po schowaniu {zwiniete}");
+
+            if (rozwiniete <= startingHeight)
+            {
+                Console.Error.WriteLine("  BLAD: rozwiniecie panelu nie podnioslo okna.");
+                dobrze = false;
+            }
+
+            if (Math.Abs(zwiniete - startingHeight) > 0.5)
+            {
+                Console.Error.WriteLine(
+                    $"  BLAD: po schowaniu panelu okno ma {zwiniete}, a powinno wrocic " +
+                    $"do {startingHeight}.");
+                dobrze = false;
+            }
+
+            // Trzeci przypadek: uzytkownik sam zmienia rozmiar, gdy panel jest rozwiniety.
+            // Wtedy zapamietana wysokosc traci waznosc i okno ma zostac tam, gdzie je postawil.
+            player.TogglePanel();
+            Dispatcher.UIThread.RunJobs();
+
+            const double wybranaPrzezUzytkownika = 760;
+            window.Height = wybranaPrzezUzytkownika;
+            Dispatcher.UIThread.RunJobs();
+
+            player.TogglePanel();
+            Dispatcher.UIThread.RunJobs();
+
+            Console.WriteLine($"       po recznej zmianie na {wybranaPrzezUzytkownika}: {window.Height}");
+
+            if (Math.Abs(window.Height - wybranaPrzezUzytkownika) > 0.5)
+            {
+                Console.Error.WriteLine(
+                    $"  BLAD: okno cofnelo reczna zmiane rozmiaru — ma {window.Height}, " +
+                    $"a powinno zostac na {wybranaPrzezUzytkownika}.");
+                dobrze = false;
+            }
+        }
+        finally
+        {
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        if (dobrze) Console.WriteLine("  ok   pamiec wysokosci okna przy zwijaniu panelu");
+        return dobrze;
+    }
+
+    /// <summary>
+    /// Checks that the two panel headings sit on the same line, and reports by how much they
+    /// miss if they do not.
+    /// <para>
+    /// The two sit in separate grids on either side of a divider, so nothing in the layout makes
+    /// them agree — they only look aligned as long as both rows happen to be the same height,
+    /// and the equaliser row is driven by the switch and the mode buttons beside it. Measuring
+    /// is the only way to know; by eye a few pixels read as "roughly right".
+    /// </para>
+    /// </summary>
+    private static double MeasureHeadingOffset(MainWindow window)
+    {
+        var eq = window.FindControl<TextBlock>("EqHeading");
+        var queue = window.FindControl<TextBlock>("QueueHeading");
+        if (eq is null || queue is null || !eq.IsVisible || !queue.IsVisible) return 0;
+
+        var eqY = eq.TranslatePoint(new Point(0, 0), window)?.Y;
+        var queueY = queue.TranslatePoint(new Point(0, 0), window)?.Y;
+        if (eqY is null || queueY is null) return 0;
+
+        var offset = queueY.Value - eqY.Value;
+        Console.WriteLine(
+            $"       naglowki: Korektor y={eqY.Value:F2}  Kolejka y={queueY.Value:F2}  roznica={offset:F2} px");
+
+        return offset;
     }
 
     /// <summary>Lets the refresh timer pick the new position up before the frame is captured.</summary>
@@ -257,6 +534,7 @@ internal static class Program
 
     private static SettingsSection SectionOf(SettingsViewModel viewModel, string name) => name switch
     {
+        "Language" => viewModel.LanguageSection,
         "Audio" => viewModel.Audio,
         "Playback" => viewModel.Playback,
         "Integration" => viewModel.Integration,
@@ -267,9 +545,19 @@ internal static class Program
     /// <summary>
     /// Renders the moving colour field on its own, under the same scrim the player puts over it.
     /// </summary>
-    private static void CaptureBackdrop(Shot shot, string outputDirectory)
+    private static void CaptureBackdrop(Shot shot, string outputDirectory, double atSeconds = 0)
     {
         Application.Current!.RequestedThemeVariant = shot.Variant;
+
+        var (minimum, maximum) = ColourPreferences.BackdropRange(shot.Intensity);
+
+        var backdrop = new LiveBackdrop
+        {
+            Palette = shot.Variant == ThemeVariant.Dark ? DarkPalette : LightPalette,
+            BaseBrush = Brush(shot.Variant == ThemeVariant.Dark ? "#FF111113" : "#FFE9E9EC"),
+            MinimumStrength = minimum,
+            MaximumStrength = maximum,
+        };
 
         var window = new Window
         {
@@ -280,11 +568,7 @@ internal static class Program
             {
                 Children =
                 {
-                    new LiveBackdrop
-                    {
-                        Palette = shot.Variant == ThemeVariant.Dark ? DarkPalette : LightPalette,
-                        BaseBrush = Brush(shot.Variant == ThemeVariant.Dark ? "#FF111113" : "#FFE9E9EC"),
-                    },
+                    backdrop,
                     new Border
                     {
                         Background = Brush(shot.Variant == ThemeVariant.Dark ? "#73101013" : "#2EFAFAFC"),
@@ -293,10 +577,56 @@ internal static class Program
             },
         };
 
-        Render(window, shot, outputDirectory);
+        Render(window, shot, outputDirectory, beforeCapture: () => backdrop.FreezeForCapture(atSeconds));
+    }
+
+    /// <summary>
+    /// Kilka chwil jednego cyklu jasnienia, na jednym tle i przy jednej palecie.
+    ///
+    /// <para>Każda plama ma własny okres, więc na nieruchomym obrazie nie widać, że w ogóle
+    /// jaśnieją. Dopiero kilka chwil obok siebie pokazuje, że każda idzie swoim rytmem — i że
+    /// nie robią tego wszystkie razem, co wyglądałoby jak migotanie całego okna.</para>
+    /// </summary>
+    private static void CaptureBackdropPulse(string outputDirectory)
+    {
+        foreach (var intensity in Enum.GetValues<ColourIntensity>())
+        {
+            foreach (var seconds in (double[])[0, 4, 8, 12, 16])
+            {
+                var nazwa = $"puls-{intensity.ToString().ToLowerInvariant()}-{seconds:0}s";
+                var shot = new Shot(nazwa, 640, 400, ThemeVariant.Dark, true, Intensity: intensity);
+
+                CaptureBackdrop(shot, outputDirectory, seconds);
+                Console.WriteLine($"  ok   {nazwa}.png");
+            }
+        }
     }
 
     private static IBrush Brush(string colour) => new SolidColorBrush(Color.Parse(colour));
+
+    /// <summary>
+    /// Writes the five default-cover colour pairs in both themes, straight from the drawing code.
+    /// <para>
+    /// These used to be two files in the repository, so looking at them meant opening the files.
+    /// Now they are drawn at run time and the only way to see what they became is to render them.
+    /// </para>
+    /// </summary>
+    private static void CaptureCoils(string outputDirectory)
+    {
+        var katalog = Path.Combine(outputDirectory, "okladki");
+        Directory.CreateDirectory(katalog);
+
+        foreach (var palette in Enum.GetValues<PlaceholderPalette>())
+        {
+            foreach (var (motyw, ciemny) in new[] { ("ciemny", true), ("jasny", false) })
+            {
+                using var bitmap = CoilCover.Render(palette, ciemny);
+                var nazwa = $"okladka-{palette.ToString().ToLowerInvariant()}-{motyw}.png";
+                bitmap.Save(Path.Combine(katalog, nazwa));
+                Console.WriteLine($"  ok   okladki/{nazwa}");
+            }
+        }
+    }
 
     private static void Capture(Shot shot, string outputDirectory)
     {
@@ -304,6 +634,7 @@ internal static class Program
         CewkaApplication.Settings.Current.PanelOpen = shot.PanelOpen;
         CewkaApplication.Settings.Current.WindowControls = shot.Controls;
         CewkaApplication.Settings.Current.Language = shot.Language;
+        CewkaApplication.Settings.Current.ColourIntensity = shot.Intensity;
         Cewka.App.Localisation.Strings.Current.SetLanguage(shot.Language);
 
         var window = new MainWindow
@@ -317,10 +648,27 @@ internal static class Program
         // wywolaniem zwrotnym z wnetrza Render, po Show.
         // Modelu widoku nie zwalniamy tutaj: robi to MainWindow.OnClosed, a drugie zwolnienie
         // konczy sie wyjatkiem.
-        Render(window, shot, outputDirectory, () => PrepareTrack(window));
+        Render(window, shot, outputDirectory,
+            afterShow: () => PrepareTrack(window),
+            beforeCapture: () =>
+            {
+                if (!shot.PanelOpen) return;
+
+                var offset = Math.Abs(MeasureHeadingOffset(window));
+                if (offset > _worstHeadingOffset) _worstHeadingOffset = offset;
+            });
     }
 
-    private static void Render(Window window, Shot shot, string outputDirectory, Action? afterShow = null)
+    /// <summary>Largest heading misalignment seen in this run, in device-independent pixels.</summary>
+    private static double _worstHeadingOffset;
+
+    /// <summary>
+    /// Half a pixel: anything below that is rounding in the layout pass, not a mistake in it.
+    /// </summary>
+    private const double HeadingTolerance = 0.5;
+
+    private static void Render(Window window, Shot shot, string outputDirectory,
+        Action? afterShow = null, Action? beforeCapture = null)
     {
         window.Show();
 
@@ -339,6 +687,8 @@ internal static class Program
 
         Console.WriteLine(
             $"       diag: Width={window.Width} ClientSize={window.ClientSize} Bounds={window.Bounds}");
+
+        beforeCapture?.Invoke();
 
         var frame = window.CaptureRenderedFrame()
                     ?? throw new InvalidOperationException("renderer nie zwrócił klatki");

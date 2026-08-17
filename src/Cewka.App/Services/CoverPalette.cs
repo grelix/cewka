@@ -25,14 +25,18 @@ public static class CoverPalette
     /// Returns <see cref="Count"/> colours ordered from most to least prominent. Falls back
     /// to a neutral set when the image cannot be read.
     /// </summary>
-    public static Color[] Extract(IImage? cover, bool darkTheme)
+    /// <param name="saturation">
+    /// Multiplier from the user's colour-intensity setting. One leaves the result exactly as it
+    /// was before the setting existed.
+    /// </param>
+    public static Color[] Extract(IImage? cover, bool darkTheme, double saturation = 1.0)
     {
         if (cover is null) return Fallback(darkTheme);
 
         try
         {
             var pixels = Rasterise(cover, out var stride);
-            var colours = Reduce(pixels, stride, darkTheme);
+            var colours = Reduce(pixels, stride, darkTheme, saturation);
 
             return colours.Length >= Count ? colours : Pad(colours, darkTheme);
         }
@@ -73,7 +77,7 @@ public static class CoverPalette
     /// precisely the problem this replaces.
     /// </para>
     /// </summary>
-    private static Color[] Reduce(byte[] pixels, int stride, bool darkTheme)
+    private static Color[] Reduce(byte[] pixels, int stride, bool darkTheme, double saturation)
     {
         const int levels = 5;
         var counts = new int[levels * levels * levels];
@@ -110,7 +114,7 @@ public static class CoverPalette
                 return Enrich(Color.FromRgb(
                     (byte)(sums[index].R / count),
                     (byte)(sums[index].G / count),
-                    (byte)(sums[index].B / count)), darkTheme);
+                    (byte)(sums[index].B / count)), darkTheme, saturation);
             })
             .ToArray();
     }
@@ -124,14 +128,20 @@ public static class CoverPalette
     /// light background or swallow the text on it.
     /// </para>
     /// </summary>
-    private static Color Enrich(Color colour, bool darkTheme)
+    private static Color Enrich(Color colour, bool darkTheme, double intensity)
     {
         var hsl = colour.ToHsl();
 
         // Motyw jasny dostaje mocniejsze nasycenie i niższy zakres jasności niż wcześniej:
         // pastele rozjaśnione do 0,86 zlewały się z tłem pulpitu i barwa okładki ledwie się
         // przebijała. Dolna granica 0,55 zostawia jeszcze zapas kontrastu dla ciemnego tekstu.
-        var saturation = Math.Clamp(hsl.S * 1.5 + 0.10, 0, darkTheme ? 0.85 : 0.74);
+        //
+        // Ustawienie intensywności mnoży zarówno nasycenie, jak i jego górną granicę. Mnożenie
+        // samej wartości przy nieruchomej granicy nie dałoby nic przy ustawieniu intensywnym:
+        // barwy z wyraźnych okładek już dziś dobijają do tego pułapu. Twarde 0,95 zostaje jako
+        // ostateczny hamulec — powyżej barwa przestaje wyglądać na wziętą ze zdjęcia.
+        var ceiling = Math.Min(0.95, (darkTheme ? 0.85 : 0.74) * intensity);
+        var saturation = Math.Clamp((hsl.S * 1.5 + 0.10) * intensity, 0, ceiling);
         var lightness = darkTheme
             ? Math.Clamp(hsl.L * 0.55 + 0.16, 0.18, 0.48)
             : Math.Clamp(hsl.L * 0.28 + 0.56, 0.55, 0.78);

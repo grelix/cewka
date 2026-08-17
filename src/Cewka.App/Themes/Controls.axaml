@@ -205,6 +205,28 @@
 
   <!-- ======================= Przycisk rozwijania panelu ======================= -->
 
+  <!--
+    Odsylacz. Barwa akcentu i podkreslenie pod kursorem, bez tla i bez obwodki: ma wygladac
+    na adres, nie na przycisk, bo prowadzi poza program.
+  -->
+  <Style Selector="Button.link">
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="FontSize" Value="11.5" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="HorizontalAlignment" Value="Left" />
+  </Style>
+
+  <Style Selector="Button.link /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style Selector="Button.link:pointerover">
+    <Setter Property="TextBlock.TextDecorations" Value="Underline" />
+  </Style>
+
   <Style Selector="Button.pill">
     <Setter Property="Height" Value="24" />
     <Setter Property="Padding" Value="12,0" />

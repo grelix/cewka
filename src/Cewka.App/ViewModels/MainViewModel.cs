@@ -125,6 +125,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _refresh = new DispatcherTimer { Interval = RefreshInterval };
         _refresh.Tick += (_, _) => Refresh();
         _refresh.Start();
+
+        _noticeTimer.Tick += (_, _) => ShowNotice(string.Empty);
     }
 
     // ---------- Utwór ----------
@@ -163,8 +165,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>The badge is removed rather than filled with a dash when nothing is playing.</summary>
-    public bool HasFormatBadge => !string.IsNullOrWhiteSpace(_formatBadge) && _formatBadge != "—";
+    /// <summary>
+    /// The badge is removed rather than filled with a dash when nothing is playing, and stays
+    /// hidden altogether when the user has switched it off in the settings.
+    /// </summary>
+    public bool HasFormatBadge => _settings.Current.ShowFormatBadge
+                                  && !string.IsNullOrWhiteSpace(_formatBadge)
+                                  && _formatBadge != "—";
+
+    /// <summary>Shows or hides the source-quality badge without reopening the window.</summary>
+    public void SetShowFormatBadge(bool show)
+    {
+        if (_settings.Current.ShowFormatBadge == show) return;
+
+        _settings.Current.ShowFormatBadge = show;
+        _settings.Touch();
+
+        Raise(nameof(HasFormatBadge));
+    }
 
     // ---------- Odtwarzanie ----------
 
@@ -675,6 +693,54 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         RebuildQueue();
     }
 
+    /// <summary>
+    /// Bierze pliki przychodzące spoza programu — z wiersza polecenia, z „Otwórz za pomocą",
+    /// od drugiej kopii programu albo upuszczone na okno — i postępuje z nimi tak, jak wybrano
+    /// w ustawieniach.
+    ///
+    /// <para>Wybór plików wewnątrz programu (<c>Ctrl+O</c>) tą drogą nie idzie: tam użytkownik
+    /// właśnie nacisnął „dodaj", więc pytanie, czy dodać, byłoby już rozstrzygnięte.</para>
+    /// </summary>
+    public void OpenFromOutside(IEnumerable<string> paths)
+    {
+        var files = ExpandToAudioFiles(paths).ToList();
+        if (files.Count == 0) return;
+
+        switch (_settings.Current.FileOpenAction)
+        {
+            case FileOpenAction.ReplaceAndPlay:
+                if (TryPlayback(() => _engine.SetQueue(files))) IsPlaying = true;
+                break;
+
+            case FileOpenAction.AppendAndPlay:
+            {
+                // Numer pierwszego dołożonego pliku trzeba odczytać przed dołożeniem: potem
+                // długość kolejki obejmuje już nowe pozycje i nie wiadomo, gdzie się zaczynają.
+                var first = Queue.Count;
+                _engine.Enqueue(files);
+                _resume.Discard();
+                if (TryPlayback(() => _engine.PlayIndex(first))) IsPlaying = true;
+                break;
+            }
+
+            default:
+                // Pusta kolejka to przypadek osobny: nie ma czego przerywać, a program, który
+                // po otwarciu pliku milczy, wygląda na zepsuty.
+                if (IsQueueEmpty)
+                {
+                    if (TryPlayback(() => _engine.SetQueue(files))) IsPlaying = true;
+                }
+                else
+                {
+                    _engine.Enqueue(files);
+                }
+
+                break;
+        }
+
+        RebuildQueue();
+    }
+
     // ---------- Awaria wyjścia dźwięku ----------
 
     private string _audioFailure = string.Empty;
@@ -1025,6 +1091,139 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _resume.Arm(state.CurrentIndex, state.PositionSeconds, existing.Count);
     }
 
+    // ---------- Komunikaty ----------
+
+    /// <summary>Jak długo komunikat zostaje na ekranie, zanim zgaśnie sam.</summary>
+    private static readonly TimeSpan NoticeDuration = TimeSpan.FromSeconds(6);
+
+    private readonly DispatcherTimer _noticeTimer = new() { Interval = NoticeDuration };
+    private string _notice = string.Empty;
+
+    /// <summary>
+    /// Krótki komunikat o czynności, która się właśnie wykonała — zapisaniu listy, brakujących
+    /// plikach. Znika sam po <see cref="NoticeDuration"/>.
+    ///
+    /// <para>Osobno od <see cref="AudioFailure"/>, bo tamten opisuje stan trwały: dopóki nie ma
+    /// wyjścia dźwięku, informacja o tym musi zostać na ekranie. Ten opisuje zdarzenie i po
+    /// przeczytaniu nie jest już do niczego potrzebny.</para>
+    /// </summary>
+    public string Notice
+    {
+        get => _notice;
+        private set
+        {
+            if (!Set(ref _notice, value)) return;
+            Raise(nameof(HasNotice));
+        }
+    }
+
+    public bool HasNotice => _notice.Length > 0;
+
+    public void ShowNotice(string text)
+    {
+        Notice = text;
+
+        // Ponowne wywołanie odlicza czas od nowa, zamiast gasić komunikat w połowie czytania.
+        _noticeTimer.Stop();
+        if (text.Length > 0) _noticeTimer.Start();
+    }
+
+    // ---------- Nowsze wydanie ----------
+
+    private string _updateNotice = string.Empty;
+
+    /// <summary>
+    /// Informacja o dostępnym nowszym wydaniu. Trwała, nie gasnąca sama: opisuje stan, a nie
+    /// zdarzenie, i po zamknięciu okna ustawień ma nadal być widoczna.
+    /// </summary>
+    public string UpdateNotice
+    {
+        get => _updateNotice;
+        private set
+        {
+            if (!Set(ref _updateNotice, value)) return;
+            Raise(nameof(HasUpdateNotice));
+        }
+    }
+
+    public bool HasUpdateNotice => _updateNotice.Length > 0;
+
+    /// <summary>Strona wydania, którą otwiera odsyłacz obok komunikatu.</summary>
+    public string UpdateNoticeUrl { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Pyta o nowsze wydanie, jeśli użytkownik na to przystał i jeśli minęła doba od ostatniego
+    /// sprawdzenia.
+    ///
+    /// <para>Wywoływane przy otwarciu okna i celowo bez oczekiwania na wynik: uruchomienie
+    /// programu nie może zależeć od tego, czy sieć odpowiada. Gdy sprawdzanie jest wyłączone —
+    /// a tak jest domyślnie — ta metoda nie wykonuje żadnego połączenia i kończy się od razu.</para>
+    /// </summary>
+    public async Task CheckForUpdatesIfDueAsync()
+    {
+        if (!_settings.Current.CheckForUpdates) return;
+
+        var last = _settings.Current.LastUpdateCheck;
+        if (last is not null && DateTimeOffset.UtcNow - last.Value < UpdateCheck.AutomaticInterval) return;
+
+        var result = await UpdateCheck.LatestAsync(UpdateCheck.Repository, UpdateCheck.Current);
+
+        _settings.Current.LastUpdateCheck = DateTimeOffset.UtcNow;
+        _settings.Touch();
+
+        if (!result.Succeeded)
+        {
+            // Brak połączenia nie jest wart pokazywania: użytkownik nie prosił o wynik teraz,
+            // więc informacja o nieudanej próbie byłaby zawracaniem uwagi.
+            Console.Error.WriteLine($"[cewka] sprawdzanie wersji: {result.Failure}");
+            return;
+        }
+
+        var latest = result.Latest!;
+        if (latest <= UpdateCheck.Current) return;
+
+        UpdateNoticeUrl = result.ReleaseUrl ?? UpdateCheck.ReleasesUrl(UpdateCheck.Repository) ?? string.Empty;
+        Raise(nameof(UpdateNoticeUrl));
+
+        UpdateNotice = string.Format(Strings.Current["UpdateNotice"], latest.ToString(3));
+    }
+
+    // ---------- Listy odtwarzania ----------
+
+    /// <summary>Obecna kolejka w postaci gotowej do zapisania na listę.</summary>
+    public IReadOnlyList<PlaylistEntry> QueueAsPlaylist() => Queue
+        .Select(item => new PlaylistEntry(item.Path, item.Title, item.Artist, item.DurationSeconds))
+        .ToList();
+
+    /// <summary>
+    /// Wstawia listę odtwarzania na miejsce obecnej kolejki. Zwraca wynik odczytu, żeby okno
+    /// mogło powiedzieć, ilu plików z listy już nie ma.
+    ///
+    /// <para>Odtwarzanie nie zaczyna się samo. Pierwszy utwór jest tylko uzbrojony tym samym
+    /// mechanizmem, którym wraca utwór z poprzedniej sesji, więc pierwsze naciśnięcie
+    /// odtwarzania rusza od początku listy. Wczytanie listy jest czynnością porządkową —
+    /// program, który po niej od razu zaczyna grać, przerywa to, czego nikt nie kazał przerywać.</para>
+    /// </summary>
+    public PlaylistLoad LoadPlaylist(string path)
+    {
+        var load = PlaylistFile.Load(path);
+        if (load.Paths.Count == 0) return load;
+
+        _resume.Discard();
+        _engine.ClearQueue();
+        _engine.Enqueue(load.Paths);
+
+        IsPlaying = false;
+        RebuildQueue();
+
+        _resume.Arm(0, 0, load.Paths.Count);
+
+        return load;
+    }
+
+    /// <summary>Zapisuje obecną kolejkę jako listę M3U pod wskazaną ścieżką.</summary>
+    public void SavePlaylist(string path) => PlaylistFile.Save(path, QueueAsPlaylist());
+
     private readonly PendingResume _resume = new();
 
     /// <summary>
@@ -1177,14 +1376,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 _usingPlaceholderCover = true;
             }
 
-            Palette = CoverPalette.Extract(Cover, App.Theme.IsDark);
+            Palette = ExtractPalette();
         }
         catch
         {
             // Uszkodzona okładka nie może zatrzymać odtwarzania.
             Cover = LoadPlaceholder();
             _usingPlaceholderCover = true;
-            Palette = CoverPalette.Extract(Cover, App.Theme.IsDark);
+            Palette = ExtractPalette();
         }
         finally
         {
@@ -1201,29 +1400,85 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         if (!_usingPlaceholderCover)
         {
-            Palette = CoverPalette.Extract(Cover, App.Theme.IsDark);
+            Palette = ExtractPalette();
             return;
         }
 
         var previous = _cover;
         Cover = LoadPlaceholder();
-        Palette = CoverPalette.Extract(Cover, App.Theme.IsDark);
+        Palette = ExtractPalette();
 
         if (!ReferenceEquals(previous, _cover)) previous?.Dispose();
     }
 
     /// <summary>
-    /// The default sleeve: a coil, after the application's name. One for each theme, so the
-    /// window never shows a dark square on a light background or the other way round.
+    /// Pulls the background colours out of whatever is currently on the record, at the strength
+    /// the user chose.
     /// </summary>
-    private static Bitmap? LoadPlaceholder()
-    {
-        var file = App.Theme.IsDark ? "cover-dark.png" : "cover-light.png";
+    private Color[] ExtractPalette() => CoverPalette.Extract(
+        Cover, App.Theme.IsDark, ColourPreferences.Saturation(_settings.Current.ColourIntensity));
 
+    /// <summary>Progi siły plam tła; czytane przez tło okna, które waha się między nimi.</summary>
+    public double BackdropMinimum => ColourPreferences.BackdropRange(_settings.Current.ColourIntensity).Minimum;
+
+    public double BackdropMaximum => ColourPreferences.BackdropRange(_settings.Current.ColourIntensity).Maximum;
+
+    /// <summary>
+    /// Applies a new colour intensity. Both halves have to move together — the palette is
+    /// measured once per track, the background strength is read every frame.
+    /// </summary>
+    public void SetColourIntensity(ColourIntensity intensity)
+    {
+        if (_settings.Current.ColourIntensity == intensity) return;
+
+        _settings.Current.ColourIntensity = intensity;
+        _settings.Touch();
+
+        Palette = ExtractPalette();
+        Raise(nameof(BackdropMinimum));
+        Raise(nameof(BackdropMaximum));
+    }
+
+    /// <summary>
+    /// Applies a new default-cover colour pair. Only visible while a file without its own
+    /// cover is loaded, but the palette behind the window changes with it, so the whole
+    /// window takes on the new pair.
+    /// </summary>
+    public void SetPlaceholderPalette(PlaceholderPalette palette)
+    {
+        if (_settings.Current.PlaceholderPalette == palette) return;
+
+        _settings.Current.PlaceholderPalette = palette;
+        _settings.Touch();
+
+        // Wybranie losowania ma dać skutek od razu, a nie dopiero przy następnym utworze.
+        _placeholderDraw.Forget();
+
+        if (!_usingPlaceholderCover) return;
+
+        var previous = _cover;
+        Cover = LoadPlaceholder();
+        Palette = ExtractPalette();
+
+        if (!ReferenceEquals(previous, _cover)) previous?.Dispose();
+    }
+
+    private readonly PlaceholderDraw _placeholderDraw = new();
+
+    /// <summary>
+    /// The default sleeve: a coil, after the application's name. Drawn rather than loaded, so
+    /// the colour pair and the theme both take effect without a file for every combination.
+    ///
+    /// <para>Para barw przechodzi przez <see cref="PlaceholderDraw"/>, a nie wprost z ustawień:
+    /// przy wyborze losowym barwy mają być wylosowane raz na utwór, a ta metoda wołana jest
+    /// także przy przewinięciu i przy zmianie motywu.</para>
+    /// </summary>
+    private Bitmap? LoadPlaceholder()
+    {
         try
         {
-            using var stream = AssetLoader.Open(new Uri($"avares://Cewka/Assets/Covers/{file}"));
-            return new Bitmap(stream);
+            var palette = _placeholderDraw.For(_settings.Current.PlaceholderPalette, _current?.Path);
+            return CoilCover.Render(palette, App.Theme.IsDark);
         }
         catch
         {
@@ -1240,6 +1495,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _refresh.Stop();
+        _noticeTimer.Stop();
         _engine.Dispose();
         _loudness.Dispose();
         _cover?.Dispose();

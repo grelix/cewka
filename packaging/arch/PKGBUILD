@@ -4,7 +4,7 @@
 # bez makepkg, więc nie ma pliku .MTREE — ten plik jest właściwą drogą na samym Archu.
 
 pkgname=cewka
-pkgver=0.6.0
+pkgver=0.7.11
 pkgrel=1
 pkgdesc="Minimalistyczny odtwarzacz plików lokalnych"
 arch=('x86_64')
