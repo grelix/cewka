@@ -1,0 +1,140 @@
+{
+  "_language": "Français",
+  "_code": "fr",
+
+  "AppName": "Cewka",
+
+  "TooltipTogglePanel": "Afficher ou masquer l'égaliseur et la file d'attente",
+  "TooltipTheme": "Thème",
+  "TooltipSettings": "Paramètres",
+  "TooltipMinimise": "Réduire",
+  "TooltipMaximise": "Agrandir",
+  "TooltipRestore": "Restaurer la taille",
+  "TooltipClose": "Fermer",
+
+  "TooltipShuffle": "Lecture aléatoire",
+  "TooltipPrevious": "Piste précédente",
+  "TooltipPlayPause": "Lecture ou pause",
+  "TooltipNext": "Piste suivante",
+  "TooltipVolume": "Volume",
+
+  "TooltipEqualiserSwitch": "Activer ou désactiver l'égaliseur",
+  "TooltipLimiter": "Limiteur doux en sortie — protège contre l'écrêtage après l'égalisation",
+  "TooltipNormalisation": "Alignement du volume selon les balises ReplayGain ou l'analyse EBU R128",
+
+  "Equaliser": "Égaliseur",
+  "Preamp": "PREAMP",
+  "OptionLimiter": "Limiteur auto",
+  "OptionNormalisation": "Normalisation",
+
+  "OpenFiles": "Ouvrir des fichiers",
+  "OpenFolder": "Ouvrir un dossier",
+  "DropHint": "Il est également possible de glisser des fichiers ou un dossier sur la fenêtre",
+  "QueueRemove": "Retirer de la file d'attente",
+  "QueueClear": "Vider la file d'attente",
+  "QueueMoveUp": "Monter",
+  "QueueMoveDown": "Descendre",
+  "TooltipMute": "Muet",
+  "Queue": "File d'attente",
+  "QueueEmpty": "vide",
+
+  "UnknownArtist": "Artiste inconnu",
+  "NoTrack": "Aucune piste dans la file d'attente",
+  "NoFormat": "—",
+
+  "AudioFailure": "Impossible de démarrer la lecture.",
+
+  "Settings": "Paramètres",
+  "SectionAppearance": "Apparence",
+  "SectionAudio": "Audio",
+  "SectionPlayback": "Lecture",
+  "SectionSystem": "Intégration système",
+  "SectionAbout": "À propos",
+  "SectionProcessing": "Traitement du signal",
+
+  "SettingTheme": "Thème",
+  "ThemeSystem": "Système",
+  "ThemeLight": "Clair",
+  "ThemeDark": "Sombre",
+
+  "SettingLanguage": "Langue de l'interface",
+  "LanguageAuto": "Système",
+
+  "SettingWindowControls": "Boutons de la fenêtre",
+  "ControlsRight": "À droite",
+  "ControlsLeft": "À gauche",
+  "ControlsMacOs": "macOS",
+
+  "SettingEffects": "Effets visuels",
+  "EffectsAuto": "Automatique",
+  "EffectsFull": "Complets",
+  "EffectsReduced": "Réduits",
+  "HintEffects": "Le mode automatique limite le mouvement du fond et la rotation du disque sur batterie.",
+
+  "SettingOutputDevice": "Périphérique de sortie",
+  "DeviceRefresh": "Actualiser",
+  "DeviceSystemDefault": "Périphérique système par défaut",
+  "DeviceMissing": "indisponible",
+  "DeviceActive": "Son dirigé vers :",
+  "DeviceIdle": "Le périphérique s'ouvre lors de la première lecture.",
+
+  "HintNormalisation": "Aligne le volume des pistes selon les balises ReplayGain ou, en leur absence, selon sa propre analyse EBU R128.",
+  "HintLimiter": "Protège contre l'écrêtage après une amplification par l'égaliseur.",
+
+  "SettingLoudnessTarget": "Niveau cible",
+  "HintLoudnessTarget": "Niveau auquel le volume des pistes est aligné. La valeur -23 LUFS correspond à la norme de diffusion, -18 LUFS au niveau de référence ReplayGain, et -14 LUFS au niveau adopté par les services de diffusion en continu. Un niveau plus élevé laisse moins de marge avant l'écrêtage.",
+
+  "OptionAlwaysAnalyse": "Ignorer les balises ReplayGain",
+  "HintAlwaysAnalyse": "Le volume de chaque piste est déterminé par une mesure propre au lecteur, même lorsque le fichier comporte des balises. Utile pour une bibliothèque balisée par plusieurs outils différents. La première écoute d'une piste se fait sans alignement ; les suivantes en bénéficient.",
+
+  "SettingQuality": "Qualité de conversion de fréquence",
+  "QualityOff": "Sans filtre",
+  "QualityStandard": "Standard",
+  "QualityHigh": "Élevée",
+  "HintQuality": "S'applique uniquement aux fichiers dont la fréquence d'échantillonnage diffère de celle du périphérique de sortie. Un ordre de filtre plus élevé réduit la distorsion au prix d'une charge processeur accrue, et l'écart augmente avec la distance entre les deux fréquences — entre 44,1 kHz et 48 kHz il est négligeable. Le changement prend effet à la piste suivante.",
+
+  "SettingLatency": "Taille du tampon",
+  "LatencyLow": "Faible latence",
+  "LatencyBalanced": "Équilibré",
+  "LatencySafe": "Sûr",
+  "HintLatency": "Un tampon plus petit réduit le délai entre une commande et le son, mais augmente le risque de coupures lorsque le système est sollicité. Le choix constitue une indication pour le pilote, qui peut retenir une autre valeur.",
+  "LatencyMeasured": "Le périphérique a retenu {0} trames, soit environ {1:F1} ms.",
+  "LatencyUnknown": "La valeur est lue une fois le périphérique ouvert.",
+
+  "SettingRestoreSession": "Restauration de la session précédente",
+  "HintRestoreSession": "La file d'attente et la position de la dernière écoute sont restaurées au démarrage de l'application, mais la lecture ne reprend pas d'elle-même. Désactiver cette option démarre l'application avec une file d'attente vide ; celle-ci est enregistrée indépendamment de ce réglage.",
+
+  "SettingSeekStep": "Pas de déplacement par flèches",
+  "HintSeekStep": "Distance dont les flèches gauche et droite déplacent la lecture.",
+
+  "SettingMediaKeys": "Touches multimédias",
+  "HintMediaKeys": "Les touches de lecture, d'arrêt et de piste fonctionnent même lorsque la fenêtre de l'application n'est pas active. Sous Linux, le bureau les transmet par le panneau multimédia ; ce réglage n'y a donc pas d'effet.",
+
+  "SettingSingleInstance": "Instance unique de l'application",
+  "HintSingleInstance": "L'ouverture d'autres fichiers les ajoute à la file d'attente de la fenêtre déjà en cours d'exécution, au lieu de démarrer une seconde instance. Le changement prend effet au prochain démarrage.",
+
+  "SettingMediaPanel": "Panneau multimédia du système",
+  "MediaPanelActive": "Actif — la piste et les boutons de commande apparaissent dans le panneau multimédia du système.",
+  "MediaPanelInactive": "Indisponible — le système n'a pas fourni le panneau au démarrage de l'application.",
+  "MediaPanelUnsupported": "Ce système ne propose pas de panneau multimédia.",
+  "SettingAssociations": "Associations de fichiers",
+  "AssociationsRegister": "Enregistrer",
+  "AssociationsRemove": "Supprimer",
+  "AssociationsCurrent": "L'application est enregistrée en tant que gestionnaire de fichiers audio.",
+  "AssociationsStale": "L'enregistrement pointe vers un autre emplacement du programme — il est conseillé de l'actualiser.",
+  "AssociationsAbsent": "L'application n'est pas enregistrée. L'enregistrement l'ajoute à la liste « Ouvrir avec » pour l'utilisateur actuel uniquement et ne prend en charge aucun format sans indication explicite.",
+  "AssociationsUnsupported": "Ce système ne propose pas de registre d'associations de fichiers.",
+  "AssociationsFailed": "L'opération a échoué :",
+
+  "AboutAuthor": "Auteur",
+  "TooltipRepeatOff": "Répétition désactivée — cliquer pour répéter la file d'attente",
+  "TooltipRepeatQueue": "Répétition de la file d'attente — cliquer pour répéter une seule piste",
+  "TooltipRepeatTrack": "Répétition d'une seule piste — cliquer pour désactiver la répétition",
+  "AboutDecoders": "Décodeurs",
+  "DecodersSummary": "MP3, FLAC et WAV — miniaudio. Ogg Vorbis — NVorbis. Opus — Concentus.",
+  "CodecsAvailable": "prise en charge d'AAC, M4A et ALAC disponible",
+  "CodecsMissing": "aucun codec système",
+
+  "AboutLicences": "Licences",
+  "LicenceSummary": "Cewka est distribué sous licence MIT. Avalonia, NVorbis, Concentus et ATL.NET — MIT. miniaudio — MIT-0. Les polices Cantarell et JetBrains Mono — SIL Open Font License 1.1."
+}

@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Cewka.Audio</RootNamespace>
+    <AssemblyName>Cewka.Audio</AssemblyName>
+    <!-- Potrzebne dla wskaznikow w torze DSP i dla callbackow wolanych z watku natywnego. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NVorbis" Version="0.10.5" />
+    <PackageReference Include="Concentus" Version="2.2.2" />
+    <PackageReference Include="Concentus.OggFile" Version="1.0.7" />
+    <PackageReference Include="z440.atl.core" Version="7.16.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cewka.Platform\Cewka.Platform.csproj" />
+  </ItemGroup>
+
+  <!--
+    Biblioteka natywna budowana skryptami z katalogu native/. Zachowanie ukladu
+    runtimes/{rid}/native pozwala publikacji jednoplikowej spakowac wlasciwy wariant
+    dla kazdej platformy; kopia w katalogu wyjsciowym obsluguje zwykle uruchomienie.
+  -->
+  <ItemGroup>
+    <None Include="runtimes\**\*" Condition="Exists('runtimes')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>runtimes\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </None>
+  </ItemGroup>
+
+  <!--
+    Publikacja pod konkretna platforme kladzie biblioteke takze w korzeniu wyniku.
+    Powod: przy publikacji jednoplikowej pakowana jest zawartosc korzenia, a uklad
+    runtimes/{rid}/native sluzy wylacznie zwyklemu uruchomieniu z katalogu projektu.
+  -->
+  <ItemGroup Condition="'$(RuntimeIdentifier)' != '' And Exists('runtimes\$(RuntimeIdentifier)\native')">
+    <None Include="runtimes\$(RuntimeIdentifier)\native\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>%(Filename)%(Extension)</Link>
+    </None>
+  </ItemGroup>
+
+</Project>

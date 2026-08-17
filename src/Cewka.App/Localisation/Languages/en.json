@@ -1,0 +1,140 @@
+{
+  "_language": "English",
+  "_code": "en",
+
+  "AppName": "Cewka",
+
+  "TooltipTogglePanel": "Show or hide the equaliser and queue",
+  "TooltipTheme": "Theme",
+  "TooltipSettings": "Settings",
+  "TooltipMinimise": "Minimise",
+  "TooltipMaximise": "Maximise",
+  "TooltipRestore": "Restore size",
+  "TooltipClose": "Close",
+
+  "TooltipShuffle": "Shuffle playback",
+  "TooltipPrevious": "Previous track",
+  "TooltipPlayPause": "Play or pause",
+  "TooltipNext": "Next track",
+  "TooltipVolume": "Volume",
+
+  "TooltipEqualiserSwitch": "Turn the equaliser on or off",
+  "TooltipLimiter": "Soft output limiter — guards against clipping after equalisation",
+  "TooltipNormalisation": "Loudness matching from ReplayGain tags or EBU R128 analysis",
+
+  "Equaliser": "Equaliser",
+  "Preamp": "PREAMP",
+  "OptionLimiter": "Auto limiter",
+  "OptionNormalisation": "Normalisation",
+
+  "OpenFiles": "Open files",
+  "OpenFolder": "Open folder",
+  "DropHint": "Files and folders can also be dropped onto the window",
+  "QueueRemove": "Remove from queue",
+  "QueueClear": "Clear the queue",
+  "QueueMoveUp": "Move up",
+  "QueueMoveDown": "Move down",
+  "TooltipMute": "Mute",
+  "Queue": "Queue",
+  "QueueEmpty": "empty",
+
+  "UnknownArtist": "Unknown artist",
+  "NoTrack": "Nothing in the queue",
+  "NoFormat": "—",
+
+  "AudioFailure": "Playback could not be started.",
+
+  "Settings": "Settings",
+  "SectionAppearance": "Appearance",
+  "SectionAudio": "Audio",
+  "SectionPlayback": "Playback",
+  "SectionSystem": "System integration",
+  "SectionAbout": "About",
+  "SectionProcessing": "Signal processing",
+
+  "SettingTheme": "Theme",
+  "ThemeSystem": "System",
+  "ThemeLight": "Light",
+  "ThemeDark": "Dark",
+
+  "SettingLanguage": "Interface language",
+  "LanguageAuto": "System",
+
+  "SettingWindowControls": "Window buttons",
+  "ControlsRight": "Right",
+  "ControlsLeft": "Left",
+  "ControlsMacOs": "macOS",
+
+  "SettingEffects": "Visual effects",
+  "EffectsAuto": "Automatic",
+  "EffectsFull": "Full",
+  "EffectsReduced": "Reduced",
+  "HintEffects": "The automatic mode calms the moving background and the spinning record while on battery.",
+
+  "SettingOutputDevice": "Output device",
+  "DeviceRefresh": "Refresh list",
+  "DeviceSystemDefault": "System default device",
+  "DeviceMissing": "unavailable",
+  "DeviceActive": "Sound is going to:",
+  "DeviceIdle": "The device is opened when playback first starts.",
+
+  "HintNormalisation": "Matches loudness between tracks from ReplayGain tags, falling back to its own EBU R128 analysis.",
+  "HintLimiter": "Guards against clipping after the equaliser adds gain.",
+
+  "SettingLoudnessTarget": "Target level",
+  "HintLoudnessTarget": "The level tracks are matched to. -23 LUFS is the broadcast standard, -18 LUFS the ReplayGain reference level, and -14 LUFS the level adopted by streaming services. A louder target leaves less headroom before clipping.",
+
+  "OptionAlwaysAnalyse": "Ignore ReplayGain tags",
+  "HintAlwaysAnalyse": "Every track's loudness comes from the player's own measurement, even when the file carries tags. Useful for a library tagged by several different tools. The first play of a track goes out unmatched; later ones are matched.",
+
+  "SettingQuality": "Sample-rate conversion quality",
+  "QualityOff": "No filter",
+  "QualityStandard": "Standard",
+  "QualityHigh": "High",
+  "HintQuality": "Applies only to files whose sample rate differs from the output device's. A higher filter order reduces distortion at the cost of processor load, and the difference grows with the distance between the two rates — between 44.1 kHz and 48 kHz it is negligible. Takes effect from the next track.",
+
+  "SettingLatency": "Buffer size",
+  "LatencyLow": "Low latency",
+  "LatencyBalanced": "Balanced",
+  "LatencySafe": "Safe",
+  "HintLatency": "A smaller buffer shortens the delay between a command and the sound, but raises the risk of dropouts when the system is busy. The choice is a hint to the driver, which may settle on a different value.",
+  "LatencyMeasured": "The device settled on {0} frames, about {1:F1} ms.",
+  "LatencyUnknown": "The value is read once the device is open.",
+
+  "SettingRestoreSession": "Restore the previous session",
+  "HintRestoreSession": "The queue and position from the last listen come back when the application starts, though playback does not begin on its own. Switching this off starts with an empty queue; the queue is saved either way.",
+
+  "SettingSeekStep": "Arrow-key seek step",
+  "HintSeekStep": "How far the left and right arrow keys move playback.",
+
+  "SettingMediaKeys": "Multimedia keys",
+  "HintMediaKeys": "The play, stop and track keys work even when the window is not in the foreground. On Linux the desktop routes them through the media panel, so the setting does not apply there.",
+
+  "SettingSingleInstance": "Single running copy",
+  "HintSingleInstance": "Opening further files adds them to the queue of the window already running instead of starting a second copy. Takes effect at the next start.",
+
+  "SettingMediaPanel": "System media panel",
+  "MediaPanelActive": "Active — the track and the transport buttons appear in the desktop media panel.",
+  "MediaPanelInactive": "Unavailable — the system did not provide the panel when the application started.",
+  "MediaPanelUnsupported": "This system provides no media panel.",
+  "SettingAssociations": "File associations",
+  "AssociationsRegister": "Register formats",
+  "AssociationsRemove": "Remove registration",
+  "AssociationsCurrent": "The application is registered as able to open audio files.",
+  "AssociationsStale": "The registration points at a different copy of the program and is worth refreshing.",
+  "AssociationsAbsent": "The application is not registered. Registering adds it to the „Open with” list for the current user only and takes no format over without being asked.",
+  "AssociationsUnsupported": "This system provides no file association registry.",
+  "AssociationsFailed": "The operation failed:",
+
+  "AboutAuthor": "Author",
+  "TooltipRepeatOff": "Repeat off — click to repeat the queue",
+  "TooltipRepeatQueue": "Repeating the queue — click to repeat one track",
+  "TooltipRepeatTrack": "Repeating one track — click to turn repeating off",
+  "AboutDecoders": "Decoders",
+  "DecodersSummary": "MP3, FLAC and WAV — miniaudio. Ogg Vorbis — NVorbis. Opus — Concentus.",
+  "CodecsAvailable": "AAC, M4A and ALAC available",
+  "CodecsMissing": "no system codecs",
+
+  "AboutLicences": "Licences",
+  "LicenceSummary": "Cewka is released under the MIT licence. Avalonia, NVorbis, Concentus and ATL.NET — MIT. miniaudio — MIT-0. The Cantarell and JetBrains Mono fonts — SIL Open Font License 1.1."
+}

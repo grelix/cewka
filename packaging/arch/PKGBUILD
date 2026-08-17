@@ -1,0 +1,47 @@
+# Maintainer: Maciej Grela <51171746+grelix@users.noreply.github.com>
+#
+# Buduje Cewkę ze źródeł na Archu. Pakiet dołączony do wydania powstaje na Ubuntu
+# bez makepkg, więc nie ma pliku .MTREE — ten plik jest właściwą drogą na samym Archu.
+
+pkgname=cewka
+pkgver=0.6.0
+pkgrel=1
+pkgdesc="Minimalistyczny odtwarzacz plików lokalnych"
+arch=('x86_64')
+url="https://github.com/grelix/cewka"
+license=('MIT')
+depends=('glibc' 'gcc-libs' 'zlib' 'libx11' 'libxrandr' 'libxi' 'fontconfig')
+optdepends=('gst-plugins-good: obsługa AAC, M4A i ALAC'
+            'gst-libav: obsługa AAC, M4A i ALAC')
+makedepends=('dotnet-sdk-9.0' 'gcc')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+# Suma kontrolna pominięta: archiwum składa GitHub przy pobraniu.
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/$pkgname-$pkgver"
+
+    # Biblioteka natywna musi powstać przed publikacją — jest pakowana do wyniku.
+    ./native/build-linux.sh
+
+    dotnet publish src/Cewka.App \
+        --configuration Release \
+        --runtime linux-x64 \
+        -p:PublishSingleFile=true \
+        --output publish
+}
+
+package() {
+    cd "$srcdir/$pkgname-$pkgver"
+
+    install -Dm755 publish/Cewka "$pkgdir/usr/bin/cewka"
+    install -Dm644 packaging/linux/cewka.desktop "$pkgdir/usr/share/applications/cewka.desktop"
+
+    local rozmiar
+    for rozmiar in 48 64 128 256; do
+        install -Dm644 "packaging/linux/icons/cewka-$rozmiar.png" \
+            "$pkgdir/usr/share/icons/hicolor/${rozmiar}x${rozmiar}/apps/cewka.png"
+    done
+
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

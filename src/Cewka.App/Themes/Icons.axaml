@@ -1,0 +1,40 @@
+﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    Ikony przeniesione z projektu wizualnego. Wszystkie w ukladzie 16x16.
+    Ikony konturowe (sufiks Stroke) rysowane sa pedzlem obrysu, wypelnione - pedzlem wypelnienia.
+  -->
+
+  <!-- Nagłówek -->
+  <StreamGeometry x:Key="IconMenu">M1,3 H15 V4.6 H1 Z M1,7.2 H15 V8.8 H1 Z M1,11.4 H10 V13 H1 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconSettings">M2,3.6 H14 V5.1 H2 Z M2,7.25 H14 V8.75 H2 Z M2,10.9 H14 V12.4 H2 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconThemeStroke">M8,4.9 A3.1,3.1 0 1 1 8,11.1 A3.1,3.1 0 1 1 8,4.9 Z M8 1.2v1.6M8 13.2v1.6M1.2 8h1.6M13.2 8h1.6M3.3 3.3l1.1 1.1M11.6 11.6l1.1 1.1M12.7 3.3l-1.1 1.1M4.4 11.6l-1.1 1.1</StreamGeometry>
+
+  <!-- Przyciski okna -->
+  <StreamGeometry x:Key="IconMinimise">M0,4.3 H10 V5.7 H0 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconMaximiseStroke">M1,2.6 A1.6,1.6 0 0 1 2.6,1 H7.4 A1.6,1.6 0 0 1 9,2.6 V7.4 A1.6,1.6 0 0 1 7.4,9 H2.6 A1.6,1.6 0 0 1 1,7.4 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconCloseStroke">M1.5 1.5l7 7M8.5 1.5l-7 7</StreamGeometry>
+
+  <!-- Znaki na krazkach w wariancie macOS; widoczne dopiero pod kursorem -->
+  <StreamGeometry x:Key="IconTrafficMinimiseStroke">M2,5 H8</StreamGeometry>
+  <StreamGeometry x:Key="IconTrafficZoomStroke">M2.6,7.4 L7.4,2.6 M2.6,4.8 V2.6 H4.8 M7.4,5.2 V7.4 H5.2</StreamGeometry>
+
+  <!-- Transport -->
+  <StreamGeometry x:Key="IconShuffleStroke">M1.6 4h2.9l6 8h3M1.6 12h2.9l6-8h3M11.8 1.7 14.2 4l-2.4 2.3M11.8 9.7 14.2 12l-2.4 2.3</StreamGeometry>
+  <StreamGeometry x:Key="IconSkip">M3.2 2.6v10.8L11 8z M11.7,2.6 H13.8 V13.4 H11.7 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconPlay">M3.8 2.2v11.6L13.4 8z</StreamGeometry>
+  <StreamGeometry x:Key="IconPause">M3.6,2.4 H7 V13.6 H3.6 Z M9,2.4 H12.4 V13.6 H9 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconRepeatStroke">M3.4 5.2A2.6 2.6 0 0 1 6 3.4h6.4M10.6 1.6 12.8 3.4 10.6 5.2M12.6 10.8a2.6 2.6 0 0 1-2.6 1.8H3.6M5.4 10.8 3.2 12.6l2.2 1.8</StreamGeometry>
+
+  <!-- Ta sama petla z cyfra jeden w wolnym pasie miedzy strzalkami: powtarzanie jednego utworu -->
+  <StreamGeometry x:Key="IconRepeatOneStroke">M3.4 5.2A2.6 2.6 0 0 1 6 3.4h6.4M10.6 1.6 12.8 3.4 10.6 5.2M12.6 10.8a2.6 2.6 0 0 1-2.6 1.8H3.6M5.4 10.8 3.2 12.6l2.2 1.8M6.9 7.4 8.2 6.6V9.9M7.1 9.9H9.3</StreamGeometry>
+
+  <!-- Dodawanie plików -->
+  <StreamGeometry x:Key="IconFolder">M2.3,3.3 H6.3 L7.7,5.1 H13.7 A1.3,1.3 0 0 1 15,6.4 V12 A1.3,1.3 0 0 1 13.7,13.3 H2.3 A1.3,1.3 0 0 1 1,12 V4.6 A1.3,1.3 0 0 1 2.3,3.3 Z</StreamGeometry>
+
+  <!-- Głośność -->
+  <StreamGeometry x:Key="IconSpeaker">M2.4 6h2.4L8.4 3v10L4.8 10H2.4z</StreamGeometry>
+  <StreamGeometry x:Key="IconSpeakerWavesStroke">M10.8 5.6a3.6 3.6 0 0 1 0 4.8M12.8 3.8a6 6 0 0 1 0 8.4</StreamGeometry>
+
+</ResourceDictionary>

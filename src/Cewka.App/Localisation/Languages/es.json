@@ -1,0 +1,140 @@
+{
+  "_language": "Español",
+  "_code": "es",
+
+  "AppName": "Cewka",
+
+  "TooltipTogglePanel": "Mostrar u ocultar el ecualizador y la cola",
+  "TooltipTheme": "Tema",
+  "TooltipSettings": "Ajustes",
+  "TooltipMinimise": "Minimizar",
+  "TooltipMaximise": "Maximizar",
+  "TooltipRestore": "Restaurar tamaño",
+  "TooltipClose": "Cerrar",
+
+  "TooltipShuffle": "Reproducción aleatoria",
+  "TooltipPrevious": "Pista anterior",
+  "TooltipPlayPause": "Reproducir o pausar",
+  "TooltipNext": "Pista siguiente",
+  "TooltipVolume": "Volumen",
+
+  "TooltipEqualiserSwitch": "Activar o desactivar el ecualizador",
+  "TooltipLimiter": "Limitador suave de salida — protege frente a la saturación tras la ecualización",
+  "TooltipNormalisation": "Igualación de volumen según las etiquetas ReplayGain o el análisis EBU R128",
+
+  "Equaliser": "Ecualizador",
+  "Preamp": "PREAMP",
+  "OptionLimiter": "Autolimitador",
+  "OptionNormalisation": "Normalización",
+
+  "OpenFiles": "Abrir archivos",
+  "OpenFolder": "Abrir carpeta",
+  "DropHint": "También se pueden arrastrar archivos o una carpeta a la ventana",
+  "QueueRemove": "Quitar de la cola",
+  "QueueClear": "Vaciar la cola",
+  "QueueMoveUp": "Subir",
+  "QueueMoveDown": "Bajar",
+  "TooltipMute": "Silenciar",
+  "Queue": "Cola",
+  "QueueEmpty": "vacía",
+
+  "UnknownArtist": "Artista desconocido",
+  "NoTrack": "No hay nada en la cola",
+  "NoFormat": "—",
+
+  "AudioFailure": "No se pudo iniciar la reproducción.",
+
+  "Settings": "Ajustes",
+  "SectionAppearance": "Apariencia",
+  "SectionAudio": "Audio",
+  "SectionPlayback": "Reproducción",
+  "SectionSystem": "Integración con el sistema",
+  "SectionAbout": "Acerca de",
+  "SectionProcessing": "Procesamiento de audio",
+
+  "SettingTheme": "Tema",
+  "ThemeSystem": "Sistema",
+  "ThemeLight": "Claro",
+  "ThemeDark": "Oscuro",
+
+  "SettingLanguage": "Idioma de la interfaz",
+  "LanguageAuto": "Sistema",
+
+  "SettingWindowControls": "Botones de la ventana",
+  "ControlsRight": "Derecha",
+  "ControlsLeft": "Izquierda",
+  "ControlsMacOs": "macOS",
+
+  "SettingEffects": "Efectos visuales",
+  "EffectsAuto": "Automático",
+  "EffectsFull": "Completos",
+  "EffectsReduced": "Reducidos",
+  "HintEffects": "El modo automático reduce el movimiento del fondo y el giro del disco cuando el equipo funciona con batería.",
+
+  "SettingOutputDevice": "Dispositivo de salida",
+  "DeviceRefresh": "Recargar lista",
+  "DeviceSystemDefault": "Dispositivo predeterminado del sistema",
+  "DeviceMissing": "no disponible",
+  "DeviceActive": "El sonido se envía a:",
+  "DeviceIdle": "El dispositivo se abre en la primera reproducción.",
+
+  "HintNormalisation": "Iguala el volumen entre pistas según las etiquetas ReplayGain y, si faltan, mediante su propio análisis EBU R128.",
+  "HintLimiter": "Protege frente a la saturación cuando el ecualizador añade ganancia.",
+
+  "SettingLoudnessTarget": "Nivel objetivo",
+  "HintLoudnessTarget": "Nivel al que se iguala el volumen de las pistas. El valor de -23 LUFS corresponde a la norma de radiodifusión, -18 LUFS al nivel de referencia de ReplayGain y -14 LUFS al nivel adoptado por los servicios de streaming. Un nivel más alto deja menos margen antes de la saturación.",
+
+  "OptionAlwaysAnalyse": "Omitir etiquetas ReplayGain",
+  "HintAlwaysAnalyse": "El volumen de cada pista se determina mediante una medición propia, incluso si el archivo contiene etiquetas. Resulta útil en una colección etiquetada con herramientas distintas. La primera escucha de una pista se reproduce sin igualación; las siguientes ya la incluyen.",
+
+  "SettingQuality": "Calidad de conversión de frecuencia",
+  "QualityOff": "Sin filtro",
+  "QualityStandard": "Estándar",
+  "QualityHigh": "Alta",
+  "HintQuality": "Se aplica únicamente a los archivos cuya frecuencia de muestreo difiere de la del dispositivo de salida. Un filtro de orden más alto reduce la distorsión a costa de la carga del procesador, y la diferencia aumenta con la distancia entre ambas frecuencias — entre 44,1 kHz y 48 kHz es insignificante. El cambio surte efecto a partir de la siguiente pista.",
+
+  "SettingLatency": "Tamaño del búfer",
+  "LatencyLow": "Baja latencia",
+  "LatencyBalanced": "Equilibrado",
+  "LatencySafe": "Seguro",
+  "HintLatency": "Un búfer más pequeño acorta el retraso entre una orden y el sonido, pero aumenta el riesgo de cortes cuando el sistema está ocupado. La elección es solo una indicación para el controlador, que puede adoptar un valor distinto.",
+  "LatencyMeasured": "El dispositivo aceptó {0} tramas, unos {1:F1} ms.",
+  "LatencyUnknown": "El valor se lee al abrir el dispositivo.",
+
+  "SettingRestoreSession": "Restaurar la sesión anterior",
+  "HintRestoreSession": "La cola y la posición del último uso se recuperan al iniciar la aplicación, aunque la reproducción no comienza por sí sola. Desactivar esta opción hace que se inicie con la cola vacía; la cola se guarda en cualquier caso.",
+
+  "SettingSeekStep": "Paso de avance con flechas",
+  "HintSeekStep": "Distancia que desplazan la reproducción las flechas izquierda y derecha.",
+
+  "SettingMediaKeys": "Teclas multimedia",
+  "HintMediaKeys": "Las teclas de reproducción, detención y cambio de pista funcionan incluso cuando la ventana no está en primer plano. En Linux, el escritorio las gestiona a través del panel multimedia, por lo que este ajuste no se aplica allí.",
+
+  "SettingSingleInstance": "Instancia única del programa",
+  "HintSingleInstance": "Al abrir más archivos, estos se añaden a la cola de la ventana ya abierta en lugar de iniciar una segunda instancia. El cambio surte efecto en el siguiente inicio.",
+
+  "SettingMediaPanel": "Panel multimedia del sistema",
+  "MediaPanelActive": "Activo — la pista y los botones de control aparecen en el panel multimedia del escritorio.",
+  "MediaPanelInactive": "No disponible — el sistema no proporcionó el panel al iniciarse la aplicación.",
+  "MediaPanelUnsupported": "Este sistema no ofrece panel multimedia.",
+  "SettingAssociations": "Asociaciones de archivos",
+  "AssociationsRegister": "Registrar formatos",
+  "AssociationsRemove": "Desregistrar",
+  "AssociationsCurrent": "La aplicación está registrada como controladora de archivos de audio.",
+  "AssociationsStale": "El registro apunta a otra ubicación del programa; conviene actualizarlo.",
+  "AssociationsAbsent": "La aplicación no está registrada. El registro la añade a la lista «Abrir con» solo para el usuario actual y no toma ningún formato sin indicación previa.",
+  "AssociationsUnsupported": "Este sistema no ofrece un registro de asociaciones de archivos.",
+  "AssociationsFailed": "La operación no se pudo completar:",
+
+  "AboutAuthor": "Autor",
+  "TooltipRepeatOff": "Repetición desactivada — clic para repetir la cola",
+  "TooltipRepeatQueue": "Repitiendo la cola — clic para repetir una pista",
+  "TooltipRepeatTrack": "Repitiendo una pista — clic para desactivar la repetición",
+  "AboutDecoders": "Decodificadores",
+  "DecodersSummary": "MP3, FLAC y WAV — miniaudio. Ogg Vorbis — NVorbis. Opus — Concentus.",
+  "CodecsAvailable": "compatibilidad con AAC, M4A y ALAC disponible",
+  "CodecsMissing": "sin códecs del sistema",
+
+  "AboutLicences": "Licencias",
+  "LicenceSummary": "Cewka se distribuye bajo la licencia MIT. Avalonia, NVorbis, Concentus y ATL.NET — MIT. miniaudio — MIT-0. Las fuentes Cantarell y JetBrains Mono — SIL Open Font License 1.1."
+}

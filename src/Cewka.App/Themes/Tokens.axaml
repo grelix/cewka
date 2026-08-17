@@ -1,0 +1,95 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    Tokeny przeniesione jeden do jednego z projektu wizualnego (zmienne CSS).
+    Kolory zapisane w formacie #AARRGGBB; wartosci alfa przeliczone z zapisu rgba().
+    Akcent podany w projekcie jako oklch() przeliczony na sRGB:
+      oklch(0.76 0.10 250) -> #7FB6EF   (ciemny)
+      oklch(0.55 0.13 250) -> #2A75BA   (jasny)
+  -->
+
+  <ResourceDictionary.ThemeDictionaries>
+
+    <!-- ================= CIEMNY ================= -->
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="DeskBrush" Color="#FF111113" />
+      <SolidColorBrush x:Key="ScrimBrush" Color="#73101013" />
+
+      <SolidColorBrush x:Key="TextBrush" Color="#FFF3F3F5" />
+      <SolidColorBrush x:Key="Text2Brush" Color="#A3F3F3F5" />
+      <SolidColorBrush x:Key="Text3Brush" Color="#66F3F3F5" />
+
+      <SolidColorBrush x:Key="GlassBrush" Color="#0FFFFFFF" />
+      <SolidColorBrush x:Key="Glass2Brush" Color="#1FFFFFFF" />
+      <SolidColorBrush x:Key="GlassHiBrush" Color="#2EFFFFFF" />
+
+      <SolidColorBrush x:Key="StrokeBrush" Color="#1AFFFFFF" />
+      <SolidColorBrush x:Key="StrokeHiBrush" Color="#33FFFFFF" />
+
+      <SolidColorBrush x:Key="TrackBrush" Color="#29FFFFFF" />
+      <SolidColorBrush x:Key="FillBrush" Color="#FFF3F3F5" />
+      <SolidColorBrush x:Key="AccentBrush" Color="#FF7FB6EF" />
+      <SolidColorBrush x:Key="HeaderBarBrush" Color="#0DFFFFFF" />
+
+      <Color x:Key="AccentColor">#FF7FB6EF</Color>
+      <Color x:Key="DeskColor">#FF111113</Color>
+
+      <x:Double x:Key="CoverOpacity">0.95</x:Double>
+
+      <!--
+        Uchwyty faderow. W projekcie ich jasnosc bierze sie z rozmycia podkladu
+        (backdrop-filter), ktorego Avalonia nie ma. Bez tego samo glassHi wypada
+        za ciemno, wiec te dwa tokeny sa jasniejsze niz doslowny odpowiednik CSS.
+      -->
+      <SolidColorBrush x:Key="FaderThumbBrush" Color="#4DFFFFFF" />
+      <SolidColorBrush x:Key="FaderThumbBorderBrush" Color="#66FFFFFF" />
+
+      <!-- Plyta winylowa -->
+      <SolidColorBrush x:Key="DiscInnerBrush" Color="#FF1A1A1C" />
+      <SolidColorBrush x:Key="DiscOuterBrush" Color="#FF0C0C0E" />
+      <SolidColorBrush x:Key="DiscGrooveBrush" Color="#0EFFFFFF" />
+      <SolidColorBrush x:Key="DiscRingBrush" Color="#0FFFFFFF" />
+    </ResourceDictionary>
+
+    <!-- ================= JASNY ================= -->
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="DeskBrush" Color="#FFE9E9EC" />
+      <!-- Przyciemnienie slabsze niz w motywie ciemnym: przy 0x4D barwa okladki ledwie sie
+           przebijala i okno wygladalo niemal tak samo dla kazdego albumu. -->
+      <SolidColorBrush x:Key="ScrimBrush" Color="#2EFAFAFC" />
+
+      <SolidColorBrush x:Key="TextBrush" Color="#FF1B1B1D" />
+      <SolidColorBrush x:Key="Text2Brush" Color="#9E1B1B1D" />
+      <SolidColorBrush x:Key="Text3Brush" Color="#611B1B1D" />
+
+      <SolidColorBrush x:Key="GlassBrush" Color="#7AFFFFFF" />
+      <SolidColorBrush x:Key="Glass2Brush" Color="#B8FFFFFF" />
+      <SolidColorBrush x:Key="GlassHiBrush" Color="#E0FFFFFF" />
+
+      <SolidColorBrush x:Key="StrokeBrush" Color="#17000000" />
+      <SolidColorBrush x:Key="StrokeHiBrush" Color="#E6FFFFFF" />
+
+      <SolidColorBrush x:Key="TrackBrush" Color="#21000000" />
+      <SolidColorBrush x:Key="FillBrush" Color="#FF1B1B1D" />
+      <SolidColorBrush x:Key="AccentBrush" Color="#FF2A75BA" />
+      <SolidColorBrush x:Key="HeaderBarBrush" Color="#8CFFFFFF" />
+
+      <Color x:Key="AccentColor">#FF2A75BA</Color>
+      <Color x:Key="DeskColor">#FFE9E9EC</Color>
+
+      <x:Double x:Key="CoverOpacity">0.85</x:Double>
+
+      <SolidColorBrush x:Key="FaderThumbBrush" Color="#FFFFFFFF" />
+      <SolidColorBrush x:Key="FaderThumbBorderBrush" Color="#26000000" />
+
+      <!-- Plyta pozostaje ciemna takze w motywie jasnym - to fizyczny obiekt, nie element interfejsu. -->
+      <SolidColorBrush x:Key="DiscInnerBrush" Color="#FF1A1A1C" />
+      <SolidColorBrush x:Key="DiscOuterBrush" Color="#FF0C0C0E" />
+      <SolidColorBrush x:Key="DiscGrooveBrush" Color="#0EFFFFFF" />
+      <SolidColorBrush x:Key="DiscRingBrush" Color="#0FFFFFFF" />
+    </ResourceDictionary>
+
+  </ResourceDictionary.ThemeDictionaries>
+
+</ResourceDictionary>

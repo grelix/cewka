@@ -1,0 +1,32 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningsAsErrors>nullable</WarningsAsErrors>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Product>Cewka</Product>
+    <Company>Maciej Grela</Company>
+    <Copyright>Copyright (c) 2026 Maciej Grela</Copyright>
+    <!-- Widoczne we wlasciwosciach pliku wykonywalnego i w menedzerze zadan. -->
+    <AssemblyTitle>Cewka</AssemblyTitle>
+    <Description>Minimalistyczny odtwarzacz plików lokalnych</Description>
+    <Version>0.6.0</Version>
+    <AssemblyVersion>0.6.0.0</AssemblyVersion>
+    <FileVersion>0.6.0.0</FileVersion>
+  </PropertyGroup>
+
+  <!-- Wersje pakietow trzymane centralnie, zeby projekty nie rozjechaly sie miedzy soba. -->
+  <PropertyGroup>
+    <AvaloniaVersion>12.1.1</AvaloniaVersion>
+  </PropertyGroup>
+
+</Project>

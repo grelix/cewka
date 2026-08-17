@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>Cewka.App</RootNamespace>
+    <AssemblyName>Cewka</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- Potrzebne wylacznie do przetwarzania pikseli tla (Services/CoverBackdrop.cs). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <!-- Ikona pliku wykonywalnego; generowana skryptem tools/make-icon.ps1. -->
+    <ApplicationIcon>Assets\cewka.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!--
+    Publikacja jednoplikowa. Zalozeniem projektu jest jeden plik wykonywalny dzialajacy
+    bez instalowania srodowiska .NET, dlatego wydanie jest samodzielne i spakowane.
+
+    Bez przycinania (PublishTrimmed): Avalonia odnajduje style, kontrolki i zasoby przez
+    refleksje, a przyciete wydanie potrafi zbudowac sie bez bledu i dopiero przy starcie
+    zglosic brak typu. Kilkadziesiat megabajtow to uczciwa cena za wydanie, ktore na pewno
+    dziala; kompresja zbija to o ponad polowe.
+
+    IncludeAllContentForSelfExtract obejmuje biblioteke natywna: nie jest ona zaleznoscia
+    pakietu NuGet, tylko wlasnym plikiem projektu, wiec bundler traktuje ja jako zawartosc,
+    a nie jako biblioteke natywna.
+  -->
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>false</PublishTrimmed>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!--
+      Bez tego obok pliku wykonywalnego lada 80 MB symboli debugowania biblioteki Skia,
+      dolaczanych razem z jej pakietem. Wydanie ma byc jednym plikiem, wiec ida precz.
+    -->
+    <AllowedReferenceRelatedFileExtensions>none</AllowedReferenceRelatedFileExtensions>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Cewka.Platform\Cewka.Platform.csproj" />
+    <ProjectReference Include="..\Cewka.Audio\Cewka.Audio.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+    <AvaloniaResource Include="Localisation\Languages\**" />
+  </ItemGroup>
+
+  <!--
+    Symbole bibliotek natywnych Skia i HarfBuzz przychodza razem z pakietami i nie daja sie
+    wylaczyc wlasciwoscia projektu, bo nie sa zwiazane z zestawem referencyjnym. Sto megabajtow
+    obok jednoplikowego wydania przeczyloby jego sensowi, wiec sa usuwane po publikacji.
+  -->
+  <Target Name="UsunSymboleZWydania" AfterTargets="Publish" Condition="'$(PublishSingleFile)' == 'true'">
+    <ItemGroup>
+      <SymboleDoUsuniecia Include="$(PublishDir)**\*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(SymboleDoUsuniecia)" />
+  </Target>
+
+</Project>

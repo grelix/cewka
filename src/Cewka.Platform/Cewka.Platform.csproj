@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Cewka.Platform</RootNamespace>
+    <AssemblyName>Cewka.Platform</AssemblyName>
+    <IsTrimmable>true</IsTrimmable>
+    <!-- Wskazniki funkcji dla zaczepu klawiatury i wpisow rejestru (MediaKeys, FileAssociations). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+</Project>

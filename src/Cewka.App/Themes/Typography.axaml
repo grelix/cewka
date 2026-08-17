@@ -1,0 +1,25 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    Fonty osadzone w pliku wykonywalnym, zeby interfejs wygladal identycznie
+    niezaleznie od tego, co uzytkownik ma zainstalowane w systemie.
+    Cantarell      - tekst interfejsu (SIL OFL 1.1)
+    JetBrains Mono - liczby, czasy, dane techniczne (SIL OFL 1.1)
+  -->
+
+  <FontFamily x:Key="UiFont">avares://Cewka/Assets/Fonts#Cantarell</FontFamily>
+  <FontFamily x:Key="MonoFont">avares://Cewka/Assets/Fonts#JetBrains Mono</FontFamily>
+
+  <!-- Skala typograficzna odwzorowana z projektu -->
+  <x:Double x:Key="FontSizeTitle">42</x:Double>
+  <x:Double x:Key="FontSizeTitleCompact">32</x:Double>
+  <x:Double x:Key="FontSizeArtist">17</x:Double>
+  <x:Double x:Key="FontSizeSection">13.5</x:Double>
+  <x:Double x:Key="FontSizeHeader">13</x:Double>
+  <x:Double x:Key="FontSizeRow">12.5</x:Double>
+  <x:Double x:Key="FontSizeSmall">10.5</x:Double>
+  <x:Double x:Key="FontSizeMonoRow">10</x:Double>
+  <x:Double x:Key="FontSizeMonoTiny">9.5</x:Double>
+
+</ResourceDictionary>

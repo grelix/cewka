@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Cewka.App.ViewModels"
+             x:Class="Cewka.App.Controls.SegmentBar">
+
+  <Border Padding="3" CornerRadius="11"
+          HorizontalAlignment="Left"
+          Background="{DynamicResource GlassBrush}"
+          BorderBrush="{DynamicResource StrokeBrush}"
+          BorderThickness="1">
+
+    <ItemsControl x:Name="Options">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <StackPanel Orientation="Horizontal" Spacing="4" />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:SegmentOption">
+          <Button Classes="option" Classes.on="{Binding IsSelected}" Click="OnOptionClick">
+            <TextBlock Text="{Binding Label}" FontSize="11" FontWeight="Bold"
+                       Foreground="{Binding $parent[Button].Foreground}" />
+          </Button>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </Border>
+
+</UserControl>

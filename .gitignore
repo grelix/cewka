@@ -1,0 +1,43 @@
+# .NET
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+*.user
+*.suo
+*.userprefs
+project.lock.json
+project.fragment.lock.json
+
+# Publikacja
+publish/
+out/
+
+# Biblioteki natywne budowane lokalnie. Zrodlo (native/cewka_audio.c wraz z miniaudio.h)
+# jest w repozytorium; wynik kompilacji nie, bo jest zalezny od platformy.
+src/Cewka.Audio/runtimes/
+native/build/
+native/out/
+*.obj
+*.pdb
+*.ilk
+*.exp
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*~
+
+# System
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Pamięć podręczna aplikacji wytworzona podczas testów lokalnych
+.cewka-cache/
+
+# Notatki projektowe trzymane tylko lokalnie
+docs/architektura.md

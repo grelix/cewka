@@ -1,0 +1,15 @@
+# Normalizacja koncow wierszy: w repozytorium zawsze LF.
+* text=auto eol=lf
+
+# Skrypty powloki systemu Windows musza zachowac CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Pliki binarne bez zadnej konwersji.
+*.png binary
+*.jpg binary
+*.ttf binary
+*.otf binary
+*.dll binary
+*.so binary
+*.lib binary

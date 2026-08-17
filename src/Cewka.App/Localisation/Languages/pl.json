@@ -1,0 +1,140 @@
+{
+  "_language": "Polski",
+  "_code": "pl",
+
+  "AppName": "Cewka",
+
+  "TooltipTogglePanel": "Pokaż lub ukryj korektor i kolejkę",
+  "TooltipTheme": "Motyw",
+  "TooltipSettings": "Ustawienia",
+  "TooltipMinimise": "Minimalizuj",
+  "TooltipMaximise": "Maksymalizuj",
+  "TooltipRestore": "Przywróć rozmiar",
+  "TooltipClose": "Zamknij",
+
+  "TooltipShuffle": "Odtwarzanie losowe",
+  "TooltipPrevious": "Poprzedni utwór",
+  "TooltipPlayPause": "Odtwarzanie lub pauza",
+  "TooltipNext": "Następny utwór",
+  "TooltipVolume": "Głośność",
+
+  "TooltipEqualiserSwitch": "Włącz lub wyłącz korektor",
+  "TooltipLimiter": "Miękki limiter na wyjściu — chroni przed przesterowaniem po korekcji",
+  "TooltipNormalisation": "Wyrównanie głośności według tagów ReplayGain lub analizy EBU R128",
+
+  "Equaliser": "Korektor",
+  "Preamp": "PREAMP",
+  "OptionLimiter": "Autolimiter",
+  "OptionNormalisation": "Normalizacja",
+
+  "OpenFiles": "Otwórz pliki",
+  "OpenFolder": "Otwórz folder",
+  "DropHint": "Można też przeciągnąć pliki lub folder na okno",
+  "QueueRemove": "Usuń z kolejki",
+  "QueueClear": "Wyczyść kolejkę",
+  "QueueMoveUp": "Przenieś wyżej",
+  "QueueMoveDown": "Przenieś niżej",
+  "TooltipMute": "Wycisz",
+  "Queue": "Kolejka",
+  "QueueEmpty": "pusta",
+
+  "UnknownArtist": "Nieznany wykonawca",
+  "NoTrack": "Brak utworu w kolejce",
+  "NoFormat": "—",
+
+  "AudioFailure": "Nie udało się uruchomić odtwarzania.",
+
+  "Settings": "Ustawienia",
+  "SectionAppearance": "Wygląd",
+  "SectionAudio": "Dźwięk",
+  "SectionPlayback": "Odtwarzanie",
+  "SectionSystem": "Integracja z systemem",
+  "SectionAbout": "O programie",
+  "SectionProcessing": "Przetwarzanie dźwięku",
+
+  "SettingTheme": "Motyw",
+  "ThemeSystem": "Systemowy",
+  "ThemeLight": "Jasny",
+  "ThemeDark": "Ciemny",
+
+  "SettingLanguage": "Język interfejsu",
+  "LanguageAuto": "Systemowy",
+
+  "SettingWindowControls": "Przyciski okna",
+  "ControlsRight": "Po prawej",
+  "ControlsLeft": "Po lewej",
+  "ControlsMacOs": "macOS",
+
+  "SettingEffects": "Efekty wizualne",
+  "EffectsAuto": "Automatycznie",
+  "EffectsFull": "Pełne",
+  "EffectsReduced": "Ograniczone",
+  "HintEffects": "Tryb automatyczny ogranicza ruch tła i obrót płyty podczas pracy na baterii.",
+
+  "SettingOutputDevice": "Urządzenie wyjściowe",
+  "DeviceRefresh": "Odśwież listę",
+  "DeviceSystemDefault": "Domyślne urządzenie systemowe",
+  "DeviceMissing": "niedostępne",
+  "DeviceActive": "Dźwięk kierowany do:",
+  "DeviceIdle": "Urządzenie zostanie otwarte przy pierwszym odtwarzaniu.",
+
+  "HintNormalisation": "Wyrównuje głośność utworów według tagów ReplayGain, a przy ich braku według własnej analizy EBU R128.",
+  "HintLimiter": "Chroni przed przesterowaniem po wzmocnieniu w korektorze.",
+
+  "SettingLoudnessTarget": "Poziom docelowy",
+  "HintLoudnessTarget": "Poziom, do którego wyrównywana jest głośność utworów. Wartość -23 LUFS odpowiada normie nadawczej, -18 LUFS poziomowi odniesienia ReplayGain, a -14 LUFS poziomowi przyjętemu przez serwisy strumieniowe. Poziom głośniejszy zostawia mniej zapasu przed przesterowaniem.",
+
+  "OptionAlwaysAnalyse": "Pomijanie tagów ReplayGain",
+  "HintAlwaysAnalyse": "Głośność każdego utworu wyznaczana jest własnym pomiarem, również wtedy, gdy plik zawiera tagi. Przydatne przy zbiorze otagowanym różnymi narzędziami. Pierwszy odsłuch utworu zagra bez wyrównania, kolejne już z nim.",
+
+  "SettingQuality": "Jakość konwersji częstotliwości",
+  "QualityOff": "Bez filtru",
+  "QualityStandard": "Standardowa",
+  "QualityHigh": "Wysoka",
+  "HintQuality": "Dotyczy wyłącznie plików o częstotliwości próbkowania innej niż częstotliwość urządzenia wyjściowego. Wyższy rząd filtru ogranicza zniekształcenia kosztem obciążenia procesora, a różnica rośnie wraz z odległością między częstotliwościami — przy 44,1 kHz wobec 48 kHz jest znikoma. Zmiana obowiązuje od następnego utworu.",
+
+  "SettingLatency": "Rozmiar bufora",
+  "LatencyLow": "Małe opóźnienie",
+  "LatencyBalanced": "Wyważony",
+  "LatencySafe": "Bezpieczny",
+  "HintLatency": "Mniejszy bufor skraca opóźnienie między poleceniem a dźwiękiem, ale zwiększa ryzyko przerywania przy obciążeniu systemu. Wybór jest podpowiedzią dla sterownika, który może przyjąć inną wartość.",
+  "LatencyMeasured": "Urządzenie przyjęło {0} ramek, czyli około {1:F1} ms.",
+  "LatencyUnknown": "Wartość zostanie odczytana po otwarciu urządzenia.",
+
+  "SettingRestoreSession": "Przywracanie poprzedniej sesji",
+  "HintRestoreSession": "Po uruchomieniu programu wracają kolejka i pozycja z poprzedniego odsłuchu, ale odtwarzanie nie rusza samo. Wyłączenie oznacza start z pustą kolejką; kolejka zapisywana jest niezależnie od tego ustawienia.",
+
+  "SettingSeekStep": "Krok przewijania strzałkami",
+  "HintSeekStep": "Odległość, o jaką strzałki w lewo i w prawo przesuwają odtwarzanie.",
+
+  "SettingMediaKeys": "Klawisze multimedialne",
+  "HintMediaKeys": "Klawisze odtwarzania, zatrzymania i przewijania utworów działają również wtedy, gdy okno programu nie jest aktywne. W systemie Linux przekazuje je pulpit przez panel multimediów, więc ustawienie nie ma tam zastosowania.",
+
+  "SettingSingleInstance": "Jedna instancja programu",
+  "HintSingleInstance": "Otwarcie kolejnych plików dopisuje je do kolejki działającego okna zamiast uruchamiać drugi egzemplarz. Zmiana obowiązuje od następnego uruchomienia.",
+
+  "SettingMediaPanel": "Panel multimediów systemu",
+  "MediaPanelActive": "Aktywny — utwór i przyciski sterowania widoczne są w panelu multimediów systemu.",
+  "MediaPanelInactive": "Niedostępny — system nie udostępnił panelu przy uruchomieniu programu.",
+  "MediaPanelUnsupported": "Ten system nie udostępnia panelu multimediów.",
+  "SettingAssociations": "Skojarzenia plików",
+  "AssociationsRegister": "Zarejestruj formaty",
+  "AssociationsRemove": "Usuń rejestrację",
+  "AssociationsCurrent": "Program jest zarejestrowany jako obsługujący pliki dźwiękowe.",
+  "AssociationsStale": "Rejestracja wskazuje inne położenie programu — warto ją odświeżyć.",
+  "AssociationsAbsent": "Program nie jest zarejestrowany. Rejestracja dodaje go do listy „Otwórz za pomocą” wyłącznie dla bieżącego użytkownika i nie przejmuje żadnego formatu bez jego wskazania.",
+  "AssociationsUnsupported": "Ten system nie udostępnia rejestru skojarzeń plików.",
+  "AssociationsFailed": "Operacja nie powiodła się:",
+
+  "AboutAuthor": "Autor",
+  "TooltipRepeatOff": "Powtarzanie wyłączone — kliknięcie włącza powtarzanie kolejki",
+  "TooltipRepeatQueue": "Powtarzanie kolejki — kliknięcie włącza powtarzanie jednego utworu",
+  "TooltipRepeatTrack": "Powtarzanie jednego utworu — kliknięcie wyłącza powtarzanie",
+  "AboutDecoders": "Dekodery",
+  "DecodersSummary": "MP3, FLAC i WAV — miniaudio. Ogg Vorbis — NVorbis. Opus — Concentus.",
+  "CodecsAvailable": "obsługa AAC, M4A i ALAC dostępna",
+  "CodecsMissing": "brak kodeków systemowych",
+
+  "AboutLicences": "Licencje",
+  "LicenceSummary": "Cewka udostępniana jest na licencji MIT. Avalonia, NVorbis, Concentus i ATL.NET — MIT. miniaudio — MIT-0. Fonty Cantarell i JetBrains Mono — SIL Open Font License 1.1."
+}

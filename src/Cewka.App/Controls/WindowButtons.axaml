@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Cewka.App.Localisation"
+             x:Class="Cewka.App.Controls.WindowButtons">
+
+  <Panel VerticalAlignment="Center">
+
+    <!-- Wariant kwadratowy: krazki w stylu reszty interfejsu -->
+    <StackPanel x:Name="SquareGroup" Orientation="Horizontal" Spacing="6">
+      <Button x:Name="SquareMinimise" Classes="window" Click="OnMinimise"
+              ToolTip.Tip="{l:Translate TooltipMinimise}">
+        <Viewbox Width="9" Height="9">
+          <Path Classes="fill" Data="{StaticResource IconMinimise}" Width="10" Height="10" />
+        </Viewbox>
+      </Button>
+      <Button x:Name="SquareMaximise" Classes="window" Click="OnToggleMaximise"
+              ToolTip.Tip="{l:Translate TooltipMaximise}">
+        <Viewbox Width="9" Height="9">
+          <Path Classes="stroke" Data="{StaticResource IconMaximiseStroke}" Width="10" Height="10" />
+        </Viewbox>
+      </Button>
+      <Button Classes="window close" Click="OnClose" ToolTip.Tip="{l:Translate TooltipClose}">
+        <Viewbox Width="9" Height="9">
+          <Path Classes="stroke" Data="{StaticResource IconCloseStroke}" Width="10" Height="10"
+                StrokeThickness="1.4" />
+        </Viewbox>
+      </Button>
+    </StackPanel>
+
+    <!-- Wariant macOS: trzy kolorowe krazki, znaki dopiero pod kursorem -->
+    <StackPanel x:Name="TrafficGroup" Orientation="Horizontal" Spacing="8" IsVisible="False">
+      <Button Classes="traffic close" Click="OnClose" ToolTip.Tip="{l:Translate TooltipClose}">
+        <Viewbox Width="7" Height="7">
+          <Path Classes="traffic-glyph" Data="{StaticResource IconCloseStroke}" Width="10" Height="10" />
+        </Viewbox>
+      </Button>
+      <Button x:Name="TrafficMinimise" Classes="traffic minimise" Click="OnMinimise"
+              ToolTip.Tip="{l:Translate TooltipMinimise}">
+        <Viewbox Width="7" Height="7">
+          <Path Classes="traffic-glyph" Data="{StaticResource IconTrafficMinimiseStroke}" Width="10" Height="10" />
+        </Viewbox>
+      </Button>
+      <Button x:Name="TrafficZoom" Classes="traffic zoom" Click="OnToggleMaximise"
+              ToolTip.Tip="{l:Translate TooltipMaximise}">
+        <Viewbox Width="7" Height="7">
+          <Path Classes="traffic-glyph" Data="{StaticResource IconTrafficZoomStroke}" Width="10" Height="10" />
+        </Viewbox>
+      </Button>
+    </StackPanel>
+
+  </Panel>
+</UserControl>

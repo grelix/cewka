@@ -1,0 +1,140 @@
+{
+  "_language": "Deutsch",
+  "_code": "de",
+
+  "AppName": "Cewka",
+
+  "TooltipTogglePanel": "Equalizer und Warteschlange ein- oder ausblenden",
+  "TooltipTheme": "Design",
+  "TooltipSettings": "Einstellungen",
+  "TooltipMinimise": "Minimieren",
+  "TooltipMaximise": "Maximieren",
+  "TooltipRestore": "Größe wiederherstellen",
+  "TooltipClose": "Schließen",
+
+  "TooltipShuffle": "Zufallswiedergabe",
+  "TooltipPrevious": "Vorheriger Titel",
+  "TooltipPlayPause": "Wiedergabe oder Pause",
+  "TooltipNext": "Nächster Titel",
+  "TooltipVolume": "Lautstärke",
+
+  "TooltipEqualiserSwitch": "Equalizer ein- oder ausschalten",
+  "TooltipLimiter": "Weicher Ausgangslimiter — schützt vor Übersteuerung nach der Bearbeitung im Equalizer",
+  "TooltipNormalisation": "Lautheitsanpassung anhand von ReplayGain-Tags oder EBU-R128-Analyse",
+
+  "Equaliser": "Equalizer",
+  "Preamp": "PREAMP",
+  "OptionLimiter": "Auto-Limiter",
+  "OptionNormalisation": "Normalisierung",
+
+  "OpenFiles": "Dateien öffnen",
+  "OpenFolder": "Ordner öffnen",
+  "DropHint": "Dateien oder Ordner können auch auf das Fenster gezogen werden",
+  "QueueRemove": "Aus Warteschlange entfernen",
+  "QueueClear": "Warteschlange leeren",
+  "QueueMoveUp": "Nach oben verschieben",
+  "QueueMoveDown": "Nach unten verschieben",
+  "TooltipMute": "Stummschalten",
+  "Queue": "Warteschlange",
+  "QueueEmpty": "leer",
+
+  "UnknownArtist": "Unbekannter Interpret",
+  "NoTrack": "Nichts in der Warteschlange",
+  "NoFormat": "—",
+
+  "AudioFailure": "Wiedergabe konnte nicht gestartet werden.",
+
+  "Settings": "Einstellungen",
+  "SectionAppearance": "Erscheinungsbild",
+  "SectionAudio": "Audio",
+  "SectionPlayback": "Wiedergabe",
+  "SectionSystem": "Systemintegration",
+  "SectionAbout": "Über",
+  "SectionProcessing": "Signalverarbeitung",
+
+  "SettingTheme": "Design",
+  "ThemeSystem": "System",
+  "ThemeLight": "Hell",
+  "ThemeDark": "Dunkel",
+
+  "SettingLanguage": "Oberflächensprache",
+  "LanguageAuto": "System",
+
+  "SettingWindowControls": "Fensterschaltflächen",
+  "ControlsRight": "Rechts",
+  "ControlsLeft": "Links",
+  "ControlsMacOs": "macOS",
+
+  "SettingEffects": "Visuelle Effekte",
+  "EffectsAuto": "Automatisch",
+  "EffectsFull": "Voll",
+  "EffectsReduced": "Reduziert",
+  "HintEffects": "Der automatische Modus reduziert die Hintergrundbewegung und die Plattendrehung im Akkubetrieb.",
+
+  "SettingOutputDevice": "Ausgabegerät",
+  "DeviceRefresh": "Aktualisieren",
+  "DeviceSystemDefault": "Standardgerät des Systems",
+  "DeviceMissing": "nicht verfügbar",
+  "DeviceActive": "Ton wird ausgegeben an:",
+  "DeviceIdle": "Das Gerät wird beim ersten Wiedergabestart geöffnet.",
+
+  "HintNormalisation": "Gleicht die Lautheit der Titel anhand von ReplayGain-Tags an, andernfalls anhand einer eigenen EBU-R128-Analyse.",
+  "HintLimiter": "Schützt vor Übersteuerung nach einer Anhebung durch den Equalizer.",
+
+  "SettingLoudnessTarget": "Zielpegel",
+  "HintLoudnessTarget": "Pegel, auf den die Lautheit der Titel angeglichen wird. -23 LUFS entspricht der Rundfunknorm, -18 LUFS dem ReplayGain-Referenzpegel und -14 LUFS dem von Streaming-Diensten verwendeten Pegel. Ein lauterer Zielpegel lässt weniger Reserve vor einer Übersteuerung.",
+
+  "OptionAlwaysAnalyse": "ReplayGain-Tags ignorieren",
+  "HintAlwaysAnalyse": "Die Lautheit jedes Titels wird durch eine eigene Messung bestimmt, auch wenn die Datei Tags enthält. Nützlich bei einer mit verschiedenen Werkzeugen getaggten Sammlung. Beim ersten Abspielen eines Titels erfolgt noch keine Anpassung, bei weiteren schon.",
+
+  "SettingQuality": "Qualität der Abtastratenwandlung",
+  "QualityOff": "Aus",
+  "QualityStandard": "Standard",
+  "QualityHigh": "Hoch",
+  "HintQuality": "Betrifft nur Dateien, deren Abtastrate von der des Ausgabegeräts abweicht. Eine höhere Filterordnung verringert Verzerrungen auf Kosten der Prozessorlast, und der Unterschied wächst mit dem Abstand zwischen den beiden Raten — zwischen 44,1 kHz und 48 kHz ist er vernachlässigbar. Die Änderung wirkt sich ab dem nächsten Titel aus.",
+
+  "SettingLatency": "Puffergröße",
+  "LatencyLow": "Niedrig",
+  "LatencyBalanced": "Ausgewogen",
+  "LatencySafe": "Sicher",
+  "HintLatency": "Ein kleinerer Puffer verkürzt die Verzögerung zwischen Befehl und Ton, erhöht aber das Risiko von Aussetzern bei Systemlast. Die Wahl ist ein Hinweis an den Treiber, der auch einen anderen Wert verwenden kann.",
+  "LatencyMeasured": "Das Gerät hat {0} Frames übernommen, etwa {1:F1} ms.",
+  "LatencyUnknown": "Der Wert wird nach dem Öffnen des Geräts ausgelesen.",
+
+  "SettingRestoreSession": "Vorherige Sitzung wiederherstellen",
+  "HintRestoreSession": "Beim Start der Anwendung werden Warteschlange und Position der letzten Sitzung wiederhergestellt, die Wiedergabe beginnt jedoch nicht von selbst. Deaktivieren bedeutet einen Start mit leerer Warteschlange; die Warteschlange wird unabhängig von dieser Einstellung gespeichert.",
+
+  "SettingSeekStep": "Sprungweite der Pfeiltasten",
+  "HintSeekStep": "Wie weit die Wiedergabe durch die Pfeiltasten links und rechts verschoben wird.",
+
+  "SettingMediaKeys": "Multimedia-Tasten",
+  "HintMediaKeys": "Die Tasten für Wiedergabe, Stopp und Titelwechsel funktionieren auch, wenn das Fenster nicht im Vordergrund ist. Unter Linux leitet der Desktop sie über das Medienpanel weiter, weshalb die Einstellung dort keine Wirkung hat.",
+
+  "SettingSingleInstance": "Einzelne Programminstanz",
+  "HintSingleInstance": "Weitere geöffnete Dateien werden der Warteschlange des bereits laufenden Fensters hinzugefügt, anstatt eine zweite Instanz zu starten. Die Änderung wirkt sich erst beim nächsten Start aus.",
+
+  "SettingMediaPanel": "Medienpanel des Systems",
+  "MediaPanelActive": "Aktiv — Titel und Steuerelemente werden im Medienpanel des Systems angezeigt.",
+  "MediaPanelInactive": "Nicht verfügbar — das System hat das Panel beim Start der Anwendung nicht bereitgestellt.",
+  "MediaPanelUnsupported": "Dieses System stellt kein Medienpanel bereit.",
+  "SettingAssociations": "Dateizuordnungen",
+  "AssociationsRegister": "Registrieren",
+  "AssociationsRemove": "Entfernen",
+  "AssociationsCurrent": "Die Anwendung ist als Programm zum Öffnen von Audiodateien registriert.",
+  "AssociationsStale": "Die Registrierung verweist auf eine andere Programmkopie — eine Aktualisierung wird empfohlen.",
+  "AssociationsAbsent": "Die Anwendung ist nicht registriert. Die Registrierung fügt sie nur für den aktuellen Benutzer der Liste „Öffnen mit“ hinzu und übernimmt kein Format, ohne dass es ausdrücklich angegeben wird.",
+  "AssociationsUnsupported": "Dieses System stellt keine Registrierung für Dateizuordnungen bereit.",
+  "AssociationsFailed": "Der Vorgang ist fehlgeschlagen:",
+
+  "AboutAuthor": "Autor",
+  "TooltipRepeatOff": "Wiederholen aus — Klick wiederholt die Warteschlange",
+  "TooltipRepeatQueue": "Warteschlange wird wiederholt — Klick wiederholt einen Titel",
+  "TooltipRepeatTrack": "Titel wird wiederholt — Klick schaltet die Wiederholung aus",
+  "AboutDecoders": "Decoder",
+  "DecodersSummary": "MP3, FLAC und WAV — miniaudio. Ogg Vorbis — NVorbis. Opus — Concentus.",
+  "CodecsAvailable": "Unterstützung für AAC, M4A und ALAC verfügbar",
+  "CodecsMissing": "keine Systemcodecs",
+
+  "AboutLicences": "Lizenzen",
+  "LicenceSummary": "Cewka wird unter der MIT-Lizenz bereitgestellt. Avalonia, NVorbis, Concentus und ATL.NET — MIT. miniaudio — MIT-0. Die Schriften Cantarell und JetBrains Mono — SIL Open Font License 1.1."
+}
