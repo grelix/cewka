@@ -5,7 +5,7 @@ no .NET runtime required.
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-0.7.11-brightgreen)
+![Version](https://img.shields.io/badge/version-0.7.20-brightgreen)
 
 *[Wersja polska](README.md)*
 
@@ -53,19 +53,19 @@ the app shows up in the application menu.
 **Fedora, RHEL, openSUSE**
 
 ```bash
-sudo dnf install ./cewka-0.7.11-1.x86_64.rpm
+sudo dnf install ./cewka-0.7.20-1.x86_64.rpm
 ```
 
 **Debian, Ubuntu, Linux Mint**
 
 ```bash
-sudo apt install ./cewka_0.7.11_amd64.deb
+sudo apt install ./cewka_0.7.20_amd64.deb
 ```
 
 **Arch, Manjaro**
 
 ```bash
-sudo pacman -U cewka-0.7.11-1-x86_64.pkg.tar.zst
+sudo pacman -U cewka-0.7.20-1-x86_64.pkg.tar.zst
 ```
 
 **Windows**

@@ -5,7 +5,7 @@ bez środowiska .NET.
 
 ![Licencja](https://img.shields.io/badge/licencja-MIT-blue)
 ![Platformy](https://img.shields.io/badge/platformy-Linux%20%7C%20Windows-lightgrey)
-![Wersja](https://img.shields.io/badge/wersja-0.7.11-brightgreen)
+![Wersja](https://img.shields.io/badge/wersja-0.7.20-brightgreen)
 
 *[English version](README.en.md)*
 
@@ -54,19 +54,19 @@ pojawia się w menu aplikacji.
 **Fedora, RHEL, openSUSE**
 
 ```bash
-sudo dnf install ./cewka-0.7.11-1.x86_64.rpm
+sudo dnf install ./cewka-0.7.20-1.x86_64.rpm
 ```
 
 **Debian, Ubuntu, Linux Mint**
 
 ```bash
-sudo apt install ./cewka_0.7.11_amd64.deb
+sudo apt install ./cewka_0.7.20_amd64.deb
 ```
 
 **Arch, Manjaro**
 
 ```bash
-sudo pacman -U cewka-0.7.11-1-x86_64.pkg.tar.zst
+sudo pacman -U cewka-0.7.20-1-x86_64.pkg.tar.zst
 ```
 
 **Windows**
