@@ -1,0 +1,208 @@
+# Wydanie budowane ze znacznika.
+#
+# Powstaje szkic, nie gotowe wydanie: pliki i sumy kontrolne przygotowuje maszyna, a opis
+# merytoryczny pisze autor i on decyduje o publikacji. Dzięki temu błąd w opisie nie staje się
+# widoczny publicznie, zanim ktokolwiek zdąży zareagować.
+#
+# Ponowne uruchomienie dla tego samego znacznika nie powiedzie się, dopóki poprzedni szkic
+# istnieje — to celowe. Szkic należy najpierw usunąć, żeby nie powstały dwa wydania tej wersji.
+
+name: Wydanie
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  sprawdzenie:
+    name: Zgodność znacznika z wersją
+    runs-on: ubuntu-latest
+
+    outputs:
+      wersja: ${{ steps.odczyt.outputs.wersja }}
+      epoka: ${{ steps.odczyt.outputs.epoka }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Odczyt wersji
+        id: odczyt
+        run: |
+          WERSJA="$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props | head -1)"
+          ZNACZNIK="${GITHUB_REF_NAME#v}"
+
+          echo "Directory.Build.props: $WERSJA"
+          echo "znacznik:              $GITHUB_REF_NAME"
+
+          if [ -z "$WERSJA" ]; then
+            echo "BLAD: nie udalo sie odczytac wersji z Directory.Build.props" >&2
+            exit 1
+          fi
+
+          if [ "$WERSJA" != "$ZNACZNIK" ]; then
+            echo "BLAD: znacznik $GITHUB_REF_NAME nie odpowiada wersji $WERSJA z Directory.Build.props." >&2
+            echo "Pakiety nazwane jedna wersja, a zawierajace inna, zdarzyly sie juz raz." >&2
+            exit 1
+          fi
+
+          echo "wersja=$WERSJA" >> "$GITHUB_OUTPUT"
+
+          # Znacznik czasu z zatwierdzenia, a nie z chwili budowy: pakiet pacmana zapisuje go
+          # w metadanych, wiec bez tego dwie budowy tego samego materialu dawalyby rozne pliki.
+          echo "epoka=$(git log -1 --format=%ct)" >> "$GITHUB_OUTPUT"
+
+  linux:
+    name: Linux — pakiety i próbne instalacje
+    needs: sprawdzenie
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Narzędzia pakujące
+        # bsdtar przychodzi z libarchive-tools, rpmbuild z rpm.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm libarchive-tools zstd libfontconfig1
+
+      - name: Publikacja
+        run: ./tools/publish-linux.sh
+
+      - name: Pakiety
+        env:
+          SOURCE_DATE_EPOCH: ${{ needs.sprawdzenie.outputs.epoka }}
+        run: ./tools/build-packages.sh
+
+      - name: Archiwum z gotowym plikiem wykonywalnym
+        # Potrzebne pakietowi w AUR, który nie powinien rozpakowywać cudzego pakietu,
+        # oraz każdemu, kto woli rozpakować i uruchomić bez instalowania.
+        env:
+          WERSJA: ${{ needs.sprawdzenie.outputs.wersja }}
+          SOURCE_DATE_EPOCH: ${{ needs.sprawdzenie.outputs.epoka }}
+        run: |
+          KATALOG="cewka-$WERSJA"
+          mkdir -p "artifacts/archiwum/$KATALOG"
+
+          install -Dm755 artifacts/publish/linux-x64/Cewka "artifacts/archiwum/$KATALOG/cewka"
+          install -Dm644 LICENSE "artifacts/archiwum/$KATALOG/LICENSE"
+          install -Dm644 README.md "artifacts/archiwum/$KATALOG/README.md"
+          install -Dm644 packaging/linux/cewka.desktop "artifacts/archiwum/$KATALOG/cewka.desktop"
+          cp -r packaging/linux/icons "artifacts/archiwum/$KATALOG/icons"
+
+          tar --sort=name --owner=0 --group=0 --numeric-owner \
+              --mtime="@$SOURCE_DATE_EPOCH" \
+              -czf "artifacts/packages/cewka-$WERSJA-linux-x64.tar.gz" \
+              -C artifacts/archiwum "$KATALOG"
+
+      - name: Materiał do prób
+        run: dotnet run --project tools/Cewka.Snapshots -c Release -- --material artifacts/material
+
+      - name: Próbne instalacje w kontenerach
+        run: ./tools/test-packages.sh
+
+      - name: Odłóż pakiety
+        uses: actions/upload-artifact@v4
+        with:
+          name: pakiety-linux
+          path: artifacts/packages
+          if-no-files-found: error
+
+  windows:
+    name: Windows — plik wykonywalny
+    needs: sprawdzenie
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Publikacja
+        run: tools\publish-windows.cmd
+        shell: cmd
+
+      - name: Odłóż plik wykonywalny
+        uses: actions/upload-artifact@v4
+        with:
+          name: plik-windows
+          path: artifacts/publish/win-x64/Cewka.exe
+          if-no-files-found: error
+
+  wydanie:
+    name: Szkic wydania
+    needs: [sprawdzenie, linux, windows]
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: pakiety-linux
+          path: pobrane
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: plik-windows
+          path: pobrane
+
+      - name: Sumy kontrolne
+        # Lista plików powstaje przed policzeniem sum i jest posortowana, żeby plik z sumami
+        # nie policzył sam siebie i żeby kolejność wpisów nie zależała od kolejności pobierania.
+        run: |
+          cd pobrane
+          ls -lh
+          find . -maxdepth 1 -type f -printf '%P\n' | sort > /tmp/lista.txt
+          xargs -a /tmp/lista.txt sha256sum > /tmp/SHA256SUMS.txt
+          mv /tmp/SHA256SUMS.txt SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Opis szkicu
+        env:
+          WERSJA: ${{ needs.sprawdzenie.outputs.wersja }}
+        run: |
+          {
+            echo "> Szkic zbudowany maszynowo ze znacznika \`$GITHUB_REF_NAME\`."
+            echo "> Opis merytoryczny należy dopisać przed publikacją, a ten akapit usunąć."
+            echo
+            echo "## Próbne instalacje"
+            echo
+            echo "Pakiety \`.deb\`, \`.rpm\` i pacmana zostały w tym przebiegu zainstalowane"
+            echo "w kontenerach Ubuntu 24.04, bieżącej Fedory i Archa: program z każdego z nich"
+            echo "uruchomił się, wpis w menu przeszedł sprawdzenie poprawności, a po usunięciu"
+            echo "pakietu nie zostało nic."
+            echo
+            echo "## Sumy kontrolne"
+            echo
+            echo '```'
+            cat pobrane/SHA256SUMS.txt
+            echo '```'
+          } > opis.md
+
+          cat opis.md
+
+      - name: Utwórz szkic wydania
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WERSJA: ${{ needs.sprawdzenie.outputs.wersja }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --draft \
+            --title "Cewka $WERSJA" \
+            --notes-file opis.md \
+            pobrane/*
+
+          echo
+          echo "Szkic gotowy: $(gh release view "$GITHUB_REF_NAME" --json url --jq .url)"

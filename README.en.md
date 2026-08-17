@@ -150,6 +150,46 @@ be compared pixel by pixel:
 dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots ~/Music/Album/track.mp3
 ```
 
+You don't need music of your own for this. The tool can produce the material itself — two files
+of different lengths, computed from trigonometric functions, so they come out byte-identical
+every time:
+
+```bash
+dotnet run --project tools/Cewka.Snapshots -- --material artifacts/material
+```
+
+Besides drawing, the tool runs three behavioural checks: whether the "Equaliser" and "Queue"
+headings sit on the same line, whether the window returns to its previous height after the panel
+is collapsed, and whether replacing the queue with a file opened from outside plays that file.
+The checks alone, without drawing, take seconds:
+
+```bash
+dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots long.wav short.wav --sprawdzenia
+```
+
+The look can also be compared against [reference images](tests/odniesienie/README.md). Where they
+differ, a difference image is written with the differing pixels marked in red:
+
+```bash
+dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots long.wav short.wav --porownaj tests/odniesienie
+```
+
+### Continuous builds
+
+Every change on the main branch compiles the native layer, runs the tests and renders the
+screenshots with the reference comparison — separately on Linux and on Windows.
+
+Releases are built from a pushed `vX.Y.Z` tag. The pipeline first checks that the tag matches
+`<Version>` in `Directory.Build.props`, builds the packages, installs them in Ubuntu, Fedora and
+Arch containers, and then creates a **draft** release with the files and their checksums. The
+release notes are written by hand and publishing is a deliberate act.
+
+The installation trials can be run locally too, if docker is available:
+
+```bash
+./tools/test-packages.sh
+```
+
 ## Known limitations
 
 - The `.deb` package is verified by installing it on Ubuntu 24.04: the app plays from it and
