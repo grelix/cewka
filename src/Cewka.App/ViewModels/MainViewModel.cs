@@ -1246,6 +1246,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     // ---------- Odświeżanie ----------
 
+    /// <summary>
+    /// Wykonuje odświeżenie od razu, zamiast czekać na zegar. Wyłącznie dla narzędzia zrzutów.
+    ///
+    /// <para>Zegar odświeżania ma odstęp 60 ms i w zwykłej pracy programu tyka sam. Narzędzie
+    /// zrzutów pracuje jednak bez pętli komunikatów — pompuje dyspozytora wywołaniami
+    /// <c>RunJobs</c> w pętli — a wtedy zegar potrafi nie dojść do głosu wcale. Sprawdzian
+    /// odczytujący czas trwania utworu opierał się przez to na tym, czy pętla odpytująca
+    /// przypadkiem zostawi zegarowi dość miejsca: przy uśpieniu 50 ms zostawiała, przy 10 ms
+    /// już nie. Tutaj odczyt jest wymuszany wprost, więc czekanie dotyczy wyłącznie tego, aż
+    /// dekoder faktycznie otworzy plik.</para>
+    /// </summary>
+    public void RefreshForCapture() => Refresh();
+
     private void Refresh()
     {
         Raise(nameof(WaveLevel));

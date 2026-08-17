@@ -5,7 +5,7 @@ no .NET runtime required.
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-0.7.11-brightgreen)
+![Version](https://img.shields.io/badge/version-0.7.20-brightgreen)
 
 *[Wersja polska](README.md)*
 
@@ -53,19 +53,19 @@ the app shows up in the application menu.
 **Fedora, RHEL, openSUSE**
 
 ```bash
-sudo dnf install ./cewka-0.7.11-1.x86_64.rpm
+sudo dnf install ./cewka-0.7.20-1.x86_64.rpm
 ```
 
 **Debian, Ubuntu, Linux Mint**
 
 ```bash
-sudo apt install ./cewka_0.7.11_amd64.deb
+sudo apt install ./cewka_0.7.20_amd64.deb
 ```
 
 **Arch, Manjaro**
 
 ```bash
-sudo pacman -U cewka-0.7.11-1-x86_64.pkg.tar.zst
+sudo pacman -U cewka-0.7.20-1-x86_64.pkg.tar.zst
 ```
 
 **Windows**
@@ -150,12 +150,53 @@ be compared pixel by pixel:
 dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots ~/Music/Album/track.mp3
 ```
 
+You don't need music of your own for this. The tool can produce the material itself — two files
+of different lengths, computed from trigonometric functions, so they come out byte-identical
+every time:
+
+```bash
+dotnet run --project tools/Cewka.Snapshots -- --material artifacts/material
+```
+
+Besides drawing, the tool runs three behavioural checks: whether the "Equaliser" and "Queue"
+headings sit on the same line, whether the window returns to its previous height after the panel
+is collapsed, and whether replacing the queue with a file opened from outside plays that file.
+The checks alone, without drawing, take seconds:
+
+```bash
+dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots long.wav short.wav --sprawdzenia
+```
+
+The look can also be compared against [reference images](tests/odniesienie/README.md). Where they
+differ, a difference image is written with the differing pixels marked in red:
+
+```bash
+dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots long.wav short.wav --porownaj tests/odniesienie
+```
+
+### Continuous builds
+
+Every change on the main branch compiles the native layer, runs the tests and renders the
+screenshots with the reference comparison — separately on Linux and on Windows.
+
+Releases are built from a pushed `vX.Y.Z` tag. The pipeline first checks that the tag matches
+`<Version>` in `Directory.Build.props`, builds the packages, installs them in Ubuntu, Fedora and
+Arch containers, and then creates a **draft** release with the files and their checksums. The
+release notes are written by hand and publishing is a deliberate act.
+
+The installation trials can be run locally too, if docker is available:
+
+```bash
+./tools/test-packages.sh
+```
+
 ## Known limitations
 
-- The `.deb` package is verified by installing it on Ubuntu 24.04: the app plays from it and
-  uninstalls without leftovers. I checked the `.rpm` and Arch packages by contents, dependencies
-  and whether the executable comes out of them untouched — but not by installing them on the
-  target distribution.
+- All three packages are verified by installation on every change — in Ubuntu 24.04, current
+  Fedora and Arch containers. The trial covers installing, the validity of the menu entry, the
+  full set of icons, dependency resolution, running the app under a headless X server, and
+  uninstalling without leftovers. A container is not a desktop, though: it says nothing about
+  how the app looks or sounds.
 - The Arch package is built without `makepkg`, so it has no `.MTREE` file. `pacman -U` accepts
   it, though it may mention this. The repository also has [`PKGBUILD`](packaging/arch/PKGBUILD).
 - The effects-throttling mode on battery hasn't been tested on a laptop.

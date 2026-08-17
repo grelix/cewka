@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Cewka.App.Services;
 using Cewka.App.Views;
@@ -31,6 +32,25 @@ public partial class App : Application
     /// way to tell a panel that failed to attach from one the user simply has not looked at.
     /// </summary>
     public static bool MediaPanelActive { get; internal set; }
+
+    /// <summary>
+    /// Ustawienia fontów przekazywane Avalonii przy budowaniu aplikacji.
+    ///
+    /// <para>Program niesie własny font i przypisuje go kontrolkom w arkuszu stylów, ale to nie
+    /// wystarcza: Avalonia osobno pyta system o <em>domyślną</em> rodzinę pisma i bez odpowiedzi
+    /// przerywa działanie komunikatem „Default font family name can't be null or empty".
+    /// Na pulpicie fonty są zawsze, więc nie wychodziło to nigdy — wyszło dopiero przy próbnej
+    /// instalacji w gołym kontenerze, gdzie nie ma żadnego. Skoro cała zawartość programu jest
+    /// w jednym pliku, to i pismo nie ma powodu pochodzić skądinąd.</para>
+    ///
+    /// <para>Ta sama wartość obowiązuje narzędzie zrzutów, które buduje aplikację samo. Inaczej
+    /// obrazy odniesienia powstawałyby przy innych ustawieniach niż te, z którymi program
+    /// naprawdę działa.</para>
+    /// </summary>
+    public static FontManagerOptions FontOptions => new()
+    {
+        DefaultFamilyName = "avares://Cewka/Assets/Fonts#Cantarell",
+    };
 
     private static MainWindow? _mainWindow;
 

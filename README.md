@@ -5,7 +5,7 @@ bez środowiska .NET.
 
 ![Licencja](https://img.shields.io/badge/licencja-MIT-blue)
 ![Platformy](https://img.shields.io/badge/platformy-Linux%20%7C%20Windows-lightgrey)
-![Wersja](https://img.shields.io/badge/wersja-0.7.11-brightgreen)
+![Wersja](https://img.shields.io/badge/wersja-0.7.20-brightgreen)
 
 *[English version](README.en.md)*
 
@@ -54,19 +54,19 @@ pojawia się w menu aplikacji.
 **Fedora, RHEL, openSUSE**
 
 ```bash
-sudo dnf install ./cewka-0.7.11-1.x86_64.rpm
+sudo dnf install ./cewka-0.7.20-1.x86_64.rpm
 ```
 
 **Debian, Ubuntu, Linux Mint**
 
 ```bash
-sudo apt install ./cewka_0.7.11_amd64.deb
+sudo apt install ./cewka_0.7.20_amd64.deb
 ```
 
 **Arch, Manjaro**
 
 ```bash
-sudo pacman -U cewka-0.7.11-1-x86_64.pkg.tar.zst
+sudo pacman -U cewka-0.7.20-1-x86_64.pkg.tar.zst
 ```
 
 **Windows**
@@ -151,11 +151,52 @@ i można je porównywać piksel w piksel:
 dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots ~/Muzyka/Album/utwor.mp3
 ```
 
+Własna muzyka nie jest do tego potrzebna. Narzędzie potrafi wytworzyć materiał samo — dwa pliki
+o różnym czasie trwania, liczone z funkcji trygonometrycznych, więc za każdym razem identyczne
+co do bajtu:
+
+```bash
+dotnet run --project tools/Cewka.Snapshots -- --material artifacts/material
+```
+
+Poza rysowaniem narzędzie wykonuje trzy sprawdziany zachowania: czy nagłówki „Korektor"
+i „Kolejka" stoją na jednej wysokości, czy okno wraca do poprzedniego rozmiaru po schowaniu
+panelu i czy zastąpienie kolejki plikiem z zewnątrz odtwarza właśnie ten plik. Same sprawdziany,
+bez rysowania, trwają sekundy:
+
+```bash
+dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots dluga.wav krotka.wav --sprawdzenia
+```
+
+Wygląd można też zestawić z [obrazami odniesienia](tests/odniesienie/README.md). Przy różnicy
+powstaje obraz różnicowy z zaznaczonymi na czerwono pikselami:
+
+```bash
+dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots dluga.wav krotka.wav --porownaj tests/odniesienie
+```
+
+### Budowa w chmurze
+
+Każda zmiana w gałęzi głównej uruchamia kompilację warstwy natywnej, testy oraz zrzuty
+z porównaniem — osobno w Linuksie i w Windowsie.
+
+Wydania powstają z wypchnięcia znacznika `vX.Y.Z`. Potok sprawdza najpierw, czy znacznik zgadza
+się z `<Version>` w `Directory.Build.props`, buduje pakiety, instaluje je próbnie w kontenerach
+Ubuntu, Fedory i Archa, po czym tworzy **szkic** wydania z plikami i sumami kontrolnymi. Opis
+merytoryczny pisze autor i on decyduje o publikacji.
+
+Próbne instalacje można uruchomić także u siebie, jeśli jest dostępny docker:
+
+```bash
+./tools/test-packages.sh
+```
+
 ## Znane ograniczenia
 
-- Pakiet `.deb` jest sprawdzony instalacją w Ubuntu 24.04: program z niego gra i odinstalowuje się
-  bez pozostałości. Pakiety `.rpm` i Arch sprawdzałem zawartością, zależnościami oraz tym, czy plik
-  wykonywalny wychodzi z nich nietknięty — ale nie instalacją na docelowej dystrybucji.
+- Wszystkie trzy pakiety są sprawdzane instalacją przy każdej zmianie — w kontenerach Ubuntu 24.04,
+  bieżącej Fedory i Archa. Próba obejmuje instalację, poprawność wpisu w menu, komplet ikon,
+  rozwiązanie zależności, uruchomienie programu pod serwerem X bez ekranu oraz odinstalowanie bez
+  pozostałości. Kontener to jednak nie pulpit: nie mówi nic o wyglądzie ani o dźwięku.
 - Pakiet Arch powstaje bez `makepkg`, więc nie ma pliku `.MTREE`. `pacman -U` go przyjmuje,
   choć może o tym wspomnieć. W repozytorium jest też [`PKGBUILD`](packaging/arch/PKGBUILD).
 - Tryb ograniczania efektów na baterii nie był sprawdzony na laptopie.

@@ -165,13 +165,66 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        var outputDirectory = args.Length > 0
-            ? args[0]
+        var pozycyjne = new List<string>();
+        string? materialDo = null;
+        string? odniesienieW = null;
+        var tylkoSprawdzenia = false;
+
+        for (var i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                // Wytwarza material dzwiekowy i konczy prace. Osobny tryb, bo material powstaje
+                // raz, a zrzuty moga potem korzystac z niego wielokrotnie.
+                case "--material":
+                    if (++i >= args.Length)
+                    {
+                        Console.Error.WriteLine("--material wymaga katalogu.");
+                        return 1;
+                    }
+
+                    materialDo = args[i];
+                    break;
+
+                case "--porownaj":
+                    if (++i >= args.Length)
+                    {
+                        Console.Error.WriteLine("--porownaj wymaga katalogu z obrazami odniesienia.");
+                        return 1;
+                    }
+
+                    odniesienieW = args[i];
+                    break;
+
+                // Same sprawdziany zachowania, bez rysowania czegokolwiek. Trwaja sekundy zamiast
+                // minut, wiec nadaja sie na pierwsza brame przebiegu — i na powtarzanie ich
+                // w kolko, gdy trzeba rozstrzygnac, czy sprawdzian jest chwiejny.
+                case "--sprawdzenia":
+                    tylkoSprawdzenia = true;
+                    break;
+
+                default:
+                    pozycyjne.Add(args[i]);
+                    break;
+            }
+        }
+
+        if (materialDo is not null)
+        {
+            var (dluga, krotka) = Material.Write(materialDo);
+            Console.WriteLine("Material dzwiekowy zapisany:");
+            Console.WriteLine($"  {dluga}");
+            Console.WriteLine($"  {krotka}");
+            return 0;
+        }
+
+        var outputDirectory = pozycyjne.Count > 0
+            ? pozycyjne[0]
             : Path.Combine(AppContext.BaseDirectory, "snapshots");
 
         Directory.CreateDirectory(outputDirectory);
 
-        var track = args.Length > 1 ? args[1] : null;
+        var track = pozycyjne.Count > 1 ? pozycyjne[1] : null;
         if (track is not null && !File.Exists(track))
         {
             Console.Error.WriteLine($"Nie ma pliku: {track}");
@@ -181,7 +234,7 @@ internal static class Program
         // Trzeci argument, opcjonalny: drugi plik dzwiekowy o innym czasie trwania. Sluzy
         // wylacznie sprawdzeniu, czy zastapienie kolejki plikiem z zewnatrz faktycznie
         // przelacza dekoder.
-        var second = args.Length > 2 ? args[2] : null;
+        var second = pozycyjne.Count > 2 ? pozycyjne[2] : null;
         if (second is not null && !File.Exists(second))
         {
             Console.Error.WriteLine($"Nie ma pliku: {second}");
@@ -199,6 +252,7 @@ internal static class Program
         AppBuilder.Configure<CewkaApplication>()
             .UseSkia()
             .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+            .With(CewkaApplication.FontOptions)
             .SetupWithoutStarting();
 
         // No desktop lifetime runs here, so the shared services must be created by hand.
@@ -211,6 +265,8 @@ internal static class Program
 
         if (track is not null && second is not null)
             zachowanieOk &= CheckReplaceQueue(track, second);
+
+        if (tylkoSprawdzenia) return zachowanieOk ? 0 : 1;
 
         CaptureCoils(outputDirectory);
         CaptureBackdropPulse(outputDirectory);
@@ -234,16 +290,26 @@ internal static class Program
 
         Console.WriteLine($"Zrzuty zapisane w: {outputDirectory}");
 
+        // Zadne z ponizszych sprawdzen nie przerywa pozostalych: przebieg w chmurze ma powiedziec
+        // wszystko, co znalazl, a nie pierwsza rzecz, na ktora trafil.
         if (_worstHeadingOffset > HeadingTolerance)
         {
             Console.Error.WriteLine(
                 $"BLAD wyrownania: naglowki Korektor i Kolejka rozjezdzaja sie o " +
                 $"{_worstHeadingOffset:F2} px (dopuszczalne {HeadingTolerance:F2}).");
-            return 1;
+            zachowanieOk = false;
+        }
+        else
+        {
+            Console.WriteLine(
+                $"Naglowki panelu wyrownane w pionie (najwiekszy rozjazd {_worstHeadingOffset:F2} px).");
         }
 
-        Console.WriteLine(
-            $"Naglowki panelu wyrownane w pionie (najwiekszy rozjazd {_worstHeadingOffset:F2} px).");
+        if (odniesienieW is not null)
+        {
+            zachowanieOk &= Odniesienie.Porownaj(
+                outputDirectory, odniesienieW, Path.Combine(outputDirectory, "roznice"));
+        }
 
         return zachowanieOk ? 0 : 1;
     }
@@ -334,13 +400,14 @@ internal static class Program
         try
         {
             player.OpenFromOutside([first]);
-            var pierwszy = WaitForDuration(player);
+            var (pierwszy, czasPierwszego) = WaitForDuration(player);
 
             player.OpenFromOutside([second]);
-            var drugi = WaitForDuration(player, avoid: pierwszy);
+            var (drugi, czasDrugiego) = WaitForDuration(player, avoid: pierwszy);
 
             Console.WriteLine($"       zastapienie kolejki: {Path.GetFileName(first)} -> {pierwszy}" +
-                              $"   {Path.GetFileName(second)} -> {drugi}");
+                              $" ({czasPierwszego} ms)   {Path.GetFileName(second)} -> {drugi}" +
+                              $" ({czasDrugiego} ms)");
 
             if (player.Queue.Count != 1)
             {
@@ -353,6 +420,11 @@ internal static class Program
                 Console.Error.WriteLine(
                     "  BLAD: po zastapieniu kolejki gra nadal poprzedni plik — czas trwania sie nie zmienil " +
                     $"({drugi}). Numer pozycji zostal ten sam, wiec dekoder nie zostal wymieniony.");
+                // Do tego miejsca dochodzi sie wylacznie po wyczerpaniu calego oczekiwania:
+                // petla konczy sie wczesniej dopiero wtedy, gdy czas trwania sie zmieni.
+                Console.Error.WriteLine(
+                    $"       czekano pelne {czasDrugiego} ms; w kolejce stoi \"{player.Queue[0].Title}\", " +
+                    $"oczekiwano pliku {Path.GetFileName(second)}.");
                 return false;
             }
 
@@ -368,21 +440,36 @@ internal static class Program
     /// <summary>
     /// Czeka, aż dekoder poda czas trwania. <paramref name="avoid"/> pozwala odczekać na zmianę:
     /// bez tego odczyt mógłby trafić w moment, w którym nowy plik jeszcze się nie otworzył.
+    ///
+    /// <para>Zwracany jest także czas oczekiwania. Sprawdzian raz nie przeszedł na maszynie
+    /// obciążonej innym zadaniem, a przy samym werdykcie „przeszedł / nie przeszedł" nie sposób
+    /// odróżnić błędu w programie od zbyt krótkiego oczekiwania. Zapas jest więc duży, a rzeczywisty
+    /// czas trafia do dziennika — jeśli otwarcie pliku zacznie kiedyś trwać sekundy zamiast
+    /// milisekund, będzie to widać, zanim sprawdzian zacznie zapalać się bez powodu.</para>
     /// </summary>
-    private static string WaitForDuration(MainViewModel player, string? avoid = null)
+    private static (string Czas, long Milisekund) WaitForDuration(MainViewModel player, string? avoid = null)
     {
-        for (var i = 0; i < 80; i++)
+        var zegar = System.Diagnostics.Stopwatch.StartNew();
+
+        while (zegar.ElapsedMilliseconds < DurationWaitMilliseconds)
         {
             Dispatcher.UIThread.RunJobs();
+            player.RefreshForCapture();
 
             var total = player.Total;
-            if (total != "0:00" && total != avoid) return total;
+            if (total != "0:00" && total != avoid) return (total, zegar.ElapsedMilliseconds);
 
-            Thread.Sleep(50);
+            Thread.Sleep(10);
         }
 
-        return player.Total;
+        return (player.Total, zegar.ElapsedMilliseconds);
     }
+
+    /// <summary>
+    /// Ile czekać na czas trwania z dekodera. Otwarcie pliku trwa milisekundy, więc piętnaście
+    /// sekund to zapas na maszynę zajętą czym innym, a nie realny czas działania.
+    /// </summary>
+    private const int DurationWaitMilliseconds = 15_000;
 
     /// <summary>
     /// Checks that expanding the panel in a window too short for it is reversible: the height
@@ -500,6 +587,8 @@ internal static class Program
         for (var i = 0; i < 20; i++)
         {
             Dispatcher.UIThread.RunJobs();
+            player.RefreshForCapture();
+
             if (player.Elapsed != "0:00") break;
             Thread.Sleep(50);
         }
@@ -517,6 +606,7 @@ internal static class Program
         for (var i = 0; i < 60; i++)
         {
             Dispatcher.UIThread.RunJobs();
+            player.RefreshForCapture();
 
             if (player.Title != placeholder && player.Cover is not null && player.Total != "0:00")
                 break;
@@ -622,7 +712,7 @@ internal static class Program
             {
                 using var bitmap = CoilCover.Render(palette, ciemny);
                 var nazwa = $"okladka-{palette.ToString().ToLowerInvariant()}-{motyw}.png";
-                bitmap.Save(Path.Combine(katalog, nazwa));
+                bitmap.Save(Path.Combine(katalog, nazwa), new PngBitmapEncoderOptions());
                 Console.WriteLine($"  ok   okladki/{nazwa}");
             }
         }

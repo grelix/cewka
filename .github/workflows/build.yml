@@ -1,0 +1,132 @@
+# Budowa i testy przy każdej zmianie w gałęzi głównej.
+#
+# Warstwa natywna nie jest trzymana w repozytorium, więc każdy przebieg kompiluje ją od zera
+# ze źródła. To samo w sobie usuwa klasę błędu, w której pakiet dostaje plik wykonywalny
+# z poprzedniej wersji, bo w katalogu roboczym zostało coś starego.
+
+name: Budowa i testy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Kolejne wypchnięcie tej samej gałęzi zastępuje poprzedni przebieg zamiast czekać w kolejce.
+concurrency:
+  group: budowa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux — testy i zrzuty
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Zależności rysowania i dźwięku
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfontconfig1 pulseaudio
+
+          # Maszyna w chmurze nie ma karty dźwiękowej, więc powstaje puste urządzenie —
+          # środowisko bliższe zwykłemu pulpitowi niż zupełny brak dźwięku.
+          #
+          # Niepowodzenie tego kroku nie zatrzymuje przebiegu celowo: czas trwania utworu silnik
+          # czyta z dekodera, a nie z urządzenia, więc sprawdziany powinny działać także bez
+          # dźwięku. Gdyby jednak okazało się inaczej, zawiodą one same i powiedzą to wprost,
+          # zamiast ukryć się za błędem przygotowania środowiska.
+          pulseaudio --start --exit-idle-time=-1 || echo "nie udalo sie uruchomic pulseaudio"
+          pactl load-module module-null-sink sink_name=cewka || echo "brak pustego urzadzenia"
+          pactl list short sinks || true
+
+      - name: Biblioteka natywna
+        run: ./native/build-linux.sh
+
+      - name: Testy
+        run: dotnet test Cewka.sln --configuration Release
+
+      - name: Materiał dźwiękowy
+        run: dotnet run --project tools/Cewka.Snapshots -c Release -- --material artifacts/material
+
+      - name: Sprawdziany zachowania
+        # Trwają sekundy, a rozstrzygają o wyrównaniu nagłówków, pamięci wysokości okna
+        # i o tym, czy zastąpienie kolejki plikiem z zewnątrz odtwarza właśnie ten plik.
+        run: |
+          dotnet run --project tools/Cewka.Snapshots -c Release -- \
+            artifacts/zrzuty \
+            artifacts/material/probka-dluga.wav \
+            artifacts/material/probka-krotka.wav \
+            --sprawdzenia
+
+      - name: Zrzuty i porównanie z odniesieniem
+        run: |
+          dotnet run --project tools/Cewka.Snapshots -c Release -- \
+            artifacts/zrzuty \
+            artifacts/material/probka-dluga.wav \
+            artifacts/material/probka-krotka.wav \
+            --porownaj tests/odniesienie
+
+      - name: Czy powstały nowe obrazy odniesienia
+        if: always()
+        id: odniesienie
+        run: |
+          if [ -n "$(git status --porcelain tests/odniesienie)" ]; then
+            echo "nowe=tak" >> "$GITHUB_OUTPUT"
+            echo "Katalog odniesienia zmienił się w tym przebiegu:"
+            git status --porcelain tests/odniesienie
+            echo
+            echo "Obrazy odniesienia muszą powstać na tej samej maszynie, która je potem"
+            echo "porównuje — rasteryzacja w Linuksie różni się od tej w Windowsie."
+            echo "Należy pobrać artefakt 'odniesienie', przejrzeć go i dodać do repozytorium."
+          fi
+
+      - name: Odłóż obrazy odniesienia
+        if: always() && steps.odniesienie.outputs.nowe == 'tak'
+        uses: actions/upload-artifact@v7
+        with:
+          name: odniesienie
+          path: tests/odniesienie
+
+      - name: Odłóż zrzuty i obrazy różnicowe
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: zrzuty
+          path: artifacts/zrzuty
+
+  # Pakiety i próby instalacyjne w kontenerach. Wywołanie tego samego pliku, z którego korzysta
+  # potok wydania — dzięki temu zepsute pakowanie wychodzi przy zmianie, a nie dopiero
+  # przy wydawaniu, gdy jest już najmniej czasu na poprawki.
+  pakiety:
+    name: Linux
+    uses: ./.github/workflows/packages.yml
+
+  windows:
+    name: Windows — testy
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Biblioteka natywna
+        # Skrypt odnajduje kompilator przez vswhere; obraz maszyny ma Visual Studio 2022
+        # ze składnikiem narzędzi C++.
+        run: native\build-windows.cmd
+        shell: cmd
+
+      - name: Testy
+        run: dotnet test Cewka.sln --configuration Release
