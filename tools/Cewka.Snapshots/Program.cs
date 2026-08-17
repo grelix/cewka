@@ -711,7 +711,7 @@ internal static class Program
             {
                 using var bitmap = CoilCover.Render(palette, ciemny);
                 var nazwa = $"okladka-{palette.ToString().ToLowerInvariant()}-{motyw}.png";
-                bitmap.Save(Path.Combine(katalog, nazwa));
+                bitmap.Save(Path.Combine(katalog, nazwa), new PngBitmapEncoderOptions());
                 Console.WriteLine($"  ok   okladki/{nazwa}");
             }
         }
