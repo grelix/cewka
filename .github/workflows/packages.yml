@@ -1,0 +1,89 @@
+# Pakiety dla Linuksa wraz z próbną instalacją w kontenerach.
+#
+# Osobny plik, bo to samo potrzebne jest w dwóch miejscach: przy wydaniu ze znacznika oraz
+# na żądanie, gdy trzeba sprawdzić, czy pakiety nadal się instalują. Powielenie tych kroków
+# w dwóch workflow skończyłoby się tym, że jedno z nich zostaje w tyle.
+
+name: Pakiety Linuksa
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pakiety:
+    name: Pakiety i próbne instalacje
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Narzędzia pakujące
+        # bsdtar przychodzi z libarchive-tools, rpmbuild z rpm.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm libarchive-tools zstd libfontconfig1
+
+      - name: Publikacja
+        run: ./tools/publish-linux.sh
+
+      - name: Wersja i znacznik czasu
+        id: dane
+        run: |
+          WERSJA="$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props | head -1)"
+          if [ -z "$WERSJA" ]; then
+            echo "BLAD: nie udalo sie odczytac wersji z Directory.Build.props" >&2
+            exit 1
+          fi
+
+          echo "wersja=$WERSJA" >> "$GITHUB_OUTPUT"
+
+          # Znacznik czasu z zatwierdzenia, a nie z chwili budowy: pakiet pacmana zapisuje go
+          # w metadanych, więc bez tego dwie budowy tego samego materiału dawałyby różne pliki.
+          echo "epoka=$(git log -1 --format=%ct)" >> "$GITHUB_OUTPUT"
+
+      - name: Pakiety
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.dane.outputs.epoka }}
+        run: ./tools/build-packages.sh
+
+      - name: Archiwum z gotowym plikiem wykonywalnym
+        # Potrzebne pakietowi w AUR, który nie powinien rozpakowywać cudzego pakietu,
+        # oraz każdemu, kto woli rozpakować i uruchomić bez instalowania.
+        env:
+          WERSJA: ${{ steps.dane.outputs.wersja }}
+          SOURCE_DATE_EPOCH: ${{ steps.dane.outputs.epoka }}
+        run: |
+          KATALOG="cewka-$WERSJA"
+          mkdir -p "artifacts/archiwum/$KATALOG"
+
+          install -Dm755 artifacts/publish/linux-x64/Cewka "artifacts/archiwum/$KATALOG/cewka"
+          install -Dm644 LICENSE "artifacts/archiwum/$KATALOG/LICENSE"
+          install -Dm644 README.md "artifacts/archiwum/$KATALOG/README.md"
+          install -Dm644 packaging/linux/cewka.desktop "artifacts/archiwum/$KATALOG/cewka.desktop"
+          cp -r packaging/linux/icons "artifacts/archiwum/$KATALOG/icons"
+
+          tar --sort=name --owner=0 --group=0 --numeric-owner \
+              --mtime="@$SOURCE_DATE_EPOCH" \
+              -czf "artifacts/packages/cewka-$WERSJA-linux-x64.tar.gz" \
+              -C artifacts/archiwum "$KATALOG"
+
+      - name: Materiał do prób
+        run: dotnet run --project tools/Cewka.Snapshots -c Release -- --material artifacts/material
+
+      - name: Próbne instalacje w kontenerach
+        run: ./tools/test-packages.sh
+
+      - name: Odłóż pakiety
+        uses: actions/upload-artifact@v7
+        with:
+          name: pakiety-linux
+          path: artifacts/packages
+          if-no-files-found: error

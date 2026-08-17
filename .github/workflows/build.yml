@@ -104,6 +104,13 @@ jobs:
           name: zrzuty
           path: artifacts/zrzuty
 
+  # Pakiety i próby instalacyjne w kontenerach. Wywołanie tego samego pliku, z którego korzysta
+  # potok wydania — dzięki temu zepsute pakowanie wychodzi przy zmianie, a nie dopiero
+  # przy wydawaniu, gdy jest już najmniej czasu na poprawki.
+  pakiety:
+    name: Linux
+    uses: ./.github/workflows/packages.yml
+
   windows:
     name: Windows — testy
     runs-on: windows-latest

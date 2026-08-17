@@ -23,7 +23,6 @@ jobs:
 
     outputs:
       wersja: ${{ steps.odczyt.outputs.wersja }}
-      epoka: ${{ steps.odczyt.outputs.epoka }}
 
     steps:
       - uses: actions/checkout@v4
@@ -50,69 +49,12 @@ jobs:
 
           echo "wersja=$WERSJA" >> "$GITHUB_OUTPUT"
 
-          # Znacznik czasu z zatwierdzenia, a nie z chwili budowy: pakiet pacmana zapisuje go
-          # w metadanych, wiec bez tego dwie budowy tego samego materialu dawalyby rozne pliki.
-          echo "epoka=$(git log -1 --format=%ct)" >> "$GITHUB_OUTPUT"
-
-  linux:
-    name: Linux — pakiety i próbne instalacje
+  # Budowa pakietów i próby instalacyjne mieszkają w osobnym pliku, bo to samo potrzebne jest
+  # także poza wydaniem — do sprawdzenia na żądanie, czy pakiety nadal się instalują.
+  pakiety:
+    name: Linux
     needs: sprawdzenie
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: '9.0.x'
-
-      - name: Narzędzia pakujące
-        # bsdtar przychodzi z libarchive-tools, rpmbuild z rpm.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y rpm libarchive-tools zstd libfontconfig1
-
-      - name: Publikacja
-        run: ./tools/publish-linux.sh
-
-      - name: Pakiety
-        env:
-          SOURCE_DATE_EPOCH: ${{ needs.sprawdzenie.outputs.epoka }}
-        run: ./tools/build-packages.sh
-
-      - name: Archiwum z gotowym plikiem wykonywalnym
-        # Potrzebne pakietowi w AUR, który nie powinien rozpakowywać cudzego pakietu,
-        # oraz każdemu, kto woli rozpakować i uruchomić bez instalowania.
-        env:
-          WERSJA: ${{ needs.sprawdzenie.outputs.wersja }}
-          SOURCE_DATE_EPOCH: ${{ needs.sprawdzenie.outputs.epoka }}
-        run: |
-          KATALOG="cewka-$WERSJA"
-          mkdir -p "artifacts/archiwum/$KATALOG"
-
-          install -Dm755 artifacts/publish/linux-x64/Cewka "artifacts/archiwum/$KATALOG/cewka"
-          install -Dm644 LICENSE "artifacts/archiwum/$KATALOG/LICENSE"
-          install -Dm644 README.md "artifacts/archiwum/$KATALOG/README.md"
-          install -Dm644 packaging/linux/cewka.desktop "artifacts/archiwum/$KATALOG/cewka.desktop"
-          cp -r packaging/linux/icons "artifacts/archiwum/$KATALOG/icons"
-
-          tar --sort=name --owner=0 --group=0 --numeric-owner \
-              --mtime="@$SOURCE_DATE_EPOCH" \
-              -czf "artifacts/packages/cewka-$WERSJA-linux-x64.tar.gz" \
-              -C artifacts/archiwum "$KATALOG"
-
-      - name: Materiał do prób
-        run: dotnet run --project tools/Cewka.Snapshots -c Release -- --material artifacts/material
-
-      - name: Próbne instalacje w kontenerach
-        run: ./tools/test-packages.sh
-
-      - name: Odłóż pakiety
-        uses: actions/upload-artifact@v7
-        with:
-          name: pakiety-linux
-          path: artifacts/packages
-          if-no-files-found: error
+    uses: ./.github/workflows/packages.yml
 
   windows:
     name: Windows — plik wykonywalny
@@ -139,7 +81,7 @@ jobs:
 
   wydanie:
     name: Szkic wydania
-    needs: [sprawdzenie, linux, windows]
+    needs: [sprawdzenie, pakiety, windows]
     runs-on: ubuntu-latest
 
     permissions:
