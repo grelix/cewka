@@ -104,6 +104,15 @@ public enum PlaceholderPalette
     Lime,
     Graphite,
 
+    // Sześć par dołożonych w 0.8.0. Wybrane tak, żeby każda szła w innym kierunku niż
+    // poprzednie: ciepły zachód, zimna głębia, purpura, pastel, ziemia i czerwień.
+    Sunset,
+    Ocean,
+    Plum,
+    Mint,
+    Sand,
+    Cherry,
+
     /// <summary>
     /// Para dobierana losowo przy każdym wczytaniu utworu. Ten sam plik odtworzony ponownie
     /// dostanie inną parę — także przy przełączeniu motywu, bo okładka jest wtedy rysowana od nowa.
@@ -170,8 +179,18 @@ public sealed class AppSettings
 
     public WindowGeometry? Window { get; set; }
 
-    /// <summary>Whether the equaliser and queue panel is expanded.</summary>
+    /// <summary>
+    /// Whether the bottom strip — the equaliser and the effects — is expanded.
+    ///
+    /// <para>Od 0.8.0 dotyczy wyłącznie pasa dolnego. Kolejka ma własny stan
+    /// (<see cref="QueueOpen"/>), bo stoi we własnej kolumnie i jedno z drugim nie musi się
+    /// pojawiać razem. Plik ustawień sprzed tej wersji wnosi tu swoją wartość, a kolejka
+    /// przyjmuje domyślną — czyli widoczną, tak jak było.</para>
+    /// </summary>
     public bool PanelOpen { get; set; } = true;
+
+    /// <summary>Whether the queue column on the right is shown.</summary>
+    public bool QueueOpen { get; set; } = true;
 
     public double Volume { get; set; } = 0.72;
 
@@ -187,6 +206,39 @@ public sealed class AppSettings
     public bool NormalisationEnabled { get; set; } = true;
 
     public EffectsMode Effects { get; set; } = EffectsMode.Auto;
+
+    // ---------- Efekty dźwiękowe ----------
+    //
+    // Każdy z pięciu ma przełącznik i siłę zapisaną w zakresie od zera do jedności — tak samo,
+    // jak przekazuje ją suwak. Wszystkie są domyślnie wyłączone: program ma grać wiernie,
+    // dopóki nikt nie poprosi inaczej. Wartości siły są zapamiętane mimo to, żeby ponowne
+    // włączenie efektu wracało tam, gdzie użytkownik go zostawił.
+
+    /// <summary>Domieszka kanału przeciwnego dla odsłuchu w słuchawkach.</summary>
+    public bool CrossfeedEnabled { get; set; }
+
+    public double CrossfeedStrength { get; set; } = 0.5;
+
+    /// <summary>Podbicie basu i góry przy cichym słuchaniu.</summary>
+    public bool LoudnessEnabled { get; set; }
+
+    /// <summary>Domyślnie pełna: korekta i tak wynika z tego, jak cicho gra muzyka.</summary>
+    public double LoudnessStrength { get; set; } = 1.0;
+
+    /// <summary>Harmoniczne najniższych tonów dla małych przetworników.</summary>
+    public bool VirtualBassEnabled { get; set; }
+
+    public double VirtualBassStrength { get; set; } = 0.5;
+
+    /// <summary>Zawężenie rozpiętości dynamicznej.</summary>
+    public bool DynamicRangeEnabled { get; set; }
+
+    public double DynamicRangeStrength { get; set; } = 0.5;
+
+    /// <summary>Poszerzenie bazy stereo dla odsłuchu na głośnikach.</summary>
+    public bool StereoWidthEnabled { get; set; }
+
+    public double StereoWidthStrength { get; set; } = 0.5;
 
     public ColourIntensity ColourIntensity { get; set; } = ColourIntensity.Recommended;
 
@@ -250,6 +302,7 @@ public sealed class AppSettings
             X = Window.X, Y = Window.Y, Width = Window.Width, Height = Window.Height, Maximized = Window.Maximized,
         },
         PanelOpen = PanelOpen,
+        QueueOpen = QueueOpen,
         Volume = Volume,
         EqualiserEnabled = EqualiserEnabled,
         Preamp = Preamp,
@@ -257,6 +310,16 @@ public sealed class AppSettings
         LimiterEnabled = LimiterEnabled,
         NormalisationEnabled = NormalisationEnabled,
         Effects = Effects,
+        CrossfeedEnabled = CrossfeedEnabled,
+        CrossfeedStrength = CrossfeedStrength,
+        LoudnessEnabled = LoudnessEnabled,
+        LoudnessStrength = LoudnessStrength,
+        VirtualBassEnabled = VirtualBassEnabled,
+        VirtualBassStrength = VirtualBassStrength,
+        DynamicRangeEnabled = DynamicRangeEnabled,
+        DynamicRangeStrength = DynamicRangeStrength,
+        StereoWidthEnabled = StereoWidthEnabled,
+        StereoWidthStrength = StereoWidthStrength,
         ColourIntensity = ColourIntensity,
         PlaceholderPalette = PlaceholderPalette,
         ShowFormatBadge = ShowFormatBadge,

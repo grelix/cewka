@@ -5,7 +5,7 @@ bez środowiska .NET.
 
 ![Licencja](https://img.shields.io/badge/licencja-MIT-blue)
 ![Platformy](https://img.shields.io/badge/platformy-Linux%20%7C%20Windows-lightgrey)
-![Wersja](https://img.shields.io/badge/wersja-0.7.20-brightgreen)
+![Wersja](https://img.shields.io/badge/wersja-0.8.0-brightgreen)
 
 *[English version](README.en.md)*
 
@@ -26,6 +26,11 @@ Kod pisałem przy wsparciu Claude Code, które pisało automatyczne testy i wysz
 - **Formaty**: MP3, FLAC, WAV, Ogg Vorbis, Opus, a przez kodeki systemowe także AAC, M4A i ALAC
 - **Odtwarzanie bezprzerwowe** i przewijanie bez trzasków
 - **Korektor dziesięciopasmowy** z przedwzmacniaczem i miękkim limiterem na wyjściu
+- **Pięć efektów**: crossfeed dla słuchawek, kompensacja głośności przy cichym słuchaniu, bas
+  wirtualny, ograniczanie dynamiki i poszerzenie bazy stereo. Każdy ma suwak siły od 0 do 10
+  i każdy jest domyślnie wyłączony
+- **Korektor i kolejkę pokazuje się niezależnie** — klawiszem `Q` i klawiszem `L`, albo
+  przyciskami w pasku tytułu. Okno wraca potem do rozmiaru, jaki miało wcześniej
 - **Wyrównanie głośności** według tagów ReplayGain albo własnej analizy EBU R128, z wyborem
   poziomu docelowego (−23, −18 albo −14 LUFS)
 - **Listy odtwarzania** w formacie M3U — kolejkę można zapisać i wczytać, także w innym programie
@@ -41,7 +46,7 @@ Kod pisałem przy wsparciu Claude Code, które pisało automatyczne testy i wysz
   To jedyne miejsce, w którym program łączy się z siecią: jedno pytanie do GitHuba o numer
   najnowszego wydania, nie częściej niż raz na dobę
 - **Ustawienia**: urządzenie wyjściowe, rozmiar bufora, jakość konwersji częstotliwości,
-  krok przewijania, przywracanie poprzedniej sesji, barwa domyślnej okładki (pięć par
+  krok przewijania, przywracanie poprzedniej sesji, barwa domyślnej okładki (jedenaście par
   albo losowanie co utwór), zachowanie przy otwarciu pliku z eksploratora
 
 <img src="docs/obrazy/cewka-ustawienia.png" width="640" alt="Ustawienia">
@@ -54,19 +59,19 @@ pojawia się w menu aplikacji.
 **Fedora, RHEL, openSUSE**
 
 ```bash
-sudo dnf install ./cewka-0.7.20-1.x86_64.rpm
+sudo dnf install ./cewka-0.8.0-1.x86_64.rpm
 ```
 
 **Debian, Ubuntu, Linux Mint**
 
 ```bash
-sudo apt install ./cewka_0.7.20_amd64.deb
+sudo apt install ./cewka_0.8.0_amd64.deb
 ```
 
 **Arch, Manjaro**
 
 ```bash
-sudo pacman -U cewka-0.7.20-1-x86_64.pkg.tar.zst
+sudo pacman -U cewka-0.8.0-1-x86_64.pkg.tar.zst
 ```
 
 **Windows**
@@ -97,7 +102,8 @@ sudo pacman -S gst-libav                 # Arch
 | `Ctrl` + `←` `→` | Poprzedni lub następny utwór |
 | `↑` `↓` | Głośność |
 | `M` | Wyciszenie |
-| `Q` | Korektor i kolejka |
+| `Q` | Korektor i efekty |
+| `L` | Kolejka |
 | `T` | Zmiana motywu |
 | `F11` | Pełny ekran |
 | `Ctrl+O` | Dodanie plików |
@@ -136,8 +142,8 @@ W Windowsie odpowiednikami są `native\build-windows.cmd` i `tools\publish-windo
 dotnet test Cewka.sln
 ```
 
-326 testów: przetwarzanie sygnału, logika modelu widoku, zgodność ustawień między wersjami
-i kompletność plików językowych.
+364 testy: przetwarzanie sygnału wraz z pięcioma efektami, logika modelu widoku, zgodność
+ustawień między wersjami i kompletność plików językowych.
 
 Zrzuty interfejsu można wyrenderować bez otwierania okna — przydaje się do porównywania
 kolejnych wersji wyglądu:
@@ -155,18 +161,18 @@ i można je porównywać piksel w piksel:
 dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots ~/Muzyka/Album/utwor.mp3
 ```
 
-Własna muzyka nie jest do tego potrzebna. Narzędzie potrafi wytworzyć materiał samo — dwa pliki
-o różnym czasie trwania, liczone z funkcji trygonometrycznych, więc za każdym razem identyczne
-co do bajtu:
+Własna muzyka nie jest do tego potrzebna — narzędzie potrafi wytworzyć materiał samo. Dwa pliki
+o różnej długości, policzone z sinusów, więc za każdym razem takie same:
 
 ```bash
 dotnet run --project tools/Cewka.Snapshots -- --material artifacts/material
 ```
 
-Poza rysowaniem narzędzie wykonuje trzy sprawdziany zachowania: czy nagłówki „Korektor"
-i „Kolejka" stoją na jednej wysokości, czy okno wraca do poprzedniego rozmiaru po schowaniu
-panelu i czy zastąpienie kolejki plikiem z zewnątrz odtwarza właśnie ten plik. Same sprawdziany,
-bez rysowania, trwają sekundy:
+Narzędzie nie tylko rysuje. Sprawdza też kilka rzeczy, które łatwo zepsuć i trudno zauważyć:
+czy nagłówki „Korektor" i „Efekty" stoją na jednej wysokości, czy okno wraca do poprzedniego
+rozmiaru po schowaniu korektora albo kolejki, czy blok odtwarzania nie wchodzi na listę utworów
+i czy otwarcie pliku z zewnątrz naprawdę odtwarza ten plik. Same sprawdziany, bez rysowania,
+trwają sekundy:
 
 ```bash
 dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots dluga.wav krotka.wav --sprawdzenia
@@ -181,13 +187,13 @@ dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots dluga.wav krot
 
 ### Budowa w chmurze
 
-Każda zmiana w gałęzi głównej uruchamia kompilację warstwy natywnej, testy oraz zrzuty
-z porównaniem — osobno w Linuksie i w Windowsie.
+Każda zmiana w gałęzi głównej uruchamia kompilację, testy i zrzuty z porównaniem — osobno
+w Linuksie i w Windowsie. Przy tej samej okazji budowane są pakiety i instalowane próbnie
+w kontenerach, żeby zepsute pakowanie wyszło od razu, a nie w chwili wydawania.
 
-Wydania powstają z wypchnięcia znacznika `vX.Y.Z`. Potok sprawdza najpierw, czy znacznik zgadza
-się z `<Version>` w `Directory.Build.props`, buduje pakiety, instaluje je próbnie w kontenerach
-Ubuntu, Fedory i Archa, po czym tworzy **szkic** wydania z plikami i sumami kontrolnymi. Opis
-merytoryczny pisze autor i on decyduje o publikacji.
+Wydanie powstaje z wypchnięcia znacznika `vX.Y.Z`. Potok sprawdza najpierw, czy znacznik zgadza
+się z numerem wersji w `Directory.Build.props`, buduje wszystko od zera i zostawia **szkic**
+wydania z plikami i sumami kontrolnymi. Opis piszę ręcznie i publikuję sam — to celowe.
 
 Próbne instalacje można uruchomić także u siebie, jeśli jest dostępny docker:
 
@@ -197,10 +203,12 @@ Próbne instalacje można uruchomić także u siebie, jeśli jest dostępny dock
 
 ## Znane ograniczenia
 
-- Wszystkie trzy pakiety są sprawdzane instalacją przy każdej zmianie — w kontenerach Ubuntu 24.04,
-  bieżącej Fedory i Archa. Próba obejmuje instalację, poprawność wpisu w menu, komplet ikon,
-  rozwiązanie zależności, uruchomienie programu pod serwerem X bez ekranu oraz odinstalowanie bez
-  pozostałości. Kontener to jednak nie pulpit: nie mówi nic o wyglądzie ani o dźwięku.
+- Wszystkie trzy pakiety instalują się i odinstalowują w kontenerach Ubuntu 24.04, bieżącej Fedory
+  i Archa, a program z każdego z nich uruchamia się pod serwerem X bez ekranu. Sprawdzane jest to
+  przy każdej zmianie. Kontener nie jest jednak pulpitem i nie powie nic o tym, jak program
+  wygląda ani jak brzmi.
+- Zrzuty ekranu powyżej pochodzą z wersji 0.7.20 i pokazują jeszcze poprzedni układ okna,
+  z kolejką w pasie dolnym.
 - Pakiet Arch powstaje bez `makepkg`, więc nie ma pliku `.MTREE`. `pacman -U` go przyjmuje,
   choć może o tym wspomnieć. W repozytorium jest też [`PKGBUILD`](packaging/arch/PKGBUILD).
 - Tryb ograniczania efektów na baterii nie był sprawdzony na laptopie.

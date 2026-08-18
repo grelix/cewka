@@ -180,9 +180,40 @@ public sealed class PlaylistFileTests : IDisposable
     /// wprowadzeniem tego ustawienia.
     /// </summary>
     [Fact]
-    public void NasycenieZalecaneNieZmieniaNiczego()
+    public void ZalecanaPrzejelaWartoscDawnejSubtelnej()
     {
-        Assert.Equal(1.0, ColourPreferences.Saturation(ColourIntensity.Recommended));
+        // Skala zjechała w dół w 0.8.0: tło było w praktyce mocniejsze, niż potrzeba. Wartości
+        // wpisane tu wprost, bo to one są rozstrzygnięciem — przypadkowa zmiana którejkolwiek
+        // przesunęłaby wygląd wszystkich okien naraz.
+        Assert.Equal(0.72, ColourPreferences.Saturation(ColourIntensity.Recommended));
+        Assert.Equal(1.28, ColourPreferences.Saturation(ColourIntensity.Intense));
+    }
+
+    /// <summary>
+    /// Subtelna ma być co najmniej dwukrotnie słabsza od zalecanej — i to w obu miarach naraz,
+    /// bo wrażenie mocy składa się z nasycenia barwy i z siły plam. Stopień słabszy tylko
+    /// o kilkanaście procent nie różniłby się niczym widocznym na tle, po którym wędrują plamy.
+    /// </summary>
+    [Fact]
+    public void SubtelnaJestPrzynajmniejDwaRazySlabszaOdZalecanej()
+    {
+        var nasycenie = ColourPreferences.Saturation(ColourIntensity.Subtle);
+        var nasycenieZalecane = ColourPreferences.Saturation(ColourIntensity.Recommended);
+
+        Assert.True(
+            nasycenie <= nasycenieZalecane / 2,
+            $"nasycenie subtelnej to {nasycenie}, a ma być najwyżej {nasycenieZalecane / 2}");
+
+        double Srodek(ColourIntensity poziom)
+        {
+            var (minimum, maximum) = ColourPreferences.BackdropRange(poziom);
+            return (minimum + maximum) / 2;
+        }
+
+        Assert.True(
+            Srodek(ColourIntensity.Subtle) <= Srodek(ColourIntensity.Recommended) / 2,
+            $"siła plam subtelnej to {Srodek(ColourIntensity.Subtle)}, " +
+            $"a ma być najwyżej {Srodek(ColourIntensity.Recommended) / 2}");
     }
 
     /// <summary>
@@ -191,12 +222,15 @@ public sealed class PlaylistFileTests : IDisposable
     /// jaśniejsze albo ciemniejsze niż to, z jakim program był projektowany.
     /// </summary>
     [Fact]
-    public void ZakresZalecanyLezySymetrycznieWokolJednosci()
+    public void ZakresZalecanyLezySymetrycznieWokolSwojegoSrodka()
     {
+        // Do 0.7.20 środkiem zalecanej była jedność, czyli siła, z jaką tło zaprojektowano.
+        // Od 0.8.0 zalecana przejęła wartość dawnej subtelnej i jedność przestała być wartością
+        // wyróżnioną — sprawdzana jest więc symetria wokół zadanego środka, a nie wokół jedynki.
         var (minimum, maximum) = ColourPreferences.BackdropRange(ColourIntensity.Recommended);
 
-        Assert.Equal(1.0, (minimum + maximum) / 2, precision: 10);
-        Assert.True(minimum < 1.0 && maximum > 1.0);
+        Assert.Equal(0.78, (minimum + maximum) / 2, precision: 10);
+        Assert.True(minimum < 0.78 && maximum > 0.78);
     }
 
     /// <summary>

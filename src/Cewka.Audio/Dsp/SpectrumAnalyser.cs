@@ -118,8 +118,11 @@ public sealed class SpectrumAnalyser : IAudioProcessor
         Publish(ref _mid, Normalise(mid * scale));
         Publish(ref _high, Normalise(high * scale));
 
-        // The envelope is deliberately generous: quiet passages should still show movement.
-        Publish(ref _level, Math.Clamp(rms * 4f, 0f, 1f));
+        // Obwiednia jest hojna, żeby ciche fragmenty też pokazywały ruch — ale nie tak hojna,
+        // jak była. Mnożnik cztery sprawiał, że przy zwykłej muzyce wartość stała przyklejona
+        // do jedności i wykres fali prawie się nie ruszał, bo obcięcie zjadało całą zmienność.
+        // Przy 2,6 poziom mieści się w zakresie i faktycznie podąża za muzyką.
+        Publish(ref _level, Math.Clamp(rms * 2.6f, 0f, 1f));
     }
 
     private static float Normalise(float value) => Math.Clamp(MathF.Sqrt(value) * 1.6f, 0f, 1f);

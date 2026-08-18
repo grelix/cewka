@@ -5,7 +5,7 @@ no .NET runtime required.
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-0.7.20-brightgreen)
+![Version](https://img.shields.io/badge/version-0.8.0-brightgreen)
 
 *[Wersja polska](README.md)*
 
@@ -26,6 +26,11 @@ I wrote the code with help from Claude Code, which wrote automated tests and hun
 - **Formats**: MP3, FLAC, WAV, Ogg Vorbis, Opus, and through system codecs also AAC, M4A, and ALAC
 - **Gapless playback** and click-free seeking
 - **Ten-band equalizer** with a preamp and a soft limiter on the output
+- **Five effects**: crossfeed for headphones, loudness compensation for quiet listening, virtual
+  bass, dynamic range limiting and stereo widening. Each has a strength slider from 0 to 10, and
+  each is off by default
+- **The equaliser and the queue show independently** — press `Q` and `L`, or use the buttons in
+  the title bar. The window then goes back to the size it had before
 - **Volume normalization** using ReplayGain tags or its own EBU R128 analysis, with a choice
   of target level (−23, −18, or −14 LUFS)
 - **M3U playlists** — the queue can be saved and loaded, including in another player
@@ -40,7 +45,7 @@ I wrote the code with help from Claude Code, which wrote automated tests and hun
   application touches the network: one question to GitHub for the number of the latest
   release, no more than once a day
 - **Settings**: output device, buffer size, sample rate conversion quality, seek step,
-  restoring the previous session, default cover colours (five pairs, or a fresh one for every
+  restoring the previous session, default cover colours (eleven pairs, or a fresh one for every
   track), what happens to a file opened from the file manager
 
 <img src="docs/obrazy/cewka-ustawienia.png" width="640" alt="Settings">
@@ -53,19 +58,19 @@ the app shows up in the application menu.
 **Fedora, RHEL, openSUSE**
 
 ```bash
-sudo dnf install ./cewka-0.7.20-1.x86_64.rpm
+sudo dnf install ./cewka-0.8.0-1.x86_64.rpm
 ```
 
 **Debian, Ubuntu, Linux Mint**
 
 ```bash
-sudo apt install ./cewka_0.7.20_amd64.deb
+sudo apt install ./cewka_0.8.0_amd64.deb
 ```
 
 **Arch, Manjaro**
 
 ```bash
-sudo pacman -U cewka-0.7.20-1-x86_64.pkg.tar.zst
+sudo pacman -U cewka-0.8.0-1-x86_64.pkg.tar.zst
 ```
 
 **Windows**
@@ -96,7 +101,8 @@ sudo pacman -S gst-libav                 # Arch
 | `Ctrl` + `←` `→` | Previous or next track |
 | `↑` `↓` | Volume |
 | `M` | Mute |
-| `Q` | Equalizer and queue |
+| `Q` | Equalizer and effects |
+| `L` | Queue |
 | `T` | Switch theme |
 | `F11` | Fullscreen |
 | `Ctrl+O` | Add files |
@@ -135,8 +141,8 @@ On Windows the equivalents are `native\build-windows.cmd` and `tools\publish-win
 dotnet test Cewka.sln
 ```
 
-326 tests: signal processing, view model logic, settings compatibility across versions,
-and completeness of the language files.
+364 tests: signal processing including the five effects, view model logic, settings
+compatibility across versions, and completeness of the language files.
 
 UI screenshots can be rendered without opening a window — useful for comparing
 successive versions of the look:
@@ -154,18 +160,18 @@ be compared pixel by pixel:
 dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots ~/Music/Album/track.mp3
 ```
 
-You don't need music of your own for this. The tool can produce the material itself — two files
-of different lengths, computed from trigonometric functions, so they come out byte-identical
-every time:
+You don't need music of your own for this — the tool can produce the material itself. Two files
+of different lengths, computed from sines, so they come out the same every time:
 
 ```bash
 dotnet run --project tools/Cewka.Snapshots -- --material artifacts/material
 ```
 
-Besides drawing, the tool runs three behavioural checks: whether the "Equaliser" and "Queue"
-headings sit on the same line, whether the window returns to its previous height after the panel
-is collapsed, and whether replacing the queue with a file opened from outside plays that file.
-The checks alone, without drawing, take seconds:
+The tool does more than draw. It also checks a few things that are easy to break and hard to
+notice: whether the "Equaliser" and "Effects" headings sit on the same line, whether the window
+returns to its previous size after the equaliser or the queue is hidden, whether the playing
+block stays clear of the track list, and whether opening a file from outside really plays that
+file. The checks alone, without drawing, take seconds:
 
 ```bash
 dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots long.wav short.wav --sprawdzenia
@@ -180,13 +186,15 @@ dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots long.wav short
 
 ### Continuous builds
 
-Every change on the main branch compiles the native layer, runs the tests and renders the
-screenshots with the reference comparison — separately on Linux and on Windows.
+Every change on the main branch compiles, tests and renders the screenshots with the reference
+comparison — separately on Linux and on Windows. The packages are built and trial-installed in
+containers at the same time, so broken packaging shows up straight away rather than at release
+time.
 
-Releases are built from a pushed `vX.Y.Z` tag. The pipeline first checks that the tag matches
-`<Version>` in `Directory.Build.props`, builds the packages, installs them in Ubuntu, Fedora and
-Arch containers, and then creates a **draft** release with the files and their checksums. The
-release notes are written by hand and publishing is a deliberate act.
+A release is built from a pushed `vX.Y.Z` tag. The pipeline first checks that the tag matches the
+version number in `Directory.Build.props`, builds everything from scratch and leaves a **draft**
+release with the files and their checksums. I write the notes by hand and publish it myself —
+that part is deliberate.
 
 The installation trials can be run locally too, if docker is available:
 
@@ -196,11 +204,12 @@ The installation trials can be run locally too, if docker is available:
 
 ## Known limitations
 
-- All three packages are verified by installation on every change — in Ubuntu 24.04, current
-  Fedora and Arch containers. The trial covers installing, the validity of the menu entry, the
-  full set of icons, dependency resolution, running the app under a headless X server, and
-  uninstalling without leftovers. A container is not a desktop, though: it says nothing about
-  how the app looks or sounds.
+- All three packages install and uninstall cleanly in Ubuntu 24.04, current Fedora and Arch
+  containers, and the app from each of them starts under a headless X server. This is checked on
+  every change. A container is not a desktop, though, and it will tell you nothing about how the
+  app looks or sounds.
+- The screenshots above come from 0.7.20 and still show the previous window layout, with the
+  queue in the bottom strip.
 - The Arch package is built without `makepkg`, so it has no `.MTREE` file. `pacman -U` accepts
   it, though it may mention this. The repository also has [`PKGBUILD`](packaging/arch/PKGBUILD).
 - The effects-throttling mode on battery hasn't been tested on a laptop.

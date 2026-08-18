@@ -44,14 +44,15 @@ public partial class MainWindow : Window
     /// upper steps the record and the title stay the size they were designed at, and the
     /// window on a 27-inch screen reads as a small interface stranded in a lot of empty space.
     /// </summary>
-    private static readonly (double MinWidth, double Disc, double Title, double EqColumn)[] LayoutSteps =
-    [
-        (0, 228, 32, 468),
-        (1080, 300, 42, 524),
-        (1500, 356, 50, 600),
-        (1900, 412, 58, 680),
-        (2400, 468, 64, 760),
-    ];
+    private static readonly (double MinWidth, double Disc, double Title, double Queue, double Volume)[]
+        LayoutSteps =
+        [
+            (0, 228, 32, 280, 88),
+            (1080, 300, 42, 280, 88),
+            (1500, 356, 50, 320, 104),
+            (1900, 412, 58, 360, 120),
+            (2400, 468, 64, 400, 132),
+        ];
 
     /// <summary>Grab band along the window border for resizing.</summary>
     private const double ResizeMargin = 6;
@@ -67,8 +68,23 @@ public partial class MainWindow : Window
     /// <para>Wartości wynikają z pomiaru: pasek tytułu 47, panel około 255, a blok odtwarzania
     /// z najmniejszą płytą i ściśniętymi marginesami około 300.</para>
     /// </summary>
-    private const double MinHeightWithPanel = 620;
+    /// <para>Wartość podniesiona z 620 na 665, odkąd efekty stanęły obok korektora: ich wiersze
+    /// są dwupoziomowe — nazwa nad suwakiem — i pas dolny urósł o mniej więcej 45 px. Przy
+    /// dawnym minimum nic wprawdzie nie nachodziło na siebie, ale blok odtwarzania tracił
+    /// dokładnie tyle, ile zyskał panel.</para>
+    private const double MinHeightWithPanel = 665;
     private const double MinHeightWithoutPanel = 360;
+
+    /// <summary>
+    /// Szerokości minimalne. Kolumna kolejki zabiera z okna od 280 px wzwyż, więc przy panelu
+    /// rozwiniętym obszar odtwarzania potrzebuje szerszego okna niż wtedy, gdy panel jest schowany.
+    /// </summary>
+    /// <para>Wartość z kolejką ustalona pomiarem, a nie szacunkiem — poprzednie 1000 px było
+    /// zgadnięte i przy tej szerokości blok odtwarzania wychodził na listę utworów o 79 px.
+    /// Narzędzie zrzutów mierzy teraz to nachodzenie przy każdym zrzucie i zatrzymuje przebieg,
+    /// gdy wróci.</para>
+    private const double MinWidthWithQueue = 1200;
+    private const double MinWidthWithoutQueue = 900;
 
     private readonly MainViewModel _viewModel;
     private readonly RenderLoop _rotation;
@@ -82,6 +98,8 @@ public partial class MainWindow : Window
     /// </summary>
     private double? _heightBeforePanel;
     private double _forcedHeight;
+    private double? _widthBeforePanel;
+    private double _forcedWidth;
 
     /// <summary>Set while the record is coasting to a stop at the top of its revolution.</summary>
     private bool _returningUpright;
@@ -102,7 +120,7 @@ public partial class MainWindow : Window
 
         // Ograniczenie wysokosci przed odtworzeniem geometrii: zapamietany rozmiar sprawdzany
         // jest wzgledem MinHeight, a to zalezy od tego, czy panel jest rozwiniety.
-        ApplyHeightConstraint();
+        ApplyPanelConstraints();
         RestoreGeometry();
 
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
@@ -111,7 +129,8 @@ public partial class MainWindow : Window
         _viewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(MainViewModel.CurrentIndex)) SyncQueueSelection();
-            else if (e.PropertyName == nameof(MainViewModel.PanelOpen)) ApplyHeightConstraint();
+            else if (e.PropertyName == nameof(MainViewModel.PanelOpen)) ApplyPanelConstraints();
+            else if (e.PropertyName == nameof(MainViewModel.QueueOpen)) ApplyPanelConstraints();
             else if (e.PropertyName == nameof(MainViewModel.ReducedEffects)) BeginUprightReturn();
         };
     }
@@ -125,29 +144,55 @@ public partial class MainWindow : Window
     /// panelu. Bez tego okno rosło w jedną stronę — każde pokazanie korektora zostawiało je
     /// wyższym na stałe, choć powód, dla którego urosło, już nie istniał.</para>
     /// </summary>
-    private void ApplyHeightConstraint()
+    private void ApplyPanelConstraints()
     {
-        var minimum = _viewModel.PanelOpen ? MinHeightWithPanel : MinHeightWithoutPanel;
-        MinHeight = minimum;
+        // Kazdy wymiar zalezy od swojego obszaru: pas dolny zabiera wysokosc, kolumna kolejki
+        // szerokosc. Odkad wlacza sie je osobno, wiazanie obu miar z jednym stanem kazaloby
+        // oknu rosnac w bok po pokazaniu samego korektora.
+        var minimumHeight = _viewModel.PanelOpen ? MinHeightWithPanel : MinHeightWithoutPanel;
+        var minimumWidth = _viewModel.QueueOpen ? MinWidthWithQueue : MinWidthWithoutQueue;
+
+        MinHeight = minimumHeight;
+        MinWidth = minimumWidth;
 
         if (WindowState != WindowState.Normal) return;
 
-        if (Height < minimum)
+        // Odkąd kolejka stoi po prawej, rozwinięcie panelu zabiera miejsce w obu wymiarach,
+        // więc obie miary muszą zachowywać się tak samo: podnieść, gdy trzeba, i wrócić,
+        // gdy panel się chowa.
+        Height = Constrain(
+            Height, minimumHeight, _viewModel.PanelOpen, ref _heightBeforePanel, ref _forcedHeight);
+
+        Width = Constrain(
+            Width, minimumWidth, _viewModel.QueueOpen, ref _widthBeforePanel, ref _forcedWidth);
+    }
+
+    /// <summary>
+    /// Jeden wymiar okna: podnosi go do wymaganego minimum i zapamiętuje, skąd wyszedł, a przy
+    /// chowaniu panelu przywraca zapamiętaną wartość.
+    ///
+    /// <para>Przywrócenie następuje tylko wtedy, gdy od podniesienia nikt nie chwycił krawędzi
+    /// okna. Porównanie z wartością, którą sami wymusiliśmy, wystarcza i nie zależy od kolejności
+    /// zdarzeń rozmiaru: jeśli użytkownik ustawił okno sam, cofanie tego byłoby odebraniem mu
+    /// decyzji.</para>
+    /// </summary>
+    private static double Constrain(
+        double current, double minimum, bool areaOpen, ref double? before, ref double forced)
+    {
+        if (current < minimum)
         {
-            _heightBeforePanel = Height;
-            _forcedHeight = minimum;
-            Height = minimum;
-            return;
+            before = current;
+            forced = minimum;
+            return minimum;
         }
 
-        if (_viewModel.PanelOpen || _heightBeforePanel is not { } wanted) return;
+        // Przywracanie dotyczy obszaru, ktory ten wymiar obsluguje: wysokosci pilnuje pas dolny,
+        // szerokosci kolumna kolejki. Wspolny warunek cofalby szerokosc przy chowaniu korektora.
+        if (areaOpen || before is not { } wanted) return current;
 
-        // Przywracamy tylko wtedy, gdy od naszego podniesienia nikt nie chwycił krawędzi okna.
-        // Porównanie z zapamiętaną wysokością wystarcza i nie zależy od kolejności zdarzeń
-        // rozmiaru: jeśli użytkownik ustawił okno sam, cofanie tego byłoby odebraniem mu decyzji.
-        if (Math.Abs(Height - _forcedHeight) < 0.5) Height = Math.Max(wanted, minimum);
-
-        _heightBeforePanel = null;
+        var restored = Math.Abs(current - forced) < 0.5 ? Math.Max(wanted, minimum) : current;
+        before = null;
+        return restored;
     }
 
     // ================= Cykl zycia =================
@@ -347,17 +392,14 @@ public partial class MainWindow : Window
                 ? Avalonia.Layout.HorizontalAlignment.Center
                 : Avalonia.Layout.HorizontalAlignment.Stretch;
 
-        // x:Name na ColumnDefinition nie tworzy pola, wiec kolumna wskazywana jest indeksem.
-        if (PanelGrid?.ColumnDefinitions.Count > 0)
-            PanelGrid.ColumnDefinitions[0].Width = new GridLength(step.EqColumn);
+        // Podzial pasa dolnego na korektor i efekty jest proporcja zapisana w XAML, wiec kod
+        // nie ma tu juz nic do roboty. Kolejka rosnie z oknem tak samo jak reszta.
+        if (QueueColumn is not null) QueueColumn.Width = step.Queue;
 
-        // Wyzsze okno pokazuje wiecej kolejki, zamiast zostawiac pusty pas.
-        //
-        // Dolna granica zeszla ze 176 na 168, bo naglowek kolejki zrownal wysokosc z naglowkiem
-        // korektora i przez to urosl o 16 px. Bez tej korekty przy dlugiej kolejce ta kolumna
-        // stalaby sie wyzsza od kolumny korektora i caly panel potrzebowalby 8 px wiecej - czyli
-        // zmierzona wysokosc minimalna okna (MinHeightWithPanel) przestalaby byc prawdziwa.
-        if (QueueHost is not null) QueueHost.MaxHeight = Math.Clamp(height * 0.26, 168, 420);
+        // Pasek glosnosci to jedyny element rzedu transportu o swobodnej szerokosci, wiec on
+        // ustepuje pierwszy. Rzed ma naturalna szerokosc ponad 400 px i nic go nie sciska;
+        // przy waskim oknie z kolejka wychodzil poza swoj obszar i rysowal sie na liscie utworow.
+        if (VolumeSlider is not null) VolumeSlider.Width = step.Volume;
     }
 
     // ================= Obrot plyty i tla =================
@@ -571,6 +613,8 @@ public partial class MainWindow : Window
     private void OnToggleRepeat(object? sender, RoutedEventArgs e) => _viewModel.CycleRepeat();
 
     private void OnTogglePanel(object? sender, RoutedEventArgs e) => _viewModel.TogglePanel();
+
+    private void OnToggleQueue(object? sender, RoutedEventArgs e) => _viewModel.ToggleQueue();
 
     private void OnToggleLimiter(object? sender, RoutedEventArgs e) =>
         _viewModel.LimiterEnabled = !_viewModel.LimiterEnabled;
@@ -946,7 +990,12 @@ public partial class MainWindow : Window
             case Key.M: _viewModel.ToggleMute(); break;
 
             // --- interfejs ---
+            //
+            // Q zostaje przy pasie dolnym, bo tak bylo. Kolejka dostaje L, jak lista — ten sam
+            // skrot pelni te role w VLC i w kilku innych odtwarzaczach, wiec nie trzeba go
+            // wymyslac od nowa.
             case Key.Q: _viewModel.TogglePanel(); break;
+            case Key.L: _viewModel.ToggleQueue(); break;
             case Key.T: OnToggleTheme(this, new RoutedEventArgs()); break;
             case Key.F11: ToggleFullScreen(); break;
 

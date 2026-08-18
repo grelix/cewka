@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Equalizer és lejátszási sor mutatása vagy elrejtése",
+  "TooltipTogglePanel": "Equalizer és effektek mutatása vagy elrejtése (Q)",
+  "TooltipToggleQueue": "Lejátszási sor mutatása vagy elrejtése (L)",
   "TooltipTheme": "Téma",
   "TooltipSettings": "Beállítások",
   "TooltipMinimise": "Kicsinyítés",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Automata limiter",
   "OptionNormalisation": "Normalizálás",
+
+  "Effects": "Effektek",
+  "EffectCrossfeed": "Crossfeed",
+  "EffectLoudness": "Hangerő-kompenzáció",
+  "EffectVirtualBass": "Virtuális mély",
+  "EffectDynamicRange": "Dinamikaszűkítés",
+  "EffectStereoWidth": "Sztereó szélesség",
+  "EffectDescriptionCrossfeed": "Az ellenkező csatorna hozzákeverése, mint hangfalas hallgatáskor. Enyhíti a szétválasztást, amely fejhallgatóban fáraszt.",
+  "EffectDescriptionLoudness": "A mély és a magas hangok kiemelése halk hallgatásnál, az azonos hangosságú görbék szerint.",
+  "EffectDescriptionVirtualBass": "A legmélyebb hangok felharmonikusai. Hallhatóvá teszik a mélyeket olyan hangfalon, amely nem adja vissza őket.",
+  "EffectDescriptionDynamicRange": "Szűkíti a halk és a hangos közti különbséget. A halk részek hallhatók lesznek a hangosak emelése nélkül.",
+  "EffectDescriptionStereoWidth": "Szélesíti a sztereó képet. A monó összeg érintetlen marad.",
+  "EffectsNote": "Minden effekt alapértelmezés szerint ki van kapcsolva, és szándékosan változtatja a hangzást. Ugyanezek a kapcsolók és csúszkák a főablakban is megtalálhatók, az ekvalizer mellett.",
 
   "OpenFiles": "Fájlok megnyitása",
   "OpenFolder": "Mappa megnyitása",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Borostyán és bíbor",
   "PaletteLime": "Lime és smaragd",
   "PaletteGraphite": "Grafit és réz",
+  "PaletteSunset": "Korall, magenta",
+  "PaletteOcean": "Tenger, tengerkék",
+  "PalettePlum": "Szilva és indigó",
+  "PaletteMint": "Menta és azúr",
+  "PaletteSand": "Homok, terrakotta",
+  "PaletteCherry": "Cseresznye, bordó",
   "PaletteRandom": "Véletlen számonként",
 
   "SettingOutputDevice": "Kimeneti eszköz",

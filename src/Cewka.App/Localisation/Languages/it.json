@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Mostrare o nascondere l'equalizzatore e la coda",
+  "TooltipTogglePanel": "Mostrare o nascondere l'equalizzatore e gli effetti (Q)",
+  "TooltipToggleQueue": "Mostrare o nascondere la coda (L)",
   "TooltipTheme": "Tema",
   "TooltipSettings": "Impostazioni",
   "TooltipMinimise": "Ridurre a icona",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Limitatore automatico",
   "OptionNormalisation": "Normalizzazione",
+
+  "Effects": "Effetti",
+  "EffectCrossfeed": "Crossfeed",
+  "EffectLoudness": "Compensazione del volume",
+  "EffectVirtualBass": "Bassi virtuali",
+  "EffectDynamicRange": "Limitazione della dinamica",
+  "EffectStereoWidth": "Ampiezza stereo",
+  "EffectDescriptionCrossfeed": "Miscela del canale opposto, come all'ascolto in altoparlanti. Attenua la separazione che affatica in cuffia.",
+  "EffectDescriptionLoudness": "Rinforzo di bassi e acuti all'ascolto a basso volume, secondo le curve isofoniche.",
+  "EffectDescriptionVirtualBass": "Armoniche delle note più gravi. Rendono udibili i bassi su altoparlanti che non li producono.",
+  "EffectDescriptionDynamicRange": "Restringe la distanza fra piano e forte. I passaggi piani si sentono senza alzare quelli forti.",
+  "EffectDescriptionStereoWidth": "Allarga l'immagine stereo. La somma monofonica resta intatta.",
+  "EffectsNote": "Tutti gli effetti sono disattivati per impostazione predefinita e alterano il suono di proposito. Gli stessi interruttori e cursori si trovano nella finestra principale, accanto all'equalizzatore.",
 
   "OpenFiles": "Aprire file",
   "OpenFolder": "Aprire cartella",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Ambra e cremisi",
   "PaletteLime": "Lime e smeraldo",
   "PaletteGraphite": "Grafite e rame",
+  "PaletteSunset": "Corallo e magenta",
+  "PaletteOcean": "Mare e blu notte",
+  "PalettePlum": "Prugna e indaco",
+  "PaletteMint": "Menta e azzurro",
+  "PaletteSand": "Sabbia e terra",
+  "PaletteCherry": "Ciliegia e bordò",
   "PaletteRandom": "Casuale per brano",
 
   "SettingOutputDevice": "Dispositivo di uscita",

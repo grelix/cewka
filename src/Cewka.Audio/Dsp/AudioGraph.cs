@@ -31,7 +31,22 @@ public sealed class AudioGraph
     /// <summary>Gain from ReplayGain tags or from loudness analysis.</summary>
     public GainStage Normalisation { get; } = new(smoothingSeconds: 0.05);
 
+    /// <summary>Podbicie basu i góry przy cichym słuchaniu. Domyślnie wyłączone.</summary>
+    public Loudness Loudness { get; } = new();
+
     public Equaliser Equaliser { get; } = new();
+
+    /// <summary>Harmoniczne najniższych tonów dla małych przetworników. Domyślnie wyłączony.</summary>
+    public VirtualBass VirtualBass { get; } = new();
+
+    /// <summary>Poszerzenie bazy stereo dla odsłuchu na głośnikach. Domyślnie wyłączone.</summary>
+    public StereoWidth StereoWidth { get; } = new();
+
+    /// <summary>Domieszka kanału przeciwnego dla odsłuchu w słuchawkach. Domyślnie wyłączony.</summary>
+    public Crossfeed Crossfeed { get; } = new();
+
+    /// <summary>Zawężenie rozpiętości dynamicznej. Domyślnie wyłączone.</summary>
+    public DynamicRange DynamicRange { get; } = new();
 
     public Limiter Limiter { get; } = new();
 
@@ -51,7 +66,12 @@ public sealed class AudioGraph
         _channels = channels;
 
         Normalisation.Prepare(sampleRate, channels);
+        Loudness.Prepare(sampleRate, channels);
         Equaliser.Prepare(sampleRate, channels);
+        VirtualBass.Prepare(sampleRate, channels);
+        StereoWidth.Prepare(sampleRate, channels);
+        Crossfeed.Prepare(sampleRate, channels);
+        DynamicRange.Prepare(sampleRate, channels);
         Limiter.Prepare(sampleRate, channels);
         Volume.Prepare(sampleRate, channels);
         Analyser.Prepare(sampleRate, channels);
@@ -61,7 +81,18 @@ public sealed class AudioGraph
     public void Process(Span<float> buffer, int frames)
     {
         Normalisation.Process(buffer, frames);
+
+        // Kompensacja jako jedyna potrzebuje wiedzieć, jak głośno naprawdę gra muzyka, a widok
+        // na obie składowe — suwak i wzmocnienie normalizacji — ma tylko ten obiekt.
+        Loudness.SetListeningLevel(Volume.TargetDecibels, Normalisation.TargetDecibels);
+        Loudness.Process(buffer, frames);
+
         Equaliser.Process(buffer, frames);
+        VirtualBass.Process(buffer, frames);
+        StereoWidth.Process(buffer, frames);
+        Crossfeed.Process(buffer, frames);
+        DynamicRange.Process(buffer, frames);
+
         Limiter.Process(buffer, frames);
         Analyser.Process(buffer, frames);
         Volume.Process(buffer, frames);
@@ -86,7 +117,12 @@ public sealed class AudioGraph
     public void Reset()
     {
         Normalisation.Reset();
+        Loudness.Reset();
         Equaliser.Reset();
+        VirtualBass.Reset();
+        StereoWidth.Reset();
+        Crossfeed.Reset();
+        DynamicRange.Reset();
         Limiter.Reset();
         Volume.Reset();
         Analyser.Reset();

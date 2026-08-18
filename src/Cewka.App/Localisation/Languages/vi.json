@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Hiện hoặc ẩn bộ cân bằng âm và hàng đợi",
+  "TooltipTogglePanel": "Hiện hoặc ẩn bộ cân bằng âm và hiệu ứng (Q)",
+  "TooltipToggleQueue": "Hiện hoặc ẩn hàng đợi (L)",
   "TooltipTheme": "Chủ đề",
   "TooltipSettings": "Cài đặt",
   "TooltipMinimise": "Thu nhỏ",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Giới hạn tự động",
   "OptionNormalisation": "Chuẩn hóa",
+
+  "Effects": "Hiệu ứng",
+  "EffectCrossfeed": "Crossfeed",
+  "EffectLoudness": "Bù độ lớn",
+  "EffectVirtualBass": "Bass ảo",
+  "EffectDynamicRange": "Giới hạn dải động",
+  "EffectStereoWidth": "Độ rộng stereo",
+  "EffectDescriptionCrossfeed": "Trộn một phần kênh đối diện, như khi nghe qua loa. Làm dịu sự tách kênh gây mỏi khi nghe tai nghe.",
+  "EffectDescriptionLoudness": "Nâng bass và treble khi nghe nhỏ, theo các đường đồng độ lớn.",
+  "EffectDescriptionVirtualBass": "Hài của những nốt trầm nhất. Giúp nghe được bass trên loa không tái tạo được chúng.",
+  "EffectDescriptionDynamicRange": "Thu hẹp khoảng cách giữa nhỏ và to. Đoạn nhỏ trở nên nghe rõ mà không phải nâng đoạn to.",
+  "EffectDescriptionStereoWidth": "Mở rộng hình ảnh stereo. Tổng mono giữ nguyên.",
+  "EffectsNote": "Mọi hiệu ứng đều tắt theo mặc định và thay đổi âm thanh một cách có chủ đích. Các công tắc và thanh trượt tương tự nằm ở cửa sổ chính, cạnh bộ chỉnh âm.",
 
   "OpenFiles": "Mở tệp",
   "OpenFolder": "Mở thư mục",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Hổ phách và đỏ thẫm",
   "PaletteLime": "Chanh và lục bảo",
   "PaletteGraphite": "Than chì và đồng",
+  "PaletteSunset": "San hô và hồng sen",
+  "PaletteOcean": "Biển và xanh đậm",
+  "PalettePlum": "Mận và chàm",
+  "PaletteMint": "Bạc hà và lam",
+  "PaletteSand": "Cát và đất nung",
+  "PaletteCherry": "Anh đào và đỏ mận",
   "PaletteRandom": "Ngẫu nhiên mỗi bản",
 
   "SettingOutputDevice": "Thiết bị đầu ra",

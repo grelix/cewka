@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Mostrar ou ocultar o equalizador e a fila",
+  "TooltipTogglePanel": "Mostrar ou ocultar o equalizador e os efeitos (Q)",
+  "TooltipToggleQueue": "Mostrar ou ocultar a fila (L)",
   "TooltipTheme": "Tema",
   "TooltipSettings": "Configurações",
   "TooltipMinimise": "Minimizar",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Autolimitador",
   "OptionNormalisation": "Normalização",
+
+  "Effects": "Efeitos",
+  "EffectCrossfeed": "Crossfeed",
+  "EffectLoudness": "Compensação de volume",
+  "EffectVirtualBass": "Graves virtuais",
+  "EffectDynamicRange": "Limitação de dinâmica",
+  "EffectStereoWidth": "Largura estéreo",
+  "EffectDescriptionCrossfeed": "Mistura do canal oposto, como ao ouvir em alto-falantes. Suaviza a separação que cansa nos fones de ouvido.",
+  "EffectDescriptionLoudness": "Reforço de graves e agudos em volume baixo, segundo as curvas isofônicas.",
+  "EffectDescriptionVirtualBass": "Harmônicos das notas mais graves. Tornam o grave audível em alto-falantes que não o produzem.",
+  "EffectDescriptionDynamicRange": "Estreita a diferença entre o suave e o forte. Os trechos suaves ficam audíveis sem elevar os fortes.",
+  "EffectDescriptionStereoWidth": "Amplia a imagem estéreo. A soma monofônica permanece intacta.",
+  "EffectsNote": "Todos os efeitos vêm desligados e alteram o som de propósito. Os mesmos interruptores e controles estão na janela principal, ao lado do equalizador.",
 
   "OpenFiles": "Abrir arquivos",
   "OpenFolder": "Abrir pasta",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Âmbar e carmesim",
   "PaletteLime": "Limão e esmeralda",
   "PaletteGraphite": "Grafite e cobre",
+  "PaletteSunset": "Coral e magenta",
+  "PaletteOcean": "Mar e marinho",
+  "PalettePlum": "Ameixa e índigo",
+  "PaletteMint": "Menta e azul-céu",
+  "PaletteSand": "Areia e terracota",
+  "PaletteCherry": "Cereja e bordô",
   "PaletteRandom": "Aleatória por faixa",
 
   "SettingOutputDevice": "Dispositivo de saída",

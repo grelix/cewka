@@ -101,11 +101,19 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         LanguageSection = new SettingsSection("SectionLanguage");
 
         Audio = new SettingsSection("SectionAudio");
+
+        // Efekty osobno od dźwięku: w zakładce dźwięku stoją ustawienia urządzenia i wierności
+        // odtwarzania, a tu — rzeczy, które celowo zmieniają brzmienie. Mieszanie jednego
+        // z drugim kazałoby szukać wierności wśród upiększeń.
+        // Nazwa zakładki bierze się z tego samego klucza, co nagłówek pasa efektów w oknie
+        // głównym. Osobny klucz oznaczałby siedemnaście identycznych napisów do utrzymania.
+        EffectsSection = new SettingsSection("Effects");
+
         Playback = new SettingsSection("SectionPlayback");
         Integration = new SettingsSection("SectionSystem");
         About = new SettingsSection("SectionAbout");
 
-        Sections = [Appearance, LanguageSection, Audio, Playback, Integration, About];
+        Sections = [Appearance, LanguageSection, Audio, EffectsSection, Playback, Integration, About];
         Appearance.IsSelected = true;
 
         Theme = new SegmentGroup(
@@ -140,13 +148,14 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             ("ColoursRecommended", ColourIntensity.Recommended),
             ("ColoursIntense", ColourIntensity.Intense));
 
+        // Lista wyprowadzona wprost z CoilCover.Fixed, a nie wypisana drugi raz. Kiedy była
+        // wypisana, dołożenie sześciu par w 0.8.0 zmieniło rysowanie okładek, ale do tej listy
+        // nie dotarło — i nowe pary po prostu nie pojawiły się w ustawieniach. Klucz językowy
+        // składa się z nazwy pozycji wyliczenia; pilnuje tego test, który sprawdza, czy każdy
+        // taki klucz istnieje w każdym pliku językowym.
         Palettes =
         [
-            new PaletteOption("PaletteBlueViolet", PlaceholderPalette.BlueViolet),
-            new PaletteOption("PaletteTurquoise", PlaceholderPalette.Turquoise),
-            new PaletteOption("PaletteAmber", PlaceholderPalette.Amber),
-            new PaletteOption("PaletteLime", PlaceholderPalette.Lime),
-            new PaletteOption("PaletteGraphite", PlaceholderPalette.Graphite),
+            ..CoilCover.Fixed.Select(value => new PaletteOption("Palette" + value, value)),
             new PaletteOption("PaletteRandom", PlaceholderPalette.Random),
         ];
 
@@ -229,7 +238,14 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public SettingsSection Appearance { get; }
     public SettingsSection LanguageSection { get; }
     public SettingsSection Audio { get; }
+    public SettingsSection EffectsSection { get; }
     public SettingsSection Playback { get; }
+
+    /// <summary>
+    /// Te same obiekty, którymi steruje okno główne. Dzięki temu suwak przesunięty w jednym
+    /// miejscu widać od razu w drugim, bez żadnego uzgadniania między oknami.
+    /// </summary>
+    public IReadOnlyList<EffectViewModel> SoundEffects => _player.SoundEffects;
     public SettingsSection Integration { get; }
     public SettingsSection About { get; }
 

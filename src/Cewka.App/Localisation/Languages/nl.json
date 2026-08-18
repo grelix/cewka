@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Equalizer en wachtrij tonen of verbergen",
+  "TooltipTogglePanel": "Equalizer en effecten tonen of verbergen (Q)",
+  "TooltipToggleQueue": "Wachtrij tonen of verbergen (L)",
   "TooltipTheme": "Thema",
   "TooltipSettings": "Instellingen",
   "TooltipMinimise": "Minimaliseren",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Autolimiter",
   "OptionNormalisation": "Normalisatie",
+
+  "Effects": "Effecten",
+  "EffectCrossfeed": "Crossfeed",
+  "EffectLoudness": "Volumecompensatie",
+  "EffectVirtualBass": "Virtuele bas",
+  "EffectDynamicRange": "Dynamiekbegrenzing",
+  "EffectStereoWidth": "Stereobreedte",
+  "EffectDescriptionCrossfeed": "Bijmenging van het andere kanaal, zoals bij luisteren via luidsprekers. Verzacht de scheiding die in een hoofdtelefoon vermoeit.",
+  "EffectDescriptionLoudness": "Versterking van bas en hoge tonen bij zacht luisteren, volgens de curven van gelijke luidheid.",
+  "EffectDescriptionVirtualBass": "Boventonen van de laagste tonen. Ze maken bas hoorbaar op luidsprekers die hem niet weergeven.",
+  "EffectDescriptionDynamicRange": "Verkleint het verschil tussen zacht en luid. Zachte passages worden hoorbaar zonder de luide te verhogen.",
+  "EffectDescriptionStereoWidth": "Verbreedt het stereobeeld. De monosom blijft ongewijzigd.",
+  "EffectsNote": "Alle effecten staan standaard uit en veranderen het geluid met opzet. Dezelfde schakelaars en schuifregelaars staan in het hoofdvenster, naast de equalizer.",
 
   "OpenFiles": "Bestanden openen",
   "OpenFolder": "Map openen",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Amber en karmijn",
   "PaletteLime": "Limoen en smaragd",
   "PaletteGraphite": "Grafiet en koper",
+  "PaletteSunset": "Koraal en magenta",
+  "PaletteOcean": "Zee en marine",
+  "PalettePlum": "Pruim en indigo",
+  "PaletteMint": "Mint en azuur",
+  "PaletteSand": "Zand en terracotta",
+  "PaletteCherry": "Kers en bordeaux",
   "PaletteRandom": "Willekeur per nummer",
 
   "SettingOutputDevice": "Uitvoerapparaat",

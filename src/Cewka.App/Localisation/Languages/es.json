@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Mostrar u ocultar el ecualizador y la cola",
+  "TooltipTogglePanel": "Mostrar u ocultar el ecualizador y los efectos (Q)",
+  "TooltipToggleQueue": "Mostrar u ocultar la cola (L)",
   "TooltipTheme": "Tema",
   "TooltipSettings": "Ajustes",
   "TooltipMinimise": "Minimizar",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Autolimitador",
   "OptionNormalisation": "Normalización",
+
+  "Effects": "Efectos",
+  "EffectCrossfeed": "Crossfeed",
+  "EffectLoudness": "Compensación de volumen",
+  "EffectVirtualBass": "Graves virtuales",
+  "EffectDynamicRange": "Limitación de dinámica",
+  "EffectStereoWidth": "Amplitud estéreo",
+  "EffectDescriptionCrossfeed": "Mezcla del canal opuesto, como al escuchar por altavoces. Suaviza la separación que cansa con auriculares.",
+  "EffectDescriptionLoudness": "Realce de graves y agudos al escuchar bajo, según las curvas isofónicas.",
+  "EffectDescriptionVirtualBass": "Armónicos de los tonos más graves. Hacen audible el bajo en altavoces que no lo reproducen.",
+  "EffectDescriptionDynamicRange": "Estrecha el margen entre lo suave y lo fuerte. Los pasajes suaves se oyen sin subir los fuertes.",
+  "EffectDescriptionStereoWidth": "Amplía la imagen estéreo. La suma monofónica queda intacta.",
+  "EffectsNote": "Todos los efectos están desactivados de forma predeterminada y alteran el sonido a propósito. Los mismos interruptores y controles están en la ventana principal, junto al ecualizador.",
 
   "OpenFiles": "Abrir archivos",
   "OpenFolder": "Abrir carpeta",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Ámbar y carmesí",
   "PaletteLime": "Lima y esmeralda",
   "PaletteGraphite": "Grafito y cobre",
+  "PaletteSunset": "Coral y magenta",
+  "PaletteOcean": "Mar y marino",
+  "PalettePlum": "Ciruela e índigo",
+  "PaletteMint": "Menta y azur",
+  "PaletteSand": "Arena y terracota",
+  "PaletteCherry": "Cereza y burdeos",
   "PaletteRandom": "Aleatoria por pista",
 
   "SettingOutputDevice": "Dispositivo de salida",

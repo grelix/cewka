@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Показати або приховати еквалайзер і чергу",
+  "TooltipTogglePanel": "Показати або приховати еквалайзер і ефекти (Q)",
+  "TooltipToggleQueue": "Показати або приховати чергу (L)",
   "TooltipTheme": "Тема",
   "TooltipSettings": "Налаштування",
   "TooltipMinimise": "Згорнути",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Автолімітер",
   "OptionNormalisation": "Нормалізація",
+
+  "Effects": "Ефекти",
+  "EffectCrossfeed": "Кросфід",
+  "EffectLoudness": "Компенсація гучності",
+  "EffectVirtualBass": "Віртуальний бас",
+  "EffectDynamicRange": "Обмеження динаміки",
+  "EffectStereoWidth": "Ширина стерео",
+  "EffectDescriptionCrossfeed": "Підмішування протилежного каналу, як під час слухання через колонки. Пом'якшує поділ, що втомлює в навушниках.",
+  "EffectDescriptionLoudness": "Підняття басу та верхів за тихого слухання, за кривими однакової гучності.",
+  "EffectDescriptionVirtualBass": "Гармоніки найнижчих тонів. Роблять бас чутним на колонках, які його не відтворюють.",
+  "EffectDescriptionDynamicRange": "Звужує різницю між тихим і гучним. Тихі місця стають чутними без піднімання гучних.",
+  "EffectDescriptionStereoWidth": "Розширює стереокартину. Монофонічна сума лишається незмінною.",
+  "EffectsNote": "Усі ефекти типово вимкнені й змінюють звучання навмисно. Ті самі перемикачі та повзунки є в головному вікні, поруч з еквалайзером.",
 
   "OpenFiles": "Відкрити файли",
   "OpenFolder": "Відкрити папку",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Бурштин і кармазин",
   "PaletteLime": "Лайм і смарагд",
   "PaletteGraphite": "Графітовий і мідний",
+  "PaletteSunset": "Корал і маджента",
+  "PaletteOcean": "Море і синій",
+  "PalettePlum": "Слива та індиго",
+  "PaletteMint": "Мента і лазур",
+  "PaletteSand": "Пісок і теракота",
+  "PaletteCherry": "Вишня і бордо",
   "PaletteRandom": "Випадково для треку",
 
   "SettingOutputDevice": "Пристрій виводу",

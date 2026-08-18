@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Zobrazit nebo skrýt ekvalizér a frontu",
+  "TooltipTogglePanel": "Zobrazit nebo skrýt ekvalizér a efekty (Q)",
+  "TooltipToggleQueue": "Zobrazit nebo skrýt frontu (L)",
   "TooltipTheme": "Motiv",
   "TooltipSettings": "Nastavení",
   "TooltipMinimise": "Minimalizovat",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Automatický limiter",
   "OptionNormalisation": "Normalizace",
+
+  "Effects": "Efekty",
+  "EffectCrossfeed": "Crossfeed",
+  "EffectLoudness": "Kompenzace hlasitosti",
+  "EffectVirtualBass": "Virtuální basy",
+  "EffectDynamicRange": "Omezení dynamiky",
+  "EffectStereoWidth": "Šířka sterea",
+  "EffectDescriptionCrossfeed": "Příměs protilehlého kanálu, jako při poslechu z reproduktorů. Zmírňuje oddělení kanálů, které ve sluchátkách unavuje.",
+  "EffectDescriptionLoudness": "Zvýraznění basů a výšek při tichém poslechu, podle křivek stejné hlasitosti.",
+  "EffectDescriptionVirtualBass": "Harmonické nejnižších tónů. Zpřístupní basy na reproduktorech, které je nevytvoří.",
+  "EffectDescriptionDynamicRange": "Zúžení rozsahu hlasitosti. Tiché pasáže jsou slyšet bez zesilování hlasitých.",
+  "EffectDescriptionStereoWidth": "Rozšíření stereobáze. Monofonní součet zůstává nezměněn.",
+  "EffectsNote": "Všechny efekty jsou ve výchozím stavu vypnuté a mění zvuk záměrně. Tytéž přepínače a posuvníky jsou v hlavním okně vedle ekvalizéru.",
 
   "OpenFiles": "Otevřít soubory",
   "OpenFolder": "Otevřít složku",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Jantar a karmín",
   "PaletteLime": "Limetka a smaragd",
   "PaletteGraphite": "Grafit a měď",
+  "PaletteSunset": "Korál a magenta",
+  "PaletteOcean": "More a námořní",
+  "PalettePlum": "Švestka a indigo",
+  "PaletteMint": "Mentol a azur",
+  "PaletteSand": "Písek a terakota",
+  "PaletteCherry": "Višeň a bordó",
   "PaletteRandom": "Losování na skladbu",
 
   "SettingOutputDevice": "Výstupní zařízení",

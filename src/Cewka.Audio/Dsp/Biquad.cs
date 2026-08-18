@@ -129,6 +129,77 @@ public struct Biquad
             a2: (a + 1) - (a - 1) * cosW0 - twoSqrtAAlpha);
     }
 
+    /// <summary>
+    /// Low-shelf in the Audio EQ Cookbook form. Używany przez kompensację głośności, która
+    /// podnosi bas tym mocniej, im ciszej gra muzyka.
+    /// </summary>
+    public void SetLowShelf(double frequency, double q, double gainDb, double sampleRate)
+    {
+        if (Math.Abs(gainDb) < 1e-6)
+        {
+            SetCoefficients(1, 0, 0, 1, 0, 0);
+            return;
+        }
+
+        var a = Math.Pow(10, gainDb / 40);
+        var w0 = 2 * Math.PI * frequency / sampleRate;
+        var cosW0 = Math.Cos(w0);
+        var alpha = Math.Sin(w0) / (2 * q);
+        var twoSqrtAAlpha = 2 * Math.Sqrt(a) * alpha;
+
+        SetCoefficients(
+            b0: a * ((a + 1) - (a - 1) * cosW0 + twoSqrtAAlpha),
+            b1: 2 * a * ((a - 1) - (a + 1) * cosW0),
+            b2: a * ((a + 1) - (a - 1) * cosW0 - twoSqrtAAlpha),
+            a0: (a + 1) + (a - 1) * cosW0 + twoSqrtAAlpha,
+            a1: -2 * ((a - 1) + (a + 1) * cosW0),
+            a2: (a + 1) + (a - 1) * cosW0 - twoSqrtAAlpha);
+    }
+
+    /// <summary>
+    /// Low-pass w postaci z Audio EQ Cookbook. Dobroć 0,7071 daje charakterystykę Butterwortha,
+    /// przy której część przepuszczona i odjęta reszta sumują się z powrotem bez garbu.
+    /// </summary>
+    public void SetLowPass(double frequency, double q, double sampleRate)
+    {
+        var nyquist = sampleRate / 2;
+        frequency = Math.Min(frequency, nyquist * 0.92);
+
+        var w0 = 2 * Math.PI * frequency / sampleRate;
+        var cosW0 = Math.Cos(w0);
+        var alpha = Math.Sin(w0) / (2 * q);
+
+        SetCoefficients(
+            b0: (1 - cosW0) / 2,
+            b1: 1 - cosW0,
+            b2: (1 - cosW0) / 2,
+            a0: 1 + alpha,
+            a1: -2 * cosW0,
+            a2: 1 - alpha);
+    }
+
+    /// <summary>
+    /// Band-pass o wzmocnieniu jedności w szczycie. Basowi wirtualnemu służy dwukrotnie: raz do
+    /// wycięcia pasma, z którego powstają harmoniczne, raz do wybrania samych harmonicznych.
+    /// </summary>
+    public void SetBandPass(double frequency, double q, double sampleRate)
+    {
+        var nyquist = sampleRate / 2;
+        frequency = Math.Min(frequency, nyquist * 0.92);
+
+        var w0 = 2 * Math.PI * frequency / sampleRate;
+        var cosW0 = Math.Cos(w0);
+        var alpha = Math.Sin(w0) / (2 * q);
+
+        SetCoefficients(
+            b0: alpha,
+            b1: 0,
+            b2: -alpha,
+            a0: 1 + alpha,
+            a1: -2 * cosW0,
+            a2: 1 - alpha);
+    }
+
     /// <summary>High-pass, used by the second stage of the K-weighting filter.</summary>
     public void SetHighPass(double frequency, double q, double sampleRate)
     {

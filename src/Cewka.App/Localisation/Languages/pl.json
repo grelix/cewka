@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Pokaż lub ukryj korektor i kolejkę",
+  "TooltipTogglePanel": "Pokaż lub ukryj korektor i efekty (Q)",
+  "TooltipToggleQueue": "Pokaż lub ukryj kolejkę (L)",
   "TooltipTheme": "Motyw",
   "TooltipSettings": "Ustawienia",
   "TooltipMinimise": "Minimalizuj",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Autolimiter",
   "OptionNormalisation": "Normalizacja",
+
+  "Effects": "Efekty",
+  "EffectCrossfeed": "Crossfeed",
+  "EffectLoudness": "Kompensacja głośności",
+  "EffectVirtualBass": "Bas wirtualny",
+  "EffectDynamicRange": "Ograniczanie dynamiki",
+  "EffectStereoWidth": "Szerokość stereo",
+  "EffectDescriptionCrossfeed": "Domieszka kanału przeciwnego, tak jak przy słuchaniu na głośnikach. Łagodzi rozdzielenie kanałów, które w słuchawkach męczy.",
+  "EffectDescriptionLoudness": "Podbicie basu i najwyższych tonów przy cichym słuchaniu, zgodnie z krzywymi jednakowej głośności.",
+  "EffectDescriptionVirtualBass": "Harmoniczne najniższych tonów. Dają słyszalny bas na głośnikach, które go nie wytwarzają.",
+  "EffectDescriptionDynamicRange": "Zawężenie rozpiętości głośności. Ciche fragmenty stają się słyszalne bez podnoszenia głośnych.",
+  "EffectDescriptionStereoWidth": "Poszerzenie bazy stereo. Suma monofoniczna pozostaje nienaruszona.",
+  "EffectsNote": "Wszystkie efekty są domyślnie wyłączone i zmieniają brzmienie celowo. Te same przełączniki i suwaki są w oknie głównym, obok korektora.",
 
   "OpenFiles": "Otwórz pliki",
   "OpenFolder": "Otwórz folder",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Bursztyn i karmazyn",
   "PaletteLime": "Limonka i szmaragd",
   "PaletteGraphite": "Grafit i miedź",
+  "PaletteSunset": "Koral i magenta",
+  "PaletteOcean": "Morze i granat",
+  "PalettePlum": "Śliwka i indygo",
+  "PaletteMint": "Mięta i lazur",
+  "PaletteSand": "Piasek i terakota",
+  "PaletteCherry": "Wiśnia i burgund",
   "PaletteRandom": "Losowanie co utwór",
 
   "SettingOutputDevice": "Urządzenie wyjściowe",

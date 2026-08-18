@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Equalizer und Warteschlange ein- oder ausblenden",
+  "TooltipTogglePanel": "Equalizer und Effekte ein- oder ausblenden (Q)",
+  "TooltipToggleQueue": "Warteschlange ein- oder ausblenden (L)",
   "TooltipTheme": "Design",
   "TooltipSettings": "Einstellungen",
   "TooltipMinimise": "Minimieren",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Auto-Limiter",
   "OptionNormalisation": "Normalisierung",
+
+  "Effects": "Effekte",
+  "EffectCrossfeed": "Crossfeed",
+  "EffectLoudness": "Lautstärkekompensation",
+  "EffectVirtualBass": "Virtueller Bass",
+  "EffectDynamicRange": "Dynamikbegrenzung",
+  "EffectStereoWidth": "Stereobreite",
+  "EffectDescriptionCrossfeed": "Beimischung des Gegenkanals wie beim Hören über Lautsprecher. Mildert die Kanaltrennung, die im Kopfhörer ermüdet.",
+  "EffectDescriptionLoudness": "Anhebung von Bass und Höhen bei leisem Hören, nach den Kurven gleicher Lautstärke.",
+  "EffectDescriptionVirtualBass": "Obertöne der tiefsten Töne. Sie machen Bass auf Lautsprechern hörbar, die ihn nicht erzeugen.",
+  "EffectDescriptionDynamicRange": "Verringert den Abstand zwischen leise und laut. Leise Passagen werden hörbar, ohne die lauten anzuheben.",
+  "EffectDescriptionStereoWidth": "Verbreitert die Stereobasis. Die Monosumme bleibt unverändert.",
+  "EffectsNote": "Alle Effekte sind standardmäßig aus und verändern den Klang absichtlich. Dieselben Schalter und Regler stehen im Hauptfenster neben dem Equalizer.",
 
   "OpenFiles": "Dateien öffnen",
   "OpenFolder": "Ordner öffnen",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Bernstein und Karmin",
   "PaletteLime": "Limette und Smaragd",
   "PaletteGraphite": "Graphit und Kupfer",
+  "PaletteSunset": "Koralle, Magenta",
+  "PaletteOcean": "Meer und Marine",
+  "PalettePlum": "Pflaume, Indigo",
+  "PaletteMint": "Mint und Azur",
+  "PaletteSand": "Sand, Terrakotta",
+  "PaletteCherry": "Kirsche, Bordeaux",
   "PaletteRandom": "Zufällig je Titel",
 
   "SettingOutputDevice": "Ausgabegerät",

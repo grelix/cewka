@@ -43,6 +43,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private IReadOnlyList<Color> _palette = [];
     private bool _usingPlaceholderCover = true;
     private bool _panelOpen;
+    private bool _queueOpen;
     private bool _isPlaying;
     private bool _isSeeking;
     private double _progress;
@@ -58,6 +59,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var s = settings.Current;
 
         _panelOpen = s.PanelOpen;
+        _queueOpen = s.QueueOpen;
 
         // Jakość konwersji i rozmiar bufora czytane są przy tworzeniu dekodera i urządzenia,
         // więc muszą stać na miejscu, zanim cokolwiek powstanie.
@@ -103,6 +105,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 _settings.Touch();
             };
         }
+
+        SoundEffects = BuildSoundEffects(s);
 
         Queue = [];
 
@@ -312,8 +316,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Raise(nameof(RepeatTooltip));
     }
 
-    // ---------- Panel ----------
+    // ---------- Obszary okna ----------
 
+    /// <summary>
+    /// Pas dolny: korektor i efekty. Od wersji 0.8.0 niezależny od kolejki.
+    ///
+    /// <para>Wcześniej jeden stan rządził oboma, bo dzieliły jeden panel u dołu okna. Odkąd
+    /// kolejka stoi we własnej kolumnie, są to dwa obszary w dwóch różnych miejscach i wiązanie
+    /// ich razem kazało pokazywać korektor komuś, kto chciał tylko zobaczyć, co dalej zagra.</para>
+    /// </summary>
     public bool PanelOpen
     {
         get => _panelOpen;
@@ -321,6 +332,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             if (!Set(ref _panelOpen, value)) return;
             _settings.Current.PanelOpen = value;
+            _settings.Touch();
+        }
+    }
+
+    /// <summary>Kolumna kolejki po prawej stronie okna.</summary>
+    public bool QueueOpen
+    {
+        get => _queueOpen;
+        set
+        {
+            if (!Set(ref _queueOpen, value)) return;
+            _settings.Current.QueueOpen = value;
             _settings.Touch();
         }
     }
@@ -367,6 +390,110 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         if (_current is null) Title = Strings.Current["NoTrack"];
         RebuildQueue();
+
+        foreach (var effect in SoundEffects) effect.RefreshLabels();
+    }
+
+    // ---------- Efekty dźwiękowe ----------
+
+    /// <summary>
+    /// Pięć efektów w kolejności, w jakiej stoją w oknie. Każdy ma przełącznik i suwak siły,
+    /// a zmiana jednego i drugiego trafia od razu do łańcucha i do zapisanych ustawień.
+    /// </summary>
+    public IReadOnlyList<EffectViewModel> SoundEffects { get; }
+
+    private IReadOnlyList<EffectViewModel> BuildSoundEffects(AppSettings s)
+    {
+        var effects = new[]
+        {
+            new EffectViewModel("Crossfeed", s.CrossfeedEnabled, s.CrossfeedStrength),
+            new EffectViewModel("Loudness", s.LoudnessEnabled, s.LoudnessStrength),
+            new EffectViewModel("VirtualBass", s.VirtualBassEnabled, s.VirtualBassStrength),
+            new EffectViewModel("DynamicRange", s.DynamicRangeEnabled, s.DynamicRangeStrength),
+            new EffectViewModel("StereoWidth", s.StereoWidthEnabled, s.StereoWidthStrength),
+        };
+
+        foreach (var effect in effects)
+        {
+            ApplyEffect(effect);
+
+            var captured = effect;
+            captured.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName != nameof(EffectViewModel.Enabled)
+                    && e.PropertyName != nameof(EffectViewModel.Strength)) return;
+
+                ApplyEffect(captured);
+                StoreEffect(captured);
+                _settings.Touch();
+            };
+        }
+
+        return effects;
+    }
+
+    /// <summary>
+    /// Przenosi stan jednego efektu do łańcucha. Siła podawana jest stopniom w procentach,
+    /// a interfejs trzyma ją w zakresie 0–1, bo tego wymaga suwak — stąd mnożenie w jednym
+    /// miejscu zamiast dwóch różnych jednostek krążących po całym programie.
+    /// </summary>
+    private void ApplyEffect(EffectViewModel effect)
+    {
+        var graph = _engine.Graph;
+        var percent = effect.Strength * 100;
+
+        switch (effect.Key)
+        {
+            case "Crossfeed":
+                graph.Crossfeed.Enabled = effect.Enabled;
+                graph.Crossfeed.Strength = percent;
+                break;
+            case "Loudness":
+                graph.Loudness.Enabled = effect.Enabled;
+                graph.Loudness.Strength = percent;
+                break;
+            case "VirtualBass":
+                graph.VirtualBass.Enabled = effect.Enabled;
+                graph.VirtualBass.Strength = percent;
+                break;
+            case "DynamicRange":
+                graph.DynamicRange.Enabled = effect.Enabled;
+                graph.DynamicRange.Strength = percent;
+                break;
+            case "StereoWidth":
+                graph.StereoWidth.Enabled = effect.Enabled;
+                graph.StereoWidth.Strength = percent;
+                break;
+        }
+    }
+
+    private void StoreEffect(EffectViewModel effect)
+    {
+        var s = _settings.Current;
+
+        switch (effect.Key)
+        {
+            case "Crossfeed":
+                s.CrossfeedEnabled = effect.Enabled;
+                s.CrossfeedStrength = effect.Strength;
+                break;
+            case "Loudness":
+                s.LoudnessEnabled = effect.Enabled;
+                s.LoudnessStrength = effect.Strength;
+                break;
+            case "VirtualBass":
+                s.VirtualBassEnabled = effect.Enabled;
+                s.VirtualBassStrength = effect.Strength;
+                break;
+            case "DynamicRange":
+                s.DynamicRangeEnabled = effect.Enabled;
+                s.DynamicRangeStrength = effect.Strength;
+                break;
+            case "StereoWidth":
+                s.StereoWidthEnabled = effect.Enabled;
+                s.StereoWidthStrength = effect.Strength;
+                break;
+        }
     }
 
     // ---------- Panel systemowy multimediów ----------
@@ -971,6 +1098,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public void TogglePanel() => PanelOpen = !PanelOpen;
 
+    public void ToggleQueue() => QueueOpen = !QueueOpen;
+
     // ---------- Operacje na kolejce ----------
 
     public void RemoveFromQueue(QueueItemViewModel item)
@@ -1428,8 +1557,82 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// Pulls the background colours out of whatever is currently on the record, at the strength
     /// the user chose.
     /// </summary>
-    private Color[] ExtractPalette() => CoverPalette.Extract(
-        Cover, App.Theme.IsDark, ColourPreferences.Saturation(_settings.Current.ColourIntensity));
+    private Color[] ExtractPalette()
+    {
+        var dark = App.Theme.IsDark;
+
+        // Akcent liczony jest z palety pobranej w pełnej sile, a nie z tej, którą przyciemniło
+        // ustawienie intensywności. Intensywność dotyczy tła; przełączniki i suwaki mają
+        // pokazywać barwę okładki zawsze i w całości.
+        ApplyAccent(CoverPalette.Extract(Cover, dark, 1.0), dark);
+
+        // Przy okładce domyślnej barwy pary są znane dokładnie, więc nie ma po co odczytywać ich
+        // z narysowanego obrazka.
+        if (_usingPlaceholderCover) return PlaceholderBackdrop(dark);
+
+        return CoverPalette.Extract(
+            Cover, dark, ColourPreferences.Saturation(_settings.Current.ColourIntensity));
+    }
+
+    /// <summary>
+    /// Plamy tła dla okładki domyślnej, wzięte wprost ze skrajnych barw pary.
+    ///
+    /// <para><b>Dlaczego nie przez analizę obrazka.</b> Dla prawdziwej okładki nie ma innego
+    /// wyjścia: barwy trzeba z niej odczytać. Ale okładkę domyślną program rysuje sam i zna jej
+    /// parę co do składowej — a droga przez analizę te barwy psuje. <see cref="CoverPalette"/>
+    /// dzieli przestrzeń barw na kubełki i uśrednia zawartość każdego z nich, co samo w sobie
+    /// ciągnie wynik do szarości; do tego spirala to cienkie kreski na ciemnym podłożu, więc
+    /// w kubełkach przeważa tło, a nie barwa kreski. Skutek: para „turkus i róż" dawała na tle
+    /// dwa odcienie tego samego zamglonego fioletu.</para>
+    ///
+    /// <para><b>Skrajne, nie środkowa.</b> Spirala przechodzi od pierwszej barwy pary do drugiej,
+    /// więc to te dwie mówią, czym para jest. Barwa środkowa jest ich mieszaniną i na tle nie
+    /// wnosi nic poza rozmyciem różnicy. Cztery plamy dostają więc obie skrajne barwy po dwa
+    /// razy, dzięki czemu tło jest dwubarwne tak samo jak okładka.</para>
+    ///
+    /// <para>Ustawienie intensywności barw działa tu dalej — skaluje nasycenie, tak jak robi to
+    /// dla barw wyciąganych z prawdziwej okładki. Przełączniki i suwaki barwy nie stąd biorą:
+    /// akcent liczony jest osobno, z pełnej palety i bez tego skalowania.</para>
+    /// </summary>
+    private Color[] PlaceholderBackdrop(bool darkTheme)
+    {
+        // Ta sama droga, którą poszło rysowanie, więc przy ustawieniu losowym tło dostaje barwy
+        // tej pary, która naprawdę jest na ekranie.
+        var drawn = _placeholderDraw.For(_settings.Current.PlaceholderPalette, _current?.Path);
+        var ramp = CoilCover.RampColours(drawn, darkTheme);
+
+        if (ramp.Length == 0) return [];
+
+        var saturation = ColourPreferences.Saturation(_settings.Current.ColourIntensity);
+        var first = Saturate(ramp[0], saturation);
+        var last = Saturate(ramp[^1], saturation);
+
+        return [first, last, first, last];
+    }
+
+    /// <summary>Skaluje nasycenie, zostawiając odcień i jasność w spokoju.</summary>
+    private static Color Saturate(Color colour, double multiplier)
+    {
+        if (Math.Abs(multiplier - 1.0) < 1e-6) return colour;
+
+        var hsl = colour.ToHsl();
+        return new HslColor(hsl.A, hsl.H, Math.Clamp(hsl.S * multiplier, 0, 1), hsl.L).ToRgb();
+    }
+
+    /// <summary>
+    /// Wstawia barwę akcentu do zasobów aplikacji. Wszystko, co sięga po nią przez
+    /// <c>DynamicResource</c> — przełączniki, suwaki, wypełnienia — przemalowuje się samo.
+    /// </summary>
+    private static void ApplyAccent(IReadOnlyList<Color> vivid, bool darkTheme)
+    {
+        var resources = Avalonia.Application.Current?.Resources;
+        if (resources is null) return;
+
+        var accent = AccentColour.From(vivid, darkTheme);
+
+        resources["AccentColor"] = accent;
+        resources["AccentBrush"] = new SolidColorBrush(accent);
+    }
 
     /// <summary>Progi siły plam tła; czytane przez tło okna, które waha się między nimi.</summary>
     public double BackdropMinimum => ColourPreferences.BackdropRange(_settings.Current.ColourIntensity).Minimum;

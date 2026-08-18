@@ -313,6 +313,59 @@
                 </Border>
               </StackPanel>
 
+              <!-- ========== Efekty ========== -->
+              <StackPanel Spacing="18" IsVisible="{Binding EffectsSection.IsSelected}">
+
+                <Border Classes="section">
+                  <StackPanel Spacing="16">
+                    <TextBlock Classes="section-title" Text="{l:Translate Effects}" />
+                    <TextBlock Classes="setting-hint" Text="{l:Translate EffectsNote}"
+                               TextWrapping="Wrap" />
+
+                    <ItemsControl ItemsSource="{Binding SoundEffects}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Spacing="20" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:EffectViewModel">
+                          <StackPanel Spacing="9">
+
+                            <Grid ColumnDefinitions="*,Auto">
+                              <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
+                                <TextBlock Classes="setting-label" Text="{Binding Label}" />
+                                <TextBlock Classes="setting-hint" Text="{Binding Description}"
+                                           TextWrapping="Wrap" />
+                              </StackPanel>
+                              <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
+                                             IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                             OffBrush="{DynamicResource TrackBrush}"
+                                             OnBrush="{DynamicResource AccentBrush}"
+                                             BorderBrush="{DynamicResource StrokeBrush}" />
+                            </Grid>
+
+                            <!-- Ten sam suwak, co w oknie glownym: oba steruja tym samym
+                                 obiektem, wiec nie ma czego miedzy nimi uzgadniac. -->
+                            <Grid ColumnDefinitions="*,44" ColumnSpacing="12"
+                                  Opacity="{Binding RowOpacity}">
+                              <c:TrackSlider Grid.Column="0" Height="18" VerticalAlignment="Center"
+                                             Value="{Binding Strength, Mode=TwoWay}"
+                                             TrackThickness="4" ThumbDiameter="11"
+                                             TrackBrush="{DynamicResource TrackBrush}"
+                                             FillBrush="{DynamicResource AccentBrush}" />
+                              <TextBlock Grid.Column="1" Classes="mono faint"
+                                         Text="{Binding StrengthText}" FontSize="10.5"
+                                         VerticalAlignment="Center" HorizontalAlignment="Right" />
+                            </Grid>
+                          </StackPanel>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+
               <!-- ========== Odtwarzanie ========== -->
               <StackPanel Spacing="18" IsVisible="{Binding Playback.IsSelected}">
                 <Border Classes="section">

@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Show or hide the equaliser and queue",
+  "TooltipTogglePanel": "Show or hide the equaliser and effects (Q)",
+  "TooltipToggleQueue": "Show or hide the queue (L)",
   "TooltipTheme": "Theme",
   "TooltipSettings": "Settings",
   "TooltipMinimise": "Minimise",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Auto limiter",
   "OptionNormalisation": "Normalisation",
+
+  "Effects": "Effects",
+  "EffectCrossfeed": "Crossfeed",
+  "EffectLoudness": "Loudness compensation",
+  "EffectVirtualBass": "Virtual bass",
+  "EffectDynamicRange": "Dynamic range",
+  "EffectStereoWidth": "Stereo width",
+  "EffectDescriptionCrossfeed": "A little of each channel fed to the other ear, as when listening on speakers. Eases the separation that tires in headphones.",
+  "EffectDescriptionLoudness": "Bass and top end raised at low listening levels, following the equal-loudness contours.",
+  "EffectDescriptionVirtualBass": "Harmonics of the lowest notes. They make bass audible on speakers that cannot produce it.",
+  "EffectDescriptionDynamicRange": "Narrows the range between quiet and loud. Quiet passages become audible without raising the loud ones.",
+  "EffectDescriptionStereoWidth": "Widens the stereo image. The mono sum is left untouched.",
+  "EffectsNote": "Every effect is off by default and changes the sound on purpose. The same switches and sliders sit in the main window, beside the equaliser.",
 
   "OpenFiles": "Open files",
   "OpenFolder": "Open folder",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Amber and crimson",
   "PaletteLime": "Lime and emerald",
   "PaletteGraphite": "Graphite and copper",
+  "PaletteSunset": "Coral and magenta",
+  "PaletteOcean": "Sea and navy",
+  "PalettePlum": "Plum and indigo",
+  "PaletteMint": "Mint and azure",
+  "PaletteSand": "Sand and terracotta",
+  "PaletteCherry": "Cherry and burgundy",
   "PaletteRandom": "Random each track",
 
   "SettingOutputDevice": "Output device",

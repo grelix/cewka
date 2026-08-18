@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Ekolayzeri ve kuyruğu gösterme veya gizleme",
+  "TooltipTogglePanel": "Ekolayzeri ve efektleri gösterme veya gizleme (Q)",
+  "TooltipToggleQueue": "Kuyruğu gösterme veya gizleme (L)",
   "TooltipTheme": "Tema",
   "TooltipSettings": "Ayarlar",
   "TooltipMinimise": "Küçültme",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Otomatik sınırlayıcı",
   "OptionNormalisation": "Normalizasyon",
+
+  "Effects": "Efektler",
+  "EffectCrossfeed": "Crossfeed",
+  "EffectLoudness": "Ses düzeyi telafisi",
+  "EffectVirtualBass": "Sanal bas",
+  "EffectDynamicRange": "Dinamik sınırlama",
+  "EffectStereoWidth": "Stereo genişlik",
+  "EffectDescriptionCrossfeed": "Karşı kanalın bir miktar karıştırılması, hoparlörden dinler gibi. Kulaklıkta yoran ayrımı yumuşatır.",
+  "EffectDescriptionLoudness": "Kısık dinlemede bas ve tizlerin yükseltilmesi, eşit gürlük eğrilerine göre.",
+  "EffectDescriptionVirtualBass": "En pes seslerin harmonikleri. Bası üretemeyen hoparlörlerde duyulur kılar.",
+  "EffectDescriptionDynamicRange": "Sessiz ile gürültülü arasındaki farkı daraltır. Sessiz bölümler, gürültülüleri yükseltmeden duyulur.",
+  "EffectDescriptionStereoWidth": "Stereo görüntüyü genişletir. Mono toplam değişmeden kalır.",
+  "EffectsNote": "Tüm efektler varsayılan olarak kapalıdır ve sesi bilerek değiştirir. Aynı anahtarlar ve kaydırıcılar ana pencerede, ekolayzırın yanında bulunur.",
 
   "OpenFiles": "Dosya açma",
   "OpenFolder": "Klasör açma",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Kehribar ve kızıl",
   "PaletteLime": "Limon ve zümrüt",
   "PaletteGraphite": "Grafit ve bakır",
+  "PaletteSunset": "Mercan ve magenta",
+  "PaletteOcean": "Deniz ve lacivert",
+  "PalettePlum": "Erik ve çivit",
+  "PaletteMint": "Nane ve mavi",
+  "PaletteSand": "Kum ve toprak",
+  "PaletteCherry": "Kiraz ve bordo",
   "PaletteRandom": "Her parça rastgele",
 
   "SettingOutputDevice": "Çıkış aygıtı",

@@ -7,7 +7,7 @@
         x:DataType="vm:MainViewModel"
         Title="Cewka"
         Icon="avares://Cewka/Assets/cewka.png"
-        Width="1180" Height="680"
+        Width="1200" Height="680"
         MinWidth="900" MinHeight="360"
         WindowStartupLocation="CenterScreen"
         Background="Transparent"
@@ -64,9 +64,24 @@
                                  IsVisible="{Binding ControlsOnLeft}"
                                  Margin="0,0,6,0" />
 
+                <!--
+                  Dwa przyciski, bo dwa obszary wlacza sie niezaleznie: suwaki to pas dolny
+                  z korektorem i efektami, lista to kolumna kolejki po prawej.
+                -->
                 <Button Classes="icon" Width="30" Height="30"
+                        Classes.active="{Binding PanelOpen}"
                         Click="OnTogglePanel"
                         ToolTip.Tip="{l:Translate TooltipTogglePanel}">
+                  <Viewbox Width="15" Height="15">
+                    <Path Classes="stroke" Data="{StaticResource IconFadersStroke}"
+                          Width="16" Height="16" StrokeThickness="1.3" />
+                  </Viewbox>
+                </Button>
+
+                <Button Classes="icon" Width="30" Height="30"
+                        Classes.active="{Binding QueueOpen}"
+                        Click="OnToggleQueue"
+                        ToolTip.Tip="{l:Translate TooltipToggleQueue}">
                   <Viewbox Width="15" Height="15">
                     <Path Classes="fill" Data="{StaticResource IconMenu}" Width="16" Height="16" />
                   </Viewbox>
@@ -103,16 +118,124 @@
           </Panel>
         </Border>
 
+        <!--
+          Kolejka jako kolumna po prawej, od paska tytulu do pasa dolnego. Wczesniej dzielila
+          pas dolny z korektorem i miescila niecale piec pozycji naraz; tutaj rosnie z oknem.
+        -->
+        <Border DockPanel.Dock="Right" x:Name="QueueColumn"
+                Width="320"
+                IsVisible="{Binding QueueOpen}"
+                Background="{DynamicResource GlassBrush}"
+                BorderBrush="{DynamicResource StrokeBrush}"
+                BorderThickness="1,0,0,0">
+          <DockPanel Margin="18,16,14,16">
+
+              <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*,Auto" Margin="6,0,6,10"
+                    MinHeight="{StaticResource PanelHeaderRowHeight}">
+                <TextBlock x:Name="QueueHeading" Grid.Column="0"
+                           Text="{l:Translate Queue}" FontSize="13.5" FontWeight="Bold"
+                           VerticalAlignment="Center" />
+
+                <!-- Wczytanie i zapisanie listy odtwarzania -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2"
+                            Margin="10,0,0,0" VerticalAlignment="Center">
+                  <Button Classes="icon" Width="26" Height="26"
+                          Click="OnLoadPlaylist" ToolTip.Tip="{l:Translate TooltipPlaylistLoad}">
+                    <Viewbox Width="14" Height="14">
+                      <Path Classes="stroke" Data="{StaticResource IconFolderStroke}"
+                            Width="16" Height="16" />
+                    </Viewbox>
+                  </Button>
+                  <Button Classes="icon" Width="26" Height="26"
+                          IsEnabled="{Binding !IsQueueEmpty}"
+                          Click="OnSavePlaylist" ToolTip.Tip="{l:Translate TooltipPlaylistSave}">
+                    <Viewbox Width="13" Height="13">
+                      <Path Classes="fill" Data="{StaticResource IconSave}"
+                            Width="16" Height="16" />
+                    </Viewbox>
+                  </Button>
+                </StackPanel>
+
+                <TextBlock Grid.Column="3" Classes="mono faint" Text="{Binding QueueSummary}"
+                           FontSize="10" VerticalAlignment="Center" Margin="0,3,0,0" />
+              </Grid>
+
+              <Panel x:Name="QueueHost">
+                <ListBox x:Name="QueueList"
+                         Classes="queue"
+                         Margin="0,0,12,0"
+                         ItemsSource="{Binding Queue}"
+                         SelectionChanged="OnQueueSelectionChanged"
+                         ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         PointerPressed="OnQueuePointerPressed"
+                         PointerMoved="OnQueuePointerMoved"
+                         PointerReleased="OnQueuePointerReleased">
+                  <ListBox.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem Header="{l:Translate QueueRemove}" Click="OnQueueRemove" />
+                      <MenuItem Header="{l:Translate QueueMoveUp}" Click="OnQueueMoveUp" />
+                      <MenuItem Header="{l:Translate QueueMoveDown}" Click="OnQueueMoveDown" />
+                      <Separator />
+                      <MenuItem Header="{l:Translate QueueClear}" Click="OnQueueClear" />
+                    </ContextMenu>
+                  </ListBox.ContextMenu>
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:QueueItemViewModel">
+                      <Grid ColumnDefinitions="16,*,Auto" Margin="10,9" ColumnSpacing="11"
+                            Background="Transparent"
+                            Classes.current="{Binding IsCurrent}"
+                            ToolTip.Tip="{Binding Tooltip}" Opacity="{Binding RowOpacity}">
+                        <Panel Grid.Column="0" Width="16" Height="16">
+                          <TextBlock Classes="mono faint" Text="{Binding Number}"
+                                     FontSize="10.5"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Opacity="{Binding NumberOpacity}" />
+                          <Ellipse Width="6" Height="6"
+                                   Fill="{DynamicResource AccentBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Opacity="{Binding MarkerOpacity}" />
+                        </Panel>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                          <TextBlock Classes="row-title" Text="{Binding Title}"
+                                     FontSize="12.5" LineHeight="17"
+                                     TextTrimming="CharacterEllipsis" />
+                          <TextBlock Classes="faint" Text="{Binding Artist}" FontSize="10.5"
+                                     LineHeight="15" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="2" Classes="mono faint row-duration"
+                                   Text="{Binding Duration}"
+                                   FontSize="10" VerticalAlignment="Center" />
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+
+                <c:ThinScrollBar x:Name="QueueScrollBar"
+                                 HorizontalAlignment="Right"
+                                 TrackBrush="{DynamicResource TrackBrush}"
+                                 ThumbBrush="{DynamicResource Text3Brush}" />
+              </Panel>
+          </DockPanel>
+        </Border>
+
         <!-- Panel korektora i kolejki -->
         <Border DockPanel.Dock="Bottom"
                 IsVisible="{Binding PanelOpen}"
                 Background="{DynamicResource GlassBrush}"
                 BorderBrush="{DynamicResource StrokeBrush}"
                 BorderThickness="0,1,0,0">
+          <!--
+            Trzy do dwoch, czyli 60 % na korektor i 40 % na efekty. Proporcja zamiast liczby
+            pikseli: pas dolny nie siega juz calej szerokosci okna, bo po prawej stoi kolumna
+            kolejki, wiec stala szerokosc korektora zmieniala podzial przy kazdym rozmiarze.
+          -->
           <Grid x:Name="PanelGrid">
             <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="524" />
-              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="3*" />
+              <ColumnDefinition Width="2*" />
             </Grid.ColumnDefinitions>
 
             <!-- Korektor -->
@@ -210,98 +333,69 @@
               </DockPanel>
             </Border>
 
-            <!-- Kolejka -->
-            <DockPanel Grid.Column="1" Margin="20,18">
+            <!-- Efekty dzwiekowe -->
+            <Border Grid.Column="1" Padding="24,18,26,22">
+              <DockPanel>
 
-              <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*,Auto" Margin="6,0,6,10"
-                    MinHeight="{StaticResource PanelHeaderRowHeight}">
-                <TextBlock x:Name="QueueHeading" Grid.Column="0"
-                           Text="{l:Translate Queue}" FontSize="13.5" FontWeight="Bold"
-                           VerticalAlignment="Center" />
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" Margin="0,0,0,15"
+                      MinHeight="{StaticResource PanelHeaderRowHeight}">
+                  <TextBlock x:Name="EffectsHeading" Grid.Column="0"
+                             Text="{l:Translate Effects}" FontSize="13.5" FontWeight="Bold"
+                             VerticalAlignment="Center" />
+                </Grid>
 
-                <!-- Wczytanie i zapisanie listy odtwarzania -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2"
-                            Margin="10,0,0,0" VerticalAlignment="Center">
-                  <Button Classes="icon" Width="26" Height="26"
-                          Click="OnLoadPlaylist" ToolTip.Tip="{l:Translate TooltipPlaylistLoad}">
-                    <Viewbox Width="14" Height="14">
-                      <Path Classes="stroke" Data="{StaticResource IconFolderStroke}"
-                            Width="16" Height="16" />
-                    </Viewbox>
-                  </Button>
-                  <Button Classes="icon" Width="26" Height="26"
-                          IsEnabled="{Binding !IsQueueEmpty}"
-                          Click="OnSavePlaylist" ToolTip.Tip="{l:Translate TooltipPlaylistSave}">
-                    <Viewbox Width="13" Height="13">
-                      <Path Classes="fill" Data="{StaticResource IconSave}"
-                            Width="16" Height="16" />
-                    </Viewbox>
-                  </Button>
-                </StackPanel>
+                <ItemsControl ItemsSource="{Binding SoundEffects}" VerticalAlignment="Top">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Spacing="10" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:EffectViewModel">
+                      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
 
-                <TextBlock Grid.Column="3" Classes="mono faint" Text="{Binding QueueSummary}"
-                           FontSize="10" VerticalAlignment="Center" Margin="0,3,0,0" />
-              </Grid>
+                        <!--
+                          Przelacznik stoi poza obszarem wygaszanym: to on wlacza efekt, wiec
+                          nie moze przygasac razem z tym, co wylaczyl.
+                        -->
+                        <c:GlassSwitch Grid.Column="0" VerticalAlignment="Center"
+                                       IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                       OffBrush="{DynamicResource TrackBrush}"
+                                       OnBrush="{DynamicResource AccentBrush}"
+                                       BorderBrush="{DynamicResource StrokeBrush}"
+                                       ToolTip.Tip="{Binding Description}" />
 
-              <Panel x:Name="QueueHost" MaxHeight="176">
-                <ListBox x:Name="QueueList"
-                         Classes="queue"
-                         Margin="0,0,12,0"
-                         ItemsSource="{Binding Queue}"
-                         SelectionChanged="OnQueueSelectionChanged"
-                         ScrollViewer.VerticalScrollBarVisibility="Hidden"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         PointerPressed="OnQueuePointerPressed"
-                         PointerMoved="OnQueuePointerMoved"
-                         PointerReleased="OnQueuePointerReleased">
-                  <ListBox.ContextMenu>
-                    <ContextMenu>
-                      <MenuItem Header="{l:Translate QueueRemove}" Click="OnQueueRemove" />
-                      <MenuItem Header="{l:Translate QueueMoveUp}" Click="OnQueueMoveUp" />
-                      <MenuItem Header="{l:Translate QueueMoveDown}" Click="OnQueueMoveDown" />
-                      <Separator />
-                      <MenuItem Header="{l:Translate QueueClear}" Click="OnQueueClear" />
-                    </ContextMenu>
-                  </ListBox.ContextMenu>
-                  <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:QueueItemViewModel">
-                      <Grid ColumnDefinitions="16,*,Auto" Margin="10,9" ColumnSpacing="11"
-                            Background="Transparent"
-                            Classes.current="{Binding IsCurrent}"
-                            ToolTip.Tip="{Binding Tooltip}" Opacity="{Binding RowOpacity}">
-                        <Panel Grid.Column="0" Width="16" Height="16">
-                          <TextBlock Classes="mono faint" Text="{Binding Number}"
-                                     FontSize="10.5"
-                                     HorizontalAlignment="Center" VerticalAlignment="Center"
-                                     Opacity="{Binding NumberOpacity}" />
-                          <Ellipse Width="6" Height="6"
-                                   Fill="{DynamicResource AccentBrush}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   Opacity="{Binding MarkerOpacity}" />
-                        </Panel>
+                        <!--
+                          Nazwa nad suwakiem, a nie obok niego. Kolumna efektow ma 40 % pasa,
+                          ktory sam skrocil sie o szerokosc kolejki; w jednym wierszu na suwak
+                          zostawalo kilkanascie pikseli. Dwa wiersze mieszcza i najdluzsze
+                          nazwy jezykow, i suwak, ktorym da sie trafic.
+                        -->
+                        <StackPanel Grid.Column="1" Spacing="4" Opacity="{Binding RowOpacity}">
+                          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                            <TextBlock Grid.Column="0" Text="{Binding Label}"
+                                       FontSize="12" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip.Tip="{Binding Description}" />
 
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                          <TextBlock Classes="row-title" Text="{Binding Title}"
-                                     FontSize="12.5" LineHeight="17"
-                                     TextTrimming="CharacterEllipsis" />
-                          <TextBlock Classes="faint" Text="{Binding Artist}" FontSize="10.5"
-                                     LineHeight="15" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="1" Classes="mono faint"
+                                       Text="{Binding StrengthText}" FontSize="10.5"
+                                       VerticalAlignment="Center" />
+                          </Grid>
+
+                          <c:TrackSlider Height="14"
+                                         Value="{Binding Strength, Mode=TwoWay}"
+                                         TrackThickness="4" ThumbDiameter="11"
+                                         TrackBrush="{DynamicResource TrackBrush}"
+                                         FillBrush="{DynamicResource AccentBrush}" />
                         </StackPanel>
-
-                        <TextBlock Grid.Column="2" Classes="mono faint row-duration"
-                                   Text="{Binding Duration}"
-                                   FontSize="10" VerticalAlignment="Center" />
                       </Grid>
                     </DataTemplate>
-                  </ListBox.ItemTemplate>
-                </ListBox>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
-                <c:ThinScrollBar x:Name="QueueScrollBar"
-                                 HorizontalAlignment="Right"
-                                 TrackBrush="{DynamicResource TrackBrush}"
-                                 ThumbBrush="{DynamicResource Text3Brush}" />
-              </Panel>
-            </DockPanel>
+              </DockPanel>
+            </Border>
           </Grid>
         </Border>
 
@@ -310,7 +404,13 @@
           wygladalo poprawnie przy wysokosci projektowej, ale na pelnym ekranie zostawialo pod
           trescia pusty pas wysokosci kilkuset pikseli.
         -->
-        <StackPanel x:Name="CentreArea" VerticalAlignment="Center">
+        <!--
+          ClipToBounds jako zabezpieczenie ostatniej instancji: zawartosc ma sie miescic sama,
+          ale gdyby kiedys przestala, ma zostac obcieta na swojej krawedzi, a nie narysowac sie
+          na kolumnie kolejki. Obciecie widac i da sie zglosic; rysowanie po liscie utworow
+          wyglada jak usterka listy.
+        -->
+        <StackPanel x:Name="CentreArea" VerticalAlignment="Center" ClipToBounds="True">
 
         <!-- Odtwarzany utwor -->
         <Grid x:Name="NowPlaying" ColumnDefinitions="Auto,*" ColumnSpacing="48"

@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Εμφάνιση ή απόκρυψη ισοσταθμιστή και ουράς",
+  "TooltipTogglePanel": "Εμφάνιση ή απόκρυψη ισοσταθμιστή και εφέ (Q)",
+  "TooltipToggleQueue": "Εμφάνιση ή απόκρυψη ουράς (L)",
   "TooltipTheme": "Θέμα",
   "TooltipSettings": "Ρυθμίσεις",
   "TooltipMinimise": "Ελαχιστοποίηση",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Αυτόματος περιοριστής",
   "OptionNormalisation": "Κανονικοποίηση",
+
+  "Effects": "Εφέ",
+  "EffectCrossfeed": "Crossfeed",
+  "EffectLoudness": "Αντιστάθμιση έντασης",
+  "EffectVirtualBass": "Εικονικά μπάσα",
+  "EffectDynamicRange": "Περιορισμός δυναμικής",
+  "EffectStereoWidth": "Πλάτος στέρεο",
+  "EffectDescriptionCrossfeed": "Πρόσμειξη του αντίθετου καναλιού, όπως στην ακρόαση από ηχεία. Απαλύνει τον διαχωρισμό που κουράζει στα ακουστικά.",
+  "EffectDescriptionLoudness": "Ενίσχυση μπάσων και πρίμων σε χαμηλή ένταση, σύμφωνα με τις καμπύλες ίσης ακουστότητας.",
+  "EffectDescriptionVirtualBass": "Αρμονικές των χαμηλότερων τόνων. Κάνουν τα μπάσα ακουστά σε ηχεία που δεν τα παράγουν.",
+  "EffectDescriptionDynamicRange": "Στενεύει το εύρος έντασης. Τα ήσυχα σημεία ακούγονται χωρίς να ενισχυθούν τα δυνατά.",
+  "EffectDescriptionStereoWidth": "Διευρύνει τη στερεοφωνική εικόνα. Το μονοφωνικό άθροισμα μένει ανέπαφο.",
+  "EffectsNote": "Όλα τα εφέ είναι εξ ορισμού ανενεργά και αλλάζουν τον ήχο σκόπιμα. Οι ίδιοι διακόπτες και ολισθητές βρίσκονται στο κύριο παράθυρο, δίπλα στον ισοσταθμιστή.",
 
   "OpenFiles": "Άνοιγμα αρχείων",
   "OpenFolder": "Άνοιγμα φακέλου",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Μελί και βυσσινί",
   "PaletteLime": "Λάιμ και σμαραγδί",
   "PaletteGraphite": "Γραφίτης και χαλκός",
+  "PaletteSunset": "Κοράλλι, ματζέντα",
+  "PaletteOcean": "Θάλασσα και μπλε",
+  "PalettePlum": "Δαμάσκηνο, λουλάκι",
+  "PaletteMint": "Μέντα και αζούρ",
+  "PaletteSand": "Άμμος, τερακότα",
+  "PaletteCherry": "Κεράσι, βουργουνδί",
   "PaletteRandom": "Τυχαία ανά κομμάτι",
 
   "SettingOutputDevice": "Συσκευή εξόδου",

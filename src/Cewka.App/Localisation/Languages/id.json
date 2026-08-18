@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Penampilan atau penyembunyian equalizer dan antrean",
+  "TooltipTogglePanel": "Penampilan atau penyembunyian equalizer dan efek (Q)",
+  "TooltipToggleQueue": "Penampilan atau penyembunyian antrean (L)",
   "TooltipTheme": "Tema",
   "TooltipSettings": "Pengaturan",
   "TooltipMinimise": "Minimalisasi",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Limiter otomatis",
   "OptionNormalisation": "Normalisasi",
+
+  "Effects": "Efek",
+  "EffectCrossfeed": "Crossfeed",
+  "EffectLoudness": "Kompensasi kenyaringan",
+  "EffectVirtualBass": "Bas virtual",
+  "EffectDynamicRange": "Pembatasan dinamika",
+  "EffectStereoWidth": "Lebar stereo",
+  "EffectDescriptionCrossfeed": "Campuran kanal seberang, seperti saat mendengarkan lewat pengeras suara. Meredakan pemisahan yang melelahkan di headphone.",
+  "EffectDescriptionLoudness": "Penguatan bas dan nada tinggi pada volume rendah, mengikuti kurva kenyaringan setara.",
+  "EffectDescriptionVirtualBass": "Harmonik nada terendah. Membuat bas terdengar pada pengeras suara yang tidak menghasilkannya.",
+  "EffectDescriptionDynamicRange": "Mempersempit jarak antara pelan dan keras. Bagian pelan terdengar tanpa menaikkan yang keras.",
+  "EffectDescriptionStereoWidth": "Memperlebar citra stereo. Jumlah mono tetap utuh.",
+  "EffectsNote": "Semua efek mati secara bawaan dan mengubah suara dengan sengaja. Sakelar dan penggeser yang sama ada di jendela utama, di samping ekualiser.",
 
   "OpenFiles": "Pembukaan file",
   "OpenFolder": "Pembukaan folder",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Amber dan krimson",
   "PaletteLime": "Lime dan zamrud",
   "PaletteGraphite": "Grafit dan tembaga",
+  "PaletteSunset": "Koral dan magenta",
+  "PaletteOcean": "Laut dan biru tua",
+  "PalettePlum": "Plum dan indigo",
+  "PaletteMint": "Mint dan azur",
+  "PaletteSand": "Pasir dan terakota",
+  "PaletteCherry": "Ceri dan anggur",
   "PaletteRandom": "Acak setiap trek",
 
   "SettingOutputDevice": "Perangkat keluaran",

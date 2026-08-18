@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Afișarea sau ascunderea egalizatorului și a cozii",
+  "TooltipTogglePanel": "Afișarea sau ascunderea egalizatorului și a efectelor (Q)",
+  "TooltipToggleQueue": "Afișarea sau ascunderea cozii (L)",
   "TooltipTheme": "Temă",
   "TooltipSettings": "Setări",
   "TooltipMinimise": "Minimizare",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Limitator automat",
   "OptionNormalisation": "Normalizare",
+
+  "Effects": "Efecte",
+  "EffectCrossfeed": "Crossfeed",
+  "EffectLoudness": "Compensarea volumului",
+  "EffectVirtualBass": "Bași virtuali",
+  "EffectDynamicRange": "Limitarea dinamicii",
+  "EffectStereoWidth": "Lățime stereo",
+  "EffectDescriptionCrossfeed": "Amestec al canalului opus, ca la ascultarea în difuzoare. Atenuează separarea care obosește în căști.",
+  "EffectDescriptionLoudness": "Accentuarea bașilor și a înaltelor la volum mic, după curbele de egală sonoritate.",
+  "EffectDescriptionVirtualBass": "Armonice ale notelor celor mai joase. Fac bașii audibili pe difuzoare care nu îi produc.",
+  "EffectDescriptionDynamicRange": "Îngustează diferența dintre încet și tare. Pasajele încete devin audibile fără a le ridica pe cele tari.",
+  "EffectDescriptionStereoWidth": "Lărgește imaginea stereo. Suma monofonică rămâne neatinsă.",
+  "EffectsNote": "Toate efectele sunt oprite în mod implicit și schimbă sunetul în mod deliberat. Aceleași comutatoare și cursoare se află în fereastra principală, lângă egalizator.",
 
   "OpenFiles": "Deschide fișiere",
   "OpenFolder": "Deschide folder",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Chihlimbar și carmin",
   "PaletteLime": "Lime și smarald",
   "PaletteGraphite": "Grafit și cupru",
+  "PaletteSunset": "Coral și magenta",
+  "PaletteOcean": "Mare și bleumarin",
+  "PalettePlum": "Prună și indigo",
+  "PaletteMint": "Mentă și azur",
+  "PaletteSand": "Nisip și teracotă",
+  "PaletteCherry": "Cireașă și bordo",
   "PaletteRandom": "Aleatoriu pe piesă",
 
   "SettingOutputDevice": "Dispozitiv de ieșire",

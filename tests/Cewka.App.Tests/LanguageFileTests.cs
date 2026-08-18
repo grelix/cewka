@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Cewka.App.Models;
 using Xunit;
 
 namespace Cewka.App.Tests;
@@ -55,11 +56,12 @@ public sealed class LanguageFileTests
     /// barwy szerokiej na 34 px, więc na sam tekst zostaje około 113 px — mniej niż na pasku
     /// segmentowym, choć przycisk jest większy.
     /// </summary>
+    /// <summary>
+    /// Klucze wyprowadzone z wyliczenia, a nie wypisane. Lista wypisana z ręki rozjechała się
+    /// już raz z rzeczywistością: doszło sześć par barw, a nazw dla nich nie dołożył nikt.
+    /// </summary>
     private static readonly string[] PaletteLabels =
-    [
-        "PaletteBlueViolet", "PaletteTurquoise", "PaletteAmber",
-        "PaletteLime", "PaletteGraphite", "PaletteRandom",
-    ];
+        Enum.GetValues<PlaceholderPalette>().Select(value => "Palette" + value).ToArray();
 
     private const int PaletteLabelLimit = 20;
 
@@ -211,6 +213,25 @@ public sealed class LanguageFileTests
         Assert.True(
             toolong.Length == 0,
             $"{code}.json ma nazwy zakładek dłuższe niż {SectionLabelLimit} znaków: {string.Join(", ", toolong)}");
+    }
+
+    /// <summary>
+    /// Każda para barw domyślnej okładki musi mieć nazwę — także ta dołożona wczoraj.
+    ///
+    /// <para>Sprawdzenie długości poniżej pomija klucze, których nie ma, więc samo nie wyłapałoby
+    /// braku. A brak wygląda w oknie ustawień jak pozycja podpisana <c>[PaletteCoś]</c>, czego
+    /// nikt nie zauważy, dopóki nie otworzy tej zakładki w tym właśnie języku.</para>
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(All))]
+    public void KazdaParaBarwMaNazwe(string code)
+    {
+        var strings = Load(code);
+        var missing = PaletteLabels.Where(key => !strings.ContainsKey(key)).ToArray();
+
+        Assert.True(
+            missing.Length == 0,
+            $"{code}.json nie ma nazw par barw: {string.Join(", ", missing)}");
     }
 
     [Theory]

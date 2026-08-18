@@ -57,6 +57,12 @@ public static class CoilCover
         PlaceholderPalette.Amber,
         PlaceholderPalette.Lime,
         PlaceholderPalette.Graphite,
+        PlaceholderPalette.Sunset,
+        PlaceholderPalette.Ocean,
+        PlaceholderPalette.Plum,
+        PlaceholderPalette.Mint,
+        PlaceholderPalette.Sand,
+        PlaceholderPalette.Cherry,
     ];
 
     /// <summary>
@@ -81,6 +87,24 @@ public static class CoilCover
 
         PlaceholderPalette.Graphite =>
             (Color.FromRgb(0x8B, 0x9A, 0xB4), Color.FromRgb(0xB0, 0x8C, 0x8B), Color.FromRgb(0xD9, 0x77, 0x57)),
+
+        PlaceholderPalette.Sunset =>
+            (Color.FromRgb(0xFF, 0x9A, 0x5C), Color.FromRgb(0xF2, 0x64, 0x8C), Color.FromRgb(0xC9, 0x3F, 0x86)),
+
+        PlaceholderPalette.Ocean =>
+            (Color.FromRgb(0x2A, 0xA6, 0xC4), Color.FromRgb(0x1F, 0x6F, 0xA8), Color.FromRgb(0x1B, 0x3A, 0x6B)),
+
+        PlaceholderPalette.Plum =>
+            (Color.FromRgb(0xB8, 0x4A, 0x9E), Color.FromRgb(0x7A, 0x3D, 0x9C), Color.FromRgb(0x43, 0x27, 0x7A)),
+
+        PlaceholderPalette.Mint =>
+            (Color.FromRgb(0x86, 0xE8, 0xC6), Color.FromRgb(0x63, 0xC8, 0xD8), Color.FromRgb(0x4A, 0x9B, 0xE0)),
+
+        PlaceholderPalette.Sand =>
+            (Color.FromRgb(0xEB, 0xC7, 0x9E), Color.FromRgb(0xD0, 0x8E, 0x5E), Color.FromRgb(0xA4, 0x56, 0x38)),
+
+        PlaceholderPalette.Cherry =>
+            (Color.FromRgb(0xFF, 0x6B, 0x84), Color.FromRgb(0xD3, 0x3E, 0x5E), Color.FromRgb(0x8E, 0x1F, 0x3D)),
 
         _ => (Color.FromRgb(0x4E, 0xA8, 0xDE), Color.FromRgb(0x64, 0x84, 0xE2), Color.FromRgb(0x7B, 0x5C, 0xD6)),
     };

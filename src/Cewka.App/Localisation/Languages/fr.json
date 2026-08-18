@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Afficher ou masquer l'égaliseur et la file d'attente",
+  "TooltipTogglePanel": "Afficher ou masquer l'égaliseur et les effets (Q)",
+  "TooltipToggleQueue": "Afficher ou masquer la file d'attente (L)",
   "TooltipTheme": "Thème",
   "TooltipSettings": "Paramètres",
   "TooltipMinimise": "Réduire",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Limiteur auto",
   "OptionNormalisation": "Normalisation",
+
+  "Effects": "Effets",
+  "EffectCrossfeed": "Crossfeed",
+  "EffectLoudness": "Compensation de volume",
+  "EffectVirtualBass": "Basses virtuelles",
+  "EffectDynamicRange": "Limitation de dynamique",
+  "EffectStereoWidth": "Largeur stéréo",
+  "EffectDescriptionCrossfeed": "Mélange du canal opposé, comme à l'écoute sur enceintes. Adoucit la séparation qui fatigue au casque.",
+  "EffectDescriptionLoudness": "Renforcement des graves et des aigus à faible volume, selon les courbes isosoniques.",
+  "EffectDescriptionVirtualBass": "Harmoniques des notes les plus graves. Elles rendent les basses audibles sur des enceintes qui ne les produisent pas.",
+  "EffectDescriptionDynamicRange": "Resserre l'écart entre le faible et le fort. Les passages discrets deviennent audibles sans monter les autres.",
+  "EffectDescriptionStereoWidth": "Élargit l'image stéréo. La somme monophonique reste intacte.",
+  "EffectsNote": "Tous les effets sont désactivés par défaut et modifient le son à dessein. Les mêmes interrupteurs et curseurs se trouvent dans la fenêtre principale, à côté de l'égaliseur.",
 
   "OpenFiles": "Ouvrir des fichiers",
   "OpenFolder": "Ouvrir un dossier",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Ambre et carmin",
   "PaletteLime": "Citron et émeraude",
   "PaletteGraphite": "Graphite et cuivre",
+  "PaletteSunset": "Corail et magenta",
+  "PaletteOcean": "Mer et marine",
+  "PalettePlum": "Prune et indigo",
+  "PaletteMint": "Menthe et azur",
+  "PaletteSand": "Sable et terre",
+  "PaletteCherry": "Cerise et bordeaux",
   "PaletteRandom": "Aléatoire par piste",
 
   "SettingOutputDevice": "Périphérique de sortie",

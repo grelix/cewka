@@ -4,7 +4,8 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Показать или скрыть эквалайзер и очередь",
+  "TooltipTogglePanel": "Показать или скрыть эквалайзер и эффекты (Q)",
+  "TooltipToggleQueue": "Показать или скрыть очередь (L)",
   "TooltipTheme": "Тема",
   "TooltipSettings": "Настройки",
   "TooltipMinimise": "Свернуть",
@@ -26,6 +27,19 @@
   "Preamp": "PREAMP",
   "OptionLimiter": "Автолимитер",
   "OptionNormalisation": "Нормализация",
+
+  "Effects": "Эффекты",
+  "EffectCrossfeed": "Кроссфид",
+  "EffectLoudness": "Компенсация громкости",
+  "EffectVirtualBass": "Виртуальный бас",
+  "EffectDynamicRange": "Ограничение динамики",
+  "EffectStereoWidth": "Ширина стерео",
+  "EffectDescriptionCrossfeed": "Подмешивание противоположного канала, как при прослушивании через колонки. Смягчает разделение, утомительное в наушниках.",
+  "EffectDescriptionLoudness": "Подъём баса и верхов при тихом прослушивании, по кривым равной громкости.",
+  "EffectDescriptionVirtualBass": "Гармоники самых низких тонов. Делают бас слышимым на колонках, которые его не воспроизводят.",
+  "EffectDescriptionDynamicRange": "Сужает разницу между тихим и громким. Тихие места становятся слышны без подъёма громких.",
+  "EffectDescriptionStereoWidth": "Расширяет стереокартину. Монофоническая сумма остаётся неизменной.",
+  "EffectsNote": "Все эффекты по умолчанию выключены и меняют звучание намеренно. Те же переключатели и ползунки есть в главном окне, рядом с эквалайзером.",
 
   "OpenFiles": "Открыть файлы",
   "OpenFolder": "Открыть папку",
@@ -102,6 +116,12 @@
   "PaletteAmber": "Янтарный и малиновый",
   "PaletteLime": "Лайм и изумруд",
   "PaletteGraphite": "Графитовый и медный",
+  "PaletteSunset": "Коралл и маджента",
+  "PaletteOcean": "Море и синий",
+  "PalettePlum": "Слива и индиго",
+  "PaletteMint": "Мята и лазурь",
+  "PaletteSand": "Песок и терракота",
+  "PaletteCherry": "Вишня и бордо",
   "PaletteRandom": "Случайно для трека",
 
   "SettingOutputDevice": "Устройство вывода",

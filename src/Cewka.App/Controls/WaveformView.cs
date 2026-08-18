@@ -17,8 +17,20 @@ public sealed class WaveformView : Control
     private const int Curves = 3;
     private const double StepPixels = 3.0;
 
-    /// <summary>How quickly the drawn amplitude catches up with <see cref="Level"/>.</summary>
-    private const double AmplitudeEasing = 0.045;
+    /// <summary>
+    /// How quickly the drawn amplitude catches up with <see cref="Level"/>.
+    ///
+    /// <para>Podniesione z 0,045: przy tej wartości wykres dochodził do celu przez mniej więcej
+    /// trzy dziesiąte sekundy i muzyka była już dawno gdzie indziej, niż pokazywała fala.
+    /// Teraz podąża za nią w niecałe sto milisekund, więc ruch odpowiada temu, co słychać.</para>
+    /// </summary>
+    private const double AmplitudeEasing = 0.17;
+
+    /// <summary>
+    /// Wysokość fali jako część wysokości kontrolki, przy pełnej amplitudzie.
+    /// Podniesiona z 0,31 — fala była wyraźnie skromniejsza niż miejsce, które ma do dyspozycji.
+    /// </summary>
+    private const double AmplitudeShare = 0.42;
 
     public static readonly StyledProperty<double> LevelProperty =
         AvaloniaProperty.Register<WaveformView, double>(nameof(Level), 1.0);
@@ -125,7 +137,7 @@ public sealed class WaveformView : Control
         {
             var frequency = 1.6 + k * 0.9;
             var speed = 0.7 + k * 0.35;
-            var amplitude = height * 0.31 * _amplitude
+            var amplitude = height * AmplitudeShare * _amplitude
                             * (0.5 + 0.5 * Math.Sin(_phase * (0.35 + k * 0.14) + k * 2.2));
 
             var geometry = new StreamGeometry();

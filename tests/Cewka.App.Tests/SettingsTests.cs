@@ -182,6 +182,56 @@ public sealed class SettingsTests
         Assert.Equal(defaults.AlwaysAnalyse, loaded.AlwaysAnalyse);
         Assert.Equal(defaults.RestoreSession, loaded.RestoreSession);
         Assert.Equal(defaults.SeekStep, loaded.SeekStep);
+
+        // Efekty dźwiękowe: plik sprzed ich wprowadzenia nie może ich włączyć. Program ma grać
+        // tak samo jak przedtem, dopóki nikt sam po nie nie sięgnie.
+        Assert.False(loaded.CrossfeedEnabled);
+        Assert.False(loaded.LoudnessEnabled);
+        Assert.False(loaded.VirtualBassEnabled);
+        Assert.False(loaded.DynamicRangeEnabled);
+        Assert.False(loaded.StereoWidthEnabled);
+
+        Assert.Equal(defaults.CrossfeedStrength, loaded.CrossfeedStrength);
+        Assert.Equal(defaults.LoudnessStrength, loaded.LoudnessStrength);
+
+        // Kolejka ma od 0.8.0 własny stan. Plik sprzed rozdzielenia niesie tylko wartość dla
+        // pasa dolnego, a kolejka musi wyjść widoczna — inaczej aktualizacja programu schowałaby
+        // komuś kolejkę bez pytania.
+        Assert.False(loaded.PanelOpen);
+        Assert.True(loaded.QueueOpen);
+    }
+
+    /// <summary>
+    /// Siła każdego efektu przechodzi zapis i odczyt bez zmiany. Wartości leżą w zakresie 0–1,
+    /// więc pomyłka o dwa rzędy wielkości nie rzucałaby się w oczy inaczej niż w brzmieniu.
+    /// </summary>
+    [Fact]
+    public void UstawieniaEfektowPrzechodzaZapisIOdczyt()
+    {
+        var source = new AppSettings
+        {
+            CrossfeedEnabled = true,
+            CrossfeedStrength = 0.75,
+            LoudnessEnabled = true,
+            LoudnessStrength = 0.4,
+            VirtualBassEnabled = true,
+            VirtualBassStrength = 0.9,
+            DynamicRangeEnabled = true,
+            DynamicRangeStrength = 0.25,
+            StereoWidthEnabled = true,
+            StereoWidthStrength = 0.6,
+        };
+
+        var loaded = JsonSerializer.Deserialize<AppSettings>(
+            JsonSerializer.Serialize(source, FileFormat), FileFormat);
+
+        Assert.NotNull(loaded);
+        Assert.True(loaded.CrossfeedEnabled);
+        Assert.Equal(0.75, loaded.CrossfeedStrength);
+        Assert.Equal(0.4, loaded.LoudnessStrength);
+        Assert.Equal(0.9, loaded.VirtualBassStrength);
+        Assert.Equal(0.25, loaded.DynamicRangeStrength);
+        Assert.Equal(0.6, loaded.StereoWidthStrength);
     }
 
     [Fact]
