@@ -41,13 +41,17 @@ jobs:
           # Maszyna w chmurze nie ma karty dźwiękowej, więc powstaje puste urządzenie —
           # środowisko bliższe zwykłemu pulpitowi niż zupełny brak dźwięku.
           #
-          # Niepowodzenie tego kroku nie zatrzymuje przebiegu celowo: czas trwania utworu silnik
-          # czyta z dekodera, a nie z urządzenia, więc sprawdziany powinny działać także bez
-          # dźwięku. Gdyby jednak okazało się inaczej, zawiodą one same i powiedzą to wprost,
-          # zamiast ukryć się za błędem przygotowania środowiska.
-          pulseaudio --start --exit-idle-time=-1 || echo "nie udalo sie uruchomic pulseaudio"
-          pactl load-module module-null-sink sink_name=cewka || echo "brak pustego urzadzenia"
-          pactl list short sinks || true
+          # Każde z tych poleceń ma limit czasu i wolno mu się nie udać. Bez limitu
+          # `pulseaudio --start` potrafi nie wrócić wcale — zdarzyło się to raz i zawiesiło
+          # przebieg na kwadrans, zamiast go po prostu przerwać.
+          #
+          # Niepowodzenie nie zatrzymuje przebiegu celowo: czas trwania utworu silnik czyta
+          # z dekodera, a nie z urządzenia, więc sprawdziany powinny działać także bez dźwięku.
+          # Gdyby okazało się inaczej, zawiodą one same i powiedzą to wprost, zamiast ukryć się
+          # za błędem przygotowania środowiska.
+          timeout 40 pulseaudio --start --exit-idle-time=-1 || echo "pulseaudio: nie wystartowal"
+          timeout 20 pactl load-module module-null-sink sink_name=cewka || echo "brak pustego urzadzenia"
+          timeout 20 pactl list short sinks || true
 
       - name: Biblioteka natywna
         run: ./native/build-linux.sh
