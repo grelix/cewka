@@ -7,11 +7,11 @@ namespace Cewka.App;
 internal static class Program
 {
     /// <summary>
-    /// Name of the channel between copies of the application. Scoped to the user: the pipe
-    /// namespace is shared by everyone logged in, and two people on one machine must not end
-    /// up steering each other's music.
+    /// Where copies of the application look for one another. Scoped to the user: the Windows
+    /// pipe namespace is shared by everyone logged in, and two people on one machine must not
+    /// end up steering each other's music.
     /// </summary>
-    private static string ChannelName => $"Cewka.{Environment.UserName}";
+    private static InstanceAddress Address => InstanceAddress.Default($"Cewka.{Environment.UserName}");
 
     // Avalonia requires an STA thread on Windows and must be initialised before
     // any control type is touched, so keep this method free of other work.
@@ -22,12 +22,12 @@ internal static class Program
 
         if (SettingsStore.ReadSingleInstanceFlag())
         {
-            instance = SingleInstance.TryAcquire(ChannelName);
+            var claim = SingleInstance.Start(Address, args);
 
-            // Rola zajęta przez inną kopię: oddaj jej wiersz poleceń i zakończ pracę.
-            // Nieudane przekazanie oznacza, że tamta kopia właśnie się zakończyła — wtedy
-            // ta zwyczajnie otwiera własne okno.
-            if (instance is null && SingleInstance.TryHandOff(ChannelName, args)) return;
+            // Rola była zajęta i tamta kopia przyjęła wiersz poleceń — ta nie ma nic do roboty.
+            if (claim.HandedOver) return;
+
+            instance = claim.Instance;
         }
 
         App.Instance = instance;

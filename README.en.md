@@ -5,7 +5,7 @@ no .NET runtime required.
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-0.8.0-brightgreen)
+![Version](https://img.shields.io/badge/version-0.8.1-brightgreen)
 
 *[Wersja polska](README.md)*
 
@@ -58,19 +58,19 @@ the app shows up in the application menu.
 **Fedora, RHEL, openSUSE**
 
 ```bash
-sudo dnf install ./cewka-0.8.0-1.x86_64.rpm
+sudo dnf install ./cewka-0.8.1-1.x86_64.rpm
 ```
 
 **Debian, Ubuntu, Linux Mint**
 
 ```bash
-sudo apt install ./cewka_0.8.0_amd64.deb
+sudo apt install ./cewka_0.8.1_amd64.deb
 ```
 
 **Arch, Manjaro**
 
 ```bash
-sudo pacman -U cewka-0.8.0-1-x86_64.pkg.tar.zst
+sudo pacman -U cewka-0.8.1-1-x86_64.pkg.tar.zst
 ```
 
 **Windows**
@@ -141,8 +141,9 @@ On Windows the equivalents are `native\build-windows.cmd` and `tools\publish-win
 dotnet test Cewka.sln
 ```
 
-364 tests: signal processing including the five effects, view model logic, settings
-compatibility across versions, and completeness of the language files.
+375 tests: signal processing including the five effects, view model logic, settings
+compatibility across versions, completeness of the language files, and the single-instance
+machinery.
 
 UI screenshots can be rendered without opening a window — useful for comparing
 successive versions of the look:

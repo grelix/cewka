@@ -15,6 +15,7 @@ public static class AppPaths
 
     private static readonly Lazy<string> LazyConfig = new(ResolveConfigDirectory);
     private static readonly Lazy<string> LazyCache = new(ResolveCacheDirectory);
+    private static readonly Lazy<string> LazyRuntime = new(ResolveRuntimeDirectory);
 
     private static string? _overrideRoot;
 
@@ -24,11 +25,33 @@ public static class AppPaths
     /// <summary>Directory holding regenerable data such as loudness analysis results.</summary>
     public static string CacheDirectory => LazyCache.Value;
 
+    /// <summary>
+    /// Directory for things that only make sense while the user is logged in.
+    /// <para>
+    /// Na systemach uniksowych jest to <c>XDG_RUNTIME_DIR</c>: katalog należy do jednego
+    /// użytkownika, ma prawa 0700 i znika przy wylogowaniu. Gniazdo przekazywania ścieżek
+    /// leży właśnie tam, a nie w <c>/tmp</c>, które widzą wszyscy na maszynie.
+    /// </para>
+    /// </summary>
+    public static string RuntimeDirectory => LazyRuntime.Value;
+
     /// <summary>Full path of the main settings file.</summary>
     public static string SettingsFile => Path.Combine(ConfigDirectory, "settings.json");
 
     /// <summary>Full path of the persisted playback queue.</summary>
     public static string QueueFile => Path.Combine(ConfigDirectory, "queue.json");
+
+    /// <summary>
+    /// File whose exclusive lock decides which copy of the application is the one running.
+    /// <para>
+    /// Leży w katalogu ustawień, bo ten wskazuje to samo miejsce niezależnie od tego, skąd
+    /// program uruchomiono — z terminala, z menu czy z menedżera plików.
+    /// </para>
+    /// </summary>
+    public static string InstanceLockFile => Path.Combine(ConfigDirectory, "instance.lock");
+
+    /// <summary>Socket on which the running copy accepts paths from later ones (Unix only).</summary>
+    public static string InstanceSocketFile => Path.Combine(RuntimeDirectory, "instance.sock");
 
     /// <summary>
     /// Moves both directories under a root of the caller's choosing.
@@ -44,7 +67,7 @@ public static class AppPaths
     /// </summary>
     public static void Redirect(string root)
     {
-        if (LazyConfig.IsValueCreated || LazyCache.IsValueCreated)
+        if (LazyConfig.IsValueCreated || LazyCache.IsValueCreated || LazyRuntime.IsValueCreated)
             throw new InvalidOperationException(
                 "AppPaths.Redirect musi zostać wywołane przed pierwszym odczytem ścieżek.");
 
@@ -76,6 +99,37 @@ public static class AppPaths
 
         Directory.CreateDirectory(root);
         return root;
+    }
+
+    private static string ResolveRuntimeDirectory()
+    {
+        if (_overrideRoot is not null)
+        {
+            var overridden = Path.Combine(_overrideRoot, "runtime");
+            Directory.CreateDirectory(overridden);
+            return overridden;
+        }
+
+        if (!OperatingSystem.IsWindows())
+        {
+            var runtime = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
+
+            if (!string.IsNullOrWhiteSpace(runtime) && Directory.Exists(runtime))
+            {
+                var root = Path.Combine(runtime, UnixFolderName);
+
+                Directory.CreateDirectory(
+                    root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+                return root;
+            }
+        }
+
+        // Zapas na wypadek pulpitu bez XDG_RUNTIME_DIR. Katalog ustawień też należy do jednego
+        // użytkownika; różnica jest taka, że nie znika przy wylogowaniu, więc plik gniazda
+        // potrafi tam przeleżeć do następnego uruchomienia. Nie szkodzi: zakłada je dopiero ta
+        // kopia, która zdobyła blokadę, i wtedy stary plik po prostu nadpisuje.
+        return ConfigDirectory;
     }
 
     private static string ResolveCacheDirectory()

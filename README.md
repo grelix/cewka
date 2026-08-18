@@ -5,7 +5,7 @@ bez środowiska .NET.
 
 ![Licencja](https://img.shields.io/badge/licencja-MIT-blue)
 ![Platformy](https://img.shields.io/badge/platformy-Linux%20%7C%20Windows-lightgrey)
-![Wersja](https://img.shields.io/badge/wersja-0.8.0-brightgreen)
+![Wersja](https://img.shields.io/badge/wersja-0.8.1-brightgreen)
 
 *[English version](README.en.md)*
 
@@ -59,19 +59,19 @@ pojawia się w menu aplikacji.
 **Fedora, RHEL, openSUSE**
 
 ```bash
-sudo dnf install ./cewka-0.8.0-1.x86_64.rpm
+sudo dnf install ./cewka-0.8.1-1.x86_64.rpm
 ```
 
 **Debian, Ubuntu, Linux Mint**
 
 ```bash
-sudo apt install ./cewka_0.8.0_amd64.deb
+sudo apt install ./cewka_0.8.1_amd64.deb
 ```
 
 **Arch, Manjaro**
 
 ```bash
-sudo pacman -U cewka-0.8.0-1-x86_64.pkg.tar.zst
+sudo pacman -U cewka-0.8.1-1-x86_64.pkg.tar.zst
 ```
 
 **Windows**
@@ -142,8 +142,8 @@ W Windowsie odpowiednikami są `native\build-windows.cmd` i `tools\publish-windo
 dotnet test Cewka.sln
 ```
 
-364 testy: przetwarzanie sygnału wraz z pięcioma efektami, logika modelu widoku, zgodność
-ustawień między wersjami i kompletność plików językowych.
+375 testów: przetwarzanie sygnału wraz z pięcioma efektami, logika modelu widoku, zgodność
+ustawień między wersjami, kompletność plików językowych i mechanizm jednej działającej kopii.
 
 Zrzuty interfejsu można wyrenderować bez otwierania okna — przydaje się do porównywania
 kolejnych wersji wyglądu:
