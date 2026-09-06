@@ -93,25 +93,6 @@ sudo apt install gstreamer1.0-libav      # Debian, Ubuntu
 sudo pacman -S gst-libav                 # Arch
 ```
 
-## Skróty klawiszowe
-
-| Skrót | Działanie |
-|-------|-----------|
-| `Spacja` | Odtwarzanie lub pauza |
-| `←` `→` | Przewijanie (krok w ustawieniach: 5, 10 albo 30 s) |
-| `Ctrl` + `←` `→` | Poprzedni lub następny utwór |
-| `↑` `↓` | Głośność |
-| `M` | Wyciszenie |
-| `Q` | Korektor i efekty |
-| `L` | Kolejka |
-| `T` | Zmiana motywu |
-| `F11` | Pełny ekran |
-| `Ctrl+O` | Dodanie plików |
-| `Ctrl+Shift+O` | Dodanie folderu |
-| `Delete` | Usunięcie z kolejki |
-
-Klawisze multimedialne klawiatury działają też wtedy, gdy okno nie jest aktywne.
-
 ## Budowanie ze źródeł
 
 Potrzebny jest .NET SDK 9 oraz kompilator C — `gcc` w Linuksie albo Visual Studio Build Tools
@@ -135,86 +116,6 @@ Wydanie jednoplikowe i pakiety instalacyjne:
 ```
 
 W Windowsie odpowiednikami są `native\build-windows.cmd` i `tools\publish-windows.cmd`.
-
-### Testy
-
-```bash
-dotnet test Cewka.sln
-```
-
-375 testów: przetwarzanie sygnału wraz z pięcioma efektami, logika modelu widoku, zgodność
-ustawień między wersjami, kompletność plików językowych i mechanizm jednej działającej kopii.
-
-Zrzuty interfejsu można wyrenderować bez otwierania okna — przydaje się do porównywania
-kolejnych wersji wyglądu:
-
-```bash
-dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots
-```
-
-Podanie pliku dźwiękowego jako drugiego argumentu wpuszcza go do okna tak, jak zrobiłoby to
-otwarcie z menedżera plików — z tytułem, okładką i czasem. Wszystkie animacje są przy zrzucie
-zatrzymywane w ustalonym miejscu, więc dwa przebiegi na tym samym kodzie dają te same obrazy
-i można je porównywać piksel w piksel:
-
-```bash
-dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots ~/Muzyka/Album/utwor.mp3
-```
-
-Własna muzyka nie jest do tego potrzebna — narzędzie potrafi wytworzyć materiał samo. Dwa pliki
-o różnej długości, policzone z sinusów, więc za każdym razem takie same:
-
-```bash
-dotnet run --project tools/Cewka.Snapshots -- --material artifacts/material
-```
-
-Narzędzie nie tylko rysuje. Sprawdza też kilka rzeczy, które łatwo zepsuć i trudno zauważyć:
-czy nagłówki „Korektor" i „Efekty" stoją na jednej wysokości, czy okno wraca do poprzedniego
-rozmiaru po schowaniu korektora albo kolejki, czy blok odtwarzania nie wchodzi na listę utworów
-i czy otwarcie pliku z zewnątrz naprawdę odtwarza ten plik. Same sprawdziany, bez rysowania,
-trwają sekundy:
-
-```bash
-dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots dluga.wav krotka.wav --sprawdzenia
-```
-
-Wygląd można też zestawić z [obrazami odniesienia](tests/odniesienie/README.md). Przy różnicy
-powstaje obraz różnicowy z zaznaczonymi na czerwono pikselami:
-
-```bash
-dotnet run --project tools/Cewka.Snapshots -- artifacts/snapshots dluga.wav krotka.wav --porownaj tests/odniesienie
-```
-
-### Budowa w chmurze
-
-Każda zmiana w gałęzi głównej uruchamia kompilację, testy i zrzuty z porównaniem — osobno
-w Linuksie i w Windowsie. Przy tej samej okazji budowane są pakiety i instalowane próbnie
-w kontenerach, żeby zepsute pakowanie wyszło od razu, a nie w chwili wydawania.
-
-Wydanie powstaje z wypchnięcia znacznika `vX.Y.Z`. Potok sprawdza najpierw, czy znacznik zgadza
-się z numerem wersji w `Directory.Build.props`, buduje wszystko od zera i zostawia **szkic**
-wydania z plikami i sumami kontrolnymi. Opis piszę ręcznie i publikuję sam — to celowe.
-
-Próbne instalacje można uruchomić także u siebie, jeśli jest dostępny docker:
-
-```bash
-./tools/test-packages.sh
-```
-
-## Znane ograniczenia
-
-- Wszystkie trzy pakiety instalują się i odinstalowują w kontenerach Ubuntu 24.04, bieżącej Fedory
-  i Archa, a program z każdego z nich uruchamia się pod serwerem X bez ekranu. Sprawdzane jest to
-  przy każdej zmianie. Kontener nie jest jednak pulpitem i nie powie nic o tym, jak program
-  wygląda ani jak brzmi.
-- Zrzuty ekranu powyżej pochodzą z wersji 0.7.20 i pokazują jeszcze poprzedni układ okna,
-  z kolejką w pasie dolnym.
-- Pakiet Arch powstaje bez `makepkg`, więc nie ma pliku `.MTREE`. `pacman -U` go przyjmuje,
-  choć może o tym wspomnieć. W repozytorium jest też [`PKGBUILD`](packaging/arch/PKGBUILD).
-- Tryb ograniczania efektów na baterii nie był sprawdzony na laptopie.
-- Ustawienie „małe opóźnienie" jest tylko podpowiedzią dla sterownika. W trybie współdzielonym
-  WASAPI nie zawsze cokolwiek zmienia — okno ustawień pokazuje wtedy rozmiar, który urządzenie
-  faktycznie przyjęło.
 
 ## Jak to jest zrobione
 
