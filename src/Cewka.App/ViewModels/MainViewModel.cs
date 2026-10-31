@@ -36,6 +36,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly LoudnessService _loudness;
     private readonly DispatcherTimer _refresh;
     private readonly string _queueFile;
+    private readonly QueueStateWriter _queueWriter;
 
     private QueueItemViewModel? _current;
     private TrackMetadata? _currentMetadata;
@@ -64,6 +65,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         _settings = settings;
         _queueFile = queueFile;
+        _queueWriter = new QueueStateWriter(queueFile);
         var s = settings.Current;
 
         _panelOpen = s.PanelOpen;
@@ -148,7 +150,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _queueSave.Tick += (_, _) =>
         {
             _queueSave.Stop();
-            SaveQueueState();
+            SaveQueueStateInBackground();
         };
     }
 
@@ -1582,8 +1584,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _queueSave.Start();
     }
 
-    /// <summary>Writes the queue and position so the next run resumes where this one stopped.</summary>
-    public void SaveQueueState()
+    /// <summary>
+    /// Writes the queue and position so the next run resumes where this one stopped. Wołane
+    /// przy zamykaniu, więc zapisuje od razu; zapisy w trakcie pracy idą przez
+    /// <see cref="SaveQueueStateInBackground"/>.
+    /// </summary>
+    public void SaveQueueState() => _queueWriter.SaveNow(CaptureQueueState());
+
+    internal Task SaveQueueStateInBackground() => _queueWriter.SaveInBackground(CaptureQueueState());
+
+    private QueueState CaptureQueueState()
     {
         _queueSave.Stop();
         _lastPositionSave = DateTime.UtcNow;
@@ -1592,7 +1602,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // w _resume i to ją trzeba zapisać, inaczej samo otwarcie i zamknięcie programu ją kasuje.
         var armed = _resume.IsArmed;
 
-        var state = new QueueState
+        return new QueueState
         {
             Paths = _engine.QueuePaths.ToList(),
             CurrentIndex = armed ? _resume.Index : _engine.CurrentIndex,
@@ -1600,8 +1610,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Shuffle = _engine.Shuffle,
             Repeat = _engine.Repeat.ToString(),
         };
-
-        QueueStateStore.Save(state, _queueFile);
     }
 
     /// <summary>
@@ -1859,7 +1867,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var playing = _engine.State == PlaybackState.Playing;
         if (playing != _isPlaying) IsPlaying = playing;
 
-        if (playing && DateTime.UtcNow - _lastPositionSave > PositionSaveInterval) SaveQueueState();
+        if (playing && DateTime.UtcNow - _lastPositionSave > PositionSaveInterval) SaveQueueStateInBackground();
 
         RefreshBitrateBadge();
 
