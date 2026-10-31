@@ -233,6 +233,8 @@ public partial class MainWindow : Window
 
         App.MediaPanelActive = _mediaPanel is not null;
         if (_mediaPanel is not null) _viewModel.AttachMediaPanel(_mediaPanel);
+
+        App.ApplyMediaKeysSetting();
     }
 
     private void AttachWindowsPanel()

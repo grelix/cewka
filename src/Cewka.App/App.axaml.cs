@@ -155,19 +155,22 @@ public partial class App : Application
 
     // ---------- Klawisze multimedialne ----------
 
+    /// <summary>
+    /// Zaczep zakłada dopiero okno, po próbie podłączenia panelu systemowego: gdy panel działa,
+    /// zaczep nie jest potrzebny.
+    /// </summary>
     private void AttachMediaKeys()
     {
         MediaKeys.Pressed += key => Dispatcher.UIThread.Post(() => _mainWindow?.HandleMediaKey(key));
-        ApplyMediaKeysSetting();
     }
 
     /// <summary>
-    /// Installs or removes the keyboard hook to match the setting. Called from the settings
-    /// window, so the change takes effect on the spot rather than at the next start.
+    /// Installs or removes the keyboard hook to match the setting and the state of the system
+    /// media panel. Called from the settings window, so the change takes effect on the spot.
     /// </summary>
     public static void ApplyMediaKeysSetting()
     {
-        if (Settings.Current.MediaKeys) MediaKeys.Install();
+        if (MediaKeys.ShouldHook(Settings.Current.MediaKeys, MediaPanelActive)) MediaKeys.Install();
         else MediaKeys.Uninstall();
     }
 

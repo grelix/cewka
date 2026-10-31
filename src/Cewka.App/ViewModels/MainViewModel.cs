@@ -199,6 +199,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
             Raise(nameof(IsPaused));
             _mediaPanel?.SetStatus(value ? MediaPanelStatus.Playing : MediaPanelStatus.Paused);
+            MediaKeys.Playing = value;
         }
     }
 
