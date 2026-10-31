@@ -82,20 +82,20 @@ internal static class Program
         new("para-turkus", 1180, 680, ThemeVariant.Dark, true, Palette: PlaceholderPalette.Turquoise),
         new("para-wisnia", 1180, 680, ThemeVariant.Dark, true, Palette: PlaceholderPalette.Cherry),
         new("para-mieta-jasny", 1180, 680, ThemeVariant.Light, true, Palette: PlaceholderPalette.Mint),
-        // Waskie okno ponizej progu kolumny: kolejka schowana, blok odtwarzania na cala szerokosc.
+        // Wąskie okno poniżej progu kolumny: kolejka schowana, blok odtwarzania na całą szerokość.
         new("ciemny-waski", 920, 660, ThemeVariant.Dark, true, QueueOpen: false),
         new("ciemny-szeroki", 1600, 820, ThemeVariant.Dark, true),
         new("ciemny-pelnyekran", 2560, 1400, ThemeVariant.Dark, true),
         new("przyciski-lewo", 1180, 680, ThemeVariant.Dark, false, WindowControlsPosition.Left),
         new("przyciski-macos", 1180, 680, ThemeVariant.Dark, false, WindowControlsPosition.MacOs),
 
-        // Najciasniejsze przypadki: okno w rozmiarze minimalnym, z pasem i bez niego. Rozmiar
-        // minimalny jest staly, wiec tu wychodzi kazde nachodzenie elementow na siebie.
+        // Najciaśniejsze przypadki: okno w rozmiarze minimalnym, z pasem i bez niego. Rozmiar
+        // minimalny jest stały, więc tu wychodzi każde nachodzenie elementów na siebie.
         new("minimum-panel", 760, 520, ThemeVariant.Dark, true, QueueOpen: false),
         new("minimum-panel-jasny", 760, 520, ThemeVariant.Light, true, QueueOpen: false),
         new("minimum-zwiniety", 760, 520, ThemeVariant.Dark, false, QueueOpen: false),
 
-        // Najdluzsze etykiety naglowka korektora (Zurucksetzen, Auto-Limiter) przy oknie minimalnym.
+        // Najdłuższe etykiety przełączników w nagłówku korektora (Auto-Limiter, Normalisierung) przy oknie minimalnym.
         new("minimum-panel-niemiecki", 760, 520, ThemeVariant.Dark, true, Language: "de", QueueOpen: false),
 
         // Interfejs po angielsku: sprawdzenie, ze przelaczenie jezyka faktycznie dociera

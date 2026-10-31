@@ -132,11 +132,11 @@
         </Border>
 
         <!--
-          Kolejka w kolumnie po prawej, gdy okno jest dosc szerokie, a w wezszym jako panel
-          nakladany nad tresc przy prawej krawedzi. Przelacza to kod, wedlug szerokosci okna.
+          Kolejka w kolumnie po prawej, gdy okno jest dość szerokie, a w węższym jako panel
+          nakładany nad treść przy prawej krawędzi. Przełącza to kod, według szerokości okna.
 
-          Kolejnosc w XAML to kolejnosc klawisza Tab: blok odtwarzania, kolejka, pas dolny.
-          Nakladana kolejka przykrywa pas dzieki ZIndex.
+          Kolejność w XAML to kolejność klawisza Tab: blok odtwarzania, kolejka, pas dolny.
+          Nakładana kolejka przykrywa pas dzięki ZIndex.
         -->
         <Grid x:Name="Body" ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
 
@@ -462,9 +462,9 @@
 
               <Panel x:Name="QueueHost">
                 <!--
-                  Klikniecie zaznacza wiersz, dwuklik i Enter go odtwarzaja. Grany utwor ma wlasny
-                  znacznik (kropka i pogrubienie), niezalezny od zaznaczenia. Obsluga myszy
-                  i klawiatury listy jest podpieta w kodzie.
+                  Kliknięcie zaznacza wiersz, dwuklik i Enter go odtwarzają. Grany utwór ma własny
+                  znacznik (kropka i pogrubienie), niezależny od zaznaczenia. Obsługa myszy
+                  i klawiatury listy jest podpięta w kodzie.
                 -->
                 <ListBox x:Name="QueueList"
                          Classes="queue"

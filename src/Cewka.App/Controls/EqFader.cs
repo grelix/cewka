@@ -141,8 +141,8 @@ public sealed class EqFader : Control, ICustomHitTest
     }
 
     /// <summary>
-    /// Scroll wheel nudges the band, which is far quicker than dragging for fine work. Gest
-    /// nad faderem nie przewija pasa, nawet na końcu zakresu.
+    /// Kółko przesuwa pasmo małymi krokami, szybciej niż przeciąganie przy drobnych zmianach.
+    /// Gest nad faderem nie przewija pasa, nawet na końcu zakresu.
     /// </summary>
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
