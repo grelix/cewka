@@ -11,6 +11,10 @@ namespace Cewka.App.Controls;
 /// that. <see cref="TopLevel.RequestAnimationFrame"/> is a one-shot, so the loop re-arms
 /// itself until stopped.
 /// </para>
+/// <para>
+/// Przy zminimalizowanym oknie pętla nie prosi o klatki, tylko czeka na zmianę stanu okna
+/// i rusza sama, gdy okno wraca na ekran.
+/// </para>
 /// </summary>
 public sealed class RenderLoop
 {
@@ -18,6 +22,7 @@ public sealed class RenderLoop
     private readonly Action<TimeSpan> _tick;
     private bool _running;
     private bool _armed;
+    private Window? _parkedOn;
 
     public RenderLoop(Visual owner, Action<TimeSpan> tick)
     {
@@ -27,6 +32,9 @@ public sealed class RenderLoop
 
     public bool IsRunning => _running;
 
+    /// <summary>Pętla działa, ale czeka na przywrócenie zminimalizowanego okna.</summary>
+    public bool IsParked => _parkedOn is not null;
+
     public void Start()
     {
         if (_running) return;
@@ -34,11 +42,15 @@ public sealed class RenderLoop
         Arm();
     }
 
-    public void Stop() => _running = false;
+    public void Stop()
+    {
+        _running = false;
+        Unpark();
+    }
 
     private void Arm()
     {
-        if (!_running || _armed) return;
+        if (!_running || _armed || _parkedOn is not null) return;
 
         var topLevel = TopLevel.GetTopLevel(_owner);
         if (topLevel is null)
@@ -48,8 +60,32 @@ public sealed class RenderLoop
             return;
         }
 
+        if (topLevel is Window { WindowState: WindowState.Minimized } window)
+        {
+            _parkedOn = window;
+            window.PropertyChanged += OnWindowPropertyChanged;
+            return;
+        }
+
         _armed = true;
         topLevel.RequestAnimationFrame(OnFrame);
+    }
+
+    private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property != Window.WindowStateProperty) return;
+        if (_parkedOn is not { } window || window.WindowState == WindowState.Minimized) return;
+
+        Unpark();
+        Arm();
+    }
+
+    private void Unpark()
+    {
+        if (_parkedOn is null) return;
+
+        _parkedOn.PropertyChanged -= OnWindowPropertyChanged;
+        _parkedOn = null;
     }
 
     private void OnFrame(TimeSpan timestamp)

@@ -7,7 +7,7 @@ namespace Cewka.App.Controls;
 /// <summary>
 /// The moving colour field behind the whole interface.
 ///
-/// <para><b>Skąd taki kształt.</b> Pierwotnie tłem była okładka powiększona do 1900 pikseli,
+/// <para>Pierwotnie tłem była okładka powiększona do 1900 pikseli,
 /// rozmyta i powoli obracana. Wyglądało to dobrze, ale nie zmieniało się w trakcie utworu —
 /// obracająca się plama rozmyta na 100 pikseli jest praktycznie nieruchoma — a rozmycie
 /// obrazu tej wielkości trzeba było wypalać do bitmapy przy każdej zmianie utworu.</para>
@@ -51,8 +51,7 @@ public sealed class LiveBackdrop : Control
     /// całość — a to wygląda jak migotanie, nie jak cztery światła o własnym życiu. Przy takich
     /// okresach ten sam układ jasności nie wraca w rozsądnym czasie.</para>
     ///
-    /// <para>Rytm liczony jest z tego samego zegara co dryf, więc przy pauzie zwalnia razem z nim
-    /// do jednej czwartej, a w trybie ograniczonych efektów jeszcze dwa i pół raza bardziej.</para>
+    /// <para>Rytm liczony jest z tego samego zegara co dryf, więc w pauzie zamiera razem z nim.</para>
     /// </summary>
     private static readonly (double Period, double Phase)[] Pulses =
     [
@@ -75,7 +74,7 @@ public sealed class LiveBackdrop : Control
     public static readonly StyledProperty<bool> IsActiveProperty =
         AvaloniaProperty.Register<LiveBackdrop, bool>(nameof(IsActive), true);
 
-    /// <summary>Reduced mode: fewer blobs, no breathing, much slower drift.</summary>
+    /// <summary>Tryb ograniczony: dwie plamy, nieruchome, bez oddychania.</summary>
     public static readonly StyledProperty<bool> IsReducedProperty =
         AvaloniaProperty.Register<LiveBackdrop, bool>(nameof(IsReduced));
 
@@ -99,12 +98,20 @@ public sealed class LiveBackdrop : Control
 
     private const int CoverPaletteSize = 4;
 
+    /// <summary>Tempo, z jakim dryf zwalnia do zatrzymania po pauzie, na sekundę.</summary>
+    private const double SpeedEasing = 1.6;
+
+    /// <summary>Poniżej tego ruch jest niewidoczny, więc pętla może stanąć.</summary>
+    private const double Settled = 0.002;
+
     private double _time;
     private double _sinceUpdate;
     private double _fade = 1;
     private double _breathing;
+    private double _speed;
     private TimeSpan _lastFrame;
     private bool _hasPalette;
+    private bool _frozen;
 
     static LiveBackdrop()
     {
@@ -152,7 +159,20 @@ public sealed class LiveBackdrop : Control
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+
         if (change.Property == PaletteProperty) AdoptPalette(Palette);
+        else if (change.Property == IsActiveProperty || change.Property == IsReducedProperty) Wake();
+    }
+
+    /// <summary>Pętla działa tylko wtedy, gdy coś na tle się porusza.</summary>
+    public bool IsLooping => _loop.IsRunning;
+
+    private void Wake()
+    {
+        if (_frozen || _loop.IsRunning || VisualRoot is null) return;
+
+        _lastFrame = TimeSpan.Zero;
+        _loop.Start();
     }
 
     private void AdoptPalette(IReadOnlyList<Color>? palette)
@@ -172,12 +192,13 @@ public sealed class LiveBackdrop : Control
         _fade = _hasPalette ? 0 : 1;
         _hasPalette = true;
         InvalidateVisual();
+        Wake();
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
-        _loop.Start();
+        Wake();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -192,10 +213,10 @@ public sealed class LiveBackdrop : Control
         _lastFrame = timestamp;
         delta = Math.Clamp(delta, 0, 0.25);
 
-        // Ruch nie zatrzymuje sie przy pauzie, tylko zwalnia - okno ma zyc, ale spokojniej.
-        var speed = IsActive ? 1.0 : 0.25;
-        if (IsReduced) speed *= 0.4;
-        _time += delta * speed;
+        // W pauzie dryf zwalnia do zatrzymania, a w trybie ograniczonym tło stoi od razu.
+        var targetSpeed = IsActive && !IsReduced ? 1.0 : 0.0;
+        _speed = IsReduced ? 0 : _speed + (targetSpeed - _speed) * Math.Min(1, delta * SpeedEasing);
+        _time += delta * _speed;
 
         if (_fade < 1)
         {
@@ -205,6 +226,15 @@ public sealed class LiveBackdrop : Control
 
         var target = IsReduced || !IsActive ? 0 : Math.Clamp(Level, 0, 1);
         _breathing += (target - _breathing) * Math.Min(1, delta * 4);
+
+        if (targetSpeed == 0 && _fade >= 1 && _speed < Settled && _breathing < Settled)
+        {
+            _speed = 0;
+            _breathing = 0;
+            _loop.Stop();
+            InvalidateVisual();
+            return;
+        }
 
         _sinceUpdate += delta;
         if (_sinceUpdate < UpdateInterval) return;
@@ -232,6 +262,7 @@ public sealed class LiveBackdrop : Control
     /// </param>
     public void FreezeForCapture(double atSeconds = 0)
     {
+        _frozen = true;
         _loop.Stop();
 
         _time = atSeconds;

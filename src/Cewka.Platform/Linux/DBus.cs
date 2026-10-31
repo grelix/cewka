@@ -102,6 +102,13 @@ internal static unsafe class DBus
     internal static extern nint dbus_message_new_signal(byte* path, byte* iface, byte* name);
 
     [DllImport(Library)]
+    internal static extern nint dbus_message_new_method_call(byte* destination, byte* path, byte* iface, byte* method);
+
+    [DllImport(Library)]
+    internal static extern nint dbus_connection_send_with_reply_and_block(
+        nint connection, nint message, int timeoutMilliseconds, Error* error);
+
+    [DllImport(Library)]
     internal static extern void dbus_message_unref(nint message);
 
     [DllImport(Library)]

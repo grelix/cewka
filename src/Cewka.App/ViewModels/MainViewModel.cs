@@ -664,13 +664,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UpdateEffects();
     }
 
-    private void UpdateEffects()
+    /// <summary>
+    /// Czy tryb automatyczny ma ograniczyÄ‡ ruch: praca na baterii albo animacje wyĹ‚Ä…czone
+    /// w systemie. Testy podstawiajÄ… wĹ‚asnÄ… odpowiedĹş.
+    /// </summary>
+    internal Func<bool> AutomaticReduction { get; set; } =
+        () => PowerStatus.IsOnBattery || !SystemAnimations.Enabled;
+
+    internal void UpdateEffects()
     {
         var reduced = _settings.Current.Effects switch
         {
             EffectsMode.Reduced => true,
             EffectsMode.Full => false,
-            _ => PowerStatus.IsOnBattery,
+            _ => AutomaticReduction(),
         };
 
         if (reduced == _reducedEffects) return;

@@ -45,7 +45,7 @@ public sealed class VinylDisc : Control
     public static readonly StyledProperty<IBrush?> HoleBrushProperty =
         AvaloniaProperty.Register<VinylDisc, IBrush?>(nameof(HoleBrush));
 
-    /// <summary>Draw the grooves. Turned off by the reduced-effects mode.</summary>
+    /// <summary>Draw the grooves.</summary>
     public static readonly StyledProperty<bool> ShowGroovesProperty =
         AvaloniaProperty.Register<VinylDisc, bool>(nameof(ShowGrooves), true);
 

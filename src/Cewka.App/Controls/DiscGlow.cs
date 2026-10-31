@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Animation;
 using Avalonia.Controls;
 using Avalonia.Media;
 
@@ -28,6 +29,12 @@ public sealed class DiscGlow : Control
     public DiscGlow()
     {
         IsHitTestVisible = false;
+
+        // Poświata gaśnie płynnie także wtedy, gdy kursor opuszcza obszar odtwarzacza jednym ruchem.
+        Transitions =
+        [
+            new DoubleTransition { Property = IntensityProperty, Duration = TimeSpan.FromMilliseconds(220) },
+        ];
     }
 
     /// <summary>Pointer position in this control's coordinates.</summary>
