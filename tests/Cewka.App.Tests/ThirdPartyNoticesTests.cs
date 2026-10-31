@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Xunit;
@@ -17,10 +18,28 @@ public sealed partial class ThirdPartyNoticesTests
 
     private static readonly string[] FontExtensions = [".otf", ".ttf", ".ttc", ".woff", ".woff2"];
 
-    [GeneratedRegex(@"^Pakiet NuGet:\s+(\S+)\s+(\S+)", RegexOptions.Multiline)]
+    private const string AssetsTarget = "net9.0";
+
+    // Pakiety z grafu zależności programu, które nie trafiają do wydania win-x64 ani linux-x64.
+    private static readonly HashSet<string> OutsideRelease = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Potrzebny tylko przy budowaniu Avalonii.
+        "Avalonia.BuildServices",
+        // W wydaniu samodzielnym zastępują je zestawy środowiska .NET.
+        "System.IO.Pipelines",
+        "System.Memory",
+        "System.Numerics.Vectors",
+        "System.ValueTuple",
+    };
+
+    // Biblioteki natywne dla platform, na które Cewka nie jest wydawana.
+    private static readonly string[] OutsideReleaseSuffixes = [".NativeAssets.macOS", ".NativeAssets.WebAssembly"];
+
+    // Odstępy tylko w obrębie wiersza, żeby wiersz bez wersji nie sięgał po słowo z następnego.
+    [GeneratedRegex(@"^Pakiet NuGet:[ \t]+(\S+)[ \t]+(\S+)", RegexOptions.Multiline)]
     private static partial Regex PackageLine();
 
-    [GeneratedRegex(@"^Plik:\s+(\S+)\s*$", RegexOptions.Multiline)]
+    [GeneratedRegex(@"^Plik:[ \t]+(\S+)[ \t]*\r?$", RegexOptions.Multiline)]
     private static partial Regex FileLine();
 
     [GeneratedRegex(@"<(\w+)>([^<]*)</\1>")]
@@ -77,6 +96,38 @@ public sealed partial class ThirdPartyNoticesTests
         return packages;
     }
 
+    /// <summary>
+    /// Wszystkie pakiety z grafu zależności programu, także przechodnie, według
+    /// <c>project.assets.json</c> po przywróceniu pakietów, bez tych spoza wydania.
+    /// </summary>
+    internal static List<(string Name, string Version)> GraphPackages(string root)
+    {
+        var assets = Path.Combine(root, "src", "Cewka.App", "obj", "project.assets.json");
+        if (!File.Exists(assets))
+            throw new InvalidOperationException($"Brak {assets}; testy poprzedza przywrócenie pakietów");
+
+        using var document = JsonDocument.Parse(File.ReadAllText(assets));
+        if (!document.RootElement.GetProperty("targets").TryGetProperty(AssetsTarget, out var target))
+            throw new InvalidOperationException($"Brak celu {AssetsTarget} w {assets}");
+
+        var packages = new List<(string, string)>();
+        foreach (var entry in target.EnumerateObject())
+        {
+            if (entry.Value.GetProperty("type").GetString() != "package")
+                continue;
+
+            var separator = entry.Name.IndexOf('/');
+            var name = entry.Name[..separator];
+            if (OutsideRelease.Contains(name)
+                || OutsideReleaseSuffixes.Any(s => name.EndsWith(s, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            packages.Add((name, entry.Name[(separator + 1)..]));
+        }
+
+        return packages;
+    }
+
     /// <summary>Pary nazwa–wersja z wierszy „Pakiet NuGet:” pliku not.</summary>
     internal static HashSet<string> NoticedPackages(string notices) =>
         PackageLine().Matches(notices)
@@ -94,6 +145,27 @@ public sealed partial class ThirdPartyNoticesTests
         var missing = packages.Select(p => p.Name + " " + p.Version).Where(p => !noticed.Contains(p)).ToList();
         Assert.True(missing.Count == 0,
             $"brak sekcji w {NoticesFile} (wiersz „Pakiet NuGet: nazwa wersja”) dla: {string.Join(", ", missing)}");
+    }
+
+    [Fact]
+    public void KazdyPakietZaleznosciPrzechodnichMaSekcjeWNotach()
+    {
+        var root = RepositoryRoot();
+        var packages = GraphPackages(root);
+        var noticed = NoticedPackages(Notices(root));
+
+        Assert.NotEmpty(packages);
+        var missing = packages.Select(p => p.Name + " " + p.Version).Where(p => !noticed.Contains(p)).ToList();
+        Assert.True(missing.Count == 0,
+            $"brak sekcji w {NoticesFile} (wiersz „Pakiet NuGet: nazwa wersja”) dla: {string.Join(", ", missing)}");
+    }
+
+    [Fact]
+    public void WierszPakietuBezWersjiNieSiegaDoNastepnegoWiersza()
+    {
+        var noticed = NoticedPackages("Pakiet NuGet:    Avalonia\nProjekt: https://example.org\n");
+
+        Assert.Empty(noticed);
     }
 
     [Fact]

@@ -43,6 +43,8 @@ odsyła do katalogu, którego w pakiecie nie ma). Licencję podaje README repozy
 
 Pakiety `System.IO.Pipelines`, `System.Memory`, `System.Numerics.Vectors` i `System.ValueTuple`
 pojawiają się w grafie zależności, ale w wydaniu zastępują je zestawy środowiska .NET.
+Pakiety `SkiaSharp.NativeAssets.*` i `HarfBuzzSharp.NativeAssets.*` dla macOS i WebAssembly
+też są w grafie, ale wydania dla tych platform nie ma, więc ich biblioteki do niego nie trafiają.
 
 Wydanie jest samodzielne (`SelfContained`), więc zawiera też środowisko uruchomieniowe .NET 9
 z pakietu `Microsoft.NETCore.App.Runtime.<rid>` (MIT, z notami składników w jego
@@ -98,7 +100,7 @@ z nim noty składników:
 - Ude.NetStandard (MPL 1.1): informacja, gdzie można pobrać kod źródłowy pakietu.
 - Font (SIL OFL 1.1): informacja o prawach autorskich i tekst licencji przy każdej kopii fontu.
 
-Noty nie wymaga tylko miniaudio (Unlicense albo MIT-0).
+Noty nie wymaga tylko miniaudio (Unlicense albo MIT-0); jego licencja i tak jest w pliku not.
 
 Wszystko to zbiera plik `THIRD-PARTY-NOTICES.txt` w katalogu głównym repozytorium. Każdy
 składnik ma w nim sekcję z nazwą, wersją, adresem projektu, informacją o prawach autorskich
@@ -116,10 +118,13 @@ Plik leży w każdej paczce obok licencji Cewki:
 
 Budowa pakietów w CI (`.github/workflows/packages.yml`) sprawdza, że plik jest w spisie plików
 pakietów `.deb`, `.rpm`, pacmana i archiwum. Test `ThirdPartyNoticesTests` wymaga w nim wiersza
-`Pakiet NuGet: <nazwa> <wersja>` dla każdego pakietu z projektów `src/*/*.csproj` i wiersza
-`Plik: <nazwa>` dla każdego pliku fontu w `src/Cewka.App/Assets/Fonts`, więc nowy pakiet, nowa
-wersja albo nowy font bez sekcji w pliku not zatrzymuje testy. Zależności przechodnich test nie
-sprawdza: po zmianie grafu pakietów sekcje dla nich trzeba uzupełnić według tabel powyżej.
+`Pakiet NuGet: <nazwa> <wersja>` dla każdego pakietu z projektów `src/*/*.csproj` i każdego
+pakietu z grafu zależności w `src/Cewka.App/obj/project.assets.json` (cel `net9.0`) oraz wiersza
+`Plik: <nazwa>` dla każdego pliku fontu w `src/Cewka.App/Assets/Fonts`. Nowy pakiet, także
+przechodni, nowa wersja albo nowy font bez sekcji w pliku not zatrzymuje więc testy. Test pomija
+pakiety spoza wydania wymienione wyżej: Avalonia.BuildServices, cztery pakiety `System.*`
+oraz `*.NativeAssets.macOS` i `*.NativeAssets.WebAssembly`. Środowiska .NET i miniaudio
+nie ma w grafie pakietów, więc ich sekcje trzeba pilnować przy zmianie wersji.
 
 Teksty OFL są też osadzone w pliku wykonywalnym razem z fontami, ale program ich nie pokazuje,
 a sekcja „Licencje” w ustawieniach podaje tylko nazwy licencji.
