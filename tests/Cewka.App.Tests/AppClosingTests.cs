@@ -145,7 +145,78 @@ public sealed class AppClosingTests
             Thread.Sleep(200);
             window.Close();
 
-            Assert.Contains(expected, QueueStateStore.Load(h.QueueFile)?.Paths.ToArray() ?? []);
+            var saved = QueueStateStore.Load(h.QueueFile)?.Paths.ToArray() ?? [];
+            Assert.Contains(expected, saved);
+
+            // Wcześniej otwierany folder też trafia do kolejki i stoi przed plikiem przysłanym później.
+            if (earlierOpenPending) Assert.Equal([inFolder, track], saved);
+        }
+        finally
+        {
+            if (window.IsVisible) window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+            App.ReleaseSingleInstance();
+            typeof(App).GetField("_closing", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, false);
+            mainWindow.SetValue(null, previous);
+        }
+    });
+
+    /// <summary>
+    /// Folder od innej kopii odebrany przez dyspozytor przed zamknięciem: przeglądanie w tle już
+    /// ruszyło, a jego dokończenie czeka w dyspozytorze, którego nikt nie pompuje. Nadawca zakończył
+    /// pracę, więc pliki z folderu mają trafić do zapisanej kolejki — przed plikiem upuszczonym później.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FolderOdebranyPrzedZamknieciemTrafiaDoZapisanejKolejki(bool laterFile) => Ui.Run(() =>
+    {
+        var directory = TestEnvironment.NewDirectory();
+        var address = new InstanceAddress(
+            "Cewka.test." + Guid.NewGuid().ToString("N"),
+            Path.Combine(directory, "instance.lock"),
+            Path.Combine(directory, "instance.sock"));
+
+        var mainWindow = typeof(App).GetField("_mainWindow", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var previous = mainWindow.GetValue(null);
+
+        var h = new PlayerHarness();
+        var window = new MainWindow(false, h.Player);
+        window.Show();
+        mainWindow.SetValue(null, window);
+
+        App.Instance = SingleInstance.TryAcquire(address);
+        Assert.NotNull(App.Instance);
+
+        try
+        {
+            typeof(App).GetMethod("AttachSingleInstance", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .Invoke(Avalonia.Application.Current, null);
+
+            var track = h.Track("a");
+            var folder = Path.Combine(h.Directory, "album");
+            Directory.CreateDirectory(folder);
+            var inFolder = Path.Combine(folder, "b.wav");
+            File.Copy(track, inFolder);
+
+            Assert.True(SingleInstance.TryHandOff(address, [folder]));
+            Thread.Sleep(200);
+
+            // Dyspozytor wykonuje odbiór jak w działającym programie: przeglądanie rusza w tle.
+            typeof(App).GetMethod("OnPathsHandedOver", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, null);
+
+            // Upuszczony plik czeka za folderem.
+            if (laterFile) _ = h.Player.OpenFromOutside([track]);
+
+            window.Close();
+
+            var saved = QueueStateStore.Load(h.QueueFile)?.Paths.ToArray() ?? [];
+            Assert.Equal(laterFile ? [inFolder, track] : [inFolder], saved);
+
+            // Dokończenie w tle, wykonane już po zamknięciu, niczego nie dokłada drugi raz.
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Assert.Equal(laterFile ? 2 : 1, h.Player.Queue.Count);
         }
         finally
         {

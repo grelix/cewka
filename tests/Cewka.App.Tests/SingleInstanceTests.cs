@@ -276,8 +276,9 @@ public sealed class SingleInstanceTests : IDisposable
 
     /// <summary>
     /// Zamknięcie nasłuchu z nadawcami zawieszonymi w połowie wiadomości trwa do dwóch limitów
-    /// odczytu, a rola zwalnia się dopiero po zapisie. Kopia uruchomiona w tym czasie czeka na
-    /// rolę dłużej, niż trwa najdłuższe zamykanie, zamiast otworzyć drugie okno bez nasłuchu.
+    /// odczytu, dokańczanie przeglądania folderów do <see cref="SingleInstance.ClosingGrace"/>,
+    /// a rola zwalnia się dopiero po zapisie. Kopia uruchomiona w tym czasie czeka na rolę
+    /// dłużej, niż trwa najdłuższe zamykanie, zamiast otworzyć drugie okno bez nasłuchu.
     /// </summary>
     [Fact]
     public void KopiaUruchomionaWTrakcieNajdluzszegoZamykaniaPrzejmujeRole()
@@ -290,7 +291,7 @@ public sealed class SingleInstanceTests : IDisposable
 
         var release = new Thread(() =>
         {
-            Thread.Sleep(2 * HandoffChannel.ReadTimeout + TimeSpan.FromMilliseconds(500));
+            Thread.Sleep(2 * HandoffChannel.ReadTimeout + SingleInstance.ClosingGrace + TimeSpan.FromMilliseconds(500));
             instance.Dispose();
         });
 

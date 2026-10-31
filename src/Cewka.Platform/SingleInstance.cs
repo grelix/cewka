@@ -43,12 +43,21 @@ public sealed class SingleInstance : IDisposable
     private const int MaxPendingMessages = 256;
 
     /// <summary>
+    /// Najdłuższe czekanie zamykanego okna na przeglądane w tle foldery przed zapisem kolejki.
+    /// Wliczone w <see cref="StartPatience"/> (zadeklarowane wcześniej, bo pola statyczne
+    /// inicjują się w kolejności zapisu), bo tyle dłużej kopia trzyma rolę.
+    /// </summary>
+    public static readonly TimeSpan ClosingGrace = TimeSpan.FromSeconds(1.5);
+
+    /// <summary>
     /// Jak długo start ponawia podejścia, gdy blokada jest zajęta, a nikt nie odbiera. Tak bywa,
     /// gdy poprzednia kopia akurat się zamyka: doczytuje nadawców (do dwóch limitów odczytu
-    /// w <see cref="StopListening"/>) i zapisuje kolejkę. Termin musi to przeczekać, inaczej
-    /// powstałoby drugie okno bez nasłuchu, które przy zamknięciu nadpisze zapisaną kolejkę.
+    /// w <see cref="StopListening"/>), dokańcza przeglądanie folderów (<see cref="ClosingGrace"/>)
+    /// i zapisuje kolejkę. Termin musi to przeczekać, inaczej powstałoby drugie okno bez
+    /// nasłuchu, które przy zamknięciu nadpisze zapisaną kolejkę.
     /// </summary>
-    private static readonly TimeSpan StartPatience = 2 * HandoffChannel.ReadTimeout + TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan StartPatience =
+        2 * HandoffChannel.ReadTimeout + ClosingGrace + TimeSpan.FromSeconds(2);
 
     /// <summary>Przerwa między podejściami, gdy odmowa przychodzi od razu.</summary>
     private static readonly TimeSpan RetryPause = TimeSpan.FromMilliseconds(50);

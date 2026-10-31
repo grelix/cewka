@@ -246,6 +246,7 @@ public partial class MainWindow : Window
         App.BeginClosing();
         _rotation.Stop();
         PersistGeometry();
+        _viewModel.FinishPendingOpens(SingleInstance.ClosingGrace);
         _viewModel.SaveQueueState();
         App.Settings.SaveNow();
         App.ReleaseSingleInstance();

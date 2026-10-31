@@ -1014,47 +1014,99 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private Task _openChain = Task.CompletedTask;
 
+    /// <summary>Otwarcia przeglądane w tle i jeszcze niedołożone, w kolejności przybycia.</summary>
+    private readonly List<PendingOpen> _pendingOpens = [];
+
+    private sealed class PendingOpen(Task<(List<string> Files, string? Unreadable)> expansion, Action<List<string>> apply)
+    {
+        public Task<(List<string> Files, string? Unreadable)> Expansion { get; } = expansion;
+        public Action<List<string>> Apply { get; } = apply;
+    }
+
     /// <summary>
     /// Zamienia ścieżki na pliki dźwiękowe i przekazuje je dalej. Same pliki idą od razu;
     /// foldery są przeglądane poza wątkiem interfejsu, bo duży katalog na wolnym dysku
-    /// zamroziłby okno. Kolejne otwarcia czekają na poprzednie, więc dwa szybkie upuszczenia
+    /// zamroziłby okno. Dokładanie czeka na wcześniejsze otwarcia, więc dwa szybkie upuszczenia
     /// nie zamienią się kolejnością.
     /// </summary>
     /// <param name="now">
-    /// Przeglądanie od razu, na wątku interfejsu: przy zamykaniu okna kolejka zapisuje się
-    /// zaraz potem, a otwieranie w tle skończyłoby się już po zapisie.
+    /// Bez czekania w tle: przy zamykaniu okna kolejka zapisuje się zaraz potem, a otwieranie
+    /// w tle skończyłoby się już po zapisie. Wcześniejsze otwarcia są wtedy dokańczane najpierw.
     /// </param>
     private Task Open(IEnumerable<string> paths, Action<List<string>> apply, bool now = false)
     {
         var list = paths.ToList();
 
-        if (now || (_openChain.IsCompleted && !list.Any(Directory.Exists)))
+        if (now) FinishPendingOpens(SingleInstance.ClosingGrace);
+
+        if (now || (_pendingOpens.Count == 0 && !list.Any(Directory.Exists)))
         {
             var files = ExpandToAudioFiles(list, out _);
             if (files.Count > 0) apply(files);
             return Task.CompletedTask;
         }
 
-        return _openChain = OpenAfterAsync(_openChain, list, apply);
+        var pending = new PendingOpen(
+            Task.Run(() => (ExpandToAudioFiles(list, out var unreadable), unreadable)),
+            apply);
+
+        _pendingOpens.Add(pending);
+        return _openChain = OpenAfterAsync(_openChain, pending);
     }
 
-    private async Task OpenAfterAsync(Task previous, List<string> paths, Action<List<string>> apply)
+    private async Task OpenAfterAsync(Task previous, PendingOpen pending)
     {
         await previous;
 
         try
         {
-            string? unreadable = null;
-            var files = await Task.Run(() => ExpandToAudioFiles(paths, out unreadable));
-            if (_disposed) return;
+            var (files, unreadable) = await pending.Expansion;
 
-            if (files.Count > 0) apply(files);
+            // Zamykane okno mogło już dołożyć te pliki albo z nich zrezygnować.
+            if (_disposed || !_pendingOpens.Remove(pending)) return;
+
+            if (files.Count > 0) pending.Apply(files);
             if (unreadable is not null)
                 ShowNotice(string.Format(Strings.Current["FolderReadFailed"], FolderName(unreadable)));
         }
         catch (Exception ex)
         {
+            _pendingOpens.Remove(pending);
             Console.Error.WriteLine($"[cewka] nie udało się dodać plików: {ex}");
+        }
+    }
+
+    /// <summary>
+    /// Dokłada przed zapisem kolejki pliki z otwarć przeglądanych jeszcze w tle, w kolejności
+    /// przybycia. Ich nadawcy — inna kopia programu albo upuszczenie — uznali je za przyjęte.
+    /// Czeka najwyżej <paramref name="wait"/>, bo zamykanie trzyma rolę działającej kopii,
+    /// na którą czeka następna; czego nie zdążono przejrzeć, tego się nie dokłada.
+    /// </summary>
+    public void FinishPendingOpens(TimeSpan wait)
+    {
+        var deadline = Environment.TickCount64 + (long)wait.TotalMilliseconds;
+
+        // Przeglądanie w tle nie potrzebuje wątku interfejsu, więc czekanie tutaj go nie zakleszczy.
+        foreach (var pending in _pendingOpens.ToList())
+        {
+            _pendingOpens.Remove(pending);
+
+            try
+            {
+                var left = Math.Max(0, deadline - Environment.TickCount64);
+                if (!pending.Expansion.Wait(TimeSpan.FromMilliseconds(left)))
+                {
+                    Console.Error.WriteLine("[cewka] przeglądanie folderu nie skończyło się przed zamknięciem okna");
+                    continue;
+                }
+
+                var files = pending.Expansion.Result.Files;
+                if (files.Count > 0) pending.Apply(files);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[cewka] nie udało się dodać plików: {ex}");
+            }
         }
     }
 
