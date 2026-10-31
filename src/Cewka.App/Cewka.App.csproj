@@ -22,9 +22,12 @@
     zglosic brak typu. Kilkadziesiat megabajtow to uczciwa cena za wydanie, ktore na pewno
     dziala; kompresja zbija to o ponad polowe.
 
-    IncludeAllContentForSelfExtract obejmuje biblioteke natywna: nie jest ona zaleznoscia
-    pakietu NuGet, tylko wlasnym plikiem projektu, wiec bundler traktuje ja jako zawartosc,
-    a nie jako biblioteke natywna.
+    IncludeAllContentForSelfExtract wypakowuje przy pierwszym starcie danej wersji caly pakunek
+    (okolo 90 MB) do katalogu tymczasowego, a kolejne starty czytaja pliki stamtad zamiast
+    rozpakowywac skompresowane zestawy w pamieci. NativeAudio szuka cewka_audio wlasnie
+    w runtimes/{rid}/native katalogu wypakowania. Pulapka: bez tej opcji biblioteka trafia
+    do pakunku pod ta sama sciezka, ale host przeszukuje tylko korzen katalogu wypakowania,
+    wiec NativeAudio jej nie znajdzie.
   -->
   <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
     <SelfContained>true</SelfContained>
@@ -63,6 +66,20 @@
     wylaczyc wlasciwoscia projektu, bo nie sa zwiazane z zestawem referencyjnym. Sto megabajtow
     obok jednoplikowego wydania przeczyloby jego sensowi, wiec sa usuwane po publikacji.
   -->
+  <!--
+    Publikacja pod konkretna platforme bierze z Cewka.Audio tylko biblioteke natywna tej
+    platformy. Gdy na maszynie zbudowano obie, wariant obcy trafialby do wydania na darmo.
+  -->
+  <Target Name="TylkoBibliotekaNatywnaPlatformy" AfterTargets="ComputeResolvedFilesToPublishList"
+          Condition="'$(RuntimeIdentifier)' != ''">
+    <ItemGroup>
+      <_BibliotekaObcejPlatformy Include="@(ResolvedFileToPublish)"
+          Condition="('%(ResolvedFileToPublish.Filename)' == 'cewka_audio' Or '%(ResolvedFileToPublish.Filename)' == 'libcewka_audio')
+                     And !$([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').Replace('/', '\').StartsWith('runtimes\$(RuntimeIdentifier)\'))" />
+      <ResolvedFileToPublish Remove="@(_BibliotekaObcejPlatformy)" />
+    </ItemGroup>
+  </Target>
+
   <Target Name="UsunSymboleZWydania" AfterTargets="Publish" Condition="'$(PublishSingleFile)' == 'true'">
     <ItemGroup>
       <SymboleDoUsuniecia Include="$(PublishDir)**\*.pdb" />
