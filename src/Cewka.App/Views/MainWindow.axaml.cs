@@ -548,6 +548,9 @@ public partial class MainWindow : Window
 
         QueueDismiss.IsVisible = _queueAsOverlay && _viewModel.QueueOpen;
         ApplyResponsiveLayout();
+
+        // Zamknięta kolejka nie przewija się przy zmianie utworu, więc po otwarciu i ułożeniu listy pokazuje grany wiersz.
+        if (_viewModel.QueueOpen) Dispatcher.UIThread.Post(RevealCurrent, DispatcherPriority.Loaded);
     }
 
     /// <summary>Nakładana kolejka jest otwarta.</summary>
@@ -742,12 +745,13 @@ public partial class MainWindow : Window
     private void OnPrevious(object? sender, RoutedEventArgs e) => _viewModel.Previous();
 
     /// <summary>
-    /// Przewija listę do granego wiersza bez ruszania zaznaczenia. Nie wtedy, gdy lista ma
-    /// fokus: przeglądanej z klawiatury nie przesuwa się spod ręki.
+    /// Przewija listę do granego wiersza bez ruszania zaznaczenia. Nie wtedy, gdy listę
+    /// przegląda się klawiaturą: tej nie przesuwa się spod ręki.
     /// </summary>
     private void RevealCurrent()
     {
-        if (QueueList is null || !_viewModel.QueueOpen || QueueList.IsKeyboardFocusWithin) return;
+        if (QueueList is null || !_viewModel.QueueOpen) return;
+        if (_queueBrowsedByKeyboard && QueueList.IsKeyboardFocusWithin) return;
 
         if (_viewModel.Queue.FirstOrDefault(item => item.IsCurrent) is { } current) QueueList.ScrollIntoView(current);
     }
@@ -1010,10 +1014,17 @@ public partial class MainWindow : Window
         QueueList.AddHandler(PointerMovedEvent, OnQueuePointerMoved, RoutingStrategies.Bubble, handledEventsToo: true);
         QueueList.AddHandler(PointerReleasedEvent, OnQueuePointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
         QueueList.AddHandler(KeyDownEvent, OnQueueKeyDown, RoutingStrategies.Tunnel);
+        QueueList.AddHandler(GotFocusEvent, (_, e) =>
+        {
+            if (e.NavigationMethod == NavigationMethod.Tab) _queueBrowsedByKeyboard = true;
+        });
         QueueList.AddHandler(ContextRequestedEvent, OnQueueContextRequested, RoutingStrategies.Tunnel);
         QueueList.DoubleTapped += OnQueueDoubleTapped;
         QueueMenu.Opening += (_, _) => UpdateQueueMenu();
     }
+
+    /// <summary>Lista dostała fokus klawiszem Tab albo zaznaczenie przesuwano strzałkami.</summary>
+    private bool _queueBrowsedByKeyboard;
 
     private QueueItemViewModel? SelectedRow => QueueList.SelectedItem as QueueItemViewModel;
 
@@ -1037,6 +1048,9 @@ public partial class MainWindow : Window
     {
         var none = e.KeyModifiers == KeyModifiers.None;
         var alt = e.KeyModifiers == KeyModifiers.Alt;
+
+        if (e.Key is Key.Up or Key.Down or Key.Home or Key.End or Key.PageUp or Key.PageDown)
+            _queueBrowsedByKeyboard = true;
 
         if (e.Key == Key.Space && none)
         {
@@ -1146,6 +1160,7 @@ public partial class MainWindow : Window
 
     private void OnQueuePointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        _queueBrowsedByKeyboard = false;
         if (!e.GetCurrentPoint(QueueList).Properties.IsLeftButtonPressed) return;
 
         _dragOrigin = e.GetPosition(QueueList);

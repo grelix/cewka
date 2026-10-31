@@ -343,6 +343,52 @@ public sealed class MainWindowInputTests
         });
     }
 
+    private static bool RowVisible(MainWindow window, int index)
+    {
+        var list = Queue(window);
+        if (list.ContainerFromIndex(index) is not { } row) return false;
+
+        var top = row.TranslatePoint(new Point(0, 0), list)!.Value.Y;
+        return top >= 0 && top + row.Bounds.Height <= list.Bounds.Height;
+    }
+
+    [Fact]
+    public void ListaPokazujeGranyWierszPoKliknieciuIPoOtwarciu()
+    {
+        Ui.Run(() =>
+        {
+            var (window, h) = Open(tracks: 40);
+
+            try
+            {
+                // Lista przeglądana z klawiatury nie przewija się sama.
+                Row(window, 0).Focus(NavigationMethod.Tab);
+                h.Player.PlayItem(h.Player.Queue[35]);
+                Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 35));
+                Settle(window);
+                Assert.False(RowVisible(window, 35));
+
+                // Po kliknięciu myszą fokus zostaje w liście, a zmiana utworu i tak ją przewija.
+                Click(window, Centre(Row(window, 0), window));
+                Assert.True(Queue(window).IsKeyboardFocusWithin);
+                h.Player.PlayItem(h.Player.Queue[36]);
+                Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 36));
+                Settle(window);
+                Assert.True(RowVisible(window, 36));
+
+                h.Player.QueueOpen = false;
+                Settle(window);
+                h.Player.PlayItem(h.Player.Queue[2]);
+                Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 2));
+                h.Player.QueueOpen = true;
+                Settle(window);
+
+                Assert.True(RowVisible(window, 2));
+            }
+            finally { window.Close(); }
+        });
+    }
+
     [Fact]
     public void TabPrzechodziOdBlokuOdtwarzaniaPrzezKolejkeDoPasa()
     {
