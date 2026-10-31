@@ -17,6 +17,12 @@ internal interface IHandoffListener : IDisposable
     /// albo <c>null</c>. Wołane przy zamykaniu, więc nie przygotowuje miejsca dla następnych.
     /// </summary>
     Stream? TakePending();
+
+    /// <summary>
+    /// Nowy nadawca nie może się już połączyć i dostaje odmowę; połączeni wcześniej czekają
+    /// na <see cref="TakePending"/>.
+    /// </summary>
+    void StopAccepting();
 }
 
 /// <summary>
@@ -150,6 +156,14 @@ internal static class HandoffChannel
             }
         }
 
+        /// <summary>
+        /// Nic do zrobienia: ostatnią instancję potoku zabiera <see cref="TakePending"/>, a nowej
+        /// nikt już nie tworzy.
+        /// </summary>
+        public void StopAccepting()
+        {
+        }
+
         public void Dispose()
         {
             lock (_gate)
@@ -268,6 +282,13 @@ internal static class HandoffChannel
         public Stream? TakePending() => _socket.Poll(0, SelectMode.SelectRead)
             ? new NetworkStream(_socket.Accept(), ownsSocket: true)
             : null;
+
+        /// <summary>
+        /// Bez pliku gniazda nowy nadawca dostaje ENOENT, a gniazdo nasłuchu z kolejką połączeń
+        /// działa dalej. Inaczej jądro przyjmowałoby nadawców aż do zamknięcia gniazda, a ich
+        /// wysłanie kończyłoby się sukcesem bez odbioru.
+        /// </summary>
+        public void StopAccepting() => Usun(_path);
 
         public void Dispose()
         {

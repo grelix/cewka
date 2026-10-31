@@ -384,6 +384,10 @@ public sealed class SingleInstance : IDisposable
         if (_stopped) return;
         _stopped = true;
 
+        // Najpierw odmowa dla nowych nadawców: połączony w trakcie doczytywania uznałby
+        // przekazanie za udane, a nikt by go już nie odebrał.
+        _channel.StopAccepting();
+
         // Przerywa samo czekanie na połączenie. Wątek doczytuje rozpoczętą wiadomość (jeden limit
         // odczytu), potem naraz wszystkie oczekujące (drugi limit), więc ten czas mu wystarcza.
         _stop.Cancel();
