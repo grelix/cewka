@@ -271,6 +271,36 @@ public sealed class WindowLayoutTests
     }
 
     [Fact]
+    public void MaksymalizacjaWykonanaPrzezSystemNieCofaSieKliknieciem()
+    {
+        Ui.Run(() =>
+        {
+            var buttons = new WindowButtons { Position = WindowControlsPosition.Right };
+            var window = new Window { Width = 300, Height = 100, Content = buttons };
+            window.Show();
+
+            try
+            {
+                Settle(window);
+                var maximise = buttons.FindControl<Button>("SquareMaximise")!;
+                var centre = maximise.TranslatePoint(new Point(maximise.Bounds.Width / 2, maximise.Bounds.Height / 2), window)!.Value;
+
+                // Ramka systemowa może przełączyć stan sama, zanim przycisk dostanie kliknięcie.
+                window.MouseDown(centre, MouseButton.Left);
+                window.WindowState = WindowState.Maximized;
+                window.MouseUp(centre, MouseButton.Left);
+                Assert.Equal(WindowState.Maximized, window.WindowState);
+
+                // Bez udziału systemu kliknięcie przełącza jak zwykle.
+                window.MouseDown(centre, MouseButton.Left);
+                window.MouseUp(centre, MouseButton.Left);
+                Assert.Equal(WindowState.Normal, window.WindowState);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
     public void PrzyciskiPoLewejZamknieciemNaZewnetrznejKrawedzi()
     {
         Ui.Run(() =>
@@ -329,4 +359,5 @@ public sealed class WindowLayoutTests
         Assert.Equal(1600 - 820, tight.X);
         Assert.Equal(50, tight.Y);
     }
+
 }

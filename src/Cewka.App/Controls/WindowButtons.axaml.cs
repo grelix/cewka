@@ -44,6 +44,12 @@ public partial class WindowButtons : UserControl
         if (OperatingSystem.IsWindows())
             WindowDecorationProperties.SetElementRole(SquareMaximise, WindowDecorationsElementRole.MaximizeButton);
 
+        foreach (var button in new Control[] { SquareMaximise, TrafficZoom })
+        {
+            button.AddHandler(PointerPressedEvent, OnMaximisePressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+            button.AddHandler(PointerReleasedEvent, (_, _) => _stateAtPress = null, RoutingStrategies.Bubble, handledEventsToo: true);
+        }
+
         ApplyPosition();
         ApplyWindowState();
     }
@@ -141,11 +147,22 @@ public partial class WindowButtons : UserControl
         if (Host is { } window) window.WindowState = WindowState.Minimized;
     }
 
+    /// <summary>
+    /// Stan z chwili naciśnięcia. Przycisk z rolą maksymalizacji może przełączyć także system,
+    /// zanim dotrze kliknięcie; liczenie od tego stanu zapobiega przełączeniu z powrotem.
+    /// </summary>
+    private WindowState? _stateAtPress;
+
+    private void OnMaximisePressed(object? sender, PointerPressedEventArgs e) => _stateAtPress = Host?.WindowState;
+
     private void OnToggleMaximise(object? sender, RoutedEventArgs e)
     {
+        var before = _stateAtPress;
+        _stateAtPress = null;
+
         if (Host is not { } window) return;
 
-        window.WindowState = window.WindowState == WindowState.Maximized
+        window.WindowState = (before ?? window.WindowState) == WindowState.Maximized
             ? WindowState.Normal
             : WindowState.Maximized;
     }
