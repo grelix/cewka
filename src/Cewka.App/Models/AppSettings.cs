@@ -161,6 +161,8 @@ public sealed class WindowGeometry
     public double Width { get; set; }
     public double Height { get; set; }
     public bool Maximized { get; set; }
+
+    public WindowGeometry Clone() => new() { X = X, Y = Y, Width = Width, Height = Height, Maximized = Maximized };
 }
 
 /// <summary>
@@ -191,6 +193,9 @@ public sealed class AppSettings
     public WindowControlsPosition WindowControls { get; set; } = WindowControlsPosition.Right;
 
     public WindowGeometry? Window { get; set; }
+
+    /// <summary>Położenie okna ustawień; rozmiar i maksymalizacja nie są w nim używane.</summary>
+    public WindowGeometry? SettingsWindow { get; set; }
 
     /// <summary>
     /// Whether the bottom strip — the equaliser and the effects — is expanded.
@@ -322,10 +327,8 @@ public sealed class AppSettings
         Theme = Theme,
         Language = Language,
         WindowControls = WindowControls,
-        Window = Window is null ? null : new WindowGeometry
-        {
-            X = Window.X, Y = Window.Y, Width = Window.Width, Height = Window.Height, Maximized = Window.Maximized,
-        },
+        Window = Window?.Clone(),
+        SettingsWindow = SettingsWindow?.Clone(),
         PanelOpen = PanelOpen,
         QueueOpen = QueueOpen,
         Volume = Volume,

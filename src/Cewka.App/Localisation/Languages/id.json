@@ -4,10 +4,12 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Penampilan atau penyembunyian equalizer dan efek (Q)",
-  "TooltipToggleQueue": "Penampilan atau penyembunyian antrean (L)",
-  "TooltipTheme": "Tema",
-  "TooltipSettings": "Pengaturan",
+  "TooltipTogglePanel": "Equalizer dan efek (Q)",
+  "TooltipToggleQueue": "Antrean (L)",
+  "TooltipThemeSystem": "Tema: sistem (T)",
+  "TooltipThemeDark": "Tema: gelap (T)",
+  "TooltipThemeLight": "Tema: terang (T)",
+  "TooltipSettings": "Pengaturan (Ctrl+,)",
   "TooltipMinimise": "Minimalisasi",
   "TooltipMaximise": "Maksimalisasi",
   "TooltipRestore": "Pemulihan ukuran",
@@ -39,10 +41,11 @@
   "EffectDescriptionVirtualBass": "Harmonik nada terendah. Membuat bas terdengar pada pengeras suara yang tidak menghasilkannya.",
   "EffectDescriptionDynamicRange": "Mempersempit jarak antara pelan dan keras. Bagian pelan terdengar tanpa menaikkan yang keras.",
   "EffectDescriptionStereoWidth": "Memperlebar citra stereo. Jumlah mono tetap utuh.",
-  "EffectsNote": "Semua efek mati secara bawaan dan mengubah suara dengan sengaja. Sakelar dan penggeser yang sama ada di jendela utama, di samping ekualiser.",
+  "HintEqualiserInMainWindow": "Equalizer dan efek suara ada di jendela utama, pada bilah di bawah pemutar (Q).",
 
   "OpenFiles": "Pembukaan file",
   "OpenFolder": "Pembukaan folder",
+  "AudioFilter": "Berkas audio",
   "DropHint": "File atau folder juga dapat diseret ke jendela",
   "QueueRemove": "Penghapusan dari antrean",
   "QueueClear": "Pengosongan antrean",
@@ -71,6 +74,7 @@
   "AudioFailure": "Pemutaran tidak dapat dimulai. Percobaan ulang atau perangkat lain dapat membantu.",
 
   "Settings": "Pengaturan",
+  "SettingsWindowTitle": "Pengaturan — Cewka",
   "SectionAppearance": "Tampilan",
   "SectionLanguage": "Bahasa",
   "SectionAudio": "Audio",
@@ -94,11 +98,11 @@
   "ControlsLeft": "Kiri",
   "ControlsMacOs": "macOS",
 
-  "SettingEffects": "Efek visual",
+  "SettingEffects": "Animasi",
   "EffectsAuto": "Otomatis",
   "EffectsFull": "Penuh",
   "EffectsReduced": "Dikurangi",
-  "HintEffects": "Mode otomatis mengurangi gerakan latar dan putaran piringan saat menggunakan baterai.",
+  "HintEffects": "Mode otomatis menghentikan gerakan latar, piringan, dan gelombang saat menggunakan baterai atau saat animasi dinonaktifkan di sistem.",
 
   "SettingColours": "Intensitas warna",
   "ColoursSubtle": "Halus",

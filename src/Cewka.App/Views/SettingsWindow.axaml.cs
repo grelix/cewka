@@ -1,4 +1,6 @@
-﻿using Avalonia.Controls;
+﻿using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Chrome;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Cewka.App.Models;
@@ -12,7 +14,8 @@ namespace Cewka.App.Views;
 /// <para>
 /// Frameless like the main window, and deliberately not modal — a device or a theme is chosen
 /// by listening and looking, which means the music has to keep playing and the window behind
-/// has to stay usable while the choice is made.
+/// has to stay usable while the choice is made. Z tego samego powodu okno przyjmuje skróty
+/// odtwarzania i staje obok okna głównego, a nie na nim.
 /// </para>
 /// </summary>
 public partial class SettingsWindow : Window
@@ -20,7 +23,13 @@ public partial class SettingsWindow : Window
     /// <summary>Grab band along the window border for resizing, as in the main window.</summary>
     private const double ResizeMargin = 6;
 
+    /// <summary>Odstęp od okna głównego przy ustawianiu obok niego.</summary>
+    private const double Gap = 12;
+
     private SettingsViewModel? _viewModel;
+
+    /// <summary>Ramka systemowa w Windows, jak w oknie głównym.</summary>
+    private readonly bool _systemFrame;
 
     /// <summary>
     /// Required by the XAML runtime loader. The window is always created with a view model
@@ -30,6 +39,14 @@ public partial class SettingsWindow : Window
     {
         InitializeComponent();
         ApplyControlsPosition();
+
+        _systemFrame = OperatingSystem.IsWindows();
+        if (_systemFrame)
+        {
+            WindowDecorations = WindowDecorations.BorderOnly;
+            WindowDecorationProperties.SetElementRole(TitleBar, WindowDecorationsElementRole.TitleBar);
+            Shell.Classes.Add("square");
+        }
 
         // Wlasny pasek przewijania, ten sam co przy kolejce; domyslny z motywu Fluent
         // jest szerszy i nie nalezy do jezyka wizualnego reszty programu.
@@ -50,6 +67,9 @@ public partial class SettingsWindow : Window
         };
     }
 
+    /// <summary>Obsługa skrótów odtwarzania z okna głównego; zwraca prawdę, gdy klawisz był skrótem.</summary>
+    public Func<KeyEventArgs, bool>? PlaybackShortcuts { get; init; }
+
     private void ApplyControlsPosition()
     {
         var position = App.Settings.Current.WindowControls;
@@ -60,6 +80,72 @@ public partial class SettingsWindow : Window
 
         ControlsLeft.IsVisible = !onRight;
         ControlsRight.IsVisible = onRight;
+    }
+
+    // ================= Położenie =================
+
+    /// <summary>
+    /// Ustawia okno przed pokazaniem. Zapamiętane położenie wraca, jeśli okno mieści się na
+    /// którymś z ekranów. Inaczej okno staje obok głównego, gdy obok jest miejsce w obszarze
+    /// roboczym, a gdy go nie ma — przy krawędzi ekranu po stronie, gdzie wolnego miejsca jest więcej.
+    /// </summary>
+    public void PlaceBeside(Window owner)
+    {
+        if ((Screens.ScreenFromWindow(owner) ?? Screens.Primary) is not { } screen)
+        {
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            return;
+        }
+
+        var scale = screen.Scaling;
+        var size = new PixelSize((int)Math.Ceiling(Width * scale), (int)Math.Ceiling(Height * scale));
+
+        if (App.Settings.Current.SettingsWindow is { } saved && FitsOnAScreen(new PixelPoint(saved.X, saved.Y), size))
+        {
+            Position = new PixelPoint(saved.X, saved.Y);
+            return;
+        }
+
+        var ownerRect = new PixelRect(owner.Position, PixelSize.FromSize(owner.ClientSize, owner.RenderScaling));
+        Position = Beside(ownerRect, size, screen.WorkingArea, (int)(Gap * scale));
+    }
+
+    /// <summary>Położenie obok prostokąta okna głównego w obrębie obszaru roboczego.</summary>
+    internal static PixelPoint Beside(PixelRect owner, PixelSize size, PixelRect area, int gap)
+    {
+        var y = Math.Clamp(owner.Y, area.Y, Math.Max(area.Y, area.Bottom - size.Height));
+
+        var right = owner.Right + gap;
+        if (right + size.Width <= area.Right) return new PixelPoint(right, y);
+
+        var left = owner.X - gap - size.Width;
+        if (left >= area.X) return new PixelPoint(left, y);
+
+        var roomRight = area.Right - owner.Right;
+        var roomLeft = owner.X - area.X;
+        var x = roomRight >= roomLeft ? area.Right - size.Width : area.X;
+
+        return new PixelPoint(Math.Max(area.X, x), y);
+    }
+
+    private bool FitsOnAScreen(PixelPoint position, PixelSize size)
+    {
+        var rect = new PixelRect(position, size);
+        return Screens.All.Any(screen => screen.WorkingArea.Contains(rect));
+    }
+
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        App.Settings.Current.SettingsWindow = new WindowGeometry
+        {
+            X = Position.X,
+            Y = Position.Y,
+            Width = Width,
+            Height = Height,
+        };
+        App.Settings.Touch();
+
+        base.OnClosing(e);
     }
 
     protected override void OnClosed(EventArgs e)
@@ -73,10 +159,15 @@ public partial class SettingsWindow : Window
         base.OnKeyDown(e);
         if (e.Handled) return;
 
-        if (e.Key != Key.Escape) return;
+        if (e.Key == Key.Escape)
+        {
+            Close();
+            e.Handled = true;
+            return;
+        }
 
-        Close();
-        e.Handled = true;
+        // Klawisze, których nie zużyła kontrolka z fokusem, sterują odtwarzaniem jak w oknie głównym.
+        PlaybackShortcuts?.Invoke(e);
     }
 
     private void OnSectionClick(object? sender, RoutedEventArgs e)
@@ -131,12 +222,12 @@ public partial class SettingsWindow : Window
 
     private void OnRemoveAssociations(object? sender, RoutedEventArgs e) => _viewModel?.RemoveAssociations();
 
-    // ================= Sterowanie oknem =================
+    // ================= Sterowanie oknem bez ramki systemowej =================
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
-        if (e.Handled) return;
+        if (e.Handled || _systemFrame) return;
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
 
         var position = e.GetPosition(this);
@@ -153,6 +244,7 @@ public partial class SettingsWindow : Window
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
+        if (_systemFrame) return;
 
         Cursor = TryGetResizeEdge(e.GetPosition(this)) switch
         {
@@ -166,7 +258,7 @@ public partial class SettingsWindow : Window
         };
     }
 
-    private WindowEdge? TryGetResizeEdge(Avalonia.Point position)
+    private WindowEdge? TryGetResizeEdge(Point position)
     {
         var left = position.X <= ResizeMargin;
         var right = position.X >= Bounds.Width - ResizeMargin;

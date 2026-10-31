@@ -35,7 +35,7 @@
 
   <!-- ======================= Przyciski ikonowe ======================= -->
 
-  <Style Selector="Button.icon">
+  <Style Selector=":is(Button).icon">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="Padding" Value="0" />
@@ -46,7 +46,7 @@
     <Setter Property="Cursor" Value="Hand" />
   </Style>
 
-  <Style Selector="Button.icon /template/ ContentPresenter#PART_ContentPresenter">
+  <Style Selector=":is(Button).icon /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="CornerRadius" Value="8" />
@@ -57,26 +57,57 @@
     </Setter>
   </Style>
 
-  <Style Selector="Button.icon:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+  <Style Selector=":is(Button).icon:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Glass2Brush}" />
   </Style>
 
-  <Style Selector="Button.icon:pressed /template/ ContentPresenter#PART_ContentPresenter">
+  <Style Selector=":is(Button).icon:pressed /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource GlassHiBrush}" />
   </Style>
 
-  <Style Selector="Button.icon:pointerover">
+  <Style Selector=":is(Button).icon:pointerover">
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
   </Style>
 
   <!-- Wariant o pelnej jasnosci (transport, przewijanie utworow) -->
-  <Style Selector="Button.icon.strong">
+  <Style Selector=":is(Button).icon.strong">
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
   </Style>
 
   <!-- Stan wlaczony dla przelacznikow losowo / powtarzaj -->
-  <Style Selector="Button.icon.active">
+  <Style Selector=":is(Button).icon.active">
     <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <!--
+    Przełączniki obszarów w pasku tytułu. Stan włączony ma własne tło w barwie akcentu, a nie
+    tylko barwny znak, żeby dało się go odczytać także bez rozróżniania barw.
+  -->
+  <Style Selector="ToggleButton.icon:checked /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+  </Style>
+
+  <Style Selector="ToggleButton.icon:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentSoftHiBrush}" />
+  </Style>
+
+  <Style Selector="ToggleButton.icon:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AccentSoftHiBrush}" />
+  </Style>
+
+  <Style Selector="ToggleButton.icon:checked Path.stroke">
+    <Setter Property="Stroke" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <!-- Kropka na przycisku pasa: przetwarzanie włączone, choć pasa nie widać. -->
+  <Style Selector="Ellipse.indicator">
+    <Setter Property="Width" Value="6" />
+    <Setter Property="Height" Value="6" />
+    <Setter Property="Fill" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="HorizontalAlignment" Value="Right" />
+    <Setter Property="VerticalAlignment" Value="Top" />
+    <Setter Property="Margin" Value="0,4,4,0" />
+    <Setter Property="IsHitTestVisible" Value="False" />
   </Style>
 
   <!-- ======================= Przycisk odtwarzania ======================= -->
@@ -157,11 +188,12 @@
 
   <!-- ======================= Przyciski okna w stylu macOS ======================= -->
 
+  <!-- Pole trafienia 24 × 24 px, krążek 12 px w środku. -->
   <Style Selector="Button.traffic">
-    <Setter Property="Width" Value="12" />
-    <Setter Property="Height" Value="12" />
+    <Setter Property="Width" Value="24" />
+    <Setter Property="Height" Value="24" />
     <Setter Property="Padding" Value="0" />
-    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="Cursor" Value="Hand" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -169,18 +201,24 @@
   </Style>
 
   <Style Selector="Button.traffic /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
   </Style>
 
+  <Style Selector="Button.traffic Border.dot">
+    <Setter Property="Width" Value="12" />
+    <Setter Property="Height" Value="12" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+
   <!-- Barwy przeniesione z systemu macOS, zeby wariant byl rozpoznawalny. -->
-  <Style Selector="Button.traffic.close /template/ ContentPresenter#PART_ContentPresenter">
+  <Style Selector="Button.traffic.close Border.dot">
     <Setter Property="Background" Value="#FFFF5F57" />
   </Style>
-  <Style Selector="Button.traffic.minimise /template/ ContentPresenter#PART_ContentPresenter">
+  <Style Selector="Button.traffic.minimise Border.dot">
     <Setter Property="Background" Value="#FFFEBC2E" />
   </Style>
-  <Style Selector="Button.traffic.zoom /template/ ContentPresenter#PART_ContentPresenter">
+  <Style Selector="Button.traffic.zoom Border.dot">
     <Setter Property="Background" Value="#FF28C840" />
   </Style>
 
@@ -199,7 +237,11 @@
     </Setter>
   </Style>
 
-  <Style Selector="Button.traffic:pointerover Path.traffic-glyph">
+  <Style Selector="StackPanel#TrafficGroup:pointerover Path.traffic-glyph">
+    <Setter Property="Opacity" Value="1" />
+  </Style>
+
+  <Style Selector="Button.traffic:focus-visible Path.traffic-glyph">
     <Setter Property="Opacity" Value="1" />
   </Style>
 
@@ -219,38 +261,82 @@
     <Setter Property="HorizontalAlignment" Value="Left" />
   </Style>
 
+  <!--
+    Fluent ustawia barwę tekstu na prezenterze w stanach najechania, naciśnięcia i wyłączenia.
+    Prezenter bierze ją tu z przycisku, więc obowiązują barwy z tego arkusza.
+  -->
   <Style Selector="Button.link /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{TemplateBinding Foreground}" />
+  </Style>
+
+  <Style Selector="Button.link:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{TemplateBinding Foreground}" />
+  </Style>
+
+  <Style Selector="Button.link:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{TemplateBinding Foreground}" />
   </Style>
 
   <Style Selector="Button.link:pointerover">
     <Setter Property="TextBlock.TextDecorations" Value="Underline" />
   </Style>
 
+  <!-- Przycisk drugorzędny: krój interfejsu, tekst czytelny bez najeżdżania. -->
   <Style Selector="Button.pill">
-    <Setter Property="Height" Value="24" />
-    <Setter Property="Padding" Value="12,0" />
-    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="Height" Value="28" />
+    <Setter Property="Padding" Value="14,0" />
+    <Setter Property="CornerRadius" Value="14" />
     <Setter Property="Background" Value="{DynamicResource GlassBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="Foreground" Value="{DynamicResource Text3Brush}" />
-    <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
-    <Setter Property="FontSize" Value="9.5" />
+    <Setter Property="Foreground" Value="{DynamicResource Text2Brush}" />
+    <Setter Property="FontSize" Value="12" />
     <Setter Property="Cursor" Value="Hand" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
   </Style>
 
   <Style Selector="Button.pill /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="CornerRadius" Value="14" />
+    <Setter Property="Foreground" Value="{TemplateBinding Foreground}" />
   </Style>
 
   <Style Selector="Button.pill:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Glass2Brush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource StrokeHiBrush}" />
+    <Setter Property="Foreground" Value="{TemplateBinding Foreground}" />
+  </Style>
+
+  <Style Selector="Button.pill:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource GlassHiBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource StrokeHiBrush}" />
+    <Setter Property="Foreground" Value="{TemplateBinding Foreground}" />
+  </Style>
+
+  <Style Selector="Button.pill:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource GlassBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}" />
+    <Setter Property="Foreground" Value="{TemplateBinding Foreground}" />
   </Style>
 
   <Style Selector="Button.pill:pointerover">
-    <Setter Property="Foreground" Value="{DynamicResource Text2Brush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  </Style>
+
+  <!-- Wezwanie główne przy pustej kolejce: jedyne wejście dla nowej osoby, więc wyraźniejsze. -->
+  <Style Selector="Button.pill.primary">
+    <Setter Property="Height" Value="34" />
+    <Setter Property="Padding" Value="18,0" />
+    <Setter Property="CornerRadius" Value="17" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Background" Value="{DynamicResource Glass2Brush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+  </Style>
+
+  <Style Selector="Button.pill.primary /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="CornerRadius" Value="17" />
   </Style>
 
   <!-- ======================= Opcje korektora ======================= -->
@@ -331,12 +417,47 @@
   </Style>
 
   <!-- Wylaczone ustawienie zostaje widoczne, ale wyraznie przygaszone. -->
-  <Style Selector="Grid.setting:disabled">
+  <Style Selector=":is(Panel).setting:disabled">
     <Setter Property="Opacity" Value="0.45" />
   </Style>
 
   <Style Selector="Button.pill:disabled">
     <Setter Property="Opacity" Value="0.4" />
+  </Style>
+
+  <Style Selector="Button.option:disabled">
+    <Setter Property="Opacity" Value="0.45" />
+  </Style>
+
+  <!-- ======================= Okno ======================= -->
+
+  <!--
+    Obrys okna. Zaokrąglenie i obwódka tylko w zwykłym oknie: przy maksymalizacji i pełnym
+    ekranie, a w Windows zawsze (narożniki i obwódkę rysuje tam system), narożniki są proste.
+  -->
+  <Style Selector="Border.shell">
+    <Setter Property="CornerRadius" Value="15" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}" />
+    <Setter Property="Background" Value="{DynamicResource DeskBrush}" />
+    <Setter Property="ClipToBounds" Value="True" />
+  </Style>
+
+  <Style Selector="Border.shell.square">
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+
+  <Style Selector="Border.queue-column">
+    <Setter Property="Background" Value="{DynamicResource GlassBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}" />
+    <Setter Property="BorderThickness" Value="1,0,0,0" />
+  </Style>
+
+  <!-- Kolejka nakładana nad treść w wąskim oknie: nieprzezroczysta, z cieniem od strony treści. -->
+  <Style Selector="Border.queue-overlay">
+    <Setter Property="Background" Value="{DynamicResource OverlayBrush}" />
+    <Setter Property="BoxShadow" Value="-10 0 32 0 #66000000" />
   </Style>
 
   <!-- ======================= Ikony ======================= -->
@@ -359,26 +480,26 @@
     <Setter Property="StrokeJoin" Value="Round" />
   </Style>
 
-  <Style Selector="Button.icon Path.fill">
+  <Style Selector=":is(Button).icon Path.fill">
     <Setter Property="Fill" Value="{DynamicResource Text2Brush}" />
   </Style>
-  <Style Selector="Button.icon:pointerover Path.fill">
+  <Style Selector=":is(Button).icon:pointerover Path.fill">
     <Setter Property="Fill" Value="{DynamicResource TextBrush}" />
   </Style>
-  <Style Selector="Button.icon.strong Path.fill">
+  <Style Selector=":is(Button).icon.strong Path.fill">
     <Setter Property="Fill" Value="{DynamicResource TextBrush}" />
   </Style>
-  <Style Selector="Button.icon.active Path.fill">
+  <Style Selector=":is(Button).icon.active Path.fill">
     <Setter Property="Fill" Value="{DynamicResource AccentBrush}" />
   </Style>
 
-  <Style Selector="Button.icon Path.stroke">
+  <Style Selector=":is(Button).icon Path.stroke">
     <Setter Property="Stroke" Value="{DynamicResource Text2Brush}" />
   </Style>
-  <Style Selector="Button.icon:pointerover Path.stroke">
+  <Style Selector=":is(Button).icon:pointerover Path.stroke">
     <Setter Property="Stroke" Value="{DynamicResource TextBrush}" />
   </Style>
-  <Style Selector="Button.icon.active Path.stroke">
+  <Style Selector=":is(Button).icon.active Path.stroke">
     <Setter Property="Stroke" Value="{DynamicResource AccentBrush}" />
   </Style>
 

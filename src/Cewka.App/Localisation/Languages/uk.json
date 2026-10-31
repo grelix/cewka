@@ -4,10 +4,12 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Показати або приховати еквалайзер і ефекти (Q)",
-  "TooltipToggleQueue": "Показати або приховати чергу (L)",
-  "TooltipTheme": "Тема",
-  "TooltipSettings": "Налаштування",
+  "TooltipTogglePanel": "Еквалайзер і ефекти (Q)",
+  "TooltipToggleQueue": "Черга (L)",
+  "TooltipThemeSystem": "Тема: системна (T)",
+  "TooltipThemeDark": "Тема: темна (T)",
+  "TooltipThemeLight": "Тема: світла (T)",
+  "TooltipSettings": "Налаштування (Ctrl+,)",
   "TooltipMinimise": "Згорнути",
   "TooltipMaximise": "Розгорнути",
   "TooltipRestore": "Відновити розмір",
@@ -39,10 +41,11 @@
   "EffectDescriptionVirtualBass": "Гармоніки найнижчих тонів. Роблять бас чутним на колонках, які його не відтворюють.",
   "EffectDescriptionDynamicRange": "Звужує різницю між тихим і гучним. Тихі місця стають чутними без піднімання гучних.",
   "EffectDescriptionStereoWidth": "Розширює стереокартину. Монофонічна сума лишається незмінною.",
-  "EffectsNote": "Усі ефекти типово вимкнені й змінюють звучання навмисно. Ті самі перемикачі та повзунки є в головному вікні, поруч з еквалайзером.",
+  "HintEqualiserInMainWindow": "Еквалайзер і звукові ефекти розташовані в головному вікні, на панелі під програвачем (Q).",
 
   "OpenFiles": "Відкрити файли",
   "OpenFolder": "Відкрити папку",
+  "AudioFilter": "Аудіофайли",
   "DropHint": "Файли та папки можна також перетягнути на вікно",
   "QueueRemove": "Вилучити з черги",
   "QueueClear": "Очистити чергу",
@@ -71,6 +74,7 @@
   "AudioFailure": "Не вдається розпочати відтворення. Можна повторити спробу або вибрати інший пристрій.",
 
   "Settings": "Налаштування",
+  "SettingsWindowTitle": "Налаштування — Cewka",
   "SectionAppearance": "Вигляд",
   "SectionLanguage": "Мова",
   "SectionAudio": "Звук",
@@ -94,11 +98,11 @@
   "ControlsLeft": "Ліворуч",
   "ControlsMacOs": "macOS",
 
-  "SettingEffects": "Візуальні ефекти",
+  "SettingEffects": "Анімація",
   "EffectsAuto": "Автоматично",
   "EffectsFull": "Повні",
   "EffectsReduced": "Обмежені",
-  "HintEffects": "Автоматичний режим обмежує рух тла та обертання платівки під час роботи від акумулятора.",
+  "HintEffects": "Автоматичний режим зупиняє рух тла, платівки та хвилі під час роботи від акумулятора або коли анімацію вимкнено в системі.",
 
   "SettingColours": "Інтенсивність кольорів",
   "ColoursSubtle": "Стримана",

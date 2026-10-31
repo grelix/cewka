@@ -4,10 +4,12 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Equalizer és effektek mutatása vagy elrejtése (Q)",
-  "TooltipToggleQueue": "Lejátszási sor mutatása vagy elrejtése (L)",
-  "TooltipTheme": "Téma",
-  "TooltipSettings": "Beállítások",
+  "TooltipTogglePanel": "Equalizer és effektek (Q)",
+  "TooltipToggleQueue": "Lejátszási sor (L)",
+  "TooltipThemeSystem": "Téma: rendszer (T)",
+  "TooltipThemeDark": "Téma: sötét (T)",
+  "TooltipThemeLight": "Téma: világos (T)",
+  "TooltipSettings": "Beállítások (Ctrl+,)",
   "TooltipMinimise": "Kicsinyítés",
   "TooltipMaximise": "Teljes méret",
   "TooltipRestore": "Méret visszaállítása",
@@ -39,10 +41,11 @@
   "EffectDescriptionVirtualBass": "A legmélyebb hangok felharmonikusai. Hallhatóvá teszik a mélyeket olyan hangfalon, amely nem adja vissza őket.",
   "EffectDescriptionDynamicRange": "Szűkíti a halk és a hangos közti különbséget. A halk részek hallhatók lesznek a hangosak emelése nélkül.",
   "EffectDescriptionStereoWidth": "Szélesíti a sztereó képet. A monó összeg érintetlen marad.",
-  "EffectsNote": "Minden effekt alapértelmezés szerint ki van kapcsolva, és szándékosan változtatja a hangzást. Ugyanezek a kapcsolók és csúszkák a főablakban is megtalálhatók, az ekvalizer mellett.",
+  "HintEqualiserInMainWindow": "Az equalizer és a hangeffektek a főablakban, a lejátszó alatti sávban találhatók (Q).",
 
   "OpenFiles": "Fájlok megnyitása",
   "OpenFolder": "Mappa megnyitása",
+  "AudioFilter": "Hangfájlok",
   "DropHint": "Fájlok és mappák az ablakra is húzhatók",
   "QueueRemove": "Eltávolítás a sorból",
   "QueueClear": "Sor ürítése",
@@ -71,6 +74,7 @@
   "AudioFailure": "A lejátszás nem indítható el. Újrapróbálkozás vagy másik eszköz választása segíthet.",
 
   "Settings": "Beállítások",
+  "SettingsWindowTitle": "Beállítások — Cewka",
   "SectionAppearance": "Megjelenés",
   "SectionLanguage": "Nyelv",
   "SectionAudio": "Hang",
@@ -94,11 +98,11 @@
   "ControlsLeft": "Bal oldalon",
   "ControlsMacOs": "macOS",
 
-  "SettingEffects": "Vizuális effektek",
+  "SettingEffects": "Animációk",
   "EffectsAuto": "Automatikus",
   "EffectsFull": "Teljes",
   "EffectsReduced": "Korlátozott",
-  "HintEffects": "Automatikus módban akkumulátoros működés közben mérséklődik a háttér mozgása és a lemez forgása.",
+  "HintEffects": "Automatikus módban a háttér, a lemez és a hullám mozgása leáll akkumulátoros működés közben, vagy ha a rendszerben ki vannak kapcsolva az animációk.",
 
   "SettingColours": "Színek intenzitása",
   "ColoursSubtle": "Visszafogott",

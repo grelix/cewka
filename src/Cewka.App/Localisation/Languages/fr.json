@@ -4,10 +4,12 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Afficher ou masquer l'égaliseur et les effets (Q)",
-  "TooltipToggleQueue": "Afficher ou masquer la file d'attente (L)",
-  "TooltipTheme": "Thème",
-  "TooltipSettings": "Paramètres",
+  "TooltipTogglePanel": "Égaliseur et effets (Q)",
+  "TooltipToggleQueue": "File d'attente (L)",
+  "TooltipThemeSystem": "Thème : système (T)",
+  "TooltipThemeDark": "Thème : sombre (T)",
+  "TooltipThemeLight": "Thème : clair (T)",
+  "TooltipSettings": "Paramètres (Ctrl+,)",
   "TooltipMinimise": "Réduire",
   "TooltipMaximise": "Agrandir",
   "TooltipRestore": "Restaurer la taille",
@@ -39,10 +41,11 @@
   "EffectDescriptionVirtualBass": "Harmoniques des notes les plus graves. Elles rendent les basses audibles sur des enceintes qui ne les produisent pas.",
   "EffectDescriptionDynamicRange": "Resserre l'écart entre le faible et le fort. Les passages discrets deviennent audibles sans monter les autres.",
   "EffectDescriptionStereoWidth": "Élargit l'image stéréo. La somme monophonique reste intacte.",
-  "EffectsNote": "Tous les effets sont désactivés par défaut et modifient le son à dessein. Les mêmes interrupteurs et curseurs se trouvent dans la fenêtre principale, à côté de l'égaliseur.",
+  "HintEqualiserInMainWindow": "L'égaliseur et les effets sonores se trouvent dans la fenêtre principale, dans le bandeau sous le lecteur (Q).",
 
   "OpenFiles": "Ouvrir des fichiers",
   "OpenFolder": "Ouvrir un dossier",
+  "AudioFilter": "Fichiers audio",
   "DropHint": "Il est également possible de glisser des fichiers ou un dossier sur la fenêtre",
   "QueueRemove": "Retirer de la file d'attente",
   "QueueClear": "Vider la file d'attente",
@@ -71,6 +74,7 @@
   "AudioFailure": "Impossible de lancer la lecture. Un nouvel essai ou un autre périphérique peut résoudre le problème.",
 
   "Settings": "Paramètres",
+  "SettingsWindowTitle": "Paramètres — Cewka",
   "SectionAppearance": "Apparence",
   "SectionLanguage": "Langue",
   "SectionAudio": "Audio",
@@ -94,11 +98,11 @@
   "ControlsLeft": "À gauche",
   "ControlsMacOs": "macOS",
 
-  "SettingEffects": "Effets visuels",
+  "SettingEffects": "Animations",
   "EffectsAuto": "Automatique",
   "EffectsFull": "Complets",
   "EffectsReduced": "Réduits",
-  "HintEffects": "Le mode automatique limite le mouvement du fond et la rotation du disque sur batterie.",
+  "HintEffects": "Le mode automatique arrête le mouvement du fond, du disque et de l'onde sur batterie ou lorsque les animations sont désactivées dans le système.",
 
   "SettingColours": "Intensité des couleurs",
   "ColoursSubtle": "Discrète",

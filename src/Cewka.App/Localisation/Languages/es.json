@@ -4,10 +4,12 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Mostrar u ocultar el ecualizador y los efectos (Q)",
-  "TooltipToggleQueue": "Mostrar u ocultar la cola (L)",
-  "TooltipTheme": "Tema",
-  "TooltipSettings": "Ajustes",
+  "TooltipTogglePanel": "Ecualizador y efectos (Q)",
+  "TooltipToggleQueue": "Cola (L)",
+  "TooltipThemeSystem": "Tema: sistema (T)",
+  "TooltipThemeDark": "Tema: oscuro (T)",
+  "TooltipThemeLight": "Tema: claro (T)",
+  "TooltipSettings": "Ajustes (Ctrl+,)",
   "TooltipMinimise": "Minimizar",
   "TooltipMaximise": "Maximizar",
   "TooltipRestore": "Restaurar tamaño",
@@ -39,10 +41,11 @@
   "EffectDescriptionVirtualBass": "Armónicos de los tonos más graves. Hacen audible el bajo en altavoces que no lo reproducen.",
   "EffectDescriptionDynamicRange": "Estrecha el margen entre lo suave y lo fuerte. Los pasajes suaves se oyen sin subir los fuertes.",
   "EffectDescriptionStereoWidth": "Amplía la imagen estéreo. La suma monofónica queda intacta.",
-  "EffectsNote": "Todos los efectos están desactivados de forma predeterminada y alteran el sonido a propósito. Los mismos interruptores y controles están en la ventana principal, junto al ecualizador.",
+  "HintEqualiserInMainWindow": "El ecualizador y los efectos de sonido están en la ventana principal, en la franja bajo el reproductor (Q).",
 
   "OpenFiles": "Abrir archivos",
   "OpenFolder": "Abrir carpeta",
+  "AudioFilter": "Archivos de audio",
   "DropHint": "También se pueden arrastrar archivos o una carpeta a la ventana",
   "QueueRemove": "Quitar de la cola",
   "QueueClear": "Vaciar la cola",
@@ -71,6 +74,7 @@
   "AudioFailure": "No se puede iniciar la reproducción. Se puede reintentar o elegir otro dispositivo.",
 
   "Settings": "Ajustes",
+  "SettingsWindowTitle": "Ajustes — Cewka",
   "SectionAppearance": "Apariencia",
   "SectionLanguage": "Idioma",
   "SectionAudio": "Audio",
@@ -94,11 +98,11 @@
   "ControlsLeft": "Izquierda",
   "ControlsMacOs": "macOS",
 
-  "SettingEffects": "Efectos visuales",
+  "SettingEffects": "Animaciones",
   "EffectsAuto": "Automático",
   "EffectsFull": "Completos",
   "EffectsReduced": "Reducidos",
-  "HintEffects": "El modo automático reduce el movimiento del fondo y el giro del disco cuando el equipo funciona con batería.",
+  "HintEffects": "El modo automático detiene el movimiento del fondo, del disco y de la onda cuando el equipo funciona con batería o cuando las animaciones están desactivadas en el sistema.",
 
   "SettingColours": "Intensidad del color",
   "ColoursSubtle": "Sutil",

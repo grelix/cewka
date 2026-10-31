@@ -4,10 +4,12 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Equalizer en effecten tonen of verbergen (Q)",
-  "TooltipToggleQueue": "Wachtrij tonen of verbergen (L)",
-  "TooltipTheme": "Thema",
-  "TooltipSettings": "Instellingen",
+  "TooltipTogglePanel": "Equalizer en effecten (Q)",
+  "TooltipToggleQueue": "Wachtrij (L)",
+  "TooltipThemeSystem": "Thema: systeem (T)",
+  "TooltipThemeDark": "Thema: donker (T)",
+  "TooltipThemeLight": "Thema: licht (T)",
+  "TooltipSettings": "Instellingen (Ctrl+,)",
   "TooltipMinimise": "Minimaliseren",
   "TooltipMaximise": "Maximaliseren",
   "TooltipRestore": "Grootte herstellen",
@@ -39,10 +41,11 @@
   "EffectDescriptionVirtualBass": "Boventonen van de laagste tonen. Ze maken bas hoorbaar op luidsprekers die hem niet weergeven.",
   "EffectDescriptionDynamicRange": "Verkleint het verschil tussen zacht en luid. Zachte passages worden hoorbaar zonder de luide te verhogen.",
   "EffectDescriptionStereoWidth": "Verbreedt het stereobeeld. De monosom blijft ongewijzigd.",
-  "EffectsNote": "Alle effecten staan standaard uit en veranderen het geluid met opzet. Dezelfde schakelaars en schuifregelaars staan in het hoofdvenster, naast de equalizer.",
+  "HintEqualiserInMainWindow": "De equalizer en geluidseffecten staan in het hoofdvenster, in de strook onder de speler (Q).",
 
   "OpenFiles": "Bestanden openen",
   "OpenFolder": "Map openen",
+  "AudioFilter": "Audiobestanden",
   "DropHint": "Bestanden of een map kunnen ook op het venster worden gesleept",
   "QueueRemove": "Verwijderen uit wachtrij",
   "QueueClear": "Wachtrij leegmaken",
@@ -71,6 +74,7 @@
   "AudioFailure": "Afspelen kan niet worden gestart. Opnieuw proberen of een ander apparaat kiezen kan helpen.",
 
   "Settings": "Instellingen",
+  "SettingsWindowTitle": "Instellingen — Cewka",
   "SectionAppearance": "Uiterlijk",
   "SectionLanguage": "Taal",
   "SectionAudio": "Audio",
@@ -94,11 +98,11 @@
   "ControlsLeft": "Links",
   "ControlsMacOs": "macOS",
 
-  "SettingEffects": "Visuele effecten",
+  "SettingEffects": "Animaties",
   "EffectsAuto": "Automatisch",
   "EffectsFull": "Volledig",
   "EffectsReduced": "Beperkt",
-  "HintEffects": "De automatische modus vermindert de bewegende achtergrond en de draaiende plaat bij gebruik op accuvoeding.",
+  "HintEffects": "De automatische modus stopt de beweging van achtergrond, plaat en golf bij gebruik op accuvoeding of wanneer animaties in het systeem zijn uitgeschakeld.",
 
   "SettingColours": "Kleurintensiteit",
   "ColoursSubtle": "Subtiel",

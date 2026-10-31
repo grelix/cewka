@@ -4,10 +4,12 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Ekolayzeri ve efektleri gösterme veya gizleme (Q)",
-  "TooltipToggleQueue": "Kuyruğu gösterme veya gizleme (L)",
-  "TooltipTheme": "Tema",
-  "TooltipSettings": "Ayarlar",
+  "TooltipTogglePanel": "Ekolayzer ve efektler (Q)",
+  "TooltipToggleQueue": "Kuyruk (L)",
+  "TooltipThemeSystem": "Tema: sistem (T)",
+  "TooltipThemeDark": "Tema: koyu (T)",
+  "TooltipThemeLight": "Tema: açık (T)",
+  "TooltipSettings": "Ayarlar (Ctrl+,)",
   "TooltipMinimise": "Küçültme",
   "TooltipMaximise": "Büyütme",
   "TooltipRestore": "Boyutu geri yükleme",
@@ -39,10 +41,11 @@
   "EffectDescriptionVirtualBass": "En pes seslerin harmonikleri. Bası üretemeyen hoparlörlerde duyulur kılar.",
   "EffectDescriptionDynamicRange": "Sessiz ile gürültülü arasındaki farkı daraltır. Sessiz bölümler, gürültülüleri yükseltmeden duyulur.",
   "EffectDescriptionStereoWidth": "Stereo görüntüyü genişletir. Mono toplam değişmeden kalır.",
-  "EffectsNote": "Tüm efektler varsayılan olarak kapalıdır ve sesi bilerek değiştirir. Aynı anahtarlar ve kaydırıcılar ana pencerede, ekolayzırın yanında bulunur.",
+  "HintEqualiserInMainWindow": "Ekolayzer ve ses efektleri ana pencerede, oynatıcının altındaki şeritte bulunur (Q).",
 
   "OpenFiles": "Dosya açma",
   "OpenFolder": "Klasör açma",
+  "AudioFilter": "Ses dosyaları",
   "DropHint": "Dosyalar ve klasörler pencereye de sürüklenip bırakılabilir",
   "QueueRemove": "Kuyruktan kaldırma",
   "QueueClear": "Kuyruğu temizleme",
@@ -71,6 +74,7 @@
   "AudioFailure": "Oynatma başlatılamıyor. Yeniden denenebilir veya başka bir aygıt seçilebilir.",
 
   "Settings": "Ayarlar",
+  "SettingsWindowTitle": "Ayarlar — Cewka",
   "SectionAppearance": "Görünüm",
   "SectionLanguage": "Dil",
   "SectionAudio": "Ses",
@@ -94,11 +98,11 @@
   "ControlsLeft": "Solda",
   "ControlsMacOs": "macOS",
 
-  "SettingEffects": "Görsel efektler",
+  "SettingEffects": "Animasyonlar",
   "EffectsAuto": "Otomatik",
   "EffectsFull": "Tam",
   "EffectsReduced": "Azaltılmış",
-  "HintEffects": "Otomatik mod, pil gücüyle çalışırken arka plan hareketini ve plağın dönüşünü azaltır.",
+  "HintEffects": "Otomatik mod, pil gücüyle çalışırken veya sistemde animasyonlar kapalıyken arka planın, plağın ve dalganın hareketini durdurur.",
 
   "SettingColours": "Renk yoğunluğu",
   "ColoursSubtle": "Hafif",

@@ -141,6 +141,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _themeWatcher = (_, _) => Dispatcher.UIThread.Post(OnThemeChanged);
         App.Theme.Changed += _themeWatcher;
 
+        _themeModeWatcher = (_, _) => RaiseThemeMode();
+        App.Theme.ModeChanged += _themeModeWatcher;
+
         _refresh = new DispatcherTimer { Interval = RefreshInterval };
         _refresh.Tick += (_, _) => Refresh();
         _refresh.Start();
@@ -421,6 +424,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (!Set(ref _panelOpen, value)) return;
             _settings.Current.PanelOpen = value;
             _settings.Touch();
+            Raise(nameof(ShowProcessingDot));
         }
     }
 
@@ -436,7 +440,47 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Where the window buttons sit; changed from the settings window in stage 6.</summary>
+    /// <summary>Włączone jest którekolwiek przetwarzanie: korektor, limiter, normalizacja albo efekt.</summary>
+    public bool ProcessingActive =>
+        EqualiserEnabled || LimiterEnabled || NormalisationEnabled || SoundEffects.Any(effect => effect.Enabled);
+
+    /// <summary>Kropka na przycisku pasa: przetwarzanie działa, a pasa nie widać.</summary>
+    public bool ShowProcessingDot => !PanelOpen && ProcessingActive;
+
+    private void RaiseProcessing()
+    {
+        Raise(nameof(ProcessingActive));
+        Raise(nameof(ShowProcessingDot));
+    }
+
+    // ---------- Motyw ----------
+
+    public ThemeMode ThemeMode => App.Theme.Mode;
+
+    public bool ThemeIsSystem => ThemeMode == ThemeMode.System;
+
+    public bool ThemeIsDark => ThemeMode == ThemeMode.Dark;
+
+    public bool ThemeIsLight => ThemeMode == ThemeMode.Light;
+
+    /// <summary>Podpowiedź i nazwa przycisku motywu z bieżącym trybem i skrótem.</summary>
+    public string ThemeTooltip => Strings.Current[ThemeMode switch
+    {
+        ThemeMode.Dark => "TooltipThemeDark",
+        ThemeMode.Light => "TooltipThemeLight",
+        _ => "TooltipThemeSystem",
+    }];
+
+    private void RaiseThemeMode()
+    {
+        Raise(nameof(ThemeMode));
+        Raise(nameof(ThemeIsSystem));
+        Raise(nameof(ThemeIsDark));
+        Raise(nameof(ThemeIsLight));
+        Raise(nameof(ThemeTooltip));
+    }
+
+    /// <summary>Where the window buttons sit; changed from the settings window.</summary>
     public WindowControlsPosition WindowControls => _settings.Current.WindowControls;
 
     public bool ControlsOnRight => WindowControls == WindowControlsPosition.Right;
@@ -483,6 +527,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Raise(nameof(UpdateNotice));
         Raise(nameof(LatencyDescription));
         Raise(nameof(VolumeLevelText));
+        Raise(nameof(ThemeTooltip));
         Preamp.RefreshText();
         foreach (var band in Bands) band.RefreshText();
 
@@ -526,6 +571,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 ApplyEffect(captured);
                 StoreEffect(captured);
                 _settings.Touch();
+                RaiseProcessing();
             };
         }
 
@@ -665,8 +711,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Czy tryb automatyczny ma ograniczyÄ‡ ruch: praca na baterii albo animacje wyĹ‚Ä…czone
-    /// w systemie. Testy podstawiajÄ… wĹ‚asnÄ… odpowiedĹş.
+    /// Czy tryb automatyczny ma ograniczyć ruch: praca na baterii albo animacje wyłączone
+    /// w systemie. Testy podstawiają własną odpowiedź.
     /// </summary>
     internal Func<bool> AutomaticReduction { get; set; } =
         () => PowerStatus.IsOnBattery || !SystemAnimations.Enabled;
@@ -864,6 +910,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _settings.Touch();
             Raise();
             Raise(nameof(EqualiserOpacity));
+            RaiseProcessing();
         }
     }
 
@@ -890,6 +937,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _settings.Current.LimiterEnabled = value;
             _settings.Touch();
             Raise();
+            RaiseProcessing();
         }
     }
 
@@ -908,6 +956,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             // po to, żeby usłyszeć różnicę w tym.
             _engine.RefreshTrackGain();
             Raise();
+            RaiseProcessing();
         }
     }
 
@@ -2274,6 +2323,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     private readonly EventHandler _themeWatcher;
+    private readonly EventHandler _themeModeWatcher;
 
     private bool _disposed;
 
@@ -2281,6 +2331,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         _disposed = true;
         App.Theme.Changed -= _themeWatcher;
+        App.Theme.ModeChanged -= _themeModeWatcher;
         _queueSave.Stop();
         _refresh.Stop();
         _noticeTimer.Stop();

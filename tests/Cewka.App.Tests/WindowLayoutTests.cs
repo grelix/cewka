@@ -1,0 +1,332 @@
+using Avalonia;
+using Avalonia.Automation;
+using Avalonia.Controls;
+using Avalonia.Headless;
+using Avalonia.Input;
+using Avalonia.LogicalTree;
+using Avalonia.Threading;
+using Cewka.App.Controls;
+using Cewka.App.Localisation;
+using Cewka.App.Models;
+using Cewka.App.ViewModels;
+using Cewka.App.Views;
+using Xunit;
+
+namespace Cewka.App.Tests;
+
+/// <summary>Okno główne bez okna na ekranie: układ, stany okna, zapis geometrii.</summary>
+[Collection(UiCollection.Name)]
+public sealed class WindowLayoutTests
+{
+    private static MainWindow Open(double width, double height, bool panel = false, bool queue = false)
+    {
+        App.Settings.Current.Window = null;
+        App.Settings.Current.PanelOpen = panel;
+        App.Settings.Current.QueueOpen = queue;
+        App.Settings.Current.WindowControls = WindowControlsPosition.Right;
+
+        var window = new MainWindow { Width = width, Height = height };
+        window.Show();
+        Settle(window);
+        return window;
+    }
+
+    private static void Settle(Window window)
+    {
+        for (var i = 0; i < 6; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            window.Measure(new Size(window.Width, window.Height));
+            window.Arrange(new Rect(0, 0, window.Width, window.Height));
+        }
+    }
+
+    private static MainViewModel Player(MainWindow window) => (MainViewModel)window.DataContext!;
+
+    private static void Press(Window window, Key key) =>
+        window.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = key });
+
+    [Fact]
+    public void PrzelaczanieObszarowNieZmieniaRozmiaruOkna()
+    {
+        Ui.Run(() =>
+        {
+            var window = Open(1000, 560);
+
+            try
+            {
+                foreach (var toggle in new Action[] { Player(window).TogglePanel, Player(window).ToggleQueue,
+                                                     Player(window).TogglePanel, Player(window).ToggleQueue })
+                {
+                    toggle();
+                    Settle(window);
+                    Assert.Equal(1000, window.Width);
+                    Assert.Equal(560, window.Height);
+                }
+
+                Assert.Equal(760, window.MinWidth);
+                Assert.Equal(520, window.MinHeight);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void WWaskimOknieKolejkaJestNakladkaZamykanaEsc()
+    {
+        Ui.Run(() =>
+        {
+            var window = Open(900, 620, queue: true);
+
+            try
+            {
+                // Zwężone okno nie nakrywa treści kolejką bez prośby.
+                Assert.True(window.QueueIsOverlay);
+                Assert.False(Player(window).QueueOpen);
+
+                Player(window).QueueOpen = true;
+                Settle(window);
+                Assert.True(window.QueueOverlayOpen);
+                Assert.True(window.FindControl<Border>("QueueDismiss")!.IsVisible);
+
+                Press(window, Key.Escape);
+                Assert.False(Player(window).QueueOpen);
+                Assert.False(window.FindControl<Border>("QueueDismiss")!.IsVisible);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void KolejkaSchowanaPrzezZwezenieWracaPoPoszerzeniu()
+    {
+        Ui.Run(() =>
+        {
+            var window = Open(1200, 680, queue: true);
+
+            try
+            {
+                Assert.False(window.QueueIsOverlay);
+                Assert.True(Player(window).QueueOpen);
+
+                window.Width = 900;
+                Settle(window);
+                Assert.True(window.QueueIsOverlay);
+                Assert.False(Player(window).QueueOpen);
+
+                window.Width = 1200;
+                Settle(window);
+                Assert.False(window.QueueIsOverlay);
+                Assert.True(Player(window).QueueOpen);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void PokazaniePasaPrzeliczaPlyteBezZmianyRozmiaru()
+    {
+        Ui.Run(() =>
+        {
+            var window = Open(1200, 600);
+
+            try
+            {
+                var disc = window.FindControl<Panel>("DiscHost")!;
+                var without = disc.Width;
+
+                Player(window).PanelOpen = true;
+                Settle(window);
+
+                Assert.True(disc.Width < without, $"płyta {disc.Width} przy pasie, {without} bez pasa");
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void PelnyEkranWracaDoMaksymalizacjiIEscZNiegoWychodzi()
+    {
+        Ui.Run(() =>
+        {
+            var window = Open(1100, 600);
+
+            try
+            {
+                window.WindowState = WindowState.Maximized;
+                window.ToggleFullScreen();
+                Assert.Equal(WindowState.FullScreen, window.WindowState);
+
+                Press(window, Key.Escape);
+                Assert.Equal(WindowState.Maximized, window.WindowState);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void EscNajpierwZamykaNakladkePotemPelnyEkran()
+    {
+        Ui.Run(() =>
+        {
+            var window = Open(900, 620);
+
+            try
+            {
+                window.ToggleFullScreen();
+                Player(window).QueueOpen = true;
+                Settle(window);
+
+                Press(window, Key.Escape);
+                Assert.False(Player(window).QueueOpen);
+                Assert.Equal(WindowState.FullScreen, window.WindowState);
+
+                Press(window, Key.Escape);
+                Assert.Equal(WindowState.Normal, window.WindowState);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void PoZaZwyklymOknemNarozinikiSaProste()
+    {
+        Ui.Run(() =>
+        {
+            var window = Open(1100, 600);
+
+            try
+            {
+                var shell = window.FindControl<Border>("Shell")!;
+                Assert.Equal(OperatingSystem.IsWindows(), shell.Classes.Contains("square"));
+
+                window.WindowState = WindowState.Maximized;
+                Assert.True(shell.Classes.Contains("square"));
+
+                window.WindowState = WindowState.FullScreen;
+                Assert.True(shell.Classes.Contains("square"));
+
+                window.WindowState = WindowState.Normal;
+                Assert.Equal(OperatingSystem.IsWindows(), shell.Classes.Contains("square"));
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void GeometriaZPelnegoEkranuToZwykleOknoIMaksymalizacja()
+    {
+        Ui.Run(() =>
+        {
+            var window = Open(1100, 600);
+
+            try
+            {
+                window.Position = new PixelPoint(120, 80);
+                Settle(window);
+
+                window.WindowState = WindowState.Maximized;
+                window.Width = 1900;
+                window.Height = 1000;
+                Settle(window);
+                window.ToggleFullScreen();
+                Settle(window);
+
+                window.PersistGeometry();
+                var saved = App.Settings.Current.Window!;
+
+                Assert.Equal(1100, saved.Width);
+                Assert.Equal(600, saved.Height);
+                Assert.Equal(120, saved.X);
+                Assert.Equal(80, saved.Y);
+                Assert.True(saved.Maximized);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void PrzyciskMaksymalizacjiPokazujePrzywrocenieINaPelnymEkranieZnika()
+    {
+        Ui.Run(() =>
+        {
+            var window = Open(1100, 600);
+
+            try
+            {
+                var buttons = window.GetLogicalDescendants().OfType<WindowButtons>().First(b => b.IsVisible);
+                var maximise = buttons.FindControl<Button>("SquareMaximise")!;
+
+                Assert.Equal(Strings.Current["TooltipMaximise"], AutomationProperties.GetName(maximise));
+
+                window.WindowState = WindowState.Maximized;
+                Assert.Equal(Strings.Current["TooltipRestore"], AutomationProperties.GetName(maximise));
+                Assert.Equal(Strings.Current["TooltipRestore"], ToolTip.GetTip(maximise));
+
+                window.WindowState = WindowState.FullScreen;
+                Assert.False(buttons.FindControl<StackPanel>("Root")!.IsVisible);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void PrzyciskiPoLewejZamknieciemNaZewnetrznejKrawedzi()
+    {
+        Ui.Run(() =>
+        {
+            var buttons = new WindowButtons { Position = WindowControlsPosition.Left };
+            var group = buttons.FindControl<StackPanel>("SquareGroup")!;
+            Assert.Equal("SquareClose", group.Children[0].Name);
+            Assert.True(buttons.FindControl<Avalonia.Controls.Shapes.Rectangle>("SeparatorAfter")!.IsVisible);
+
+            buttons.Position = WindowControlsPosition.Right;
+            Assert.Equal("SquareClose", group.Children[^1].Name);
+            Assert.True(buttons.FindControl<Avalonia.Controls.Shapes.Rectangle>("SeparatorBefore")!.IsVisible);
+        });
+    }
+
+    [Fact]
+    public void PrzelacznikiObszarowSaPrawdziwymiPrzelacznikamiZNazwa()
+    {
+        Ui.Run(() =>
+        {
+            var window = Open(1200, 680, panel: true);
+
+            try
+            {
+                var panel = window.FindControl<Avalonia.Controls.Primitives.ToggleButton>("PanelToggle")!;
+                var queue = window.FindControl<Avalonia.Controls.Primitives.ToggleButton>("QueueToggle")!;
+
+                Assert.True(panel.IsChecked);
+                Assert.False(queue.IsChecked);
+                Assert.Equal(Strings.Current["TooltipTogglePanel"], AutomationProperties.GetName(panel));
+                Assert.Equal(Strings.Current["TooltipToggleQueue"], AutomationProperties.GetName(queue));
+
+                Player(window).QueueOpen = true;
+                Assert.True(queue.IsChecked);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void OknoUstawienOtwieraSieObokGlownego()
+    {
+        var owner = new PixelRect(100, 100, 1200, 680);
+        var size = new PixelSize(820, 640);
+
+        // Miejsce po prawej.
+        Assert.Equal(new PixelPoint(1312, 100),
+            SettingsWindow.Beside(owner, size, new PixelRect(0, 0, 2560, 1400), 12));
+
+        // Brak miejsca po prawej, jest po lewej.
+        Assert.Equal(new PixelPoint(1800 - 12 - 820, 100),
+            SettingsWindow.Beside(new PixelRect(1800, 100, 1200, 680), size, new PixelRect(0, 0, 3000, 1400), 12));
+
+        // Nigdzie się nie mieści: przy krawędzi po stronie z większą ilością miejsca.
+        var tight = SettingsWindow.Beside(new PixelRect(200, 50, 1200, 680), size, new PixelRect(0, 0, 1600, 900), 12);
+        Assert.Equal(1600 - 820, tight.X);
+        Assert.Equal(50, tight.Y);
+    }
+}

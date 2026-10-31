@@ -4,10 +4,12 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Показать или скрыть эквалайзер и эффекты (Q)",
-  "TooltipToggleQueue": "Показать или скрыть очередь (L)",
-  "TooltipTheme": "Тема",
-  "TooltipSettings": "Настройки",
+  "TooltipTogglePanel": "Эквалайзер и эффекты (Q)",
+  "TooltipToggleQueue": "Очередь (L)",
+  "TooltipThemeSystem": "Тема: системная (T)",
+  "TooltipThemeDark": "Тема: тёмная (T)",
+  "TooltipThemeLight": "Тема: светлая (T)",
+  "TooltipSettings": "Настройки (Ctrl+,)",
   "TooltipMinimise": "Свернуть",
   "TooltipMaximise": "Развернуть",
   "TooltipRestore": "Восстановить размер",
@@ -39,10 +41,11 @@
   "EffectDescriptionVirtualBass": "Гармоники самых низких тонов. Делают бас слышимым на колонках, которые его не воспроизводят.",
   "EffectDescriptionDynamicRange": "Сужает разницу между тихим и громким. Тихие места становятся слышны без подъёма громких.",
   "EffectDescriptionStereoWidth": "Расширяет стереокартину. Монофоническая сумма остаётся неизменной.",
-  "EffectsNote": "Все эффекты по умолчанию выключены и меняют звучание намеренно. Те же переключатели и ползунки есть в главном окне, рядом с эквалайзером.",
+  "HintEqualiserInMainWindow": "Эквалайзер и звуковые эффекты находятся в главном окне, на панели под проигрывателем (Q).",
 
   "OpenFiles": "Открыть файлы",
   "OpenFolder": "Открыть папку",
+  "AudioFilter": "Аудиофайлы",
   "DropHint": "Файлы и папки можно также перетащить на окно",
   "QueueRemove": "Удалить из очереди",
   "QueueClear": "Очистить очередь",
@@ -71,6 +74,7 @@
   "AudioFailure": "Не удаётся начать воспроизведение. Можно повторить попытку или выбрать другое устройство.",
 
   "Settings": "Настройки",
+  "SettingsWindowTitle": "Настройки — Cewka",
   "SectionAppearance": "Внешний вид",
   "SectionLanguage": "Язык",
   "SectionAudio": "Звук",
@@ -94,11 +98,11 @@
   "ControlsLeft": "Слева",
   "ControlsMacOs": "macOS",
 
-  "SettingEffects": "Визуальные эффекты",
+  "SettingEffects": "Анимация",
   "EffectsAuto": "Автоматически",
   "EffectsFull": "Полные",
   "EffectsReduced": "Ограниченные",
-  "HintEffects": "Автоматический режим снижает подвижность фона и вращение пластинки при работе от батареи.",
+  "HintEffects": "Автоматический режим останавливает движение фона, пластинки и волны при работе от батареи или когда анимация отключена в системе.",
 
   "SettingColours": "Интенсивность цвета",
   "ColoursSubtle": "Слабая",

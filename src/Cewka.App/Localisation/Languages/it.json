@@ -4,10 +4,12 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Mostrare o nascondere l'equalizzatore e gli effetti (Q)",
-  "TooltipToggleQueue": "Mostrare o nascondere la coda (L)",
-  "TooltipTheme": "Tema",
-  "TooltipSettings": "Impostazioni",
+  "TooltipTogglePanel": "Equalizzatore ed effetti (Q)",
+  "TooltipToggleQueue": "Coda (L)",
+  "TooltipThemeSystem": "Tema: sistema (T)",
+  "TooltipThemeDark": "Tema: scuro (T)",
+  "TooltipThemeLight": "Tema: chiaro (T)",
+  "TooltipSettings": "Impostazioni (Ctrl+,)",
   "TooltipMinimise": "Ridurre a icona",
   "TooltipMaximise": "Ingrandire",
   "TooltipRestore": "Ripristinare le dimensioni",
@@ -39,10 +41,11 @@
   "EffectDescriptionVirtualBass": "Armoniche delle note più gravi. Rendono udibili i bassi su altoparlanti che non li producono.",
   "EffectDescriptionDynamicRange": "Restringe la distanza fra piano e forte. I passaggi piani si sentono senza alzare quelli forti.",
   "EffectDescriptionStereoWidth": "Allarga l'immagine stereo. La somma monofonica resta intatta.",
-  "EffectsNote": "Tutti gli effetti sono disattivati per impostazione predefinita e alterano il suono di proposito. Gli stessi interruttori e cursori si trovano nella finestra principale, accanto all'equalizzatore.",
+  "HintEqualiserInMainWindow": "L'equalizzatore e gli effetti sonori si trovano nella finestra principale, nella fascia sotto il lettore (Q).",
 
   "OpenFiles": "Aprire file",
   "OpenFolder": "Aprire cartella",
+  "AudioFilter": "File audio",
   "DropHint": "È possibile trascinare file o una cartella anche sulla finestra",
   "QueueRemove": "Rimuovere dalla coda",
   "QueueClear": "Svuotare la coda",
@@ -71,6 +74,7 @@
   "AudioFailure": "Impossibile avviare la riproduzione. Si può riprovare o scegliere un altro dispositivo.",
 
   "Settings": "Impostazioni",
+  "SettingsWindowTitle": "Impostazioni — Cewka",
   "SectionAppearance": "Aspetto",
   "SectionLanguage": "Lingua",
   "SectionAudio": "Audio",
@@ -94,11 +98,11 @@
   "ControlsLeft": "A sinistra",
   "ControlsMacOs": "macOS",
 
-  "SettingEffects": "Effetti visivi",
+  "SettingEffects": "Animazioni",
   "EffectsAuto": "Automatico",
   "EffectsFull": "Completi",
   "EffectsReduced": "Ridotti",
-  "HintEffects": "La modalità automatica riduce il movimento dello sfondo e la rotazione del disco quando il dispositivo funziona a batteria.",
+  "HintEffects": "La modalità automatica ferma il movimento dello sfondo, del disco e dell'onda quando il dispositivo funziona a batteria o quando le animazioni sono disattivate nel sistema.",
 
   "SettingColours": "Intensità dei colori",
   "ColoursSubtle": "Tenue",

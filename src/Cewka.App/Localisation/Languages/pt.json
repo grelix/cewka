@@ -4,10 +4,12 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Mostrar ou ocultar o equalizador e os efeitos (Q)",
-  "TooltipToggleQueue": "Mostrar ou ocultar a fila (L)",
-  "TooltipTheme": "Tema",
-  "TooltipSettings": "Configurações",
+  "TooltipTogglePanel": "Equalizador e efeitos (Q)",
+  "TooltipToggleQueue": "Fila (L)",
+  "TooltipThemeSystem": "Tema: sistema (T)",
+  "TooltipThemeDark": "Tema: escuro (T)",
+  "TooltipThemeLight": "Tema: claro (T)",
+  "TooltipSettings": "Configurações (Ctrl+,)",
   "TooltipMinimise": "Minimizar",
   "TooltipMaximise": "Maximizar",
   "TooltipRestore": "Restaurar tamanho",
@@ -39,10 +41,11 @@
   "EffectDescriptionVirtualBass": "Harmônicos das notas mais graves. Tornam o grave audível em alto-falantes que não o produzem.",
   "EffectDescriptionDynamicRange": "Estreita a diferença entre o suave e o forte. Os trechos suaves ficam audíveis sem elevar os fortes.",
   "EffectDescriptionStereoWidth": "Amplia a imagem estéreo. A soma monofônica permanece intacta.",
-  "EffectsNote": "Todos os efeitos vêm desligados e alteram o som de propósito. Os mesmos interruptores e controles estão na janela principal, ao lado do equalizador.",
+  "HintEqualiserInMainWindow": "O equalizador e os efeitos sonoros ficam na janela principal, na faixa abaixo do reprodutor (Q).",
 
   "OpenFiles": "Abrir arquivos",
   "OpenFolder": "Abrir pasta",
+  "AudioFilter": "Arquivos de áudio",
   "DropHint": "Também é possível arrastar arquivos ou uma pasta para a janela",
   "QueueRemove": "Remover da fila",
   "QueueClear": "Limpar a fila",
@@ -71,6 +74,7 @@
   "AudioFailure": "Não é possível iniciar a reprodução. Pode-se tentar novamente ou escolher outro dispositivo.",
 
   "Settings": "Configurações",
+  "SettingsWindowTitle": "Configurações — Cewka",
   "SectionAppearance": "Aparência",
   "SectionLanguage": "Idioma",
   "SectionAudio": "Áudio",
@@ -94,11 +98,11 @@
   "ControlsLeft": "Esquerda",
   "ControlsMacOs": "macOS",
 
-  "SettingEffects": "Efeitos visuais",
+  "SettingEffects": "Animações",
   "EffectsAuto": "Automático",
   "EffectsFull": "Completo",
   "EffectsReduced": "Reduzido",
-  "HintEffects": "O modo automático reduz o movimento do fundo e a rotação do disco durante o uso da bateria.",
+  "HintEffects": "O modo automático para o movimento do fundo, do disco e da onda durante o uso da bateria ou quando as animações estão desativadas no sistema.",
 
   "SettingColours": "Intensidade das cores",
   "ColoursSubtle": "Sutil",

@@ -4,10 +4,12 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Show or hide the equaliser and effects (Q)",
-  "TooltipToggleQueue": "Show or hide the queue (L)",
-  "TooltipTheme": "Theme",
-  "TooltipSettings": "Settings",
+  "TooltipTogglePanel": "Equaliser and effects (Q)",
+  "TooltipToggleQueue": "Queue (L)",
+  "TooltipThemeSystem": "Theme: system (T)",
+  "TooltipThemeDark": "Theme: dark (T)",
+  "TooltipThemeLight": "Theme: light (T)",
+  "TooltipSettings": "Settings (Ctrl+,)",
   "TooltipMinimise": "Minimise",
   "TooltipMaximise": "Maximise",
   "TooltipRestore": "Restore size",
@@ -39,10 +41,11 @@
   "EffectDescriptionVirtualBass": "Harmonics of the lowest notes. They make bass audible on speakers that cannot produce it.",
   "EffectDescriptionDynamicRange": "Narrows the range between quiet and loud. Quiet passages become audible without raising the loud ones.",
   "EffectDescriptionStereoWidth": "Widens the stereo image. The mono sum is left untouched.",
-  "EffectsNote": "Every effect is off by default and changes the sound on purpose. The same switches and sliders sit in the main window, beside the equaliser.",
+  "HintEqualiserInMainWindow": "The equaliser and sound effects are in the main window, in the strip below the player (Q).",
 
   "OpenFiles": "Open files",
   "OpenFolder": "Open folder",
+  "AudioFilter": "Audio files",
   "DropHint": "Files and folders can also be dropped onto the window",
   "QueueRemove": "Remove from queue",
   "QueueClear": "Clear the queue",
@@ -71,6 +74,7 @@
   "AudioFailure": "Playback could not be started. Another attempt or a different device may help.",
 
   "Settings": "Settings",
+  "SettingsWindowTitle": "Settings — Cewka",
   "SectionAppearance": "Appearance",
   "SectionLanguage": "Language",
   "SectionAudio": "Audio",
@@ -94,11 +98,11 @@
   "ControlsLeft": "Left",
   "ControlsMacOs": "macOS",
 
-  "SettingEffects": "Visual effects",
+  "SettingEffects": "Animations",
   "EffectsAuto": "Automatic",
   "EffectsFull": "Full",
   "EffectsReduced": "Reduced",
-  "HintEffects": "The automatic mode calms the moving background and the spinning record while on battery.",
+  "HintEffects": "The automatic mode stops the moving background, record and waveform while on battery or when animations are turned off in the system.",
 
   "SettingColours": "Colour intensity",
   "ColoursSubtle": "Subtle",

@@ -100,20 +100,15 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         // wyboru języka w tej samej klasie.
         LanguageSection = new SettingsSection("SectionLanguage");
 
+        // Korektor i efekty dźwiękowe mają jedno miejsce: pas w oknie głównym. Zakładka dźwięku
+        // odsyła do niego jednym zdaniem.
         Audio = new SettingsSection("SectionAudio");
-
-        // Efekty osobno od dźwięku: w zakładce dźwięku stoją ustawienia urządzenia i wierności
-        // odtwarzania, a tu — rzeczy, które celowo zmieniają brzmienie. Mieszanie jednego
-        // z drugim kazałoby szukać wierności wśród upiększeń.
-        // Nazwa zakładki bierze się z tego samego klucza, co nagłówek pasa efektów w oknie
-        // głównym. Osobny klucz oznaczałby siedemnaście identycznych napisów do utrzymania.
-        EffectsSection = new SettingsSection("Effects");
 
         Playback = new SettingsSection("SectionPlayback");
         Integration = new SettingsSection("SectionSystem");
         About = new SettingsSection("SectionAbout");
 
-        Sections = [Appearance, LanguageSection, Audio, EffectsSection, Playback, Integration, About];
+        Sections = [Appearance, LanguageSection, Audio, Playback, Integration, About];
         Appearance.IsSelected = true;
 
         Theme = new SegmentGroup(
@@ -264,14 +259,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public SettingsSection Appearance { get; }
     public SettingsSection LanguageSection { get; }
     public SettingsSection Audio { get; }
-    public SettingsSection EffectsSection { get; }
     public SettingsSection Playback { get; }
-
-    /// <summary>
-    /// Te same obiekty, którymi steruje okno główne. Dzięki temu suwak przesunięty w jednym
-    /// miejscu widać od razu w drugim, bez żadnego uzgadniania między oknami.
-    /// </summary>
-    public IReadOnlyList<EffectViewModel> SoundEffects => _player.SoundEffects;
     public SettingsSection Integration { get; }
     public SettingsSection About { get; }
 

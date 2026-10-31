@@ -5,22 +5,18 @@
         xmlns:vm="using:Cewka.App.ViewModels"
         x:Class="Cewka.App.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
-        Title="Cewka"
+        Title="{l:Translate SettingsWindowTitle}"
         Icon="avares://Cewka/Assets/cewka.png"
         Width="820" Height="640"
         MinWidth="700" MinHeight="520"
-        WindowStartupLocation="CenterOwner"
+        CanMaximize="False"
+        WindowStartupLocation="Manual"
         Background="Transparent"
         TransparencyLevelHint="Transparent"
         WindowDecorations="None"
         ExtendClientAreaToDecorationsHint="True">
 
-  <Border x:Name="Shell"
-          CornerRadius="15"
-          ClipToBounds="True"
-          BorderBrush="{DynamicResource StrokeBrush}"
-          BorderThickness="1"
-          Background="{DynamicResource DeskBrush}">
+  <Border x:Name="Shell" Classes="shell">
 
     <DockPanel>
 
@@ -274,13 +270,13 @@
                                      BorderBrush="{DynamicResource StrokeBrush}" />
                     </Grid>
 
-                    <StackPanel Spacing="8" IsEnabled="{Binding NormalisationEnabled}">
+                    <StackPanel Classes="setting" Spacing="8" IsEnabled="{Binding NormalisationEnabled}">
                       <TextBlock Classes="setting-label" Text="{l:Translate SettingLoudnessTarget}" />
                       <c:SegmentBar Group="{Binding Loudness}" />
                       <TextBlock Classes="setting-hint" Text="{l:Translate HintLoudnessTarget}" />
                     </StackPanel>
 
-                    <Grid ColumnDefinitions="*,Auto" IsEnabled="{Binding NormalisationEnabled}">
+                    <Grid Classes="setting" ColumnDefinitions="*,Auto" IsEnabled="{Binding NormalisationEnabled}">
                       <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
                         <TextBlock Classes="setting-label" Text="{l:Translate OptionAlwaysAnalyse}" />
                         <TextBlock Classes="setting-hint" Text="{l:Translate HintAlwaysAnalyse}" />
@@ -309,59 +305,9 @@
                       <c:SegmentBar Group="{Binding Quality}" />
                       <TextBlock Classes="setting-hint" Text="{l:Translate HintQuality}" />
                     </StackPanel>
-                  </StackPanel>
-                </Border>
-              </StackPanel>
 
-              <!-- ========== Efekty ========== -->
-              <StackPanel Spacing="18" IsVisible="{Binding EffectsSection.IsSelected}">
-
-                <Border Classes="section">
-                  <StackPanel Spacing="16">
-                    <TextBlock Classes="section-title" Text="{l:Translate Effects}" />
-                    <TextBlock Classes="setting-hint" Text="{l:Translate EffectsNote}"
-                               TextWrapping="Wrap" />
-
-                    <ItemsControl ItemsSource="{Binding SoundEffects}">
-                      <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                          <StackPanel Spacing="20" />
-                        </ItemsPanelTemplate>
-                      </ItemsControl.ItemsPanel>
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:EffectViewModel">
-                          <StackPanel Spacing="9">
-
-                            <Grid ColumnDefinitions="*,Auto">
-                              <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
-                                <TextBlock Classes="setting-label" Text="{Binding Label}" />
-                                <TextBlock Classes="setting-hint" Text="{Binding Description}"
-                                           TextWrapping="Wrap" />
-                              </StackPanel>
-                              <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
-                                             IsChecked="{Binding Enabled, Mode=TwoWay}"
-                                             OffBrush="{DynamicResource TrackBrush}"
-                                             OnBrush="{DynamicResource AccentBrush}"
-                                             BorderBrush="{DynamicResource StrokeBrush}" />
-                            </Grid>
-
-                            <!-- Ten sam suwak, co w oknie glownym: oba steruja tym samym
-                                 obiektem, wiec nie ma czego miedzy nimi uzgadniac. -->
-                            <Grid ColumnDefinitions="*,44" ColumnSpacing="12"
-                                  Opacity="{Binding RowOpacity}">
-                              <c:TrackSlider Grid.Column="0" Height="18" VerticalAlignment="Center"
-                                             Value="{Binding Strength, Mode=TwoWay}" Step="0.1"
-                                             TrackThickness="4" ThumbDiameter="11"
-                                             TrackBrush="{DynamicResource TrackBrush}"
-                                             FillBrush="{DynamicResource AccentBrush}" />
-                              <TextBlock Grid.Column="1" Classes="mono faint"
-                                         Text="{Binding StrengthText}" FontSize="10.5"
-                                         VerticalAlignment="Center" HorizontalAlignment="Right" />
-                            </Grid>
-                          </StackPanel>
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <!-- Korektor i efekty mają jedno miejsce: pas w oknie głównym. -->
+                    <TextBlock Classes="setting-hint" Text="{l:Translate HintEqualiserInMainWindow}" />
                   </StackPanel>
                 </Border>
               </StackPanel>

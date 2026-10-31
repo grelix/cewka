@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
@@ -37,28 +38,41 @@ internal static class Program
         string Section = "Appearance",
         ColourIntensity Intensity = ColourIntensity.Recommended,
         bool QueueOpen = true,
-        PlaceholderPalette Palette = PlaceholderPalette.BlueViolet);
+        PlaceholderPalette Palette = PlaceholderPalette.BlueViolet,
+        bool QueueOverlay = false);
 
     private static readonly Shot[] Shots =
     [
         new("ciemny-1180", 1200, 680, ThemeVariant.Dark, true),
         new("jasny-1180", 1200, 680, ThemeVariant.Light, true),
-        new("ciemny-zwiniety", 1180, 448, ThemeVariant.Dark, false, QueueOpen: false),
-        new("jasny-zwiniety", 1180, 448, ThemeVariant.Light, false, QueueOpen: false),
+        new("ciemny-zwiniety", 1180, 520, ThemeVariant.Dark, false, QueueOpen: false),
+        new("jasny-zwiniety", 1180, 520, ThemeVariant.Light, false, QueueOpen: false),
 
-        // Waskie okna z kolejka — tam, gdzie blok odtwarzania wchodzil na liste utworow.
-        // 1160 px to zmierzona szerokosc minimalna z kolejka, wiec przypadek najciasniejszy
-        // z mozliwych; 1200 to ten sam uklad z niewielkim zapasem.
-        new("waskie-z-kolejka", 1200, 665, ThemeVariant.Dark, true),
+        // Kolumna kolejki tuz nad progiem, przy ktorym okno przechodzi na nakladke — przypadek
+        // najciasniejszy dla bloku odtwarzania obok kolumny.
+        new("waskie-z-kolejka", 1040, 680, ThemeVariant.Dark, true),
         new("waskie-z-kolejka-zapas", 1260, 680, ThemeVariant.Dark, true),
-        new("waskie-z-kolejka-bez-pasa", 1200, 480, ThemeVariant.Dark, false),
+        new("waskie-z-kolejka-bez-pasa", 1040, 520, ThemeVariant.Dark, false),
+
+        // Kolejka jako panel nakladany nad tresc w oknie wezszym niz prog kolumny.
+        new("nakladka-ciemny", 900, 620, ThemeVariant.Dark, true, QueueOpen: false, QueueOverlay: true),
+        new("nakladka-jasny", 900, 620, ThemeVariant.Light, true, QueueOpen: false, QueueOverlay: true),
+        new("nakladka-minimum", 760, 520, ThemeVariant.Dark, false, QueueOpen: false, QueueOverlay: true),
+
+        // Niskie okna z pasem: pas przewija sie, a blok odtwarzania dostaje mniejsza plyte albo wcale.
+        new("niskie-z-pasem", 1200, 560, ThemeVariant.Dark, true),
+        new("niskie-z-pasem-jasny", 1200, 560, ThemeVariant.Light, true),
+        new("niskie-waskie-z-pasem", 900, 520, ThemeVariant.Dark, true, QueueOpen: false),
+
+        // Szerokie okno: blok srodkowany granica szerokosci, pasek postepu niezalezny od tytulu.
+        new("szeroki-1920", 1920, 1040, ThemeVariant.Dark, true),
 
         // Cztery mozliwe stany dwoch niezaleznych obszarow. Odkad pas dolny i kolejka wlaczaja
         // sie osobno, kazde z tych zestawien uzytkownik moze zobaczyc — wiec kazde musi wygladac.
         new("obszary-oba", 1200, 680, ThemeVariant.Dark, true),
         new("obszary-tylko-pas", 1180, 680, ThemeVariant.Dark, true, QueueOpen: false),
         new("obszary-tylko-kolejka", 1180, 680, ThemeVariant.Dark, false),
-        new("obszary-zadne", 1180, 448, ThemeVariant.Dark, false, QueueOpen: false),
+        new("obszary-zadne", 1180, 520, ThemeVariant.Dark, false, QueueOpen: false),
         new("obszary-tylko-kolejka-jasny", 1180, 680, ThemeVariant.Light, false),
 
         // Pary o skrajnych barwach najdalszych od siebie. Odkad tlo bierze barwy wprost z pary,
@@ -67,19 +81,18 @@ internal static class Program
         new("para-turkus", 1180, 680, ThemeVariant.Dark, true, Palette: PlaceholderPalette.Turquoise),
         new("para-wisnia", 1180, 680, ThemeVariant.Dark, true, Palette: PlaceholderPalette.Cherry),
         new("para-mieta-jasny", 1180, 680, ThemeVariant.Light, true, Palette: PlaceholderPalette.Mint),
-        // Waskie okna maja kolejke schowana, bo z nia widoczna okno tak wezsze byc nie moze —
-        // szerokosc minimalna z kolejka to 1200 px. Zrzut stanu nieosiagalnego nic nie mowi.
+        // Waskie okno ponizej progu kolumny: kolejka schowana, blok odtwarzania na cala szerokosc.
         new("ciemny-waski", 920, 660, ThemeVariant.Dark, true, QueueOpen: false),
         new("ciemny-szeroki", 1600, 820, ThemeVariant.Dark, true),
         new("ciemny-pelnyekran", 2560, 1400, ThemeVariant.Dark, true),
         new("przyciski-lewo", 1180, 680, ThemeVariant.Dark, false, WindowControlsPosition.Left),
         new("przyciski-macos", 1180, 680, ThemeVariant.Dark, false, WindowControlsPosition.MacOs),
 
-        // Najciasniejsze przypadki: dokladnie wysokosc minimalna dla obu stanow panelu, w tym
-        // przy najwezszym dopuszczalnym oknie. Tu wychodzi kazde nachodzenie elementow na siebie.
-        new("minimum-panel", 1200, 665, ThemeVariant.Dark, true),
-        new("minimum-panel-waskie", 1000, 665, ThemeVariant.Dark, true, QueueOpen: false),
-        new("minimum-zwiniety", 900, 360, ThemeVariant.Dark, false, QueueOpen: false),
+        // Najciasniejsze przypadki: okno w rozmiarze minimalnym, z pasem i bez niego. Rozmiar
+        // minimalny jest staly, wiec tu wychodzi kazde nachodzenie elementow na siebie.
+        new("minimum-panel", 760, 520, ThemeVariant.Dark, true, QueueOpen: false),
+        new("minimum-panel-jasny", 760, 520, ThemeVariant.Light, true, QueueOpen: false),
+        new("minimum-zwiniety", 760, 520, ThemeVariant.Dark, false, QueueOpen: false),
 
         // Interfejs po angielsku: sprawdzenie, ze przelaczenie jezyka faktycznie dociera
         // do wszystkich napisow, a nie tylko do tych zlozonych na nowo.
@@ -167,12 +180,9 @@ internal static class Program
         // rozbija wyrazy na sylaby, wiec akurat te etykiety sa tam najbardziej narazone.
         new("ustawienia-wietnamski-wyglad", 820, 1000, ThemeVariant.Dark, true, Language: "vi"),
 
-        // Zakladka efektow: piec wpisow z opisem, przelacznikiem i suwakiem. Najdluzsza
-        // z zakladek, wiec obok widoku bez przewijania stoi zrzut calosciowy.
-        new("ustawienia-efekty", 820, 640, ThemeVariant.Dark, true, Section: "Effects"),
-        new("ustawienia-efekty-cala", 820, 1180, ThemeVariant.Dark, true, Section: "Effects"),
-        new("ustawienia-efekty-jasny", 820, 1180, ThemeVariant.Light, true, Section: "Effects"),
-        new("ustawienia-efekty-wloski", 820, 1180, ThemeVariant.Dark, true, Language: "it", Section: "Effects"),
+        // Zakladka dzwieku w calosci: na jej koncu odsylacz do korektora w oknie glownym.
+        new("ustawienia-dzwiek-cala", 820, 1000, ThemeVariant.Dark, true, Section: "Audio"),
+        new("ustawienia-dzwiek-jasny", 820, 1000, ThemeVariant.Light, true, Section: "Audio"),
 
         // Zakladka jezyka: lista trzynastu pozycji i nota o tlumaczeniu maszynowym.
         new("ustawienia-jezyk", 820, 640, ThemeVariant.Dark, true, Section: "Language"),
@@ -299,8 +309,9 @@ internal static class Program
 
         // Sprawdziany zachowania okna idą przed zrzutami: obracają stanem panelu i rozmiarem,
         // a zrzuty mają zastać ustawienia takie, jakie sobie ustawiają same.
-        var zachowanieOk = CheckPanelHeightMemory();
-        zachowanieOk &= CheckQueueWidthMemory();
+        var zachowanieOk = CheckAreasKeepWindowSize();
+        zachowanieOk &= CheckQueueModes();
+        zachowanieOk &= CheckLowWindows();
         zachowanieOk &= CheckPlaceholderBackdrop();
 
         if (track is not null && second is not null)
@@ -346,22 +357,17 @@ internal static class Program
                 $"Naglowki panelu wyrownane w pionie (najwiekszy rozjazd {_worstHeadingOffset:F2} px).");
         }
 
-        if (_worstQueueOverlap > 0)
+        if (_worstQueueOverlap > 0.5)
         {
             Console.Error.WriteLine(
-                $"BLAD ukladu: blok odtwarzania wchodzi na kolumne kolejki o " +
-                $"{_worstQueueOverlap:F1} px. Trzeba albo scisnac zawartosc, albo podniesc " +
-                "szerokosc minimalna z kolejka.");
+                $"BLAD ukladu: blok odtwarzania wchodzi na kolumne kolejki albo za prawa krawedz okna o " +
+                $"{_worstQueueOverlap:F1} px. Trzeba scisnac zawartosc albo podniesc prog kolumny kolejki.");
             zachowanieOk = false;
-        }
-        else if (double.IsNegativeInfinity(_worstQueueOverlap))
-        {
-            Console.WriteLine("Nachodzenia na kolejke nie mierzono: w tym przebiegu nie bylo jej widac.");
         }
         else
         {
             Console.WriteLine(
-                $"Blok odtwarzania miesci sie obok kolejki (najmniejszy zapas " +
+                $"Blok odtwarzania miesci sie w swoim obszarze (najmniejszy zapas " +
                 $"{-_worstQueueOverlap:F1} px).");
         }
 
@@ -532,15 +538,6 @@ internal static class Program
     private const int DurationWaitMilliseconds = 15_000;
 
     /// <summary>
-    /// Checks that expanding the panel in a window too short for it is reversible: the height
-    /// from before comes back when the panel is collapsed again, unless the user has resized
-    /// the window in between.
-    /// <para>
-    /// Three cases, because only the first two are obvious and the third is the one that used to
-    /// be wrong in the opposite direction — restoring a height the user had since overruled.
-    /// </para>
-    /// </summary>
-    /// <summary>
     /// Czy plamy tla przy okladce domyslnej biora skrajne barwy pary, a nie ich usrednienie.
     ///
     /// <para>Odczyt barw z narysowanego obrazka przechodzi przez kubelkowanie i usrednianie,
@@ -613,67 +610,57 @@ internal static class Program
     private static string Odcienie(IReadOnlyList<Color> colours) =>
         string.Join(" ", colours.Select(c => $"{c}({c.ToHsl().H:F0})"));
 
+    /// <summary>Daje układowi okna ustalić się przy zadanym rozmiarze, bez robienia zdjęcia.</summary>
+    private static void Settle(Window window, double width, double height)
+    {
+        for (var i = 0; i < 8; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            window.Measure(new Size(width, height));
+            window.Arrange(new Rect(0, 0, width, height));
+        }
+    }
+
     /// <summary>
-    /// To samo dla szerokosci, ktora pilnuje kolumna kolejki.
-    ///
-    /// <para>Odkad pas dolny i kolejka wlaczaja sie niezaleznie, kazdy z nich odpowiada za swoj
-    /// wymiar: pas za wysokosc, kolejka za szerokosc. Wspolny warunek przywracania cofalby
-    /// szerokosc przy chowaniu korektora, ktory z szerokoscia nie ma nic wspolnego.</para>
+    /// Pokazanie i schowanie pasa dolnego oraz kolejki nie zmienia rozmiaru okna. Treść oddaje
+    /// miejsce sama: pas się przewija, kolejka w wąskim oknie staje się nakładką.
     /// </summary>
-    private static bool CheckQueueWidthMemory()
+    private static bool CheckAreasKeepWindowSize()
     {
         CewkaApplication.Settings.Current.Window = null;
         CewkaApplication.Settings.Current.PanelOpen = false;
         CewkaApplication.Settings.Current.QueueOpen = false;
 
-        // Ponizej minimum z kolejka (1000), powyzej minimum bez niej (900).
-        const double startingWidth = 950;
-        var window = new MainWindow { Width = startingWidth, Height = 500 };
+        const double width = 1000, height = 560;
+        var window = new MainWindow { Width = width, Height = height };
         var player = (MainViewModel)window.DataContext!;
         var dobrze = true;
 
         try
         {
             window.Show();
-            Dispatcher.UIThread.RunJobs();
+            Settle(window, width, height);
 
-            player.ToggleQueue();
-            Dispatcher.UIThread.RunJobs();
-            var zKolejka = window.Width;
-
-            player.ToggleQueue();
-            Dispatcher.UIThread.RunJobs();
-            var bezKolejki = window.Width;
-
-            Console.WriteLine($"       szerokosc: start {startingWidth}  -> kolejka {zKolejka}" +
-                              $"  -> po schowaniu {bezKolejki}");
-
-            if (zKolejka <= startingWidth)
+            foreach (var (nazwa, przelacz) in new (string, Action)[]
+                     {
+                         ("pas", player.TogglePanel), ("kolejka", player.ToggleQueue),
+                         ("pas", player.TogglePanel), ("kolejka", player.ToggleQueue),
+                     })
             {
-                Console.Error.WriteLine("  BLAD: pokazanie kolejki nie poszerzylo okna.");
-                dobrze = false;
+                przelacz();
+                Settle(window, width, height);
+
+                if (Math.Abs(window.Width - width) > 0.5 || Math.Abs(window.Height - height) > 0.5)
+                {
+                    Console.Error.WriteLine(
+                        $"  BLAD: przelaczenie obszaru „{nazwa}” zmienilo rozmiar okna z {width}x{height} " +
+                        $"na {window.Width}x{window.Height}.");
+                    dobrze = false;
+                    break;
+                }
             }
 
-            if (Math.Abs(bezKolejki - startingWidth) > 0.5)
-            {
-                Console.Error.WriteLine(
-                    $"  BLAD: po schowaniu kolejki okno ma {bezKolejki}, a powinno wrocic " +
-                    $"do {startingWidth}.");
-                dobrze = false;
-            }
-
-            // Pas dolny nie ma prawa ruszyc szerokosci — to osobny wymiar i osobny obszar.
-            var przedPasem = window.Width;
-            player.TogglePanel();
-            Dispatcher.UIThread.RunJobs();
-
-            if (Math.Abs(window.Width - przedPasem) > 0.5)
-            {
-                Console.Error.WriteLine(
-                    $"  BLAD: pokazanie pasa dolnego zmienilo szerokosc z {przedPasem} " +
-                    $"na {window.Width}; obszary maja byc niezalezne.");
-                dobrze = false;
-            }
+            Console.WriteLine($"       rozmiar minimalny okna: {window.MinWidth}x{window.MinHeight}");
         }
         finally
         {
@@ -681,85 +668,160 @@ internal static class Program
             Dispatcher.UIThread.RunJobs();
         }
 
-        if (dobrze) Console.WriteLine("  ok   pamiec szerokosci okna i niezaleznosc obszarow");
+        if (dobrze) Console.WriteLine("  ok   pokazanie i schowanie pasa i kolejki nie zmienia rozmiaru okna");
         return dobrze;
     }
 
-    private static bool CheckPanelHeightMemory()
-    {
-        // Zadnej zapamietanej geometrii: inaczej odtworzenie rozmiaru z ustawien nadpisalo by
-        // wysokosc, ktora ten sprawdzian wlasnie ustawia.
-        CewkaApplication.Settings.Current.Window = null;
-        CewkaApplication.Settings.Current.PanelOpen = false;
-        CewkaApplication.Settings.Current.QueueOpen = false;
+    /// <summary>Szerokości okna, przy których sprawdzany jest układ kolejki i bloku odtwarzania.</summary>
+    private static readonly int[] QueueSweep =
+        [760, 820, 900, 960, 1000, 1020, 1030, 1040, 1060, 1080, 1100, 1140, 1200, 1300, 1500, 1900];
 
-        const double startingHeight = 500;
-        var window = new MainWindow { Width = 1180, Height = startingHeight };
-        var player = (MainViewModel)window.DataContext!;
+    /// <summary>
+    /// Kolejka w kolumnie, gdy okno jest dość szerokie, a w węższym jako nakładka. Dla każdej
+    /// szerokości mierzone jest, czy blok odtwarzania nie sięga kolumny kolejki (albo prawej
+    /// krawędzi okna przy nakładce). Nakładka nie otwiera się sama przy zwężeniu okna, a Esc ją zamyka.
+    /// Najmniejsza szerokość z kolumną to zmierzony próg.
+    /// </summary>
+    private static bool CheckQueueModes()
+    {
+        var dobrze = true;
+        int? prog = null;
+
+        foreach (var width in QueueSweep)
+        {
+            CewkaApplication.Settings.Current.Window = null;
+            CewkaApplication.Settings.Current.PanelOpen = true;
+            CewkaApplication.Settings.Current.QueueOpen = true;
+
+            const double height = 680;
+            var window = new MainWindow { Width = width, Height = height };
+            var player = (MainViewModel)window.DataContext!;
+
+            try
+            {
+                window.Show();
+                Settle(window, width, height);
+
+                var queue = window.FindControl<Border>("QueueColumn")!;
+                var overlay = queue.Classes.Contains("queue-overlay");
+
+                if (overlay)
+                {
+                    if (prog is not null)
+                    {
+                        Console.Error.WriteLine($"  BLAD: przy {width} px kolejka znow jest nakladka, choc przy {prog} px byla kolumna.");
+                        dobrze = false;
+                    }
+
+                    if (player.QueueOpen)
+                    {
+                        Console.Error.WriteLine($"  BLAD: przy {width} px nakladka kolejki otworzyla sie sama.");
+                        dobrze = false;
+                    }
+
+                    player.QueueOpen = true;
+                    Settle(window, width, height);
+                }
+                else
+                {
+                    prog ??= width;
+                }
+
+                var zapas = -MeasureRightEdgeOverlap(window, report: false);
+                var disc = window.FindControl<Panel>("DiscHost")!;
+                Console.WriteLine(
+                    $"       {width,5} px: {(overlay ? "nakladka" : "kolumna "),-8}  plyta {(disc.IsVisible ? disc.Bounds.Width : 0),4:F0}" +
+                    $"  zapas {zapas,6:F1} px");
+
+                if (zapas < -0.5)
+                {
+                    Console.Error.WriteLine($"  BLAD: przy {width} px blok odtwarzania wychodzi o {-zapas:F1} px za swoj obszar.");
+                    dobrze = false;
+                }
+
+                if (overlay)
+                {
+                    window.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
+                    Settle(window, width, height);
+
+                    if (player.QueueOpen)
+                    {
+                        Console.Error.WriteLine($"  BLAD: przy {width} px Esc nie zamknal nakladki kolejki.");
+                        dobrze = false;
+                    }
+                }
+            }
+            finally
+            {
+                window.Close();
+                Dispatcher.UIThread.RunJobs();
+            }
+        }
+
+        Console.WriteLine(prog is null
+            ? "       kolejka nie stanela w kolumnie przy zadnej szerokosci"
+            : $"       prog kolumny kolejki: {prog} px");
+
+        if (dobrze) Console.WriteLine("  ok   kolejka w kolumnie albo w nakladce, bez nachodzenia na blok odtwarzania");
+        return dobrze;
+    }
+
+    /// <summary>
+    /// Niskie okna z pasem dolnym: rząd transportu mieści się w obszarze nad pasem, a pas przewija
+    /// to, czego nie zmieści.
+    /// </summary>
+    private static bool CheckLowWindows()
+    {
         var dobrze = true;
 
-        try
+        foreach (var (width, height) in new[] { (760, 520), (900, 520), (1200, 520), (1200, 560), (1200, 680), (1600, 600) })
         {
-            window.Show();
-            Dispatcher.UIThread.RunJobs();
+            CewkaApplication.Settings.Current.Window = null;
+            CewkaApplication.Settings.Current.PanelOpen = true;
+            CewkaApplication.Settings.Current.QueueOpen = false;
 
-            player.TogglePanel();
-            Dispatcher.UIThread.RunJobs();
-            var rozwiniete = window.Height;
+            var window = new MainWindow { Width = width, Height = height };
 
-            player.TogglePanel();
-            Dispatcher.UIThread.RunJobs();
-            var zwiniete = window.Height;
-
-            Console.WriteLine($"       wysokosc: start {startingHeight}  -> panel {rozwiniete}" +
-                              $"  -> po schowaniu {zwiniete}");
-
-            if (rozwiniete <= startingHeight)
+            try
             {
-                Console.Error.WriteLine("  BLAD: rozwiniecie panelu nie podnioslo okna.");
-                dobrze = false;
+                window.Show();
+                Settle(window, width, height);
+
+                var host = window.FindControl<Panel>("CentreHost")!;
+                var transport = window.FindControl<Grid>("TransportRow")!;
+                var info = window.FindControl<StackPanel>("TrackInfo")!;
+                var scroll = window.FindControl<ScrollViewer>("PanelScroll")!;
+                var disc = window.FindControl<Panel>("DiscHost")!;
+
+                var hostTop = host.TranslatePoint(new Point(0, 0), window)!.Value.Y;
+                var hostBottom = host.TranslatePoint(new Point(0, host.Bounds.Height), window)!.Value.Y;
+                var infoTop = info.TranslatePoint(new Point(0, 0), window)!.Value.Y;
+                var transportBottom = transport.TranslatePoint(new Point(0, transport.Bounds.Height), window)!.Value.Y;
+
+                var zapas = Math.Min(hostBottom - transportBottom, infoTop - hostTop);
+                var przewijanie = scroll.Extent.Height > scroll.Viewport.Height + 0.5;
+
+                Console.WriteLine(
+                    $"       {width}x{height}: obszar {host.Bounds.Height:F0}  pas {scroll.Bounds.Height:F0}" +
+                    $"{(przewijanie ? " (przewija)" : "")}  plyta {(disc.IsVisible ? disc.Bounds.Width : 0):F0}  zapas {zapas:F1} px");
+
+                if (zapas < -0.5)
+                {
+                    Console.Error.WriteLine(
+                        $"  BLAD: przy {width}x{height} blok odtwarzania wychodzi o {-zapas:F1} px poza obszar nad pasem.");
+                    dobrze = false;
+                }
             }
-
-            if (Math.Abs(zwiniete - startingHeight) > 0.5)
+            finally
             {
-                Console.Error.WriteLine(
-                    $"  BLAD: po schowaniu panelu okno ma {zwiniete}, a powinno wrocic " +
-                    $"do {startingHeight}.");
-                dobrze = false;
-            }
-
-            // Trzeci przypadek: uzytkownik sam zmienia rozmiar, gdy panel jest rozwiniety.
-            // Wtedy zapamietana wysokosc traci waznosc i okno ma zostac tam, gdzie je postawil.
-            player.TogglePanel();
-            Dispatcher.UIThread.RunJobs();
-
-            const double wybranaPrzezUzytkownika = 760;
-            window.Height = wybranaPrzezUzytkownika;
-            Dispatcher.UIThread.RunJobs();
-
-            player.TogglePanel();
-            Dispatcher.UIThread.RunJobs();
-
-            Console.WriteLine($"       po recznej zmianie na {wybranaPrzezUzytkownika}: {window.Height}");
-
-            if (Math.Abs(window.Height - wybranaPrzezUzytkownika) > 0.5)
-            {
-                Console.Error.WriteLine(
-                    $"  BLAD: okno cofnelo reczna zmiane rozmiaru — ma {window.Height}, " +
-                    $"a powinno zostac na {wybranaPrzezUzytkownika}.");
-                dobrze = false;
+                window.Close();
+                Dispatcher.UIThread.RunJobs();
             }
         }
-        finally
-        {
-            window.Close();
-            Dispatcher.UIThread.RunJobs();
-        }
 
-        if (dobrze) Console.WriteLine("  ok   pamiec wysokosci okna przy zwijaniu panelu");
+        if (dobrze) Console.WriteLine("  ok   blok odtwarzania miesci sie nad pasem takze w niskim oknie");
         return dobrze;
     }
-
     /// <summary>
     /// Checks that the two panel headings sit on the same line, and reports by how much they
     /// miss if they do not.
@@ -833,7 +895,6 @@ internal static class Program
     private static SettingsSection SectionOf(SettingsViewModel viewModel, string name) => name switch
     {
         "Language" => viewModel.LanguageSection,
-        "Effects" => viewModel.EffectsSection,
         "Audio" => viewModel.Audio,
         "Playback" => viewModel.Playback,
         "Integration" => viewModel.Integration,
@@ -978,9 +1039,8 @@ internal static class Program
         CewkaApplication.Settings.Current.ColourIntensity = shot.Intensity;
         Cewka.App.Localisation.Strings.Current.SetLanguage(shot.Language);
 
-        // Rozmiar nigdy poniżej tego, co okno dopuszcza. Przypisanie Width wprost omija
-        // ograniczenie, którego pilnuje ApplyPanelConstraints, i zrzut pokazywałby wtedy układ
-        // nieosiągalny dla użytkownika — a wraz z nim usterki, których w programie nie ma.
+        // Rozmiar nigdy poniżej minimalnego okna: zrzut pokazywałby wtedy układ nieosiągalny dla
+        // użytkownika, a wraz z nim usterki, których w programie nie ma.
         var window = new MainWindow();
         window.Width = Math.Max(shot.Width, window.MinWidth);
         window.Height = Math.Max(shot.Height, window.MinHeight);
@@ -991,7 +1051,13 @@ internal static class Program
         // Modelu widoku nie zwalniamy tutaj: robi to MainWindow.OnClosed, a drugie zwolnienie
         // konczy sie wyjatkiem.
         Render(window, shot, outputDirectory,
-            afterShow: () => PrepareTrack(window),
+            afterShow: () =>
+            {
+                PrepareTrack(window);
+
+                // Nakladka kolejki otwiera sie dopiero na zyczenie, wiec zdjecie otwiera ja samo.
+                if (shot.QueueOverlay && window.DataContext is MainViewModel player) player.QueueOpen = true;
+            },
             beforeCapture: () =>
             {
                 MeasureQueueOverlap(window);
@@ -1020,36 +1086,47 @@ internal static class Program
     /// </remarks>
     private static double _worstQueueOverlap = double.NegativeInfinity;
 
-    /// <summary>Nazwy elementow, ktore nie maja prawa siegnac kolumny kolejki.</summary>
-    private static readonly string[] MustNotReachQueue = ["VolumeSlider", "TrackInfo", "Seek"];
+    /// <summary>Nazwy elementow, ktore nie maja prawa siegnac kolumny kolejki ani prawej krawedzi okna.</summary>
+    private static readonly string[] MustNotReachQueue = ["VolumeSlider", "TrackInfo", "Seek", "TransportRow"];
 
     private static void MeasureQueueOverlap(MainWindow window)
     {
-        var queue = window.FindControl<Border>("QueueColumn");
-        if (queue is null || !queue.IsVisible) return;
+        var overlap = MeasureRightEdgeOverlap(window, report: true);
+        if (overlap > _worstQueueOverlap) _worstQueueOverlap = overlap;
+    }
 
-        var queueLeft = queue.TranslatePoint(new Point(0, 0), window)?.X;
-        if (queueLeft is null) return;
+    /// <summary>
+    /// Najglebsze wejscie bloku odtwarzania za jego prawa krawedz: lewa krawedz kolumny kolejki,
+    /// a gdy kolejka jest nakladka albo jej nie ma, prawa krawedz okna. Wartosc ujemna to zapas.
+    /// </summary>
+    private static double MeasureRightEdgeOverlap(MainWindow window, bool report)
+    {
+        var queue = window.FindControl<Border>("QueueColumn");
+        var column = queue is { IsVisible: true } && !queue.Classes.Contains("queue-overlay");
+
+        var edge = column ? queue!.TranslatePoint(new Point(0, 0), window)?.X ?? window.Bounds.Width : window.Bounds.Width;
+        var worst = double.NegativeInfinity;
 
         foreach (var name in MustNotReachQueue)
         {
             var control = window.FindControl<Control>(name);
-            if (control is null || !control.IsVisible || control.Bounds.Width <= 0) continue;
+            if (control is null || !control.IsEffectivelyVisible || control.Bounds.Width <= 0) continue;
 
             var right = control.TranslatePoint(new Point(control.Bounds.Width, 0), window)?.X;
             if (right is null) continue;
 
-            var overlap = right.Value - queueLeft.Value;
-            if (overlap > _worstQueueOverlap) _worstQueueOverlap = overlap;
+            var overlap = right.Value - edge;
+            if (overlap > worst) worst = overlap;
 
-            if (overlap > 0)
+            if (report && overlap > 0.5)
             {
                 Console.WriteLine(
-                    $"       nachodzi: {name} konczy sie {overlap:F1} px za krawedzia kolejki");
+                    $"       nachodzi: {name} konczy sie {overlap:F1} px za krawedzia " +
+                    (column ? "kolejki" : "okna"));
             }
         }
 
-        if (_worstQueueOverlap > 0)
+        if (report && worst > 0.5)
         {
             // Rozbicie szerokosci na skladniki: bez tego widac tylko, ze nie miesci sie,
             // a nie wiadomo, co zabiera miejsce.
@@ -1059,12 +1136,13 @@ internal static class Program
             var volume = window.FindControl<Control>("VolumeSlider");
 
             Console.WriteLine(
-                $"       szerokosci: okno {window.Bounds.Width:F0}  kolejka od {queueLeft:F0}" +
+                $"       szerokosci: okno {window.Bounds.Width:F0}  krawedz {edge:F0}" +
                 $"  srodek {centre?.Bounds.Width ?? -1:F0}  blok {playing?.Bounds.Width ?? -1:F0}" +
                 $"  plyta {disc?.Bounds.Width ?? -1:F0}  glosnosc {volume?.Bounds.Width ?? -1:F0}");
         }
-    }
 
+        return worst;
+    }
     /// <summary>
     /// Half a pixel: anything below that is rounding in the layout pass, not a mistake in it.
     /// </summary>

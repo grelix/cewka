@@ -4,10 +4,12 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Zobrazit nebo skrýt ekvalizér a efekty (Q)",
-  "TooltipToggleQueue": "Zobrazit nebo skrýt frontu (L)",
-  "TooltipTheme": "Motiv",
-  "TooltipSettings": "Nastavení",
+  "TooltipTogglePanel": "Ekvalizér a efekty (Q)",
+  "TooltipToggleQueue": "Fronta (L)",
+  "TooltipThemeSystem": "Motiv: systémový (T)",
+  "TooltipThemeDark": "Motiv: tmavý (T)",
+  "TooltipThemeLight": "Motiv: světlý (T)",
+  "TooltipSettings": "Nastavení (Ctrl+,)",
   "TooltipMinimise": "Minimalizovat",
   "TooltipMaximise": "Maximalizovat",
   "TooltipRestore": "Obnovit velikost",
@@ -39,10 +41,11 @@
   "EffectDescriptionVirtualBass": "Harmonické nejnižších tónů. Zpřístupní basy na reproduktorech, které je nevytvoří.",
   "EffectDescriptionDynamicRange": "Zúžení rozsahu hlasitosti. Tiché pasáže jsou slyšet bez zesilování hlasitých.",
   "EffectDescriptionStereoWidth": "Rozšíření stereobáze. Monofonní součet zůstává nezměněn.",
-  "EffectsNote": "Všechny efekty jsou ve výchozím stavu vypnuté a mění zvuk záměrně. Tytéž přepínače a posuvníky jsou v hlavním okně vedle ekvalizéru.",
+  "HintEqualiserInMainWindow": "Ekvalizér a zvukové efekty jsou v hlavním okně, v pásu pod přehrávačem (Q).",
 
   "OpenFiles": "Otevřít soubory",
   "OpenFolder": "Otevřít složku",
+  "AudioFilter": "Zvukové soubory",
   "DropHint": "Soubory a složky lze také přetáhnout na okno",
   "QueueRemove": "Odebrat z fronty",
   "QueueClear": "Vyprázdnit frontu",
@@ -71,6 +74,7 @@
   "AudioFailure": "Přehrávání nelze spustit. Lze to zkusit znovu nebo zvolit jiné zařízení.",
 
   "Settings": "Nastavení",
+  "SettingsWindowTitle": "Nastavení — Cewka",
   "SectionAppearance": "Vzhled",
   "SectionLanguage": "Jazyk",
   "SectionAudio": "Zvuk",
@@ -94,11 +98,11 @@
   "ControlsLeft": "Vlevo",
   "ControlsMacOs": "macOS",
 
-  "SettingEffects": "Vizuální efekty",
+  "SettingEffects": "Animace",
   "EffectsAuto": "Automatické",
   "EffectsFull": "Plné",
   "EffectsReduced": "Omezené",
-  "HintEffects": "Automatický režim omezuje pohyb pozadí a otáčení desky při provozu na baterii.",
+  "HintEffects": "Automatický režim zastaví pohyb pozadí, desky a vlny při provozu na baterii nebo při animacích vypnutých v systému.",
 
   "SettingColours": "Intenzita barev",
   "ColoursSubtle": "Jemná",

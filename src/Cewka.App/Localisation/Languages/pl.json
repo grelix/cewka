@@ -4,10 +4,12 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Pokaż lub ukryj korektor i efekty (Q)",
-  "TooltipToggleQueue": "Pokaż lub ukryj kolejkę (L)",
-  "TooltipTheme": "Motyw",
-  "TooltipSettings": "Ustawienia",
+  "TooltipTogglePanel": "Korektor i efekty (Q)",
+  "TooltipToggleQueue": "Kolejka (L)",
+  "TooltipThemeSystem": "Motyw: systemowy (T)",
+  "TooltipThemeDark": "Motyw: ciemny (T)",
+  "TooltipThemeLight": "Motyw: jasny (T)",
+  "TooltipSettings": "Ustawienia (Ctrl+,)",
   "TooltipMinimise": "Minimalizuj",
   "TooltipMaximise": "Maksymalizuj",
   "TooltipRestore": "Przywróć rozmiar",
@@ -39,10 +41,11 @@
   "EffectDescriptionVirtualBass": "Harmoniczne najniższych tonów. Dają słyszalny bas na głośnikach, które go nie wytwarzają.",
   "EffectDescriptionDynamicRange": "Zawężenie rozpiętości głośności. Ciche fragmenty stają się słyszalne bez podnoszenia głośnych.",
   "EffectDescriptionStereoWidth": "Poszerzenie bazy stereo. Suma monofoniczna pozostaje nienaruszona.",
-  "EffectsNote": "Wszystkie efekty są domyślnie wyłączone i zmieniają brzmienie celowo. Te same przełączniki i suwaki są w oknie głównym, obok korektora.",
+  "HintEqualiserInMainWindow": "Korektor i efekty dźwiękowe są w oknie głównym, w pasie pod odtwarzaczem (Q).",
 
   "OpenFiles": "Otwórz pliki",
   "OpenFolder": "Otwórz folder",
+  "AudioFilter": "Pliki dźwiękowe",
   "DropHint": "Można też przeciągnąć pliki lub folder na okno",
   "QueueRemove": "Usuń z kolejki",
   "QueueClear": "Wyczyść kolejkę",
@@ -71,6 +74,7 @@
   "AudioFailure": "Nie można uruchomić odtwarzania. Można spróbować ponownie albo wybrać inne urządzenie.",
 
   "Settings": "Ustawienia",
+  "SettingsWindowTitle": "Ustawienia — Cewka",
   "SectionAppearance": "Wygląd",
   "SectionLanguage": "Język",
   "SectionAudio": "Dźwięk",
@@ -94,11 +98,11 @@
   "ControlsLeft": "Po lewej",
   "ControlsMacOs": "macOS",
 
-  "SettingEffects": "Efekty wizualne",
+  "SettingEffects": "Animacje",
   "EffectsAuto": "Automatycznie",
   "EffectsFull": "Pełne",
   "EffectsReduced": "Ograniczone",
-  "HintEffects": "Tryb automatyczny ogranicza ruch tła i obrót płyty podczas pracy na baterii.",
+  "HintEffects": "Tryb automatyczny zatrzymuje ruch tła, płyty i fali przy pracy na baterii oraz przy animacjach wyłączonych w systemie.",
 
   "SettingColours": "Intensywność barw",
   "ColoursSubtle": "Subtelna",

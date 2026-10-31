@@ -1,9 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Chrome;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Markup.Xaml;
-using Avalonia.Media;
+using Avalonia.Layout;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -34,15 +34,10 @@ public partial class MainWindow : Window
     private const double UprightReturnSeconds = 0.45;
 
     /// <summary>
-    /// Breakpoints for the layout. Avalonia has no equivalent of CSS media queries, and
-    /// driving this through style classes proved unreliable at start-up, when the window
-    /// bounds are still zero. Setting the handful of affected properties directly is both
-    /// deterministic and easy to follow.
-    /// </summary>
-    /// <summary>
-    /// Layout steps, from a narrow window to a maximised one on a large display. Without the
-    /// upper steps the record and the title stay the size they were designed at, and the
-    /// window on a 27-inch screen reads as a small interface stranded in a lot of empty space.
+    /// Layout steps by window width, from a narrow window to a maximised one on a large display.
+    /// Avalonia has no equivalent of CSS media queries, so the handful of affected properties
+    /// is set directly. Without the upper steps the window on a 27-inch screen reads as a small
+    /// interface stranded in a lot of empty space.
     /// </summary>
     private static readonly (double MinWidth, double Disc, double Title, double Queue, double Volume)[]
         LayoutSteps =
@@ -54,57 +49,66 @@ public partial class MainWindow : Window
             (2400, 468, 64, 400, 132),
         ];
 
-    /// <summary>Grab band along the window border for resizing.</summary>
+    /// <summary>Grab band along the window border for resizing, where the system gives none.</summary>
     private const double ResizeMargin = 6;
 
     /// <summary>
-    /// Smallest window height that still fits everything, with and without the panel.
-    ///
-    /// <para>Musi zależeć od stanu panelu, bo panel korektora i kolejki ma własną wysokość
-    /// naturalną i nie da się jej skurczyć. Przy jednej, wspólnej wartości można było zwinąć
-    /// panel, zmniejszyć okno do minimum, a potem panel rozwinąć — i wtedy nie było już miejsca
-    /// na blok odtwarzania, który wychodził poza swój obszar i nachodził na panel.</para>
-    ///
-    /// <para>Wartości wynikają z pomiaru: pasek tytułu 47, panel około 255, a blok odtwarzania
-    /// z najmniejszą płytą i ściśniętymi marginesami około 300.</para>
+    /// Najmniejsza szerokość okna, przy której kolejka stoi w kolumnie obok bloku odtwarzania.
+    /// Węższe okno pokazuje ją jako panel nakładany nad treść. Wartość z pomiaru narzędziem
+    /// zrzutów: od 1040 px blok odtwarzania mieści się obok kolumny z płytą w rozmiarze
+    /// najmniejszego stopnia układu (228 px), a poniżej płyta musiałaby się kurczyć.
     /// </summary>
-    /// <para>Wartość podniesiona z 620 na 665, odkąd efekty stanęły obok korektora: ich wiersze
-    /// są dwupoziomowe — nazwa nad suwakiem — i pas dolny urósł o mniej więcej 45 px. Przy
-    /// dawnym minimum nic wprawdzie nie nachodziło na siebie, ale blok odtwarzania tracił
-    /// dokładnie tyle, ile zyskał panel.</para>
-    private const double MinHeightWithPanel = 665;
-    private const double MinHeightWithoutPanel = 360;
+    internal const double QueueColumnMinWidth = 1040;
 
-    /// <summary>
-    /// Szerokości minimalne. Kolumna kolejki zabiera z okna od 280 px wzwyż, więc przy panelu
-    /// rozwiniętym obszar odtwarzania potrzebuje szerszego okna niż wtedy, gdy panel jest schowany.
-    /// </summary>
-    /// <para>Wartość z kolejką ustalona pomiarem, a nie szacunkiem — poprzednie 1000 px było
-    /// zgadnięte i przy tej szerokości blok odtwarzania wychodził na listę utworów o 79 px.
-    /// Narzędzie zrzutów mierzy teraz to nachodzenie przy każdym zrzucie i zatrzymuje przebieg,
-    /// gdy wróci.</para>
-    private const double MinWidthWithQueue = 1200;
-    private const double MinWidthWithoutQueue = 900;
+    /// <summary>Rozmiar projektowy okna przy pierwszym uruchomieniu, przycinany do ekranu.</summary>
+    private const double DesignWidth = 1200;
+    private const double DesignHeight = 680;
+
+    /// <summary>Szerokość, którą musi mieć opis utworu, żeby rząd transportu nie wychodził poza blok.</summary>
+    private const double TrackInfoMinWidth = 440;
+
+    /// <summary>Płyta mniejsza od tego wygląda jak usterka, więc znika, oddając miejsce tekstowi.</summary>
+    private const double SmallestDisc = 140;
+
+    /// <summary>Pas dolny nie maleje poniżej tej wysokości; resztę przewija.</summary>
+    private const double SmallestPanel = 150;
 
     private readonly MainViewModel _viewModel;
     private readonly RenderLoop _rotation;
     private TimeSpan _lastRotationFrame;
     private double _angle;
-
-    /// <summary>
-    /// Height the window had before expanding the panel forced it taller, and the height that
-    /// was forced. Both are needed: the first is where to go back to, the second is how to tell
-    /// whether the user has resized the window since.
-    /// </summary>
-    private double? _heightBeforePanel;
-    private double _forcedHeight;
-    private double? _widthBeforePanel;
-    private double _forcedWidth;
+    private bool _animationsFrozen;
 
     /// <summary>Set while the record is coasting to a stop at the top of its revolution.</summary>
     private bool _returningUpright;
     private double _returnFrom;
     private double _returnElapsed;
+
+    /// <summary>
+    /// W Windows okno ma systemową ramkę (bez paska tytułu): przyciąganie do krawędzi, Win+strzałki,
+    /// układy przyciągania i zmianę rozmiaru daje system. W Linuksie okno jest bez dekoracji,
+    /// a przesuwanie i zmianę rozmiaru obsługuje kod poniżej.
+    /// </summary>
+    private readonly bool _systemFrame;
+
+    /// <summary>Położenie i rozmiar z ostatniej chwili w stanie Normal; tylko te trafiają do ustawień.</summary>
+    private PixelPoint _normalPosition;
+    private Size _normalSize;
+    private bool _normalPositionKnown;
+
+    /// <summary>Ostatni stan Normal albo Maximized: do niego wraca okno po pełnym ekranie i minimalizacji.</summary>
+    private WindowState _lastRegularState = WindowState.Normal;
+    private WindowState _stateBeforeFullScreen = WindowState.Normal;
+
+    /// <summary>Kolejka jako panel nakładany nad treść (wąskie okno) zamiast kolumny.</summary>
+    private bool _queueAsOverlay;
+
+    /// <summary>
+    /// Kolejkę schowało zwężenie okna, a nie użytkownik. Po poszerzeniu wraca sama, a do ustawień
+    /// trafia jako otwarta.
+    /// </summary>
+    private bool _queueCollapsedByWidth;
+    private bool _adjustingQueue;
 
     public MainWindow()
     {
@@ -118,81 +122,33 @@ public partial class MainWindow : Window
 
         _rotation = new RenderLoop(this, OnRotationFrame);
 
-        // Ograniczenie wysokosci przed odtworzeniem geometrii: zapamietany rozmiar sprawdzany
-        // jest wzgledem MinHeight, a to zalezy od tego, czy panel jest rozwiniety.
-        ApplyPanelConstraints();
+        _systemFrame = OperatingSystem.IsWindows();
+        if (_systemFrame) WindowDecorations = WindowDecorations.BorderOnly;
+
+        ApplyWindowShape();
         RestoreGeometry();
 
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DropEvent, OnDrop);
 
+        PositionChanged += (_, _) => RememberNormalBounds();
+        CentreHost.SizeChanged += (_, _) => ApplyResponsiveLayout();
+        TrackInfo.SizeChanged += (_, _) => ApplyResponsiveLayout();
+
         _viewModel.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(MainViewModel.CurrentIndex)) SyncQueueSelection();
-            else if (e.PropertyName == nameof(MainViewModel.PanelOpen)) ApplyPanelConstraints();
-            else if (e.PropertyName == nameof(MainViewModel.QueueOpen)) ApplyPanelConstraints();
-            else if (e.PropertyName == nameof(MainViewModel.ReducedEffects)) BeginUprightReturn();
+            switch (e.PropertyName)
+            {
+                case nameof(MainViewModel.CurrentIndex): SyncQueueSelection(); break;
+                case nameof(MainViewModel.QueueOpen): OnQueueOpenChanged(); break;
+                case nameof(MainViewModel.PanelOpen): ApplyResponsiveLayout(); break;
+                case nameof(MainViewModel.IsPlaying): UpdateRotationLoop(); break;
+                case nameof(MainViewModel.ReducedEffects):
+                    BeginUprightReturn();
+                    UpdateRotationLoop();
+                    break;
+            }
         };
-    }
-
-    /// <summary>
-    /// Keeps the window tall enough for what it currently shows. Rozwinięcie panelu w oknie
-    /// niższym niż jego zawartość podnosi okno do wysokości minimalnej — inaczej nie ma
-    /// fizycznie miejsca, w którym blok odtwarzania mógłby się zmieścić.
-    ///
-    /// <para>Podniesienie jest odwracalne: wysokość sprzed rozwinięcia wraca po schowaniu
-    /// panelu. Bez tego okno rosło w jedną stronę — każde pokazanie korektora zostawiało je
-    /// wyższym na stałe, choć powód, dla którego urosło, już nie istniał.</para>
-    /// </summary>
-    private void ApplyPanelConstraints()
-    {
-        // Kazdy wymiar zalezy od swojego obszaru: pas dolny zabiera wysokosc, kolumna kolejki
-        // szerokosc. Odkad wlacza sie je osobno, wiazanie obu miar z jednym stanem kazaloby
-        // oknu rosnac w bok po pokazaniu samego korektora.
-        var minimumHeight = _viewModel.PanelOpen ? MinHeightWithPanel : MinHeightWithoutPanel;
-        var minimumWidth = _viewModel.QueueOpen ? MinWidthWithQueue : MinWidthWithoutQueue;
-
-        MinHeight = minimumHeight;
-        MinWidth = minimumWidth;
-
-        if (WindowState != WindowState.Normal) return;
-
-        // Odkąd kolejka stoi po prawej, rozwinięcie panelu zabiera miejsce w obu wymiarach,
-        // więc obie miary muszą zachowywać się tak samo: podnieść, gdy trzeba, i wrócić,
-        // gdy panel się chowa.
-        Height = Constrain(
-            Height, minimumHeight, _viewModel.PanelOpen, ref _heightBeforePanel, ref _forcedHeight);
-
-        Width = Constrain(
-            Width, minimumWidth, _viewModel.QueueOpen, ref _widthBeforePanel, ref _forcedWidth);
-    }
-
-    /// <summary>
-    /// Jeden wymiar okna: podnosi go do wymaganego minimum i zapamiętuje, skąd wyszedł, a przy
-    /// chowaniu panelu przywraca zapamiętaną wartość.
-    ///
-    /// <para>Przywrócenie następuje tylko wtedy, gdy od podniesienia nikt nie chwycił krawędzi
-    /// okna. Porównanie z wartością, którą sami wymusiliśmy, wystarcza i nie zależy od kolejności
-    /// zdarzeń rozmiaru: jeśli użytkownik ustawił okno sam, cofanie tego byłoby odebraniem mu
-    /// decyzji.</para>
-    /// </summary>
-    private static double Constrain(
-        double current, double minimum, bool areaOpen, ref double? before, ref double forced)
-    {
-        if (current < minimum)
-        {
-            before = current;
-            forced = minimum;
-            return minimum;
-        }
-
-        // Przywracanie dotyczy obszaru, ktory ten wymiar obsluguje: wysokosci pilnuje pas dolny,
-        // szerokosci kolumna kolejki. Wspolny warunek cofalby szerokosc przy chowaniu korektora.
-        if (areaOpen || before is not { } wanted) return current;
-
-        var restored = Math.Abs(current - forced) < 0.5 ? Math.Max(wanted, minimum) : current;
-        before = null;
-        return restored;
     }
 
     // ================= Cykl zycia =================
@@ -218,7 +174,7 @@ public partial class MainWindow : Window
 
         AttachMediaPanel();
 
-        _rotation.Start();
+        UpdateRotationLoop();
     }
 
     /// <summary>
@@ -265,7 +221,7 @@ public partial class MainWindow : Window
 
         mpris.RaiseRequested += () => Dispatcher.UIThread.Post(() =>
         {
-            if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+            if (WindowState == WindowState.Minimized) WindowState = _lastRegularState;
             Activate();
         });
 
@@ -281,6 +237,10 @@ public partial class MainWindow : Window
         App.BeginClosing();
         _rotation.Stop();
         PersistGeometry();
+
+        // Kolejkę schowało tylko wąskie okno; przy następnym starcie ma wrócić, jeśli się zmieści.
+        if (_queueCollapsedByWidth) App.Settings.Current.QueueOpen = true;
+
         _viewModel.SaveQueueState();
         App.Settings.SaveNow();
         App.ReleaseSingleInstance();
@@ -297,56 +257,175 @@ public partial class MainWindow : Window
     protected override void OnSizeChanged(SizeChangedEventArgs e)
     {
         base.OnSizeChanged(e);
+        RememberNormalBounds();
         ApplyResponsiveLayout();
     }
 
-    // ================= Geometria okna =================
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property == WindowStateProperty) OnWindowStateChanged(change.GetNewValue<WindowState>());
+    }
+
+    // ================= Stan i geometria okna =================
+
+    private void OnWindowStateChanged(WindowState state)
+    {
+        if (state is WindowState.Normal or WindowState.Maximized) _lastRegularState = state;
+
+        ApplyWindowShape();
+        RememberNormalBounds();
+    }
+
+    /// <summary>
+    /// Proste narożniki bez obwódki poza zwykłym oknem, a w Windows zawsze, bo tam narożniki,
+    /// obwódkę i cień rysuje system. Na pełnym ekranie pasek tytułu nie przesuwa okna.
+    /// </summary>
+    private void ApplyWindowShape()
+    {
+        var state = WindowState;
+        Shell.Classes.Set("square", _systemFrame || state is WindowState.Maximized or WindowState.FullScreen);
+
+        if (_systemFrame)
+        {
+            WindowDecorationProperties.SetElementRole(TitleBar, state == WindowState.FullScreen
+                ? WindowDecorationsElementRole.None
+                : WindowDecorationsElementRole.TitleBar);
+        }
+    }
+
+    /// <summary>
+    /// Zapamiętuje położenie i rozmiar zwykłego okna. Zatwierdzane po obsłużeniu bieżących
+    /// komunikatów: w Windows zdarzenie przesunięcia przychodzi przed zmianą stanu, więc położenie
+    /// okna maksymalizowanego wziętoby za zwykłe.
+    /// </summary>
+    private void RememberNormalBounds()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (WindowState != WindowState.Normal || !IsVisible) return;
+
+            _normalPosition = Position;
+            _normalPositionKnown = true;
+            _normalSize = ClientSize;
+        });
+    }
 
     private void RestoreGeometry()
     {
         var saved = App.Settings.Current.Window;
-        if (saved is null) return;
 
-        if (saved.Width >= MinWidth && saved.Height >= MinHeight)
+        if (saved is null)
         {
-            Width = saved.Width;
-            Height = saved.Height;
+            // Pierwsze uruchomienie: rozmiar projektowy, ale nie większy niż 90 % obszaru roboczego.
+            if (WorkingArea(Screens.Primary) is { } primary)
+            {
+                Width = Math.Max(MinWidth, Math.Min(DesignWidth, primary.Width * 0.9));
+                Height = Math.Max(MinHeight, Math.Min(DesignHeight, primary.Height * 0.9));
+            }
+
+            _normalSize = new Size(Width, Height);
+            return;
         }
 
-        // A monitor may have been unplugged since the last run; only restore the
-        // position if it still lands on a screen that exists.
-        var point = new PixelPoint(saved.X, saved.Y);
-        if (Screens.ScreenFromPoint(point) is not null)
+        Width = Math.Max(MinWidth, saved.Width);
+        Height = Math.Max(MinHeight, saved.Height);
+
+        // Ekran mógł zniknąć albo zmienić rozdzielczość od ostatniego razu. Okno trafia na ekran,
+        // na którym leży największa część jego paska tytułu, i tak, żeby pasek dało się chwycić.
+        if (ScreenForTitleBar(saved) is { } screen)
         {
+            var area = screen.WorkingArea;
+            var scale = screen.Scaling;
+
+            Width = Math.Max(MinWidth, Math.Min(Width, area.Width / scale));
+            Height = Math.Max(MinHeight, Math.Min(Height, area.Height / scale));
+
+            var width = (int)(Width * scale);
+            var grip = (int)(100 * scale);
+            var x = Math.Clamp(saved.X, area.X - width + grip, area.Right - grip);
+            var y = Math.Clamp(saved.Y, area.Y, Math.Max(area.Y, area.Bottom - (int)(47 * scale)));
+
             WindowStartupLocation = WindowStartupLocation.Manual;
-            Position = point;
+            Position = new PixelPoint(x, y);
+            _normalPosition = Position;
+            _normalPositionKnown = true;
         }
+
+        _normalSize = new Size(Width, Height);
 
         if (saved.Maximized) WindowState = WindowState.Maximized;
-
-        // Wysokość zapamiętana chwilę wcześniej przez ApplyHeightConstraint dotyczyła rozmiaru
-        // projektowego, a nie rozmiaru z poprzedniego uruchomienia. Po odtworzeniu geometrii
-        // nie ma już do czego wracać: to, co widzi użytkownik, jest jego własnym wyborem.
-        _heightBeforePanel = null;
     }
 
-    private void PersistGeometry()
+    /// <summary>Obszar roboczy ekranu w jednostkach logicznych.</summary>
+    private static Size? WorkingArea(Avalonia.Platform.Screen? screen) =>
+        screen is null ? null : new Size(screen.WorkingArea.Width / screen.Scaling, screen.WorkingArea.Height / screen.Scaling);
+
+    private Avalonia.Platform.Screen? ScreenForTitleBar(WindowGeometry saved)
     {
-        var maximized = WindowState == WindowState.Maximized;
+        Avalonia.Platform.Screen? best = null;
+        long bestArea = 0;
+
+        foreach (var screen in Screens.All)
+        {
+            var strip = new PixelRect(saved.X, saved.Y,
+                (int)(saved.Width * screen.Scaling), (int)(47 * screen.Scaling));
+            var common = strip.Intersect(screen.WorkingArea);
+            var area = (long)common.Width * common.Height;
+
+            if (area > bestArea)
+            {
+                bestArea = area;
+                best = screen;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// Zapisuje geometrię zwykłego okna z ostatniej chwili w stanie Normal. Zamknięcie na pełnym
+    /// ekranie zapisuje się jak maksymalizacja, a w zminimalizowanym oknie liczy się stan sprzed.
+    /// </summary>
+    internal void PersistGeometry()
+    {
+        var state = WindowState;
+        var maximized = state is WindowState.Maximized or WindowState.FullScreen
+                        || (state == WindowState.Minimized && _lastRegularState == WindowState.Maximized);
+
+        var previous = App.Settings.Current.Window;
+        var position = _normalPositionKnown ? _normalPosition : new PixelPoint(previous?.X ?? Position.X, previous?.Y ?? Position.Y);
 
         App.Settings.Current.Window = new WindowGeometry
         {
-            // While maximized the current bounds describe the screen, not the window
-            // the user actually sized, so keep whatever was stored before.
-            X = maximized ? App.Settings.Current.Window?.X ?? Position.X : Position.X,
-            Y = maximized ? App.Settings.Current.Window?.Y ?? Position.Y : Position.Y,
-            Width = maximized ? App.Settings.Current.Window?.Width ?? Width : Width,
-            Height = maximized ? App.Settings.Current.Window?.Height ?? Height : Height,
+            X = position.X,
+            Y = position.Y,
+            Width = _normalSize.Width,
+            Height = _normalSize.Height,
             Maximized = maximized,
         };
 
         App.Settings.Touch();
     }
+
+    private void ToggleMaximise() =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    /// <summary>Pełny ekran wraca do stanu sprzed niego: zmaksymalizowane okno zostaje zmaksymalizowane.</summary>
+    internal void ToggleFullScreen()
+    {
+        if (WindowState == WindowState.FullScreen)
+        {
+            WindowState = _stateBeforeFullScreen;
+            return;
+        }
+
+        _stateBeforeFullScreen = WindowState == WindowState.Maximized ? WindowState.Maximized : WindowState.Normal;
+        WindowState = WindowState.FullScreen;
+    }
+
+    // ================= Układ =================
 
     private void ApplyResponsiveLayout()
     {
@@ -361,54 +440,129 @@ public partial class MainWindow : Window
 
         var compact = width < LayoutSteps[1].MinWidth;
 
-        if (DiscHost is not null)
-        {
-            // Plyta rosnie z szerokoscia, ale nie moze przerosnac wysokosci dostepnej
-            // po odjeciu paska tytulu, panelu i marginesow.
-            var vertical = Math.Max(200, height - 47 - (_viewModel.PanelOpen ? 300 : 90) - 120);
-            var size = Math.Min(step.Disc, vertical);
+        ApplyQueueMode(width);
 
-            DiscHost.Width = size;
-            DiscHost.Height = size;
-        }
+        var queueWidth = _queueAsOverlay ? Math.Min(step.Queue, width - 80) : step.Queue;
+        QueueColumn.Width = queueWidth;
 
-        if (TrackTitle is not null) TrackTitle.FontSize = step.Title;
+        var contentWidth = width - (!_queueAsOverlay && _viewModel.QueueOpen ? queueWidth : 0);
 
-        if (TrackArtist is not null) TrackArtist.FontSize = Math.Round(step.Title * 0.40, 1);
+        // Pas dolny dostaje tyle, ile zostaje po bloku odtwarzania; nadmiar przewija.
+        var body = height - (TitleBar.Bounds.Height > 0 ? TitleBar.Bounds.Height : 47);
+        var info = TrackInfo.DesiredSize.Height > 0 ? TrackInfo.DesiredSize.Height : 300;
+        PanelScroll.MaxHeight = Math.Max(SmallestPanel, body - info - 22);
 
-        if (NowPlaying is not null)
-        {
-            var padding = compact ? 28 : Math.Min(72, 40 + (width - 1180) * 0.05);
+        var centreHeight = CentreHost.Bounds.Height > 0 ? CentreHost.Bounds.Height : body;
 
-            // Odstep od gory i dolu rosnie z wysokoscia okna, zamiast byc staly. W oknie
-            // sciscietym do minimum kazdy niepotrzebny piksel oddechu odbiera miejsce trescii,
-            // a przy duzej wysokosci ten sam odstep wygladalby na skapy.
-            var room = Math.Clamp((height - MinHeightWithPanel) / 240, 0, 1);
-            var top = 14 + room * (compact ? 12 : 24);
-            var bottom = 8 + room * (compact ? 6 : 10);
+        // Odstęp od góry i dołu rośnie z wolnym miejscem. W ciasnym oknie każdy piksel oddechu
+        // odbiera miejsce treści, a przy dużej wysokości ten sam odstęp wyglądałby na skąpy.
+        var room = Math.Clamp((centreHeight - info - 22) / 240, 0, 1);
+        var top = 14 + room * (compact ? 12 : 24);
+        var bottom = 8 + room * (compact ? 6 : 10);
 
-            NowPlaying.Margin = new Thickness(padding, top, padding, bottom);
-            NowPlaying.ColumnSpacing = compact ? 32 : Math.Min(72, 48 + (width - 1180) * 0.03);
-        }
+        var padding = compact ? 28 : Math.Min(72, 40 + (width - 1180) * 0.05);
+        var spacing = compact ? 32 : Math.Min(72, 48 + (width - 1180) * 0.03);
 
-        // Prawa kolumna rozciaga sie swobodnie do granicy, powyzej ktorej pasek postepu
-        // przestaje byc czytelny; wtedy caly blok jest srodkowany zamiast rozciagany.
-        if (NowPlaying is not null)
-            NowPlaying.HorizontalAlignment = width > 1700
-                ? Avalonia.Layout.HorizontalAlignment.Center
-                : Avalonia.Layout.HorizontalAlignment.Stretch;
+        // Płyta rośnie z szerokością okna, ale nie może przerosnąć wolnej wysokości ani zabrać
+        // opisowi utworu miejsca na rząd transportu. Za mała znika całkiem.
+        var disc = Math.Min(step.Disc, Math.Min(
+            centreHeight - top - bottom,
+            contentWidth - 2 * padding - spacing - TrackInfoMinWidth));
+        var showDisc = disc >= SmallestDisc;
 
-        // Podzial pasa dolnego na korektor i efekty jest proporcja zapisana w XAML, wiec kod
-        // nie ma tu juz nic do roboty. Kolejka rosnie z oknem tak samo jak reszta.
-        if (QueueColumn is not null) QueueColumn.Width = step.Queue;
+        DiscHost.IsVisible = showDisc;
+        DiscHost.Width = DiscHost.Height = Math.Max(SmallestDisc, disc);
+
+        NowPlaying.Margin = new Thickness(padding, top, padding, bottom);
+        NowPlaying.ColumnSpacing = showDisc ? spacing : 0;
+
+        // Szeroki blok jest środkowany przez granicę szerokości, a nie przez wyrównanie: przy
+        // wyrównaniu do środka szerokość paska postępu zależałaby od długości tytułu.
+        NowPlaying.MaxWidth = (showDisc ? DiscHost.Width + spacing : 0) + TrackInfo.MaxWidth;
+
+        // Niskie okno: mniejszy tytuł, żeby rząd transportu nie wypadł poza blok.
+        var titleSize = centreHeight < 330 ? Math.Min(step.Title, 30) : step.Title;
+        TrackTitle.FontSize = titleSize;
+        TrackArtist.FontSize = Math.Round(titleSize * 0.40, 1);
 
         // Pasek glosnosci to jedyny element rzedu transportu o swobodnej szerokosci, wiec on
-        // ustepuje pierwszy. Rzed ma naturalna szerokosc ponad 400 px i nic go nie sciska;
-        // przy waskim oknie z kolejka wychodzil poza swoj obszar i rysowal sie na liscie utworow.
-        if (VolumeSlider is not null) VolumeSlider.Width = step.Volume;
+        // ustepuje pierwszy, gdy rzad sie nie miesci.
+        VolumeSlider.Width = step.Volume;
+    }
+
+    /// <summary>
+    /// Kolumna kolejki albo panel nakładany. Przejście w nakładkę chowa kolejkę: panel, który
+    /// sam nakrywa treść przy zwężaniu okna, zabierałby ją bez prośby.
+    /// </summary>
+    private void ApplyQueueMode(double width)
+    {
+        var overlay = width < QueueColumnMinWidth;
+
+        if (overlay != _queueAsOverlay)
+        {
+            _queueAsOverlay = overlay;
+
+            if (overlay && _viewModel.QueueOpen)
+            {
+                _queueCollapsedByWidth = true;
+                SetQueueOpen(false);
+            }
+            else if (!overlay && _queueCollapsedByWidth)
+            {
+                _queueCollapsedByWidth = false;
+                SetQueueOpen(true);
+            }
+
+            Grid.SetColumn(QueueColumn, overlay ? 0 : 1);
+            Grid.SetColumnSpan(QueueColumn, overlay ? 2 : 1);
+            QueueColumn.HorizontalAlignment = overlay ? HorizontalAlignment.Right : HorizontalAlignment.Stretch;
+            QueueColumn.Classes.Set("queue-overlay", overlay);
+        }
+
+        QueueDismiss.IsVisible = overlay && _viewModel.QueueOpen;
+    }
+
+    private void SetQueueOpen(bool open)
+    {
+        _adjustingQueue = true;
+        try { _viewModel.QueueOpen = open; }
+        finally { _adjustingQueue = false; }
+    }
+
+    private void OnQueueOpenChanged()
+    {
+        if (!_adjustingQueue) _queueCollapsedByWidth = false;
+
+        QueueDismiss.IsVisible = _queueAsOverlay && _viewModel.QueueOpen;
+        ApplyResponsiveLayout();
+    }
+
+    /// <summary>Nakładana kolejka jest otwarta.</summary>
+    internal bool QueueOverlayOpen => _queueAsOverlay && _viewModel.QueueOpen;
+
+    internal bool QueueIsOverlay => _queueAsOverlay;
+
+    private void OnQueueDismissPressed(object? sender, PointerPressedEventArgs e)
+    {
+        _viewModel.QueueOpen = false;
+        e.Handled = true;
     }
 
     // ================= Obrot plyty i tla =================
+
+    /// <summary>Pętla obrotu działa tylko wtedy, gdy płyta się kręci albo dojeżdża do pionu.</summary>
+    private void UpdateRotationLoop()
+    {
+        if (_animationsFrozen || _rotation.IsRunning || !IsVisible) return;
+        if (!SpinNeeded) return;
+
+        _lastRotationFrame = TimeSpan.Zero;
+        _rotation.Start();
+    }
+
+    private bool SpinNeeded => (_viewModel.IsPlaying && !_viewModel.ReducedEffects) || _returningUpright;
+
+    internal bool IsRotating => _rotation.IsRunning;
 
     private void OnRotationFrame(TimeSpan timestamp)
     {
@@ -432,15 +586,14 @@ public partial class MainWindow : Window
         {
             AdvanceUprightReturn(delta);
         }
+
+        if (!SpinNeeded) _rotation.Stop();
     }
 
     /// <summary>
-    /// Starts the record coasting to rest with the cover the right way up.
-    /// <para>
-    /// Cutting the effects used to leave the rotation wherever it happened to be, so the sleeve
-    /// ended up on its side or upside down and stayed there — the one state in which a still
+    /// Starts the record coasting to rest with the cover the right way up. Cutting the effects
+    /// used to leave the sleeve on its side or upside down — the one state in which a still
     /// picture of a record looks wrong.
-    /// </para>
     /// </summary>
     private void BeginUprightReturn()
     {
@@ -480,17 +633,14 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Brings every moving part to a fixed, repeatable state: the record upright, the background
-    /// blobs at the start of their paths, the waveform at the start of its cycle.
-    /// <para>
-    /// This is for the snapshot tool. All three animations run off wall-clock time, so two runs
-    /// of the same code produced two different pictures — which made the snapshots useless for
-    /// the one job they exist to do, namely comparing one version of the interface against the
-    /// next. Photographs of a paused player, so nothing here invents motion that isn't there.
-    /// </para>
+    /// Brings every moving part to a fixed, repeatable state for the snapshot tool: the record
+    /// upright, the background blobs at the start of their paths, the waveform at the start of
+    /// its cycle. All three run off wall-clock time, so without this two runs of the same code
+    /// produced two different pictures.
     /// </summary>
     public void FreezeAnimationsForCapture()
     {
+        _animationsFrozen = true;
         _rotation.Stop();
         _returningUpright = false;
         _angle = 0;
@@ -503,14 +653,13 @@ public partial class MainWindow : Window
     private void ApplyAngle()
     {
         if (Disc is not null) Disc.Angle = _angle;
-        if (Backdrop?.RenderTransform is RotateTransform rotate) rotate.Angle = _angle;
     }
 
     // ================= Poswiata pod kursorem =================
 
     private void OnDiscPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (Glow is null || DiscHost is null) return;
+        if (Glow is null || !DiscHost.IsVisible) return;
         if (_viewModel.ReducedEffects) { Glow.Intensity = 0; return; }
 
         var position = e.GetPosition(Glow);
@@ -520,8 +669,8 @@ public partial class MainWindow : Window
         var distance = Math.Sqrt(
             Math.Pow(position.X - centre.X, 2) + Math.Pow(position.Y - centre.Y, 2));
 
-        // Full strength over the record, fading out as the pointer moves away.
-        var proximity = Math.Clamp(1 - (distance - radius) / 340, 0, 1);
+        // Full strength over the record, fading out as the pointer moves away across the block.
+        var proximity = Math.Clamp(1 - Math.Max(0, distance - radius) / 340, 0, 1);
 
         Glow.Centre = position;
         Glow.Intensity = 0.25 + 0.75 * proximity;
@@ -618,10 +767,6 @@ public partial class MainWindow : Window
 
     private void OnToggleRepeat(object? sender, RoutedEventArgs e) => _viewModel.CycleRepeat();
 
-    private void OnTogglePanel(object? sender, RoutedEventArgs e) => _viewModel.TogglePanel();
-
-    private void OnToggleQueue(object? sender, RoutedEventArgs e) => _viewModel.ToggleQueue();
-
     private void OnToggleLimiter(object? sender, RoutedEventArgs e) =>
         _viewModel.LimiterEnabled = !_viewModel.LimiterEnabled;
 
@@ -637,12 +782,16 @@ public partial class MainWindow : Window
 
     private SettingsWindow? _settingsWindow;
 
+    internal SettingsWindow? OpenSettingsWindow => _settingsWindow;
+
     /// <summary>
     /// Opens the settings, or brings them forward if they are already up. Shown beside the
     /// player rather than over it: several of the settings are judged by ear, which needs the
     /// music playing and the transport reachable.
     /// </summary>
-    private void OnOpenSettings(object? sender, RoutedEventArgs e)
+    private void OnOpenSettings(object? sender, RoutedEventArgs e) => OpenSettings();
+
+    internal void OpenSettings()
     {
         if (_settingsWindow is not null)
         {
@@ -650,7 +799,12 @@ public partial class MainWindow : Window
             return;
         }
 
-        _settingsWindow = new SettingsWindow(new SettingsViewModel(App.Settings, _viewModel));
+        _settingsWindow = new SettingsWindow(new SettingsViewModel(App.Settings, _viewModel))
+        {
+            PlaybackShortcuts = HandlePlaybackShortcut,
+        };
+
+        _settingsWindow.PlaceBeside(this);
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show(this);
     }
@@ -773,7 +927,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private static FilePickerFileType BuildAudioFilter() => new("Pliki dźwiękowe")
+    private static FilePickerFileType BuildAudioFilter() => new(Strings.Current["AudioFilter"])
     {
         Patterns = AudioFileFormatDetector.SupportedExtensions.Select(ext => "*" + ext).ToArray(),
     };
@@ -952,15 +1106,6 @@ public partial class MainWindow : Window
         return -1;
     }
 
-    // ================= Sterowanie oknem =================
-
-    /// <summary>
-    /// Minimise, maximise and close live in <see cref="Controls.WindowButtons"/>, which acts
-    /// on the window directly. Only the double-click on the title bar is handled here.
-    /// </summary>
-    private void ToggleMaximise() =>
-        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
-
     // ================= Skroty klawiszowe =================
 
     /// <summary>
@@ -996,14 +1141,15 @@ public partial class MainWindow : Window
             case Key.M: _viewModel.ToggleMute(); break;
 
             // --- interfejs ---
-            //
-            // Q zostaje przy pasie dolnym, bo tak bylo. Kolejka dostaje L, jak lista — ten sam
-            // skrot pelni te role w VLC i w kilku innych odtwarzaczach, wiec nie trzeba go
-            // wymyslac od nowa.
             case Key.Q: _viewModel.TogglePanel(); break;
             case Key.L: _viewModel.ToggleQueue(); break;
             case Key.T: OnToggleTheme(this, new RoutedEventArgs()); break;
             case Key.F11: ToggleFullScreen(); break;
+            case Key.OemComma when control: OpenSettings(); break;
+
+            // Esc najpierw zamyka nakładaną kolejkę, potem kończy pełny ekran.
+            case Key.Escape when QueueOverlayOpen: _viewModel.QueueOpen = false; break;
+            case Key.Escape when WindowState == WindowState.FullScreen: ToggleFullScreen(); break;
 
             // --- kolejka ---
             case Key.Delete: OnQueueRemove(this, new RoutedEventArgs()); break;
@@ -1014,8 +1160,34 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void ToggleFullScreen() =>
-        WindowState = WindowState == WindowState.FullScreen ? WindowState.Normal : WindowState.FullScreen;
+    /// <summary>
+    /// Skróty odtwarzania i głośności, które przyjmuje także okno ustawień: Spacja, strzałki,
+    /// Ctrl+strzałki i M. Skróty interfejsu (Q, L, Delete) dotyczą tylko tego okna.
+    /// </summary>
+    internal bool HandlePlaybackShortcut(KeyEventArgs e)
+    {
+        var modifiers = e.KeyModifiers;
+        var none = modifiers == KeyModifiers.None;
+        var control = modifiers == KeyModifiers.Control;
+
+        switch (e.Key)
+        {
+            case Key.Space when none: _viewModel.TogglePlay(); break;
+            case Key.Right when control: _viewModel.Next(); SyncQueueSelection(); break;
+            case Key.Left when control: _viewModel.Previous(); SyncQueueSelection(); break;
+            case Key.Right when none: _viewModel.SeekRelative(_viewModel.SeekStep); break;
+            case Key.Left when none: _viewModel.SeekRelative(-_viewModel.SeekStep); break;
+            case Key.Up when none: _viewModel.AdjustVolume(0.05); break;
+            case Key.Down when none: _viewModel.AdjustVolume(-0.05); break;
+            case Key.M when none: _viewModel.ToggleMute(); break;
+            default: return false;
+        }
+
+        e.Handled = true;
+        return true;
+    }
+
+    // ================= Sterowanie oknem bez ramki systemowej =================
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
@@ -1025,23 +1197,32 @@ public partial class MainWindow : Window
 
         var position = e.GetPosition(this);
 
-        if (WindowState == WindowState.Normal && TryGetResizeEdge(position) is { } edge)
+        if (!_systemFrame && WindowState == WindowState.Normal && TryGetResizeEdge(position) is { } edge)
         {
             BeginResizeDrag(edge, e);
             return;
         }
 
-        // Dragging anywhere on the empty part of the title bar moves the window.
-        if (TitleBar is not null && position.Y <= TitleBar.Bounds.Height)
+        if (position.Y > TitleBar.Bounds.Height) return;
+
+        // Na pełnym ekranie pasek tytułu nie przesuwa okna; dwuklik z niego wychodzi.
+        if (WindowState == WindowState.FullScreen)
         {
-            if (e.ClickCount == 2) ToggleMaximise();
-            else BeginMoveDrag(e);
+            if (e.ClickCount == 2) ToggleFullScreen();
+            return;
         }
+
+        // W Windows przesuwanie i dwuklik obsługuje system, bo pasek jest oznaczony jako pasek tytułu.
+        if (_systemFrame) return;
+
+        if (e.ClickCount == 2) ToggleMaximise();
+        else BeginMoveDrag(e);
     }
 
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
+        if (_systemFrame) return;
 
         if (WindowState != WindowState.Normal)
         {
@@ -1061,10 +1242,7 @@ public partial class MainWindow : Window
         };
     }
 
-    /// <summary>
-    /// Works out which border the pointer is over. Without system decorations the window
-    /// has no resize frame of its own, so one is provided here.
-    /// </summary>
+    /// <summary>Works out which border the pointer is over, for the frame drawn by the program.</summary>
     private WindowEdge? TryGetResizeEdge(Point position)
     {
         var left = position.X <= ResizeMargin;

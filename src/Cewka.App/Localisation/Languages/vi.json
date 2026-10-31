@@ -4,10 +4,12 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Hiện hoặc ẩn bộ cân bằng âm và hiệu ứng (Q)",
-  "TooltipToggleQueue": "Hiện hoặc ẩn hàng đợi (L)",
-  "TooltipTheme": "Chủ đề",
-  "TooltipSettings": "Cài đặt",
+  "TooltipTogglePanel": "Bộ cân bằng âm và hiệu ứng (Q)",
+  "TooltipToggleQueue": "Hàng đợi (L)",
+  "TooltipThemeSystem": "Chủ đề: hệ thống (T)",
+  "TooltipThemeDark": "Chủ đề: tối (T)",
+  "TooltipThemeLight": "Chủ đề: sáng (T)",
+  "TooltipSettings": "Cài đặt (Ctrl+,)",
   "TooltipMinimise": "Thu nhỏ",
   "TooltipMaximise": "Phóng to",
   "TooltipRestore": "Khôi phục kích thước",
@@ -39,10 +41,11 @@
   "EffectDescriptionVirtualBass": "Hài của những nốt trầm nhất. Giúp nghe được bass trên loa không tái tạo được chúng.",
   "EffectDescriptionDynamicRange": "Thu hẹp khoảng cách giữa nhỏ và to. Đoạn nhỏ trở nên nghe rõ mà không phải nâng đoạn to.",
   "EffectDescriptionStereoWidth": "Mở rộng hình ảnh stereo. Tổng mono giữ nguyên.",
-  "EffectsNote": "Mọi hiệu ứng đều tắt theo mặc định và thay đổi âm thanh một cách có chủ đích. Các công tắc và thanh trượt tương tự nằm ở cửa sổ chính, cạnh bộ chỉnh âm.",
+  "HintEqualiserInMainWindow": "Bộ cân bằng âm và hiệu ứng âm thanh nằm trong cửa sổ chính, ở dải bên dưới trình phát (Q).",
 
   "OpenFiles": "Mở tệp",
   "OpenFolder": "Mở thư mục",
+  "AudioFilter": "Tệp âm thanh",
   "DropHint": "Cũng có thể kéo tệp hoặc thư mục vào cửa sổ",
   "QueueRemove": "Xóa khỏi hàng đợi",
   "QueueClear": "Xóa toàn bộ hàng đợi",
@@ -71,6 +74,7 @@
   "AudioFailure": "Không thể bắt đầu phát. Có thể thử lại hoặc chọn thiết bị khác.",
 
   "Settings": "Cài đặt",
+  "SettingsWindowTitle": "Cài đặt — Cewka",
   "SectionAppearance": "Giao diện",
   "SectionLanguage": "Ngôn ngữ",
   "SectionAudio": "Âm thanh",
@@ -94,11 +98,11 @@
   "ControlsLeft": "Bên trái",
   "ControlsMacOs": "macOS",
 
-  "SettingEffects": "Hiệu ứng hình ảnh",
+  "SettingEffects": "Hiệu ứng chuyển động",
   "EffectsAuto": "Tự động",
   "EffectsFull": "Đầy đủ",
   "EffectsReduced": "Hạn chế",
-  "HintEffects": "Chế độ tự động giảm chuyển động của nền và đĩa quay khi máy chạy bằng pin.",
+  "HintEffects": "Chế độ tự động dừng chuyển động của nền, đĩa và sóng khi máy chạy bằng pin hoặc khi hoạt ảnh bị tắt trong hệ thống.",
 
   "SettingColours": "Cường độ màu sắc",
   "ColoursSubtle": "Nhẹ nhàng",

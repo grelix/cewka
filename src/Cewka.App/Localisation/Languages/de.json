@@ -4,10 +4,12 @@
 
   "AppName": "Cewka",
 
-  "TooltipTogglePanel": "Equalizer und Effekte ein- oder ausblenden (Q)",
-  "TooltipToggleQueue": "Warteschlange ein- oder ausblenden (L)",
-  "TooltipTheme": "Design",
-  "TooltipSettings": "Einstellungen",
+  "TooltipTogglePanel": "Equalizer und Effekte (Q)",
+  "TooltipToggleQueue": "Warteschlange (L)",
+  "TooltipThemeSystem": "Design: System (T)",
+  "TooltipThemeDark": "Design: dunkel (T)",
+  "TooltipThemeLight": "Design: hell (T)",
+  "TooltipSettings": "Einstellungen (Strg+,)",
   "TooltipMinimise": "Minimieren",
   "TooltipMaximise": "Maximieren",
   "TooltipRestore": "Größe wiederherstellen",
@@ -39,10 +41,11 @@
   "EffectDescriptionVirtualBass": "Obertöne der tiefsten Töne. Sie machen Bass auf Lautsprechern hörbar, die ihn nicht erzeugen.",
   "EffectDescriptionDynamicRange": "Verringert den Abstand zwischen leise und laut. Leise Passagen werden hörbar, ohne die lauten anzuheben.",
   "EffectDescriptionStereoWidth": "Verbreitert die Stereobasis. Die Monosumme bleibt unverändert.",
-  "EffectsNote": "Alle Effekte sind standardmäßig aus und verändern den Klang absichtlich. Dieselben Schalter und Regler stehen im Hauptfenster neben dem Equalizer.",
+  "HintEqualiserInMainWindow": "Equalizer und Klangeffekte befinden sich im Hauptfenster, im Bereich unter dem Player (Q).",
 
   "OpenFiles": "Dateien öffnen",
   "OpenFolder": "Ordner öffnen",
+  "AudioFilter": "Audiodateien",
   "DropHint": "Dateien oder Ordner können auch auf das Fenster gezogen werden",
   "QueueRemove": "Aus Warteschlange entfernen",
   "QueueClear": "Warteschlange leeren",
@@ -71,6 +74,7 @@
   "AudioFailure": "Die Wiedergabe kann nicht gestartet werden. Ein erneuter Versuch oder ein anderes Gerät kann helfen.",
 
   "Settings": "Einstellungen",
+  "SettingsWindowTitle": "Einstellungen — Cewka",
   "SectionAppearance": "Erscheinungsbild",
   "SectionLanguage": "Sprache",
   "SectionAudio": "Audio",
@@ -94,11 +98,11 @@
   "ControlsLeft": "Links",
   "ControlsMacOs": "macOS",
 
-  "SettingEffects": "Visuelle Effekte",
+  "SettingEffects": "Animationen",
   "EffectsAuto": "Automatisch",
   "EffectsFull": "Voll",
   "EffectsReduced": "Reduziert",
-  "HintEffects": "Der automatische Modus reduziert die Hintergrundbewegung und die Plattendrehung im Akkubetrieb.",
+  "HintEffects": "Der automatische Modus hält Hintergrund, Platte und Welle im Akkubetrieb an oder wenn Animationen im System ausgeschaltet sind.",
 
   "SettingColours": "Farbintensität",
   "ColoursSubtle": "Dezent",
