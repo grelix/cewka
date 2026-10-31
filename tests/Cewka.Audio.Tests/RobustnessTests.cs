@@ -39,6 +39,47 @@ public class RobustnessTests
         Assert.True(peak < 4, $"wynik rozbiega się (szczyt {peak:F2})");
     }
 
+    /// <summary>
+    /// Cały łańcuch ze wszystkimi stopniami włączonymi pracuje przy każdym spotykanym
+    /// próbkowaniu: wynik skończony i w skali, a pasmo korektora 1 kHz podbija swoją częstotliwość
+    /// o nastawione 6 dB.
+    /// </summary>
+    [Theory]
+    [InlineData(16000)]
+    [InlineData(32000)]
+    [InlineData(44100)]
+    [InlineData(96000)]
+    public void WholeChainWorksAtEverySampleRate(int sampleRate)
+    {
+        var graph = new AudioGraph();
+        graph.Equaliser.SetGain(5, 6);
+        graph.Equaliser.SetGain(9, 6);
+        graph.Loudness.Enabled = true;
+        graph.VirtualBass.Enabled = true;
+        graph.StereoWidth.Enabled = true;
+        graph.StereoWidth.Strength = 100;
+        graph.Crossfeed.Enabled = true;
+        graph.DynamicRange.Enabled = true;
+        graph.DynamicRange.Strength = 50;
+        graph.Volume.TargetDecibels = -20;
+        graph.Prepare(sampleRate, Channels);
+
+        var random = new Random(42);
+        var noise = new float[sampleRate * Channels];
+        for (var i = 0; i < noise.Length; i++) noise[i] = (float)(random.NextDouble() - 0.5);
+        ProcessInBlocks(graph, noise, 512);
+
+        Assert.True(AllFinite(noise));
+        Assert.True(Peak(noise) <= 1.0);
+
+        var equaliser = new Equaliser();
+        equaliser.SetGain(5, 6);
+        equaliser.Prepare(sampleRate, Channels);
+        var tone = Sine(1000, 0.1, sampleRate, sampleRate);
+        ProcessInBlocks(equaliser, tone, 512);
+        Assert.InRange(Db(Goertzel(tone, 0, 1000, sampleRate, sampleRate / 5) / 0.1), 5.7, 6.3);
+    }
+
     /// <summary>Półka powyżej 0,45 częstotliwości próbkowania jest przepustem, nie wzmocnieniem całego pasma.</summary>
     [Fact]
     public void HighShelfAboveNyquistIsAPassThrough()
