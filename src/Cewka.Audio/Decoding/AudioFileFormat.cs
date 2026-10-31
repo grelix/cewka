@@ -133,10 +133,18 @@ public static class AudioFileFormatDetector
         }
     }
 
+    /// <summary>Ile stron początkowych Ogg przejrzeć w poszukiwaniu strumienia dźwięku.</summary>
+    private const int MaxOggStreams = 16;
+
     /// <summary>
     /// Vorbis, Opus and FLAC all travel inside Ogg. The codec identifier sits in the first
-    /// packet, right after the 27-byte page header plus the segment table. A readable packet
-    /// naming some other codec gives Unknown, so the queue does not call the file damaged.
+    /// packet of each logical stream, and every stream opens with its own BOS page before any
+    /// data page. A file whose streams name no codec the player knows gives Unknown, so the
+    /// queue does not call the file damaged.
+    ///
+    /// <para>Pułapka: pierwszy strumień nie musi być dźwiękiem. Pliki z ffmpeg2theora albo oggz
+    /// zaczynają się od Skeletonu lub Theory, a Vorbis stoi dalej, więc przeglądane są wszystkie
+    /// strony BOS. Gdy plik urywa się wcześniej, decyduje rozszerzenie.</para>
     /// </summary>
     private static AudioFileFormat DetectInsideOgg(Stream stream, string? path)
     {
@@ -145,35 +153,66 @@ public static class AudioFileFormatDetector
         var origin = stream.Position;
         try
         {
-            Span<byte> page = stackalloc byte[64];
-            var read = stream.ReadAtLeast(page, page.Length, throwOnEndOfStream: false);
-            if (read < 35) return FromExtension(path);
+            Span<byte> header = stackalloc byte[27 + 255];
+            Span<byte> packet = stackalloc byte[8];
+            var unknownAudio = false;
 
-            var segmentCount = page[26];
-            var payload = 27 + segmentCount;
-            if (payload + 8 > read) return FromExtension(path);
+            for (var i = 0; i < MaxOggStreams; i++)
+            {
+                var pageStart = stream.Position;
 
-            var body = page[payload..];
+                if (stream.ReadAtLeast(header[..27], 27, throwOnEndOfStream: false) < 27 ||
+                    !header.StartsWith("OggS"u8))
+                    return FromExtension(path);
 
-            if (body.Length >= 8 && body[0] == 'O' && body[1] == 'p' && body[2] == 'u' && body[3] == 's')
-                return AudioFileFormat.Opus;
+                // Pierwsza strona bez znacznika BOS: wszystkie strumienie zostały już zapowiedziane.
+                if ((header[5] & 0x02) == 0)
+                    return i == 0 ? FromExtension(path) : AudioFileFormat.Unknown;
 
-            if (body.Length >= 7 && body[1] == 'v' && body[2] == 'o' && body[3] == 'r' &&
-                body[4] == 'b' && body[5] == 'i' && body[6] == 's')
-                return AudioFileFormat.OggVorbis;
+                var segmentCount = header[26];
+                var table = header.Slice(27, segmentCount);
+                if (stream.ReadAtLeast(table, segmentCount, throwOnEndOfStream: false) < segmentCount)
+                    return FromExtension(path);
 
-            // Ogg FLAC: 0x7F i „FLAC”. Dekoder FLAC w miniaudio sam rozpakowuje kontener Ogg.
-            if (body.Length >= 5 && body[0] == 0x7F && body[1] == 'F' && body[2] == 'L' &&
-                body[3] == 'A' && body[4] == 'C')
-                return AudioFileFormat.Flac;
+                var bodyLength = 0;
+                foreach (var lacing in table) bodyLength += lacing;
 
-            return AudioFileFormat.Unknown;
+                var wanted = Math.Min(packet.Length, bodyLength);
+                var read = stream.ReadAtLeast(packet[..wanted], wanted, throwOnEndOfStream: false);
+                if (read < Math.Min(5, bodyLength)) return FromExtension(path);
+
+                var body = packet[..read];
+                if (CodecInOgg(body) is { } codec) return codec;
+                if (!IsNonAudioOggStream(body)) unknownAudio = true;
+
+                stream.Position = pageStart + 27 + segmentCount + bodyLength;
+            }
+
+            return unknownAudio ? AudioFileFormat.Unknown : FromExtension(path);
         }
         finally
         {
             stream.Position = origin;
         }
     }
+
+    private static AudioFileFormat? CodecInOgg(ReadOnlySpan<byte> body)
+    {
+        if (body.StartsWith("Opus"u8)) return AudioFileFormat.Opus;
+
+        if (body.Length >= 7 && body[1..7].SequenceEqual("vorbis"u8)) return AudioFileFormat.OggVorbis;
+
+        // Ogg FLAC: 0x7F i „FLAC”. Dekoder FLAC w miniaudio sam rozpakowuje kontener Ogg.
+        if (body.Length >= 5 && body[0] == 0x7F && body[1..5].SequenceEqual("FLAC"u8)) return AudioFileFormat.Flac;
+
+        return null;
+    }
+
+    /// <summary>Skeleton, Theora, Kate i Dirac: strumienie, które towarzyszą dźwiękowi albo obrazowi.</summary>
+    private static bool IsNonAudioOggStream(ReadOnlySpan<byte> body) =>
+        body.StartsWith("fishead"u8) ||
+        (body.Length >= 5 && body[0] == 0x80 && (body[1..].StartsWith("theora"u8) || body[1..].StartsWith("kate"u8))) ||
+        body.StartsWith("BBCD"u8);
 
     private static AudioFileFormat FromExtension(string? path) =>
         Path.GetExtension(path ?? string.Empty).ToLowerInvariant() switch

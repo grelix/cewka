@@ -251,6 +251,18 @@ internal static class TestAudioFiles
         return ogg.ToArray();
     }
 
+    /// <summary>
+    /// Początek pliku Ogg z kilkoma strumieniami logicznymi: strona BOS z pierwszym pakietem
+    /// każdego z nich, a po nich strona danych.
+    /// </summary>
+    public static byte[] OggBeginningPages(params byte[][] firstPackets)
+    {
+        var ogg = new OggWriter();
+        foreach (var packet in firstPackets) ogg.WritePage(packet, 0, bos: true, eos: false);
+        ogg.WritePage(new byte[64], 0, bos: false, eos: true);
+        return ogg.ToArray();
+    }
+
     /// <summary>Znacznik ID3v2 o podanej długości treści, bez ramek.</summary>
     public static byte[] Id3Tag(int bodySize, bool footer = false)
     {

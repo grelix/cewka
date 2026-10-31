@@ -110,6 +110,43 @@ public class FormatDetectionTests
         Assert.Equal(AudioFileFormat.Unknown, Detect(TestAudioFiles.OggFirstPacket(speex), "mowa.ogg"));
     }
 
+    private static readonly byte[] Skeleton = TestAudioFiles.Concat("fishead\0"u8.ToArray(), new byte[56]);
+    private static readonly byte[] Theora = TestAudioFiles.Concat([0x80], "theora"u8.ToArray(), new byte[35]);
+
+    [Fact]
+    public void VorbisBehindSkeletonAndTheoraIsVorbis()
+    {
+        var vorbis = TestAudioFiles.Concat([1], "vorbis"u8.ToArray(), new byte[23]);
+        var bytes = TestAudioFiles.OggBeginningPages(Skeleton, Theora, vorbis);
+
+        Assert.Equal(AudioFileFormat.OggVorbis, Detect(bytes, "film.ogg"));
+        Assert.Equal(AudioFileFormat.OggVorbis, Detect(bytes, "bez-rozszerzenia"));
+    }
+
+    [Fact]
+    public void OggWithoutAnyAudioStreamIsUnknown()
+    {
+        var bytes = TestAudioFiles.OggBeginningPages(Skeleton, Theora);
+        Assert.Equal(AudioFileFormat.Unknown, Detect(bytes, "film.ogg"));
+    }
+
+    [Fact]
+    public void SpeexBehindSkeletonIsUnknown()
+    {
+        var speex = TestAudioFiles.Concat("Speex   "u8.ToArray(), new byte[72]);
+        Assert.Equal(AudioFileFormat.Unknown, Detect(TestAudioFiles.OggBeginningPages(Skeleton, speex), "mowa.ogg"));
+    }
+
+    [Fact]
+    public void TruncatedOggHeaderFallsBackToExtension()
+    {
+        // Sama strona Skeleton: plik urywa się, zanim wiadomo, czy dalej jest dźwięk.
+        var bytes = TestAudioFiles.OggBeginningPages(Skeleton);
+        var cut = bytes[..(27 + 1 + Skeleton.Length)];
+
+        Assert.Equal(AudioFileFormat.OggVorbis, Detect(cut, "utwor.ogg"));
+    }
+
     /// <summary>Strumień bez możliwości przewijania, jak potok albo gniazdo.</summary>
     private sealed class ForwardOnlyStream(byte[] data) : Stream
     {
