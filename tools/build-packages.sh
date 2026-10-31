@@ -109,6 +109,7 @@ DEB="$PRACA/deb"
 przygotuj_drzewo "$DEB"
 
 install -Dm644 "$REPO/LICENSE" "$DEB/usr/share/doc/cewka/copyright"
+install -Dm644 "$REPO/THIRD-PARTY-NOTICES.txt" "$DEB/usr/share/doc/cewka/THIRD-PARTY-NOTICES.txt"
 mkdir -p "$DEB/DEBIAN"
 
 ROZMIAR_KB="$(du -sk "$DEB/usr" | cut -f1)"
@@ -208,9 +209,11 @@ gstreamer1-plugins-good, a dekoder pakiet libav.
 %install
 cp -a $DRZEWO_RPM/. %{buildroot}/
 install -Dm644 $REPO/LICENSE %{buildroot}/usr/share/licenses/cewka/LICENSE
+install -Dm644 $REPO/THIRD-PARTY-NOTICES.txt %{buildroot}/usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt
 
 %files
 %license /usr/share/licenses/cewka/LICENSE
+%license /usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt
 /usr/bin/cewka
 /usr/share/applications/cewka.desktop
 /usr/share/icons/hicolor/*/apps/cewka.png
@@ -242,6 +245,7 @@ echo "[3/3] .pkg.tar.zst"
 ARCH_ROOT="$PRACA/arch"
 przygotuj_drzewo "$ARCH_ROOT"
 install -Dm644 "$REPO/LICENSE" "$ARCH_ROOT/usr/share/licenses/cewka/LICENSE"
+install -Dm644 "$REPO/THIRD-PARTY-NOTICES.txt" "$ARCH_ROOT/usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt"
 
 ROZMIAR_B="$(du -sb "$ARCH_ROOT" | cut -f1)"
 

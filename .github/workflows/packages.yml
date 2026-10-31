@@ -61,6 +61,7 @@ jobs:
 
           install -Dm755 artifacts/publish/linux-x64/Cewka "artifacts/archiwum/$KATALOG/cewka"
           install -Dm644 LICENSE "artifacts/archiwum/$KATALOG/LICENSE"
+          install -Dm644 THIRD-PARTY-NOTICES.txt "artifacts/archiwum/$KATALOG/THIRD-PARTY-NOTICES.txt"
           install -Dm644 README.md "artifacts/archiwum/$KATALOG/README.md"
           install -Dm644 packaging/linux/cewka.desktop "artifacts/archiwum/$KATALOG/cewka.desktop"
           cp -r packaging/linux/icons "artifacts/archiwum/$KATALOG/icons"
@@ -69,6 +70,37 @@ jobs:
               --mtime="@$SOURCE_DATE_EPOCH" \
               -czf "artifacts/packages/cewka-$WERSJA-linux-x64.tar.gz" \
               -C artifacts/archiwum "$KATALOG"
+
+      - name: Noty składników w pakietach
+        # Licencje składników pozwalają rozpowszechniać program tylko razem z ich notami.
+        # Sprawdzana jest zawartość plików pakietów, bo obraz Ubuntu w próbnej instalacji
+        # pomija przy instalacji dokumentację z /usr/share/doc poza plikami copyright.
+        env:
+          WERSJA: ${{ steps.dane.outputs.wersja }}
+        run: |
+          set -euo pipefail
+          cd artifacts/packages
+
+          # Spis plików trafia najpierw do zmiennej: grep -q w potoku kończy czytanie przed
+          # końcem spisu, a pipefail uznałby przerwany program wypisujący za błąd.
+          sprawdz() {
+            local pakiet="$1" plik="$2" spis="$3"
+            if ! grep -qxF "$plik" <<< "$spis"; then
+              echo "BLAD: w $pakiet brak $plik" >&2
+              exit 1
+            fi
+            echo "$pakiet: $plik"
+          }
+
+          DEB="cewka_${WERSJA}_amd64.deb"
+          RPM="cewka-${WERSJA}-1.x86_64.rpm"
+          PACMAN="cewka-${WERSJA}-1-x86_64.pkg.tar.zst"
+          ARCHIWUM="cewka-${WERSJA}-linux-x64.tar.gz"
+
+          sprawdz "$DEB" ./usr/share/doc/cewka/THIRD-PARTY-NOTICES.txt "$(dpkg-deb -c "$DEB" | awk '{ print $6 }')"
+          sprawdz "$RPM" /usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt "$(rpm -qlp "$RPM")"
+          sprawdz "$PACMAN" usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt "$(bsdtar -tf "$PACMAN")"
+          sprawdz "$ARCHIWUM" "cewka-${WERSJA}/THIRD-PARTY-NOTICES.txt" "$(tar -tzf "$ARCHIWUM")"
 
       - name: Materiał do prób
         env:

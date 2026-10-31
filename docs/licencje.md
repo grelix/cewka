@@ -33,8 +33,8 @@ po przywróceniu pakietów.
 
 Biblioteki natywne `libSkiaSharp` i `libHarfBuzzSharp` zawierają kod innych projektów (między
 innymi Skia, HarfBuzz, FreeType, libpng, libjpeg-turbo, libwebp, expat, zlib i dane ICU). Ich noty
-licencyjne są w pliku `THIRD-PARTY-NOTICES.txt` pakietów `SkiaSharp.NativeAssets.*`
-i `HarfBuzzSharp.NativeAssets.*`.
+licencyjne pochodzą z pliku `THIRD-PARTY-NOTICES.txt` pakietów `SkiaSharp.NativeAssets.*`
+i `HarfBuzzSharp.NativeAssets.*` (we wszystkich czterech ten sam tekst).
 
 Ude.NetStandard to przeniesiony na C# wykrywacz kodowania znaków z Mozilli; ATL.NET używa go do
 tagów zapisanych w nieznanym kodowaniu. Pakiet nie zawiera tekstu licencji (plik `COPYING`
@@ -43,9 +43,13 @@ odsyła do katalogu, którego w pakiecie nie ma). Licencję podaje README repozy
 
 Pakiety `System.IO.Pipelines`, `System.Memory`, `System.Numerics.Vectors` i `System.ValueTuple`
 pojawiają się w grafie zależności, ale w wydaniu zastępują je zestawy środowiska .NET.
+Pakiety `SkiaSharp.NativeAssets.*` i `HarfBuzzSharp.NativeAssets.*` dla macOS i WebAssembly
+też są w grafie, ale wydania dla tych platform nie ma, więc ich biblioteki do niego nie trafiają.
 
 Wydanie jest samodzielne (`SelfContained`), więc zawiera też środowisko uruchomieniowe .NET 9
-(MIT, z własnymi notami w `THIRD-PARTY-NOTICES.txt` Microsoftu).
+z pakietu `Microsoft.NETCore.App.Runtime.<rid>` (MIT, z notami składników w jego
+`THIRD-PARTY-NOTICES.TXT`). Program nie odwołuje się do `Microsoft.WindowsDesktop.App`, więc
+środowisko WPF i Windows Forms do wydania nie trafia.
 
 ## Pakiety wyłącznie deweloperskie
 
@@ -96,14 +100,34 @@ z nim noty składników:
 - Ude.NetStandard (MPL 1.1): informacja, gdzie można pobrać kod źródłowy pakietu.
 - Font (SIL OFL 1.1): informacja o prawach autorskich i tekst licencji przy każdej kopii fontu.
 
-Noty nie wymaga tylko miniaudio (Unlicense albo MIT-0).
+Noty nie wymaga tylko miniaudio (Unlicense albo MIT-0); jego licencja i tak jest w pliku not.
 
-Wydanie dziś tego nie spełnia. Archiwum i pakiety dla Linuksa zawierają tylko `LICENSE` Cewki,
-a plik wykonywalny dla Windows wychodzi bez żadnego pliku obok. Teksty OFL są osadzone
-w pliku wykonywalnym razem z fontami, ale program ich nie pokazuje, a sekcja „Licencje”
-w ustawieniach podaje tylko nazwy licencji. Do uzupełnienia jest jeden plik z notami
-(np. `THIRD-PARTY-NOTICES.txt`) dołączany do archiwum, pakietów i wydania dla Windows albo
-dostępny z okna ustawień.
+Wszystko to zbiera plik `THIRD-PARTY-NOTICES.txt` w katalogu głównym repozytorium. Każdy
+składnik ma w nim sekcję z nazwą, wersją, adresem projektu, informacją o prawach autorskich
+i pełnym tekstem licencji, skopiowanym z pakietu albo, gdy pakiet go nie zawiera, z repozytorium
+źródłowego. Noty bibliotek natywnych Skii i HarfBuzz oraz środowiska .NET są przytoczone w całości.
+Plik leży w każdej paczce obok licencji Cewki:
+
+| Paczka | Położenie |
+|--------|-----------|
+| wydanie dla Windows | zasób wydania obok `Cewka.exe`, ujęty w `SHA256SUMS.txt` |
+| archiwum `.tar.gz` | `cewka-<wersja>/THIRD-PARTY-NOTICES.txt` |
+| `.deb` | `/usr/share/doc/cewka/THIRD-PARTY-NOTICES.txt` |
+| `.rpm` | `/usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt` (`%license`) |
+| pacman (wydanie i `packaging/arch/PKGBUILD`) | `/usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt` |
+
+Budowa pakietów w CI (`.github/workflows/packages.yml`) sprawdza, że plik jest w spisie plików
+pakietów `.deb`, `.rpm`, pacmana i archiwum. Test `ThirdPartyNoticesTests` wymaga w nim wiersza
+`Pakiet NuGet: <nazwa> <wersja>` dla każdego pakietu z projektów `src/*/*.csproj` i każdego
+pakietu z grafu zależności w `src/Cewka.App/obj/project.assets.json` (cel `net9.0`) oraz wiersza
+`Plik: <nazwa>` dla każdego pliku fontu w `src/Cewka.App/Assets/Fonts`. Nowy pakiet, także
+przechodni, nowa wersja albo nowy font bez sekcji w pliku not zatrzymuje więc testy. Test pomija
+pakiety spoza wydania wymienione wyżej: Avalonia.BuildServices, cztery pakiety `System.*`
+oraz `*.NativeAssets.macOS` i `*.NativeAssets.WebAssembly`. Środowiska .NET i miniaudio
+nie ma w grafie pakietów, więc ich sekcje trzeba pilnować przy zmianie wersji.
+
+Teksty OFL są też osadzone w pliku wykonywalnym razem z fontami, ale program ich nie pokazuje,
+a sekcja „Licencje” w ustawieniach podaje tylko nazwy licencji.
 
 ## Grafika
 
