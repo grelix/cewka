@@ -102,7 +102,7 @@
   "EffectsAuto": "Automatycznie",
   "EffectsFull": "Pełne",
   "EffectsReduced": "Ograniczone",
-  "HintEffects": "Tryb automatyczny zatrzymuje ruch tła, płyty i fali przy pracy na baterii oraz przy animacjach wyłączonych w systemie.",
+  "HintEffects": "Tryb automatyczny zatrzymuje ruch tła, płyty i fali przy pracy na baterii albo przy animacjach wyłączonych w systemie.",
 
   "SettingColours": "Intensywność barw",
   "ColoursSubtle": "Subtelna",
