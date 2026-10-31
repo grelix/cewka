@@ -19,6 +19,9 @@ public sealed class LoudnessRecord
     public double? SamplePeak { get; init; }
 }
 
+/// <summary>Wynik analizy jednego pliku.</summary>
+public readonly record struct LoudnessMeasurement(double IntegratedLufs, double SamplePeak);
+
 [JsonSourceGenerationOptions(WriteIndented = false, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(List<LoudnessRecord>))]
 internal sealed partial class LoudnessJsonContext : JsonSerializerContext;
@@ -54,17 +57,25 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
     private readonly BlockingCollection<string> _pending = new(new ConcurrentQueue<string>());
     private readonly HashSet<string> _queued = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _queueLock = new();
+    private readonly Lock _saveLock = new();
+    private readonly CancellationTokenSource _stopping = new();
+    private readonly Func<string, CancellationToken, LoudnessMeasurement?> _measure;
     private readonly Thread _worker;
-    private volatile bool _running = true;
-    private bool _dirty;
+    private volatile bool _dirty;
 
     public LoudnessService() : this(Path.Combine(AppPaths.CacheDirectory, "loudness.json"))
     {
     }
 
-    public LoudnessService(string cachePath)
+    public LoudnessService(string cachePath) : this(cachePath, MeasureFile)
+    {
+    }
+
+    /// <summary>Z własnym pomiarem w miejsce dekodowania pliku; do testów.</summary>
+    public LoudnessService(string cachePath, Func<string, CancellationToken, LoudnessMeasurement?> measure)
     {
         _cachePath = cachePath;
+        _measure = measure;
         Load();
 
         _worker = new Thread(WorkerLoop)
@@ -188,46 +199,59 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
 
     private void WorkerLoop()
     {
-        foreach (var path in _pending.GetConsumingEnumerable())
+        try
         {
-            if (!_running) break;
-
-            try
-            {
-                var measurement = Measure(path);
-                if (measurement is null) continue;
-
-                var info = new FileInfo(path);
-                var record = new LoudnessRecord
-                {
-                    Path = path,
-                    Length = info.Length,
-                    ModifiedTicks = info.LastWriteTimeUtc.Ticks,
-                    IntegratedLufs = measurement.Value.IntegratedLufs,
-                    SamplePeak = measurement.Value.SamplePeak,
-                };
-
-                _cache[path] = record;
-                _dirty = true;
-
-                Measured?.Invoke(path, FromMeasurement(record.IntegratedLufs, record.SamplePeak, TargetLufs).GainDecibels);
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[cewka] analiza głośności nie powiodła się: {Path.GetFileName(path)} — {ex.Message}");
-            }
-            finally
-            {
-                lock (_queueLock) _queued.Remove(path);
-
-                // Zapis dopiero gdy kolejka pusta — inaczej przy dodaniu folderu
-                // plik byłby przepisywany setki razy.
-                if (_dirty && _pending.Count == 0) Save();
-            }
+            foreach (var path in _pending.GetConsumingEnumerable(_stopping.Token))
+                MeasureOne(path);
+        }
+        catch (OperationCanceledException)
+        {
+            // Zamykanie; pamięć podręczną zapisuje Dispose.
         }
     }
 
-    private static (double IntegratedLufs, double SamplePeak)? Measure(string path)
+    private void MeasureOne(string path)
+    {
+        var token = _stopping.Token;
+
+        try
+        {
+            var measurement = _measure(path, token);
+            if (measurement is null || token.IsCancellationRequested) return;
+
+            var info = new FileInfo(path);
+            var record = new LoudnessRecord
+            {
+                Path = path,
+                Length = info.Length,
+                ModifiedTicks = info.LastWriteTimeUtc.Ticks,
+                IntegratedLufs = measurement.Value.IntegratedLufs,
+                SamplePeak = measurement.Value.SamplePeak,
+            };
+
+            _cache[path] = record;
+            _dirty = true;
+
+            Measured?.Invoke(path, FromMeasurement(record.IntegratedLufs, record.SamplePeak, TargetLufs).GainDecibels);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cewka] analiza głośności nie powiodła się: {Path.GetFileName(path)} — {ex.Message}");
+        }
+        finally
+        {
+            lock (_queueLock) _queued.Remove(path);
+
+            // Zapis dopiero gdy kolejka pusta — inaczej przy dodaniu folderu plik byłby
+            // przepisywany setki razy. Kolekcja nie jest zwalniana, dopóki ten wątek żyje.
+            if (_dirty && _pending.Count == 0 && !token.IsCancellationRequested) Save();
+        }
+    }
+
+    private static LoudnessMeasurement? MeasureFile(string path, CancellationToken token)
     {
         using var decoder = DecoderFactory.Open(path, AnalysisRate, AnalysisChannels);
 
@@ -236,13 +260,16 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
 
         while (true)
         {
+            // Przy zamykaniu pomiar godzinnego pliku nie może trzymać wątku do końca.
+            token.ThrowIfCancellationRequested();
+
             var frames = decoder.Read(buffer);
             if (frames == 0) break;
             analyser.Add(buffer, frames);
         }
 
         var loudness = analyser.ComputeIntegratedLoudness();
-        return loudness is null ? null : (loudness.Value, analyser.SamplePeak);
+        return loudness is null ? null : new LoudnessMeasurement(loudness.Value, analyser.SamplePeak);
     }
 
     private void Load()
@@ -265,6 +292,9 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
 
     private void Save()
     {
+        // Wątek analizy i Dispose mogą zapisywać naraz, a plik tymczasowy jest wspólny.
+        using var scope = _saveLock.EnterScope();
+
         try
         {
             var directory = Path.GetDirectoryName(_cachePath);
@@ -286,11 +316,16 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
 
     public void Dispose()
     {
-        _running = false;
+        if (_stopping.IsCancellationRequested) return;
+
+        _stopping.Cancel();
         _pending.CompleteAdding();
-        _worker.Join(2000);
+
+        // Kolekcja zwalniana tylko po faktycznym końcu wątku. Wątek, który jeszcze mierzy plik
+        // niesprawdzający przerwania, sięgnąłby po nią i padł z wyjątkiem kończącym proces.
+        var finished = _worker.Join(2000);
 
         if (_dirty) Save();
-        _pending.Dispose();
+        if (finished) _pending.Dispose();
     }
 }

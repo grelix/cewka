@@ -101,6 +101,64 @@ public sealed class LoudnessServiceTests : IDisposable
         Assert.Equal(-12, gain.Value.ProgrammeLevelDecibels, precision: 6);
     }
 
+    /// <summary>Zamknięcie przerywa trwający pomiar, zamiast czekać na koniec długiego pliku.</summary>
+    [Fact]
+    public void DisposeCancelsARunningMeasurement()
+    {
+        using var started = new ManualResetEventSlim();
+        var cancelled = false;
+
+        var service = new LoudnessService(Path.Combine(_directory, "loudness.json"), (_, token) =>
+        {
+            started.Set();
+            cancelled = token.WaitHandle.WaitOne(TimeSpan.FromSeconds(10));
+            token.ThrowIfCancellationRequested();
+            return new LoudnessMeasurement(-20, 0.5);
+        });
+
+        service.GetTrackGain(new QueueEntry { Path = CreateFile("long.flac") });
+        Assert.True(started.Wait(TimeSpan.FromSeconds(5)), "pomiar się nie zaczął");
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        service.Dispose();
+
+        Assert.True(cancelled, "pomiar nie dostał sygnału przerwania");
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(1.5), $"zamykanie trwało {clock.Elapsed.TotalSeconds:F1} s");
+    }
+
+    /// <summary>
+    /// Pomiar, który nie sprawdza przerwania i kończy się po czasie oczekiwania w Dispose,
+    /// nie może sięgnąć po zwolnioną kolejkę: wyjątek w wątku tła zakończyłby proces.
+    /// Wynik spóźnionego pomiaru nie jest już ogłaszany.
+    /// </summary>
+    [Fact]
+    public void MeasurementOutlivingDisposeEndsQuietly()
+    {
+        using var started = new ManualResetEventSlim();
+        using var finished = new ManualResetEventSlim();
+
+        var service = new LoudnessService(Path.Combine(_directory, "loudness.json"), (_, _) =>
+        {
+            started.Set();
+            Thread.Sleep(2600);
+            finished.Set();
+            return new LoudnessMeasurement(-20, 0.5);
+        });
+
+        var announced = false;
+        service.Measured += (_, _) => announced = true;
+
+        service.GetTrackGain(new QueueEntry { Path = CreateFile("first.flac") });
+        service.GetTrackGain(new QueueEntry { Path = CreateFile("second.flac") });
+        Assert.True(started.Wait(TimeSpan.FromSeconds(5)), "pomiar się nie zaczął");
+
+        service.Dispose();
+        Assert.True(finished.Wait(TimeSpan.FromSeconds(5)), "pomiar się nie skończył");
+        Thread.Sleep(300);
+
+        Assert.False(announced);
+    }
+
     // ---------- pomocnicze ----------
 
     private string CreateFile(string name)
