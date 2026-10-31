@@ -74,11 +74,19 @@ jobs:
         run: tools\publish-windows.cmd
         shell: cmd
 
+      # Noty składników leżą w wydaniu obok pliku wykonywalnego, bo ich licencje pozwalają
+      # rozpowszechniać program tylko razem z notami.
+      - name: Noty składników obok pliku wykonywalnego
+        run: copy THIRD-PARTY-NOTICES.txt artifacts\publish\win-x64\THIRD-PARTY-NOTICES.txt
+        shell: cmd
+
       - name: Odłóż plik wykonywalny
         uses: actions/upload-artifact@v7
         with:
           name: plik-windows
-          path: artifacts/publish/win-x64/Cewka.exe
+          path: |
+            artifacts/publish/win-x64/Cewka.exe
+            artifacts/publish/win-x64/THIRD-PARTY-NOTICES.txt
           if-no-files-found: error
 
   wydanie:
