@@ -13,6 +13,51 @@ internal static unsafe partial class NativeAudio
 {
     internal const string Library = "cewka_audio";
 
+    /// <summary>Zmienna środowiskowa włączająca puste wyjście; wartość „1” je włącza.</summary>
+    internal const string NullOutputVariable = "CEWKA_NULL_AUDIO";
+
+    // ---------- zaplecze ----------
+
+    [LibraryImport(Library, EntryPoint = "cewka_use_null_backend")]
+    private static partial int UseNullBackend(int on);
+
+    private static readonly Lock BackendLock = new();
+    private static bool _nullBackend = Environment.GetEnvironmentVariable(NullOutputVariable) == "1";
+    private static bool _backendApplied;
+
+    internal static bool NullBackend
+    {
+        get { lock (BackendLock) return _nullBackend; }
+    }
+
+    /// <summary>
+    /// Przestawia zaplecze. Kontekst miniaudio powstaje przy pierwszym wyliczeniu urządzeń
+    /// albo otwarciu urządzenia i od tej chwili zaplecza zmienić się nie da.
+    /// </summary>
+    internal static void SetNullBackend(bool on)
+    {
+        lock (BackendLock)
+        {
+            if (UseNullBackend(on ? 1 : 0) != Success)
+                throw new InvalidOperationException("Wyjście puste trzeba wybrać przed pierwszym użyciem urządzeń dźwiękowych.");
+
+            _nullBackend = on;
+            _backendApplied = true;
+        }
+    }
+
+    /// <summary>Przekazuje wybór zaplecza do biblioteki przed pierwszym utworzeniem kontekstu.</summary>
+    internal static void EnsureBackend()
+    {
+        lock (BackendLock)
+        {
+            if (_backendApplied) return;
+
+            ThrowIfFailed(UseNullBackend(_nullBackend ? 1 : 0), "Wybór zaplecza dźwięku");
+            _backendApplied = true;
+        }
+    }
+
     // ---------- urządzenia ----------
 
     [LibraryImport(Library, EntryPoint = "cewka_devices_refresh")]
@@ -29,11 +74,20 @@ internal static unsafe partial class NativeAudio
         int deviceIndex, uint sampleRate, uint channels, uint periodSizeInFrames,
         delegate* unmanaged<void*, float*, uint, void> callback, void* user, out nint handle);
 
+    /// <summary>Zdarzenie urządzenia zgłaszane przez <see cref="DeviceSetNotify"/>: urządzenie przestało pracować samo.</summary>
+    internal const int DeviceLostEvent = 1;
+
+    [LibraryImport(Library, EntryPoint = "cewka_device_set_notify")]
+    internal static partial int DeviceSetNotify(nint handle, delegate* unmanaged<void*, int, void> notify);
+
     [LibraryImport(Library, EntryPoint = "cewka_device_start")]
     internal static partial int DeviceStart(nint handle);
 
     [LibraryImport(Library, EntryPoint = "cewka_device_stop")]
     internal static partial int DeviceStop(nint handle);
+
+    [LibraryImport(Library, EntryPoint = "cewka_device_is_started")]
+    internal static partial int DeviceIsStarted(nint handle);
 
     [LibraryImport(Library, EntryPoint = "cewka_device_destroy")]
     internal static partial void DeviceDestroy(nint handle);

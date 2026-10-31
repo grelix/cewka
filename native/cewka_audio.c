@@ -38,6 +38,7 @@
 
 static ma_context      g_context;
 static int             g_contextReady = 0;
+static int             g_useNullBackend = 0;
 static ma_device_info* g_playbackInfos = NULL;
 static ma_uint32       g_playbackCount = 0;
 
@@ -47,13 +48,38 @@ static ma_result cewka__ensure_context(void)
         return MA_SUCCESS;
     }
 
-    ma_result result = ma_context_init(NULL, 0, NULL, &g_context);
+    ma_result result;
+    if (g_useNullBackend) {
+        ma_backend backends[] = { ma_backend_null };
+        result = ma_context_init(backends, 1, NULL, &g_context);
+    } else {
+        result = ma_context_init(NULL, 0, NULL, &g_context);
+    }
+
     if (result != MA_SUCCESS) {
         return result;
     }
 
     g_contextReady = 1;
     return MA_SUCCESS;
+}
+
+/*
+    Wybiera zaplecze puste: urzadzenie, ktore pobiera probki w tempie rzeczywistym
+    i niczego nie odtwarza. Dla testow i narzedzi, ktore nie moga grac przez glosniki.
+
+    Wybor obowiazuje od utworzenia kontekstu, wiec po nim zmiana jest bledem.
+*/
+CEWKA_API int cewka_use_null_backend(int on)
+{
+    int wanted = on ? 1 : 0;
+
+    if (g_contextReady && wanted != g_useNullBackend) {
+        return (int)MA_INVALID_OPERATION;
+    }
+
+    g_useNullBackend = wanted;
+    return (int)MA_SUCCESS;
 }
 
 /* Odswieza liste urzadzen odtwarzania i zwraca ich liczbe przez outCount. */
@@ -113,12 +139,19 @@ CEWKA_API int cewka_devices_is_default(int index)
 
 typedef void (*cewka_data_cb)(void* pUser, float* pFrames, ma_uint32 frameCount);
 
+/* Zdarzenia urzadzenia przekazywane do warstwy zarzadzanej. */
+#define CEWKA_DEVICE_LOST 1
+
+typedef void (*cewka_notify_cb)(void* pUser, int event);
+
 typedef struct
 {
-    ma_device     device;
-    cewka_data_cb callback;
-    void*         user;
-    ma_uint32     channels;
+    ma_device       device;
+    cewka_data_cb   callback;
+    cewka_notify_cb notify;
+    void*           user;
+    ma_uint32       channels;
+    volatile int    stopRequested;
 } cewka_device;
 
 static void cewka__device_data(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
@@ -130,7 +163,31 @@ static void cewka__device_data(ma_device* pDevice, void* pOutput, const void* pI
         self->callback(self->user, (float*)pOutput, frameCount);
     } else {
         /* Cisza jest jedyna bezpieczna odpowiedzia, gdy nie ma kto wypelnic bufora. */
-        memset(pOutput, 0, (size_t)frameCount * self->channels * sizeof(float));
+        memset(pOutput, 0, (size_t)frameCount * pDevice->playback.channels * ma_get_bytes_per_sample(pDevice->playback.format));
+    }
+}
+
+/*
+    Zatrzymanie, ktorego nie zlecila aplikacja, oznacza utrate urzadzenia: odlaczenie
+    sluchawek, uniewaznienie strumienia przez sterownik. Dla urzadzenia wybranego jawnie
+    miniaudio nie przekierowuje strumienia, wiec bez tej wiadomosci warstwa zarzadzana
+    uwazalaby, ze nadal gra.
+
+    Pulapka: wywolanie przychodzi z watku roboczego miniaudio, wiec odbiorca nie moze tu
+    zamykac ani zatrzymywac urzadzenia.
+*/
+static void cewka__device_notification(const ma_device_notification* pNotification)
+{
+    cewka_device* self = (cewka_device*)pNotification->pDevice->pUserData;
+    if (self == NULL) {
+        return;
+    }
+
+    if (pNotification->type == ma_device_notification_type_stopped && !self->stopRequested) {
+        cewka_notify_cb notify = self->notify;
+        if (notify != NULL) {
+            notify(self->user, CEWKA_DEVICE_LOST);
+        }
     }
 }
 
@@ -173,8 +230,12 @@ CEWKA_API int cewka_device_create(int           deviceIndex,
     config.playback.format   = ma_format_f32;
     config.playback.channels = channels;
     config.sampleRate        = sampleRate;
-    config.dataCallback      = cewka__device_data;
-    config.pUserData         = self;
+    config.dataCallback         = cewka__device_data;
+    config.notificationCallback = cewka__device_notification;
+    config.pUserData            = self;
+
+    /* Urzadzenie stoi od utworzenia; jego zatrzymanie nie jest utrata. */
+    self->stopRequested = 1;
 
     if (periodSizeInFrames > 0) {
         config.periodSizeInFrames = periodSizeInFrames;
@@ -197,16 +258,43 @@ CEWKA_API int cewka_device_create(int           deviceIndex,
     return (int)MA_SUCCESS;
 }
 
+/* Ustawia odbiorce zdarzen urzadzenia; NULL wylacza powiadamianie. */
+CEWKA_API int cewka_device_set_notify(void* handle, cewka_notify_cb notify)
+{
+    if (handle == NULL) return (int)MA_INVALID_ARGS;
+    ((cewka_device*)handle)->notify = notify;
+    return (int)MA_SUCCESS;
+}
+
 CEWKA_API int cewka_device_start(void* handle)
 {
     if (handle == NULL) return (int)MA_INVALID_ARGS;
-    return (int)ma_device_start(&((cewka_device*)handle)->device);
+
+    cewka_device* self = (cewka_device*)handle;
+    self->stopRequested = 0;
+
+    ma_result result = ma_device_start(&self->device);
+    if (result != MA_SUCCESS) {
+        self->stopRequested = 1;
+    }
+
+    return (int)result;
 }
 
 CEWKA_API int cewka_device_stop(void* handle)
 {
     if (handle == NULL) return (int)MA_INVALID_ARGS;
-    return (int)ma_device_stop(&((cewka_device*)handle)->device);
+
+    cewka_device* self = (cewka_device*)handle;
+    self->stopRequested = 1;
+    return (int)ma_device_stop(&self->device);
+}
+
+/* 1, gdy urzadzenie faktycznie pracuje; po utracie urzadzenia zwraca 0. */
+CEWKA_API int cewka_device_is_started(void* handle)
+{
+    if (handle == NULL) return 0;
+    return ma_device_is_started(&((cewka_device*)handle)->device) ? 1 : 0;
 }
 
 CEWKA_API void cewka_device_destroy(void* handle)
@@ -214,6 +302,8 @@ CEWKA_API void cewka_device_destroy(void* handle)
     if (handle == NULL) return;
 
     cewka_device* self = (cewka_device*)handle;
+    self->stopRequested = 1;
+    self->notify = NULL;
     ma_device_uninit(&self->device);
     ma_free(self, NULL);
 }

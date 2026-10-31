@@ -18,6 +18,7 @@ public static class AudioDeviceList
     /// </summary>
     public static unsafe IReadOnlyList<AudioDeviceInfo> Enumerate()
     {
+        NativeAudio.EnsureBackend();
         NativeAudio.ThrowIfFailed(NativeAudio.DevicesRefresh(out var count), "Odczyt listy urządzeń");
 
         var devices = new List<AudioDeviceInfo>(count);
