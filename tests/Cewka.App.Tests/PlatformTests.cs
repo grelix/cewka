@@ -108,6 +108,19 @@ public sealed class PlatformTests : IDisposable
     private static Func<string, string?> Variables(params (string Name, string Value)[] values) =>
         name => values.FirstOrDefault(v => v.Name == name).Value;
 
+    // ---------- Skojarzenia plików ----------
+
+    /// <summary>Opis widoczny w ustawieniach Windows podlega standardowi tekstów: bez kropki i bez przymiotników.</summary>
+    [Fact]
+    public void DomyslneTekstySkojarzenZgodneZeStandardem()
+    {
+        var texts = AssociationTexts.Default;
+
+        Assert.False(texts.Description.EndsWith('.'));
+        Assert.DoesNotContain("Minimalistyczny", texts.Description);
+        Assert.False(string.IsNullOrWhiteSpace(texts.FileTypeName));
+    }
+
     // ---------- Zasilanie w Linuksie ----------
 
     /// <summary>Laptop ładowany przez USB-C z wyłączonym wpisem zasilacza sieciowego jest na zasilaniu.</summary>
