@@ -43,10 +43,15 @@ public sealed class SingleInstance : IDisposable
     private const int MaxPendingMessages = 256;
 
     /// <summary>
-    /// Liczba podejść przy starcie. Rola zmienia właściciela między sprawdzeniem blokady
-    /// a połączeniem tylko wtedy, gdy poprzednia kopia akurat się zamyka.
+    /// Jak długo start ponawia podejścia, gdy blokada jest zajęta, a nikt nie odbiera. Tak bywa,
+    /// gdy poprzednia kopia akurat się zamyka: doczytuje nadawców (do dwóch limitów odczytu
+    /// w <see cref="StopListening"/>) i zapisuje kolejkę. Termin musi to przeczekać, inaczej
+    /// powstałoby drugie okno bez nasłuchu, które przy zamknięciu nadpisze zapisaną kolejkę.
     /// </summary>
-    private const int Attempts = 3;
+    private static readonly TimeSpan StartPatience = 2 * HandoffChannel.ReadTimeout + TimeSpan.FromSeconds(2);
+
+    /// <summary>Przerwa między podejściami, gdy odmowa przychodzi od razu.</summary>
+    private static readonly TimeSpan RetryPause = TimeSpan.FromMilliseconds(50);
 
     private readonly FileStream _lock;
     private readonly IHandoffListener _channel;
@@ -105,7 +110,9 @@ public sealed class SingleInstance : IDisposable
     /// </summary>
     public static Claim Start(InstanceAddress address, IReadOnlyList<string> paths)
     {
-        for (var attempt = 0; attempt < Attempts; attempt++)
+        var deadline = Environment.TickCount64 + (long)StartPatience.TotalMilliseconds;
+
+        while (true)
         {
             switch (Acquire(address, out var instance))
             {
@@ -122,6 +129,9 @@ public sealed class SingleInstance : IDisposable
             }
 
             if (TryHandOff(address, paths)) return new Claim(null, true);
+            if (Environment.TickCount64 >= deadline) break;
+
+            Thread.Sleep(RetryPause);
         }
 
         // Blokada zajęta, a mimo to nikt nie odbiera: poprzednia kopia żyje, lecz nie słucha.

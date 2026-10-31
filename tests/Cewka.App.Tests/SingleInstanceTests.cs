@@ -275,6 +275,36 @@ public sealed class SingleInstanceTests : IDisposable
     }
 
     /// <summary>
+    /// Zamknięcie nasłuchu z nadawcami zawieszonymi w połowie wiadomości trwa do dwóch limitów
+    /// odczytu, a rola zwalnia się dopiero po zapisie. Kopia uruchomiona w tym czasie czeka na
+    /// rolę dłużej, niż trwa najdłuższe zamykanie, zamiast otworzyć drugie okno bez nasłuchu.
+    /// </summary>
+    [Fact]
+    public void KopiaUruchomionaWTrakcieNajdluzszegoZamykaniaPrzejmujeRole()
+    {
+        var address = Temporary();
+
+        var instance = SingleInstance.TryAcquire(address);
+        Assert.NotNull(instance);
+        instance.StopListening();
+
+        var release = new Thread(() =>
+        {
+            Thread.Sleep(2 * HandoffChannel.ReadTimeout + TimeSpan.FromMilliseconds(500));
+            instance.Dispose();
+        });
+
+        release.Start();
+
+        var claim = SingleInstance.Start(address, ["/muzyka/utwor.mp3"]);
+        release.Join();
+
+        using var next = claim.Instance;
+        Assert.False(claim.HandedOver);
+        Assert.NotNull(next);
+    }
+
+    /// <summary>
     /// Pod Linuksem wysłanie kończy się, gdy dane leżą w buforze jądra, więc nadawca, który zaczął
     /// pisać przed zamknięciem nasłuchu, uznał już przekazanie za udane. Wiadomość musi dojść.
     /// </summary>
