@@ -103,6 +103,102 @@ public sealed class MainWindowInputTests
     }
 
     [Fact]
+    public void SpacjaNaPrzelaczniku_ZFokusemZKlawiaturyPrzelaczaStanANieOdtwarzanie()
+    {
+        Ui.Run(() =>
+        {
+            var (window, h) = Open(tracks: 2);
+
+            try
+            {
+                var switches = window.GetVisualDescendants().OfType<GlassSwitch>().ToList();
+                var equaliser = switches.First(s => AutomationProperties.GetName(s) == Strings.Current["Equaliser"]);
+                var effectSwitch = switches.First(s => s.DataContext is EffectViewModel);
+                var effect = (EffectViewModel)effectSwitch.DataContext!;
+                var playing = h.Player.IsPlaying;
+
+                Assert.True(equaliser.Focus(NavigationMethod.Tab));
+                var eq = h.Player.EqualiserEnabled;
+                Key(window, Avalonia.Input.Key.Space);
+                h.PumpUntil(() => false, 150);
+                Assert.NotEqual(eq, h.Player.EqualiserEnabled);
+                Assert.Equal(playing, h.Player.IsPlaying);
+
+                Assert.True(effectSwitch.Focus(NavigationMethod.Tab));
+                var enabled = effect.Enabled;
+                Key(window, Avalonia.Input.Key.Space);
+                h.PumpUntil(() => false, 150);
+                Assert.NotEqual(enabled, effect.Enabled);
+                Assert.Equal(playing, h.Player.IsPlaying);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Theory]
+    [InlineData("PanelToggle")]
+    [InlineData("QueueToggle")]
+    [InlineData("ShuffleToggle")]
+    [InlineData("LimiterToggle")]
+    [InlineData("NormalisationToggle")]
+    public void SpacjaNaPrzyciskuPrzelaczanym_ZFokusemZKlawiaturyPrzelaczaStan(string name)
+    {
+        Ui.Run(() =>
+        {
+            var (window, h) = Open(tracks: 2);
+
+            try
+            {
+                Func<bool> state = name switch
+                {
+                    "PanelToggle" => () => h.Player.PanelOpen,
+                    "QueueToggle" => () => h.Player.QueueOpen,
+                    "ShuffleToggle" => () => h.Player.ShuffleEnabled,
+                    "LimiterToggle" => () => h.Player.LimiterEnabled,
+                    _ => () => h.Player.NormalisationEnabled,
+                };
+                var toggle = window.FindControl<ToggleButton>(name)!;
+                var before = state();
+                var playing = h.Player.IsPlaying;
+
+                Assert.True(toggle.Focus(NavigationMethod.Tab));
+                Key(window, Avalonia.Input.Key.Space);
+                h.PumpUntil(() => false, 150);
+
+                Assert.NotEqual(before, state());
+                Assert.Equal(playing, h.Player.IsPlaying);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void SpacjaPoKliknieciuPrzelacznikaSterujeOdtwarzaniem()
+    {
+        Ui.Run(() =>
+        {
+            var (window, h) = Open(tracks: 2);
+
+            try
+            {
+                var equaliser = window.GetVisualDescendants().OfType<GlassSwitch>()
+                    .First(s => AutomationProperties.GetName(s) == Strings.Current["Equaliser"]);
+                Assert.True(equaliser.Focus(NavigationMethod.Pointer));
+                Assert.DoesNotContain(":focus-visible", equaliser.Classes);
+                var eq = h.Player.EqualiserEnabled;
+                var playing = h.Player.IsPlaying;
+
+                Key(window, Avalonia.Input.Key.Space);
+                h.PumpUntil(() => false, 150);
+
+                Assert.Equal(eq, h.Player.EqualiserEnabled);
+                Assert.NotEqual(playing, h.Player.IsPlaying);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
     public void LiteryDzialajaTylkoBezModyfikatorow()
     {
         Ui.Run(() =>

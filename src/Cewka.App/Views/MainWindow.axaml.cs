@@ -1250,13 +1250,15 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// Spacja i strzałki w fazie tunelowania, czyli przed przyciskiem, który dostał fokus po
-    /// kliknięciu. Wyjątek: lista kolejki, fader i suwak z fokusem, które same używają strzałek;
-    /// klawisz, którego nie zużyją, i tak dochodzi potem do <see cref="OnKeyDown"/>.
+    /// kliknięciu. Wyjątek: lista kolejki, fader i suwak z fokusem, które same używają strzałek,
+    /// oraz przełącznik z fokusem z klawiatury, który Spacją zmienia stan; klawisz, którego nie
+    /// zużyją, i tak dochodzi potem do <see cref="OnKeyDown"/>.
     /// </summary>
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Handled || e.Key is not (Key.Space or Key.Left or Key.Right or Key.Up or Key.Down)) return;
-        if (KeepsArrowKeys(FocusManager?.GetFocusedElement())) return;
+        var focused = FocusManager?.GetFocusedElement();
+        if (KeepsArrowKeys(focused) || e.Key == Key.Space && KeepsSpace(focused)) return;
 
         HandlePlaybackShortcut(e);
     }
@@ -1264,9 +1266,14 @@ public partial class MainWindow : Window
     /// <summary>Puszczenie Spacji też nie dociera do przycisku, bo ten klika właśnie przy puszczeniu.</summary>
     private void OnPreviewKeyUp(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.None && !KeepsArrowKeys(FocusManager?.GetFocusedElement()))
+        var focused = FocusManager?.GetFocusedElement();
+        if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.None && !KeepsArrowKeys(focused) && !KeepsSpace(focused))
             e.Handled = true;
     }
+
+    /// <summary>Przełącznik kliknięty myszą nie powtarza przełączenia po Spacji.</summary>
+    private static bool KeepsSpace(IInputElement? focused) =>
+        focused is GlassSwitch or Avalonia.Controls.Primitives.ToggleButton &&((StyledElement)focused).Classes.Contains(":focus-visible");
 
     private bool KeepsArrowKeys(IInputElement? focused) => focused switch
     {
