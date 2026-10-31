@@ -127,24 +127,33 @@ public partial class App : Application
 
     // ---------- Przekazywanie ścieżek z kolejnych uruchomień ----------
 
+    private static readonly Queue<string[]> HandedOver = new();
+
     private void AttachSingleInstance()
     {
         // Ścieżki przysłane w trakcie budowania okna czekały w kanale; trafiają do kolejki
         // dopiero po jego otwarciu, bo Post wykona się już w pętli komunikatów.
-        Instance?.Attach(paths => Dispatcher.UIThread.Post(() => OnPathsHandedOver(paths)));
+        Instance?.Attach(paths =>
+        {
+            lock (HandedOver) HandedOver.Enqueue(paths);
+            Dispatcher.UIThread.Post(OnPathsHandedOver);
+        });
     }
 
     private static bool _closing;
 
     /// <summary>
     /// Przestaje przyjmować ścieżki od innych kopii, gdy okno zaczyna się zamykać. Kopia
-    /// uruchomiona w trakcie zapisu dostaje odmowę i czeka na rolę, zamiast oddać plik oknu,
-    /// które go już nie doda.
+    /// uruchomiona w trakcie zapisu nie połączy się i ponawia próby przejęcia roli.
     /// </summary>
     internal static void BeginClosing()
     {
         _closing = true;
         Instance?.StopListening();
+
+        // Ścieżki odebrane wcześniej czekają jeszcze w dyspozytorze, a ich nadawcy już
+        // zakończyli pracę, więc trafiają do kolejki przed jej zapisem.
+        TakeHandedOverPaths();
     }
 
     /// <summary>
@@ -164,16 +173,31 @@ public partial class App : Application
     /// Dokłada pliki od innej kopii do kolejki i wysuwa okno. Dokłada, bo zaznaczenie kilkunastu
     /// plików uruchamia kilkanaście kopii po jednej ścieżce.
     /// </summary>
-    private static void OnPathsHandedOver(string[] paths)
+    private static void OnPathsHandedOver()
     {
-        if (_mainWindow is null || _closing) return;
-
-        _mainWindow.ReceivePaths(paths);
+        if (_mainWindow is null || _closing || !TakeHandedOverPaths()) return;
 
         if (_mainWindow.WindowState == Avalonia.Controls.WindowState.Minimized)
             _mainWindow.WindowState = Avalonia.Controls.WindowState.Normal;
 
         _mainWindow.Activate();
+    }
+
+    /// <summary>Dokłada do kolejki wszystkie czekające wiadomości; fałsz, gdy nie było żadnej.</summary>
+    private static bool TakeHandedOverPaths()
+    {
+        string[][] messages;
+
+        lock (HandedOver)
+        {
+            messages = [.. HandedOver];
+            HandedOver.Clear();
+        }
+
+        if (_mainWindow is null) return false;
+
+        foreach (var paths in messages) _mainWindow.ReceivePaths(paths);
+        return messages.Length > 0;
     }
 
     // ---------- Klawisze multimedialne ----------
