@@ -30,10 +30,11 @@
       <!--
         Krycie tekstu drugorzędnego dobrane do najjaśniejszej plamy tła, na jaką pozwala
         Contrast.DarkBackdropCeiling (i do najciemniejszej z Contrast.LightBackdropFloor w motywie
-        jasnym): Text3 ma tam co najmniej 4,5:1. Pilnuje tego test kontrastu.
+        jasnym): Text3 ma tam co najmniej 4,5:1 na tle i na szkle, a Text2 także na podświetlonym
+        wierszu kolejki, gdzie tekst przygaszony przechodzi w Text2. Pilnuje tego test kontrastu.
       -->
       <SolidColorBrush x:Key="TextBrush" Color="#FFF3F3F5" />
-      <SolidColorBrush x:Key="Text2Brush" Color="#D9F3F3F5" />
+      <SolidColorBrush x:Key="Text2Brush" Color="#E0F3F3F5" />
       <SolidColorBrush x:Key="Text3Brush" Color="#B3F3F3F5" />
 
       <SolidColorBrush x:Key="GlassBrush" Color="#0FFFFFFF" />

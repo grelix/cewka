@@ -1,5 +1,8 @@
 using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using Avalonia.Styling;
 using Cewka.App.Services;
 using Xunit;
@@ -29,15 +32,54 @@ public sealed class ContrastTests
             var background = Contrast.Over(Token("ScrimBrush"), grey);
             var glass = Contrast.Over(Token("GlassBrush"), background);
 
-            foreach (var surface in new[] { background, glass })
+            // Tekst przygaszony na podświetlonym wierszu kolejki przechodzi w Text2, więc tam
+            // sprawdzany jest tylko Text2.
+            var surfaces = new (string Name, Color Colour, string[] Texts)[]
             {
-                foreach (var key in new[] { "Text2Brush", "Text3Brush" })
+                ("tło", background, ["Text2Brush", "Text3Brush"]),
+                ("szkło", glass, ["Text2Brush", "Text3Brush"]),
+                ("komunikat na tle", Contrast.Over(Token("Glass2Brush"), background), ["Text2Brush"]),
+                ("wiersz kolejki", Contrast.Over(Token("Glass2Brush"), glass), ["Text2Brush"]),
+            };
+
+            foreach (var (name, surface, texts) in surfaces)
+            {
+                foreach (var key in texts)
                 {
                     var text = Contrast.Over(Token(key), surface);
                     var ratio = Contrast.Ratio(text, surface);
-                    Assert.True(ratio >= 4.5, $"{key} w motywie {(dark ? "ciemnym" : "jasnym")}: {ratio:F2}:1");
+                    Assert.True(ratio >= 4.5, $"{key}, {name}, motyw {(dark ? "ciemny" : "jasny")}: {ratio:F2}:1");
                 }
             }
+        });
+    }
+
+    [Fact]
+    public void TekstPrzygaszonyWZaznaczonymWierszuKolejkiJestJasniejszy()
+    {
+        Ui.Run(() =>
+        {
+            var faint = new TextBlock { Classes = { "faint" }, Text = "1" };
+            var list = new ListBox { Classes = { "queue" }, ItemsSource = new[] { "a", "b" },
+                                     ItemTemplate = new FuncDataTemplate<string>((_, _) => new TextBlock { Classes = { "faint" } }) };
+            var window = new Window { Width = 300, Height = 200, Content = new StackPanel { Children = { faint, list } } };
+            window.Show();
+
+            try
+            {
+                list.SelectedIndex = 0;
+                Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+                var selected = list.ContainerFromIndex(0)!.GetVisualDescendants().OfType<TextBlock>().First(t => t.Classes.Contains("faint"));
+                var other = list.ContainerFromIndex(1)!.GetVisualDescendants().OfType<TextBlock>().First(t => t.Classes.Contains("faint"));
+
+                Assert.True(window.TryFindResource("Text2Brush", window.ActualThemeVariant, out var text2));
+                Assert.True(window.TryFindResource("Text3Brush", window.ActualThemeVariant, out var text3));
+                Assert.Same(text2, selected.Foreground);
+                Assert.Same(text3, other.Foreground);
+                Assert.Same(text3, faint.Foreground);
+            }
+            finally { window.Close(); }
         });
     }
 

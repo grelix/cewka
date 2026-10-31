@@ -565,6 +565,15 @@
     <Setter Property="BorderThickness" Value="1" />
   </Style>
 
+  <!-- Na podświetlonym wierszu tekst przygaszony traciłby kontrast 4,5:1, więc jaśnieje. -->
+  <Style Selector="ListBox.queue ListBoxItem:pointerover TextBlock.faint">
+    <Setter Property="Foreground" Value="{DynamicResource Text2Brush}" />
+  </Style>
+
+  <Style Selector="ListBox.queue ListBoxItem:selected TextBlock.faint">
+    <Setter Property="Foreground" Value="{DynamicResource Text2Brush}" />
+  </Style>
+
   <!-- Wiersz odtwarzanego utworu: pogrubiony tytul i jasniejszy czas. -->
   <Style Selector="Grid.current TextBlock.row-title">
     <Setter Property="FontWeight" Value="Bold" />
