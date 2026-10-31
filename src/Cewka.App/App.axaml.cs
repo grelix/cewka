@@ -127,10 +127,30 @@ public partial class App : Application
 
     private void AttachSingleInstance()
     {
-        if (Instance is null) return;
+        // Ścieżki przysłane w trakcie budowania okna czekały w kanale; trafiają do kolejki
+        // dopiero po jego otwarciu, bo Post wykona się już w pętli komunikatów.
+        Instance?.Attach(paths => Dispatcher.UIThread.Post(() => OnPathsHandedOver(paths)));
+    }
 
-        Instance.PathsReceived += paths => Dispatcher.UIThread.Post(() => OnPathsHandedOver(paths));
-        Instance.StartListening();
+    private static bool _closing;
+
+    /// <summary>Stops taking paths from other copies once the window starts closing.</summary>
+    internal static void BeginClosing() => _closing = true;
+
+    /// <summary>
+    /// Gives up the role of the running copy once the queue and settings are saved.
+    /// <para>
+    /// Kopia uruchomiona po zwolnieniu roli otwiera własne okno i czyta kolejkę oraz ustawienia
+    /// z dysku, więc muszą tam już być. Ścieżki przysłane w trakcie zapisu przepadają.
+    /// </para>
+    /// </summary>
+    internal static void ReleaseSingleInstance()
+    {
+        _closing = true;
+
+        var instance = Instance;
+        Instance = null;
+        instance?.Dispose();
     }
 
     /// <summary>
@@ -143,7 +163,7 @@ public partial class App : Application
     /// </summary>
     private static void OnPathsHandedOver(string[] paths)
     {
-        if (_mainWindow is null) return;
+        if (_mainWindow is null || _closing) return;
 
         _mainWindow.ReceivePaths(paths);
 
@@ -155,19 +175,22 @@ public partial class App : Application
 
     // ---------- Klawisze multimedialne ----------
 
+    /// <summary>
+    /// Zaczep zakłada dopiero okno, po próbie podłączenia panelu systemowego: gdy panel działa,
+    /// zaczep nie jest potrzebny.
+    /// </summary>
     private void AttachMediaKeys()
     {
         MediaKeys.Pressed += key => Dispatcher.UIThread.Post(() => _mainWindow?.HandleMediaKey(key));
-        ApplyMediaKeysSetting();
     }
 
     /// <summary>
-    /// Installs or removes the keyboard hook to match the setting. Called from the settings
-    /// window, so the change takes effect on the spot rather than at the next start.
+    /// Installs or removes the keyboard hook to match the setting and the state of the system
+    /// media panel. Called from the settings window, so the change takes effect on the spot.
     /// </summary>
     public static void ApplyMediaKeysSetting()
     {
-        if (Settings.Current.MediaKeys) MediaKeys.Install();
+        if (MediaKeys.ShouldHook(Settings.Current.MediaKeys, MediaPanelActive)) MediaKeys.Install();
         else MediaKeys.Uninstall();
     }
 

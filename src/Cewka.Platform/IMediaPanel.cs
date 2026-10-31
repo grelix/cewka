@@ -25,4 +25,12 @@ public interface IMediaPanel : IDisposable
     void SetPosition(TimeSpan position)
     {
     }
+
+    /// <summary>
+    /// Reports the volume, between 0 and 1. Only MPRIS shows it; the Windows panel has none of
+    /// its own, so the default does nothing.
+    /// </summary>
+    void SetVolume(double volume)
+    {
+    }
 }

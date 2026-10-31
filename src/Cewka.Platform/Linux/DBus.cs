@@ -45,6 +45,10 @@ internal static unsafe class DBus
     internal const int Handled = 0;
     internal const int NotHandled = 1;
 
+    internal const string ErrorUnknownProperty = "org.freedesktop.DBus.Error.UnknownProperty";
+    internal const string ErrorPropertyReadOnly = "org.freedesktop.DBus.Error.PropertyReadOnly";
+    internal const string ErrorInvalidArgs = "org.freedesktop.DBus.Error.InvalidArgs";
+
     [DllImport(Library)]
     internal static extern void dbus_error_init(Error* error);
 
@@ -54,8 +58,14 @@ internal static unsafe class DBus
     [DllImport(Library)]
     internal static extern void dbus_error_free(Error* error);
 
+    /// <summary>
+    /// Połączenie prywatne. Tylko takie da się zamknąć, a zamknięcie zwalnia nazwę na szynie.
+    /// </summary>
     [DllImport(Library)]
-    internal static extern nint dbus_bus_get(int type, Error* error);
+    internal static extern nint dbus_bus_get_private(int type, Error* error);
+
+    [DllImport(Library)]
+    internal static extern void dbus_connection_close(nint connection);
 
     [DllImport(Library)]
     internal static extern int dbus_bus_request_name(nint connection, byte* name, uint flags, Error* error);
@@ -114,6 +124,9 @@ internal static unsafe class DBus
 
     [DllImport(Library)]
     internal static extern int dbus_message_iter_next(MessageIter* iter);
+
+    [DllImport(Library)]
+    internal static extern void dbus_message_iter_recurse(MessageIter* iter, MessageIter* sub);
 
     [DllImport(Library)]
     internal static extern int dbus_message_iter_append_basic(MessageIter* iter, int type, void* value);

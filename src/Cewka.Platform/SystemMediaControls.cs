@@ -47,6 +47,7 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
     private static readonly Guid IidControls = new("99fa3ff4-1742-42a6-902e-087d41f965ec");
     private static readonly Guid IidDisplayUpdater = new("8abbc53e-fa55-4ecf-ad8e-c984e5dd1550");
     private static readonly Guid IidMusicProperties = new("6bbf0c59-d0a0-4d26-92a0-f978e1d18e7b");
+    private static readonly Guid IidMusicProperties2 = new("00368462-97d3-44b9-b00f-008afcefaf18");
     private static readonly Guid IidButtonArgs = new("b7f47116-a56f-4dc8-9e11-92031f4a87c2");
 
     // ---------- Pozycje w tablicach wirtualnych ----------
@@ -76,10 +77,12 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
     private const int SlotUpdate = Inspectable + 11;
 
     private const int SlotPutTitle = Inspectable + 1;
-    private const int SlotPutAlbumArtist = Inspectable + 3;
+    private const int SlotPutAlbumTitle = Inspectable + 1;
     private const int SlotPutArtist = Inspectable + 5;
 
     private const int SlotGetButton = Inspectable + 0;
+
+    private const int SlotQueryInterface = 0;
 
     /// <summary>Media type reported to the panel; 1 is Music.</summary>
     private const int MediaTypeMusic = 1;
@@ -89,6 +92,7 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
     private nint _controls;
     private nint _updater;
     private nint _musicProperties;
+    private nint _albumProperties;
     private nint _handler;
     private long _token;
     private bool _disposed;
@@ -98,6 +102,9 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
         _controls = controls;
         _updater = updater;
         _musicProperties = musicProperties;
+
+        // Tytuł albumu ma osobny interfejs; bez niego album po prostu się nie pokazuje.
+        _albumProperties = QueryInterface(musicProperties, IidMusicProperties2);
     }
 
     /// <summary>Raised when a button on the system panel is pressed. Fires on a system thread.</summary>
@@ -217,7 +224,8 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
 
         Check(SetString(_musicProperties, SlotPutTitle, title), "tytuł");
         Check(SetString(_musicProperties, SlotPutArtist, artist ?? string.Empty), "wykonawca");
-        Check(SetString(_musicProperties, SlotPutAlbumArtist, album ?? string.Empty), "album");
+        if (_albumProperties != nint.Zero)
+            Check(SetString(_albumProperties, SlotPutAlbumTitle, album ?? string.Empty), "album");
 
         // Bez Update panel pokazuje poprzedni utwór: właściwości trafiają do bufora, a dopiero
         // to wywołanie przekazuje je systemowi.
@@ -331,6 +339,15 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
         }
     }
 
+    private static nint QueryInterface(nint instance, Guid iid)
+    {
+        nint value;
+        var result = ((delegate* unmanaged<nint, Guid*, nint*, int>)Vtable(instance)[SlotQueryInterface])(
+            instance, &iid, &value);
+
+        return result == Ok ? value : nint.Zero;
+    }
+
     private static nint GetInterface(nint instance, int slot)
     {
         nint value;
@@ -394,11 +411,12 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
 
         if (_controls != nint.Zero) SetBoolean(_controls, SlotPutIsEnabled, false);
 
+        Release(_albumProperties);
         Release(_musicProperties);
         Release(_updater);
         Release(_controls);
 
-        _musicProperties = _updater = _controls = nint.Zero;
+        _albumProperties = _musicProperties = _updater = _controls = nint.Zero;
     }
 
     /// <summary>

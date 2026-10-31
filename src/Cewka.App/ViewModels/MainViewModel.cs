@@ -199,6 +199,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
             Raise(nameof(IsPaused));
             _mediaPanel?.SetStatus(value ? MediaPanelStatus.Playing : MediaPanelStatus.Paused);
+            MediaKeys.Playing = value;
         }
     }
 
@@ -272,6 +273,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _engine.Graph.Volume.Target = clamped;
             _settings.Current.Volume = clamped;
             _settings.Touch();
+            _mediaPanel?.SetVolume(clamped);
             Raise();
         }
     }
@@ -513,6 +515,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void PublishToMediaPanel()
     {
         if (_mediaPanel is null) return;
+
+        _mediaPanel.SetVolume(Volume);
 
         if (_current is null)
         {

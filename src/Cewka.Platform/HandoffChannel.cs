@@ -17,28 +17,28 @@ internal interface IHandoffListener : IDisposable
 /// Carries paths from a copy that is starting to the copy that is already running.
 ///
 /// <para><b>Dlaczego dwa rozwiązania.</b> W Windows potok nazwany żyje w przestrzeni nazw
-/// jądra i nie zależy od żadnego katalogu — działa i zostaje. W Linuksie potok nazwany .NET-u
-/// jest w rzeczywistości gniazdem dziedziny Uniksa, którego ścieżkę wyznacza zmienna
-/// <c>TMPDIR</c>. To zawodzi na dwa sposoby: kopia uruchomiona z innym <c>TMPDIR</c> szuka
-/// gniazda w innym miejscu i nie znajduje go, a katalog <c>/tmp</c> jest wspólny dla wszystkich
-/// użytkowników maszyny — obca osoba może zająć nazwę i odbierać ścieżki otwieranych plików.
-/// Dlatego pod Linuksem gniazdo zakładamy sami, w katalogu należącym do jednego użytkownika.</para>
+/// jądra i nie zależy od żadnego katalogu. Przestrzeń ta jest jednak wspólna dla wszystkich
+/// zalogowanych, więc obie strony potoku przyjmują tylko bieżącego użytkownika: inaczej obca
+/// osoba mogłaby zająć nazwę i odbierać ścieżki otwieranych plików. W Linuksie potok nazwany
+/// .NET-u jest gniazdem dziedziny Uniksa w katalogu z <c>TMPDIR</c>, wspólnym dla wszystkich
+/// i zależnym od środowiska uruchomienia. Dlatego pod Linuksem gniazdo zakładamy sami,
+/// w katalogu należącym do jednego użytkownika.</para>
 ///
-/// <para><b>Adres powstaje od razu przy zdobyciu roli</b>, a nie dopiero przy pierwszym
-/// nasłuchu. Zanim pierwsza kopia zbuduje okno, mija ułamek sekundy — a menedżer plików potrafi
-/// w tym czasie uruchomić kopię na każdy zaznaczony plik. Gniazdo otwarte wcześniej przyjmuje
-/// te połączenia do kolejki jądra i żadne nie przepada.</para>
+/// <para>Menedżer plików potrafi uruchomić kopię na każdy zaznaczony plik naraz. Gniazdo
+/// trzyma czekające połączenia w kolejce jądra; potok w Windows takiej kolejki nie ma, więc
+/// kolejna instancja potoku powstaje zaraz po przyjęciu połączenia, jeszcze przed odczytem
+/// wiadomości.</para>
 /// </summary>
 internal static class HandoffChannel
 {
     /// <summary>
     /// How long a sender keeps trying. Wystarczy na szparę między zdobyciem blokady a otwarciem
-    /// gniazda; dłuższe czekanie tylko opóźniałoby otwarcie własnego okna, gdy nikogo nie ma.
+    /// kanału; dłuższe czekanie tylko opóźniałoby otwarcie własnego okna, gdy nikogo nie ma.
     /// </summary>
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(1);
 
     /// <summary>Guards the accept loop against a sender that connects and then goes quiet.</summary>
-    private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(2);
+    internal static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(2);
 
     /// <summary>
     /// Waiting connections the kernel holds. Zaznaczenie całego albumu uruchamia kopię na każdy
@@ -63,7 +63,9 @@ internal static class HandoffChannel
 
     private static void SendThroughPipe(string name, byte[] payload)
     {
-        using var client = new NamedPipeClientStream(".", name, PipeDirection.Out);
+        // CurrentUserOnly sprawdza właściciela potoku, zanim cokolwiek zostanie wysłane:
+        // potok założony przez innego użytkownika kończy się wyjątkiem, a nie wyciekiem ścieżek.
+        using var client = new NamedPipeClientStream(".", name, PipeDirection.Out, PipeOptions.CurrentUserOnly);
         client.Connect((int)ConnectTimeout.TotalMilliseconds);
 
         client.Write(BitConverter.GetBytes(payload.Length));
@@ -71,34 +73,69 @@ internal static class HandoffChannel
         client.Flush();
     }
 
-    private sealed class PipeListener(string name) : IHandoffListener
+    private sealed class PipeListener : IHandoffListener
     {
+        private readonly string _name;
+        private readonly object _gate = new();
+        private bool _disposed;
+
         /// <summary>
         /// Instancja potoku przygotowana z góry, żeby nadawca mógł się połączyć, zanim
         /// odbiorca stanie na przyjęciu połączenia.
         /// </summary>
-        private NamedPipeServerStream? _ready = Create(name);
+        private NamedPipeServerStream? _ready;
+
+        public PipeListener(string name)
+        {
+            _name = name;
+
+            // Pierwsza instancja musi założyć potok, a nie dołączyć do cudzego o tej nazwie.
+            _ready = Create(name, PipeOptions.FirstPipeInstance);
+        }
 
         public Stream? Accept(CancellationToken token)
         {
-            var server = Interlocked.Exchange(ref _ready, null) ?? Create(name);
+            NamedPipeServerStream server;
+
+            lock (_gate)
+            {
+                if (_disposed) return null;
+                server = _ready ?? Create(_name, PipeOptions.None);
+                _ready = null;
+            }
 
             try
             {
                 server.WaitForConnectionAsync(token).GetAwaiter().GetResult();
-                return server;
             }
             catch
             {
                 server.Dispose();
                 throw;
             }
+
+            // Następny nadawca ma od razu gdzie się połączyć, choćby ten zwlekał z wiadomością.
+            lock (_gate)
+            {
+                if (!_disposed) _ready ??= Create(_name, PipeOptions.None);
+            }
+
+            return server;
         }
 
-        public void Dispose() => Interlocked.Exchange(ref _ready, null)?.Dispose();
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                _disposed = true;
+                _ready?.Dispose();
+                _ready = null;
+            }
+        }
 
-        private static NamedPipeServerStream Create(string name) => new(
-            name, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        private static NamedPipeServerStream Create(string name, PipeOptions extra) => new(
+            name, PipeDirection.In, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly | extra);
     }
 
     // ---------- Systemy uniksowe ----------
@@ -199,7 +236,6 @@ internal static class HandoffChannel
                 return null;
             }
 
-            accepted.ReceiveTimeout = (int)ReadTimeout.TotalMilliseconds;
             return new NetworkStream(accepted, ownsSocket: true);
         }
 

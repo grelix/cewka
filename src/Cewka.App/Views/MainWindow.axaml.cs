@@ -233,6 +233,8 @@ public partial class MainWindow : Window
 
         App.MediaPanelActive = _mediaPanel is not null;
         if (_mediaPanel is not null) _viewModel.AttachMediaPanel(_mediaPanel);
+
+        App.ApplyMediaKeysSetting();
     }
 
     private void AttachWindowsPanel()
@@ -258,6 +260,8 @@ public partial class MainWindow : Window
         mpris.CommandReceived += command => Dispatcher.UIThread.Post(() => HandleMediaCommand(command));
         mpris.SeekRequested += offset => Dispatcher.UIThread.Post(() => _viewModel.SeekRelative(offset.TotalSeconds));
         mpris.PositionRequested += position => Dispatcher.UIThread.Post(() => _viewModel.SeekToPosition(position));
+        mpris.VolumeRequested += volume => Dispatcher.UIThread.Post(() => _viewModel.Volume = volume);
+        mpris.OpenRequested += path => Dispatcher.UIThread.Post(() => _viewModel.OpenFromOutside([path]));
 
         mpris.RaiseRequested += () => Dispatcher.UIThread.Post(() =>
         {
@@ -274,10 +278,12 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(WindowClosingEventArgs e)
     {
+        App.BeginClosing();
         _rotation.Stop();
         PersistGeometry();
         _viewModel.SaveQueueState();
         App.Settings.SaveNow();
+        App.ReleaseSingleInstance();
         base.OnClosing(e);
     }
 
