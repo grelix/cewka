@@ -339,7 +339,9 @@ public partial class MainWindow : Window
 
         // Ekran mógł zniknąć albo zmienić rozdzielczość od ostatniego razu. Okno trafia na ekran,
         // na którym leży największa część jego paska tytułu, i tak, żeby pasek dało się chwycić.
-        if (ScreenForTitleBar(saved) is { } screen)
+        // Gdy pasek nie leży na żadnym ekranie, okno staje na środku głównego.
+        var titleScreen = ScreenForTitleBar(saved);
+        if ((titleScreen ?? Screens.Primary ?? Screens.All.FirstOrDefault()) is { } screen)
         {
             var area = screen.WorkingArea;
             var scale = screen.Scaling;
@@ -348,9 +350,14 @@ public partial class MainWindow : Window
             Height = Math.Max(MinHeight, Math.Min(Height, area.Height / scale));
 
             var width = (int)(Width * scale);
+            var height = (int)(Height * scale);
             var grip = (int)(100 * scale);
-            var x = Math.Clamp(saved.X, area.X - width + grip, area.Right - grip);
-            var y = Math.Clamp(saved.Y, area.Y, Math.Max(area.Y, area.Bottom - (int)(47 * scale)));
+            var x = titleScreen is null
+                ? area.X + Math.Max(0, (area.Width - width) / 2)
+                : Math.Clamp(saved.X, area.X - width + grip, area.Right - grip);
+            var y = titleScreen is null
+                ? area.Y + Math.Max(0, (area.Height - height) / 2)
+                : Math.Clamp(saved.Y, area.Y, Math.Max(area.Y, area.Bottom - (int)(47 * scale)));
 
             WindowStartupLocation = WindowStartupLocation.Manual;
             Position = new PixelPoint(x, y);

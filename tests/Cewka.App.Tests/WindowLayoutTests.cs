@@ -277,6 +277,48 @@ public sealed class WindowLayoutTests
         });
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OknoZapisaneNaOdlaczonymEkranieMiesciSieNaPozostalym(bool maximized)
+    {
+        Ui.Run(() =>
+        {
+            var probe = new Window();
+            var area = probe.Screens.All.First().WorkingArea;
+            App.Settings.Current.WindowControls = WindowControlsPosition.Right;
+            App.Settings.Current.Window = new WindowGeometry
+            {
+                X = area.Right, Y = 0, Width = 2500, Height = 1400, Maximized = maximized,
+            };
+
+            var window = new MainWindow();
+
+            try
+            {
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                if (maximized)
+                {
+                    window.WindowState = WindowState.Normal;
+                    Dispatcher.UIThread.RunJobs();
+                }
+
+                Assert.True(window.Width <= area.Width, $"{window.Width}");
+                Assert.True(window.Height <= area.Height, $"{window.Height}");
+                Assert.True(window.Position.X >= area.X, $"{window.Position}");
+                Assert.True(window.Position.Y >= area.Y, $"{window.Position}");
+                Assert.True(window.Position.X + window.Width <= area.Right, $"{window.Position}");
+                Assert.True(window.Position.Y + window.Height <= area.Bottom, $"{window.Position}");
+            }
+            finally
+            {
+                window.Close();
+                App.Settings.Current.Window = null;
+            }
+        });
+    }
+
     [Fact]
     public void PrzyciskMaksymalizacjiPokazujePrzywrocenieINaPelnymEkranieZnika()
     {
