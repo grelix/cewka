@@ -38,7 +38,17 @@ public sealed class PlaybackEngine : IDisposable
     private const int FlushTimeoutMilliseconds = 500;
 
     /// <summary>Najdłuższe czekanie na wyciszenie przed pauzą; woła je wątek interfejsu.</summary>
-    private const int PauseFadeTimeoutMilliseconds = 100;
+    private const int PauseFadeTimeoutMilliseconds = 250;
+
+    /// <summary>
+    /// Cisza oddawana po wyciszeniu, zanim wolno zatrzymać urządzenie. Wyrenderowane próbki
+    /// czekają jeszcze w buforze sprzętowym, a zatrzymanie go ucina — z trzaskiem.
+    /// </summary>
+    private const int DrainMilliseconds = 40;
+
+    private int _drainLength = 1;
+    private int _pauseDrainPosition;
+    private bool _pauseDraining;
 
     private readonly object _sync = new();
     private readonly List<QueueEntry> _queue = [];
@@ -267,6 +277,7 @@ public sealed class PlaybackEngine : IDisposable
 
             _fadeLength = Math.Max(1, (int)(SampleRate * FadeMilliseconds / 1000));
             _tailLength = Math.Max(1, (int)(SampleRate * TailMilliseconds / 1000));
+            _drainLength = Math.Max(device.PeriodSizeInFrames * 3, SampleRate * DrainMilliseconds / 1000);
             ResetAudioThreadState();
 
             Graph.Prepare(SampleRate, Channels);
@@ -397,6 +408,8 @@ public sealed class PlaybackEngine : IDisposable
         _snapGainPending = false;
         _fadeOutActive = false;
         _fadeOutPosition = 0;
+        _pauseDraining = false;
+        _pauseDrainPosition = 0;
         _fadeCounter = 0;
         _fadingIn = false;
     }
@@ -683,6 +696,7 @@ public sealed class PlaybackEngine : IDisposable
         if (device.IsRunning)
         {
             _pauseFadeDone = false;
+            _pauseDraining = false;
             _pauseFadeRequested = true;
 
             var clock = Stopwatch.StartNew();
@@ -799,10 +813,17 @@ public sealed class PlaybackEngine : IDisposable
             {
                 buffer.Clear();
             }
+            else if (_pauseDraining)
+            {
+                buffer.Clear();
+                _pauseDrainPosition += frames;
+                if (_pauseDrainPosition >= _drainLength) _pauseFadeDone = true;
+            }
             else if (RenderFadeOut(ring, buffer, frames))
             {
                 ResetChain();
-                _pauseFadeDone = true;
+                _pauseDraining = true;
+                _pauseDrainPosition = 0;
             }
 
             return;
@@ -810,6 +831,7 @@ public sealed class PlaybackEngine : IDisposable
 
         // Wyciszenie przerwane przed końcem, na przykład pauza po upływie limitu czasu.
         _fadeOutActive = false;
+        _pauseDraining = false;
 
         // Granice są nieaktualne od żądania przewinięcia do jego wykonania; ich przekroczenie
         // zgłosiłoby na chwilę utwór, który już nie zagra.

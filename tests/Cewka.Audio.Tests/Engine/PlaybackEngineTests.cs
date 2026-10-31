@@ -329,6 +329,31 @@ public class PlaybackEngineTests
         Assert.Equal(A, resumed[^1], 1e-5f);
     }
 
+    /// <summary>
+    /// Po wyciszeniu pauza oddaje jeszcze ciszę na długość bufora urządzenia. Zatrzymanie zaraz po
+    /// wyrenderowaniu wyciszenia ucina próbki czekające w buforze sprzętowym i słychać trzask.
+    /// </summary>
+    [Fact]
+    public void PauseDrainsTheDeviceBufferBeforeStopping()
+    {
+        // Okres jak w prawdziwym urządzeniu. Przy bardzo krótkim atrapa, pompowana w rytmie zegara
+        // systemowego, nie zdążyłaby oddać ciszy przed limitem czasu pauzy.
+        using var h = new EngineHarness(periodFrames: 512);
+        var a = h.Track("a", 10, A);
+
+        h.Engine.SetQueue([a]);
+        h.PumpUntil(() => h.Engine.Position > TimeSpan.FromSeconds(0.3));
+
+        h.Output.ClearSamples();
+        h.Output.StartAutoPump();
+        h.Engine.Pause();
+        h.Output.StopAutoPump();
+
+        var left = h.Output.Samples.Where((_, i) => i % EngineHarness.Channels == 0).ToArray();
+        var silence = Enumerable.Reverse(left).TakeWhile(s => s == 0f).Count();
+        Assert.True(silence >= EngineHarness.Frames(0.04), $"cisza przed zatrzymaniem: {silence} ramek");
+    }
+
     // ---------- błędy plików ----------
 
     /// <summary>
