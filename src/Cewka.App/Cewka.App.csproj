@@ -54,6 +54,7 @@
   <!-- Testy zgodności plików czytają ustawienia i kolejkę tymi samymi kontekstami JSON co program. -->
   <ItemGroup>
     <InternalsVisibleTo Include="Cewka.App.Tests" />
+    <InternalsVisibleTo Include="Cewka.WindowProbe" />
   </ItemGroup>
 
   <ItemGroup>
