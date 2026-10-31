@@ -8,10 +8,13 @@ setlocal
 set KATALOG=%~dp0..
 
 rem Biblioteka natywna musi powstac przed publikacja - to ona jest pakowana do wyniku.
-if not exist "%KATALOG%\src\Cewka.Audio\runtimes\win-x64\native\cewka_audio.dll" (
-    echo Brak biblioteki natywnej, budowanie...
-    call "%KATALOG%\native\build-windows.cmd" || exit /b 1
-)
+rem Budowana zawsze od nowa: katalog runtimes\ jest poza gitem i po aktualizacji zrodel
+rem zostalaby w nim poprzednia wersja, a cmd nie ma wygodnego porownania dat plikow.
+call "%KATALOG%\native\build-windows.cmd" || exit /b 1
+
+rem Plik poprzedniej publikacji usuwany z gory, zeby po przerwanej publikacji nie zostal
+rem jako rzekomy wynik tej.
+if exist "%KATALOG%\artifacts\publish\win-x64\Cewka.exe" del /q "%KATALOG%\artifacts\publish\win-x64\Cewka.exe"
 
 dotnet publish "%KATALOG%\src\Cewka.App" ^
     --configuration Release ^
