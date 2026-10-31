@@ -74,6 +74,37 @@ public sealed class LoudnessServiceTests : IDisposable
         Assert.Equal(0.75, analyser.SamplePeak, precision: 6);
     }
 
+    /// <summary>
+    /// Próbka nieskończona z uszkodzonego pliku dałaby nieskończony szczyt, wzmocnienie −∞ dB
+    /// i wyjątek przy zapisie pamięci podręcznej do JSON.
+    /// </summary>
+    [Fact]
+    public void NonFiniteSamplesAreIgnoredByTheAnalyser()
+    {
+        var clean = new LoudnessAnalyser(48000, 2);
+        clean.Add(Signals.Sine(1000, 0.5, 48000, 48000), 48000);
+
+        var analyser = new LoudnessAnalyser(48000, 2);
+        var buffer = Signals.Sine(1000, 0.5, 48000, 48000);
+        buffer[1001] = float.PositiveInfinity;
+        buffer[2002] = float.NegativeInfinity;
+        buffer[3003] = float.NaN;
+        analyser.Add(buffer, 48000);
+
+        Assert.Equal(0.5, analyser.SamplePeak, precision: 6);
+        var loudness = analyser.ComputeIntegratedLoudness();
+        Assert.NotNull(loudness);
+        Assert.Equal(clean.ComputeIntegratedLoudness()!.Value, loudness!.Value, precision: 1);
+    }
+
+    /// <summary>Szczyt spoza liczb skończonych traktowany jest jak nieznany.</summary>
+    [Fact]
+    public void NonFinitePeakCountsAsUnknown()
+    {
+        var gain = LoudnessService.FromMeasurement(-24, peak: double.PositiveInfinity, targetLufs: -18);
+        Assert.Equal(6, gain.GainDecibels, precision: 6);
+    }
+
     /// <summary>Wpis z pomiaru szczytu ogranicza wzmocnienie utworu z pamięci podręcznej.</summary>
     [Fact]
     public void CachedMeasurementIsLimitedByItsPeak()

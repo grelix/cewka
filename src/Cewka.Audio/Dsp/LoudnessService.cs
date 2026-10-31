@@ -152,7 +152,7 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
 
     private static TrackGain LimitByPeak(TrackGain gain, double? peak)
     {
-        if (gain.GainDecibels <= 0 || peak is not > 0) return gain;
+        if (gain.GainDecibels <= 0 || peak is not > 0 || !double.IsFinite(peak.Value)) return gain;
         return LowerTo(gain, -20 * Math.Log10(peak.Value) - PeakHeadroomDb);
     }
 
@@ -268,8 +268,10 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
             analyser.Add(buffer, frames);
         }
 
+        // Wartości nieskończonej nie da się zapisać w JSON; zablokowałaby zapis całej pamięci podręcznej.
         var loudness = analyser.ComputeIntegratedLoudness();
-        return loudness is null ? null : new LoudnessMeasurement(loudness.Value, analyser.SamplePeak);
+        if (loudness is not { } lufs || !double.IsFinite(lufs) || !double.IsFinite(analyser.SamplePeak)) return null;
+        return new LoudnessMeasurement(lufs, analyser.SamplePeak);
     }
 
     private void Load()

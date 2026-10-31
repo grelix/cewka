@@ -71,7 +71,9 @@ public sealed class LoudnessAnalyser
 
             for (var c = 0; c < _channels; c++)
             {
+                // Próbka spoza liczb skończonych zatrułaby stan filtru K i szczyt na cały pomiar.
                 var sample = buffer[baseIndex + c];
+                if (!float.IsFinite(sample)) sample = 0;
                 if (Math.Abs(sample) > SamplePeak) SamplePeak = Math.Abs(sample);
 
                 var filtered = _highPass[c].ProcessDouble(_shelf[c].ProcessDouble(sample));
