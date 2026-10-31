@@ -1,3 +1,4 @@
+using Cewka.App.Localisation;
 using Cewka.App.Models;
 using Xunit;
 
@@ -20,6 +21,65 @@ public sealed class OutputDeviceTests
         Assert.True(h.Player.HasAudioFailure);
         Assert.True(h.Engine.IsDeviceOpen);
         Assert.Null(h.Engine.PreferredDeviceName);
+        Assert.True(h.Player.IsPlaying);
+    });
+
+    [Fact]
+    public void GdyUrzadzenieDomyslneTezZawodziKomunikatNieTwierdziZeGra() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        h.Player.OpenPaths([h.Track("a")]);
+        Assert.True(h.Player.IsPlaying);
+
+        h.FailAll = true;
+        h.Player.SetOutputDevice("Zepsute");
+
+        Assert.False(h.Player.IsPlaying);
+        Assert.Equal(Strings.Current["AudioFailureDevice"], h.Player.AudioFailure);
+    });
+
+    [Fact]
+    public void WstrzymaneOdtwarzanieNiePrzechodziNaDomyslne() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        h.Player.OpenPaths([h.Track("a")]);
+        h.Player.Pause();
+
+        h.FailingDevice = "Zepsute";
+        h.Player.SetOutputDevice("Zepsute");
+
+        Assert.Equal(Strings.Current["AudioFailureDevice"], h.Player.AudioFailure);
+        Assert.Equal("Zepsute", h.Engine.PreferredDeviceName);
+    });
+
+    [Fact]
+    public void KomunikatOUrzadzeniuDomyslnymZostajePrzyNastepnymUtworze() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        h.Player.OpenPaths([h.Track("a"), h.Track("b")]);
+        h.FailingDevice = "Zepsute";
+        h.Player.SetOutputDevice("Zepsute");
+
+        h.Player.Next();
+
+        Assert.True(h.Player.IsPlaying);
+        Assert.Equal(Strings.Current["AudioFailureFallback"], h.Player.AudioFailure);
+    });
+
+    [Fact]
+    public void PonownaProbaWracaNaWybraneUrzadzenie() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        h.Player.OpenPaths([h.Track("a")]);
+        h.FailingDevice = "Zepsute";
+        h.Player.SetOutputDevice("Zepsute");
+        Assert.Null(h.Engine.PreferredDeviceName);
+
+        h.FailingDevice = null;
+        h.Player.RetryAudio();
+
+        Assert.Equal("Zepsute", h.Engine.PreferredDeviceName);
+        Assert.False(h.Player.HasAudioFailure);
         Assert.True(h.Player.IsPlaying);
     });
 

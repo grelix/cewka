@@ -701,21 +701,27 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// leaving the application silent; the engine resolves the name when it opens the device.
     ///
     /// <para>Urządzenie obecne na liście może mimo to odmówić otwarcia: słuchawki zdążyły się
-    /// rozłączyć, inny program zajął je na wyłączność. Odtwarzanie przechodzi wtedy na urządzenie
-    /// domyślne, a komunikat o błędzie zostaje na ekranie.</para>
+    /// rozłączyć, inny program zajął je na wyłączność. Grający utwór przechodzi wtedy na
+    /// urządzenie domyślne, a komunikat zostaje na ekranie, dopóki gra ono zamiast wybranego.
+    /// Wstrzymany zostaje przy wybranym urządzeniu, żeby następne odtworzenie spróbowało je
+    /// otworzyć jeszcze raz.</para>
     /// </summary>
     private void ApplyOutputDevice()
     {
-        var chosen = _settings.Current.OutputDevice;
+        var chosen = ChosenDevice;
         var wasPlaying = _isPlaying;
 
-        if (TryPlayback(() => _engine.SwitchDevice(chosen)) || chosen is null) return;
+        if (TryPlayback(() => _engine.SwitchDevice(chosen)) || chosen is null || !wasPlaying) return;
 
         _engine.SwitchDevice(null);
-        if (wasPlaying && TryPlayback(_engine.Play)) SyncPlaying();
-
-        SetAudioFailure("AudioFailureFallback");
+        if (TryPlayback(_engine.Play)) SyncPlaying();
     }
+
+    private string? ChosenDevice =>
+        string.IsNullOrEmpty(_settings.Current.OutputDevice) ? null : _settings.Current.OutputDevice;
+
+    /// <summary>Gra urządzenie domyślne, bo wybrane odmówiło otwarcia.</summary>
+    private bool OnFallbackDevice => _engine.IsDeviceOpen && _engine.PreferredDeviceName != ChosenDevice;
 
     /// <summary>Stan wyjścia mógł się zmienić: otwarcie, zamknięcie albo inne urządzenie.</summary>
     private void RaiseOutputState()
@@ -1046,6 +1052,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public void RetryAudio()
     {
+        if (_engine.PreferredDeviceName != ChosenDevice)
+        {
+            ApplyOutputDevice();
+            if (_isPlaying || HasAudioFailure) return;
+        }
+
         if (ResumeRestoredTrack()) return;
 
         if (Queue.Count == 0)
@@ -1070,7 +1082,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         try
         {
             operation();
-            SetAudioFailure(string.Empty);
+            SetAudioFailure(OnFallbackDevice ? "AudioFailureFallback" : string.Empty);
 
             if (wasOpen != _engine.IsDeviceOpen)
             {
