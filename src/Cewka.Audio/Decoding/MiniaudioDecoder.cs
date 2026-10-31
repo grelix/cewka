@@ -33,7 +33,7 @@ internal sealed unsafe class MiniaudioDecoder : IAudioDecoder
         _self = GCHandle.Alloc(this);
 
         var result = NativeAudio.DecoderOpen(
-            &OnRead, &OnSeek, (void*)GCHandle.ToIntPtr(_self),
+            &OnRead, &OnSeek, &OnTell, (void*)GCHandle.ToIntPtr(_self),
             (uint)outputSampleRate, (uint)outputChannels, (uint)AudioQuality.ResamplerFilterOrder,
             out _handle, out var lengthFrames, out var sourceRate, out var sourceChannels);
 
@@ -90,9 +90,11 @@ internal sealed unsafe class MiniaudioDecoder : IAudioDecoder
         // miniaudio uwzglednia wlasna konwersje czestotliwosci po swojej stronie. Przeliczanie
         // na ramki zrodlowe wysylaloby plik 96 kHz odtwarzany przez urzadzenie 48 kHz
         // dwukrotnie za daleko, czyli zwykle poza koniec nagrania.
-        if (NativeAudio.DecoderSeek(_handle, (ulong)Math.Max(0, frame)) != NativeAudio.Success) return;
-
-        _position = frame;
+        // Nieudane przewinięcie zostawia dekoder tam, gdzie faktycznie stoi, i tę pozycję
+        // trzeba podać dalej, inaczej wskaźnik pokazywałby cel, a dźwięk szedłby skądinąd.
+        _position = NativeAudio.DecoderSeek(_handle, (ulong)Math.Max(0, frame)) == NativeAudio.Success
+            ? frame
+            : (long)NativeAudio.DecoderCursor(_handle);
 
         // Po przewinięciu związek między pobranymi bajtami a czasem dźwięku przestaje
         // obowiązywać, więc pomiar zaczyna się od nowa.
@@ -127,12 +129,38 @@ internal sealed unsafe class MiniaudioDecoder : IAudioDecoder
             var self = (MiniaudioDecoder?)GCHandle.FromIntPtr((nint)user).Target;
             if (self is null || !self._stream.CanSeek) return 0;
 
-            self._stream.Seek(offset, origin == 0 ? SeekOrigin.Begin : SeekOrigin.Current);
+            var seekOrigin = origin switch
+            {
+                0 => SeekOrigin.Begin,
+                1 => SeekOrigin.Current,
+                2 => SeekOrigin.End,
+                _ => (SeekOrigin?)null,
+            };
+            if (seekOrigin is null) return 0;
+
+            self._stream.Seek(offset, seekOrigin.Value);
             return 1;
         }
         catch
         {
             return 0;
+        }
+    }
+
+    /// <summary>Położenie (<paramref name="what"/> = 0) albo długość strumienia (1); −1, gdy nieznane.</summary>
+    [UnmanagedCallersOnly]
+    private static long OnTell(void* user, int what)
+    {
+        try
+        {
+            var self = (MiniaudioDecoder?)GCHandle.FromIntPtr((nint)user).Target;
+            if (self is null || !self._stream.CanSeek) return -1;
+
+            return what == 0 ? self._stream.Position : self._stream.Length;
+        }
+        catch
+        {
+            return -1;
         }
     }
 

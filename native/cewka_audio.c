@@ -357,34 +357,114 @@ CEWKA_API int cewka_device_name(void* handle, char* buffer, int bufferSize)
    sa obslugiwane poprawnie na obu systemach, a plik nie musi trafiac w calosci do pamieci.
    ============================================================================ */
 
-typedef size_t (*cewka_read_cb)(void* user, void* buffer, size_t bytesToRead);
-typedef int    (*cewka_seek_cb)(void* user, long long offset, int origin); /* 0 = poczatek, 1 = biezaca */
+typedef size_t    (*cewka_read_cb)(void* user, void* buffer, size_t bytesToRead);
+typedef int       (*cewka_seek_cb)(void* user, long long offset, int origin); /* 0 = poczatek, 1 = biezaca, 2 = koniec */
+typedef long long (*cewka_tell_cb)(void* user, int what);                    /* 0 = polozenie, 1 = dlugosc; -1 przy bledzie */
+
+/*
+    Strumien podawany jest dekoderowi jako wirtualny system plikow, a nie przez
+    ma_decoder_init. Tylko ta droga przekazuje funkcje "tell", bez ktorej dr_wav nie
+    przycina naglowka do faktycznej dlugosci pliku (przerwane nagranie pokazywaloby
+    dlugosc z naglowka), a dr_mp3 nie rozpoznaje znacznikow ID3v1 i APE na koncu.
+*/
+typedef struct
+{
+    ma_vfs_callbacks cb;
+    void*            owner;
+} cewka_stream_vfs;
 
 typedef struct
 {
-    ma_decoder    decoder;
-    cewka_read_cb read;
-    cewka_seek_cb seek;
-    void*         user;
+    ma_decoder       decoder;
+    cewka_stream_vfs vfs;
+    cewka_read_cb    read;
+    cewka_seek_cb    seek;
+    cewka_tell_cb    tell;
+    void*            user;
+    int              seekTableTried;
 } cewka_decoder;
 
-static ma_result cewka__decoder_read(ma_decoder* pDecoder, void* pBufferOut, size_t bytesToRead, size_t* pBytesRead)
+static cewka_decoder* cewka__vfs_owner(ma_vfs* pVFS)
 {
-    cewka_decoder* self = (cewka_decoder*)pDecoder->pUserData;
-    size_t read = self->read(self->user, pBufferOut, bytesToRead);
+    return (cewka_decoder*)((cewka_stream_vfs*)pVFS)->owner;
+}
+
+static ma_result cewka__vfs_open(ma_vfs* pVFS, const char* pFilePath, ma_uint32 openMode, ma_vfs_file* pFile)
+{
+    (void)pFilePath;
+
+    if ((openMode & MA_OPEN_MODE_WRITE) != 0) {
+        return MA_ACCESS_DENIED;
+    }
+
+    /* Plik jest juz otwarty po stronie C#; uchwytem jest sam dekoder. */
+    *pFile = (ma_vfs_file)cewka__vfs_owner(pVFS);
+    return MA_SUCCESS;
+}
+
+static ma_result cewka__vfs_close(ma_vfs* pVFS, ma_vfs_file file)
+{
+    (void)pVFS;
+    (void)file;
+    return MA_SUCCESS;
+}
+
+static ma_result cewka__vfs_read(ma_vfs* pVFS, ma_vfs_file file, void* pDst, size_t sizeInBytes, size_t* pBytesRead)
+{
+    cewka_decoder* self = cewka__vfs_owner(pVFS);
+    (void)file;
+
+    size_t read = self->read(self->user, pDst, sizeInBytes);
 
     if (pBytesRead != NULL) {
         *pBytesRead = read;
     }
 
-    return read == 0 ? MA_AT_END : MA_SUCCESS;
+    return (read == 0 && sizeInBytes > 0) ? MA_AT_END : MA_SUCCESS;
 }
 
-static ma_result cewka__decoder_seek(ma_decoder* pDecoder, ma_int64 byteOffset, ma_seek_origin origin)
+static ma_result cewka__vfs_seek(ma_vfs* pVFS, ma_vfs_file file, ma_int64 offset, ma_seek_origin origin)
 {
-    cewka_decoder* self = (cewka_decoder*)pDecoder->pUserData;
-    int ok = self->seek(self->user, (long long)byteOffset, origin == ma_seek_origin_start ? 0 : 1);
-    return ok ? MA_SUCCESS : MA_ERROR;
+    cewka_decoder* self = cewka__vfs_owner(pVFS);
+    (void)file;
+
+    int code;
+    switch (origin) {
+        case ma_seek_origin_start:   code = 0; break;
+        case ma_seek_origin_current: code = 1; break;
+        case ma_seek_origin_end:     code = 2; break;
+        default: return MA_INVALID_ARGS;
+    }
+
+    return self->seek(self->user, (long long)offset, code) ? MA_SUCCESS : MA_ERROR;
+}
+
+static ma_result cewka__vfs_tell(ma_vfs* pVFS, ma_vfs_file file, ma_int64* pCursor)
+{
+    cewka_decoder* self = cewka__vfs_owner(pVFS);
+    (void)file;
+
+    long long position = self->tell(self->user, 0);
+    if (position < 0) {
+        return MA_ERROR;
+    }
+
+    *pCursor = (ma_int64)position;
+    return MA_SUCCESS;
+}
+
+static ma_result cewka__vfs_info(ma_vfs* pVFS, ma_vfs_file file, ma_file_info* pInfo)
+{
+    cewka_decoder* self = cewka__vfs_owner(pVFS);
+    (void)file;
+
+    long long length = self->tell(self->user, 1);
+    if (length < 0) {
+        return MA_NOT_IMPLEMENTED;
+    }
+
+    pInfo->sizeInBytes = (ma_uint64)length;
+    return MA_SUCCESS;
 }
 
 /*
@@ -396,6 +476,7 @@ static ma_result cewka__decoder_seek(ma_decoder* pDecoder, ma_int64 byteOffset, 
 */
 CEWKA_API int cewka_decoder_open(cewka_read_cb read,
                                  cewka_seek_cb seek,
+                                 cewka_tell_cb tell,
                                  void*         user,
                                  ma_uint32     outRate,
                                  ma_uint32     outChannels,
@@ -405,7 +486,7 @@ CEWKA_API int cewka_decoder_open(cewka_read_cb read,
                                  ma_uint32*    outSourceRate,
                                  ma_uint32*    outSourceChannels)
 {
-    if (outHandle == NULL || read == NULL || seek == NULL) {
+    if (outHandle == NULL || read == NULL || seek == NULL || tell == NULL) {
         return (int)MA_INVALID_ARGS;
     }
     *outHandle = NULL;
@@ -418,7 +499,16 @@ CEWKA_API int cewka_decoder_open(cewka_read_cb read,
 
     self->read = read;
     self->seek = seek;
+    self->tell = tell;
     self->user = user;
+
+    self->vfs.cb.onOpen  = cewka__vfs_open;
+    self->vfs.cb.onClose = cewka__vfs_close;
+    self->vfs.cb.onRead  = cewka__vfs_read;
+    self->vfs.cb.onSeek  = cewka__vfs_seek;
+    self->vfs.cb.onTell  = cewka__vfs_tell;
+    self->vfs.cb.onInfo  = cewka__vfs_info;
+    self->vfs.owner      = self;
 
     ma_decoder_config config = ma_decoder_config_init(ma_format_f32, outChannels, outRate);
 
@@ -427,7 +517,8 @@ CEWKA_API int cewka_decoder_open(cewka_read_cb read,
     }
     config.resampling.linear.lpfOrder = lpfOrder;
 
-    ma_result result = ma_decoder_init(cewka__decoder_read, cewka__decoder_seek, self, &config, &self->decoder);
+    /* Sciezka bez rozszerzenia: format rozpoznaje sie po zawartosci, jak w ma_decoder_init. */
+    ma_result result = ma_decoder_init_vfs((ma_vfs*)&self->vfs, "strumien", &config, &self->decoder);
     if (result != MA_SUCCESS) {
         ma_free(self, NULL);
         return (int)result;
@@ -485,10 +576,70 @@ CEWKA_API ma_uint64 cewka_decoder_read(void* handle, float* output, ma_uint64 fr
     return read;
 }
 
+/*
+    Tablica punktow przewijania MP3, budowana przy pierwszym przewinieciu. Bez niej dr_mp3
+    przewija, dekodujac wszystko od poczatku pliku, co przy dlugim nagraniu daje sekundy
+    ciszy. Budowa przy otwarciu przeczytalaby caly plik w chwili przejscia miedzy utworami,
+    gdy bufor ma zapas tylko pol sekundy, wiec odklada sie ja do pierwszej potrzeby.
+
+    Pulapka: ma_dr_mp3_calculate_seek_points wraca na koniec na pozycje sprzed wyliczenia,
+    przewijajac bez tablicy. Cofniecie strumienia na poczatek przed wyliczeniem czyni ten
+    powrot darmowym; i tak zaraz nastepuje wlasciwe przewiniecie.
+*/
+static void cewka__ensure_mp3_seek_table(cewka_decoder* self)
+{
+    if (self->seekTableTried) {
+        return;
+    }
+    self->seekTableTried = 1;
+
+    if (self->decoder.pBackend == NULL || self->decoder.pBackendVTable != &g_ma_decoding_backend_vtable_mp3) {
+        return;
+    }
+
+    ma_mp3* mp3 = (ma_mp3*)self->decoder.pBackend;
+    if (mp3->seekPointCount > 0) {
+        return;
+    }
+
+    ma_uint32 count = 1024;
+    ma_dr_mp3_seek_point* points = (ma_dr_mp3_seek_point*)ma_malloc(sizeof(*points) * count, NULL);
+    if (points == NULL) {
+        return;
+    }
+
+    if (!ma_dr_mp3_seek_to_start_of_stream(&mp3->dr) ||
+        !ma_dr_mp3_calculate_seek_points(&mp3->dr, &count, points) ||
+        !ma_dr_mp3_bind_seek_table(&mp3->dr, count, points)) {
+        ma_free(points, NULL);
+        return;
+    }
+
+    /* ma_mp3_uninit zwalnia tablice razem z dekoderem. */
+    mp3->seekPointCount = count;
+    mp3->pSeekPoints    = points;
+}
+
 CEWKA_API int cewka_decoder_seek(void* handle, ma_uint64 frameIndex)
 {
     if (handle == NULL) return (int)MA_INVALID_ARGS;
-    return (int)ma_decoder_seek_to_pcm_frame(&((cewka_decoder*)handle)->decoder, frameIndex);
+
+    cewka_decoder* self = (cewka_decoder*)handle;
+    cewka__ensure_mp3_seek_table(self);
+    return (int)ma_decoder_seek_to_pcm_frame(&self->decoder, frameIndex);
+}
+
+/* Polozenie dekodera w ramkach wyjsciowych; po nieudanym przewinieciu mowi, gdzie naprawde stoi. */
+CEWKA_API ma_uint64 cewka_decoder_cursor(void* handle)
+{
+    if (handle == NULL) return 0;
+
+    ma_uint64 cursor = 0;
+    if (ma_decoder_get_cursor_in_pcm_frames(&((cewka_decoder*)handle)->decoder, &cursor) != MA_SUCCESS) {
+        return 0;
+    }
+
+    return cursor;
 }
 
 CEWKA_API void cewka_decoder_close(void* handle)

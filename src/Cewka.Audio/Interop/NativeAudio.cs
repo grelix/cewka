@@ -110,6 +110,7 @@ internal static unsafe partial class NativeAudio
     internal static partial int DecoderOpen(
         delegate* unmanaged<void*, void*, nuint, nuint> read,
         delegate* unmanaged<void*, long, int, int> seek,
+        delegate* unmanaged<void*, int, long> tell,
         void* user, uint outRate, uint outChannels, uint lpfOrder,
         out nint handle, out ulong lengthFrames, out uint sourceRate, out uint sourceChannels);
 
@@ -118,6 +119,9 @@ internal static unsafe partial class NativeAudio
 
     [LibraryImport(Library, EntryPoint = "cewka_decoder_seek")]
     internal static partial int DecoderSeek(nint handle, ulong frameIndex);
+
+    [LibraryImport(Library, EntryPoint = "cewka_decoder_cursor")]
+    internal static partial ulong DecoderCursor(nint handle);
 
     [LibraryImport(Library, EntryPoint = "cewka_decoder_close")]
     internal static partial void DecoderClose(nint handle);
