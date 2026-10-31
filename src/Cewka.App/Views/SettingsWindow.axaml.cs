@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Chrome;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Cewka.App.Controls;
 using Cewka.App.Models;
 using Cewka.App.ViewModels;
 using Cewka.Platform;
@@ -43,6 +44,7 @@ public partial class SettingsWindow : Window
         {
             WindowDecorations = WindowDecorations.BorderOnly;
             WindowDecorationProperties.SetElementRole(TitleBar, WindowDecorationsElementRole.TitleBar);
+            TitleBarRoles.Apply(TitleBar);
             Shell.Classes.Add("square");
         }
 

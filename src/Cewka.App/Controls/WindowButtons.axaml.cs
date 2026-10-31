@@ -1,7 +1,6 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
-using Avalonia.Controls.Chrome;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Cewka.App.Localisation;
@@ -34,11 +33,6 @@ public partial class WindowButtons : UserControl
     {
         InitializeComponent();
 
-        // W systemie Windows przycisk maksymalizacji zgłasza się jako systemowy, co włącza
-        // podpowiedź układów przyciągania po najechaniu.
-        if (OperatingSystem.IsWindows())
-            WindowDecorationProperties.SetElementRole(SquareMaximise, WindowDecorationsElementRole.MaximizeButton);
-
         foreach (var button in new Control[] { SquareMaximise, TrafficZoom })
         {
             button.AddHandler(PointerPressedEvent, OnMaximisePressed, RoutingStrategies.Tunnel, handledEventsToo: true);
@@ -60,6 +54,9 @@ public partial class WindowButtons : UserControl
         get => GetValue(CloseOnlyProperty);
         set => SetValue(CloseOnlyProperty, value);
     }
+
+    /// <summary>Przyciski maksymalizacji obu wariantów; przy ramce systemowej dostają rolę przycisku systemu.</summary>
+    internal IEnumerable<Control> MaximiseButtons => [SquareMaximise, TrafficZoom];
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
