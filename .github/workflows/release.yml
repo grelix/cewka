@@ -25,29 +25,33 @@ jobs:
       wersja: ${{ steps.odczyt.outputs.wersja }}
 
     steps:
+      # Pełna historia: bez niej nie ma gałęzi main, z którą porównywany jest znacznik.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Odczyt wersji
         id: odczyt
         run: |
-          WERSJA="$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props | head -1)"
-          ZNACZNIK="${GITHUB_REF_NAME#v}"
-
-          echo "Directory.Build.props: $WERSJA"
-          echo "znacznik:              $GITHUB_REF_NAME"
-
-          if [ -z "$WERSJA" ]; then
-            echo "BLAD: nie udalo sie odczytac wersji z Directory.Build.props" >&2
-            exit 1
-          fi
-
-          if [ "$WERSJA" != "$ZNACZNIK" ]; then
-            echo "BLAD: znacznik $GITHUB_REF_NAME nie odpowiada wersji $WERSJA z Directory.Build.props." >&2
-            echo "Pakiety nazwane jedna wersja, a zawierajace inna, zdarzyly sie juz raz." >&2
-            exit 1
-          fi
-
+          echo "znacznik: $GITHUB_REF_NAME"
+          WERSJA="$(./tools/sprawdz-wersje.sh "$GITHUB_REF_NAME")"
+          echo "wersja:   $WERSJA"
           echo "wersja=$WERSJA" >> "$GITHUB_OUTPUT"
+
+      - name: Znacznik na gałęzi głównej
+        # Wydanie powstaje tylko z tego, co weszło do main, a więc przeszło przegląd i budowę.
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "BLAD: znacznik $GITHUB_REF_NAME wskazuje zatwierdzenie spoza gałęzi main." >&2
+            exit 1
+          fi
+
+  # Pełne testy na obu systemach, te same co przy każdej zmianie. Bez nich szkic wydania
+  # mógłby powstać ze znacznika na zatwierdzeniu z czerwonymi testami.
+  testy:
+    name: Testy
+    needs: sprawdzenie
+    uses: ./.github/workflows/tests.yml
 
   # Budowa pakietów i próby instalacyjne mieszkają w osobnym pliku, bo to samo potrzebne jest
   # także poza wydaniem — do sprawdzenia na żądanie, czy pakiety nadal się instalują.
@@ -81,7 +85,7 @@ jobs:
 
   wydanie:
     name: Szkic wydania
-    needs: [sprawdzenie, pakiety, windows]
+    needs: [sprawdzenie, testy, pakiety, windows]
     runs-on: ubuntu-latest
 
     permissions:
@@ -118,6 +122,11 @@ jobs:
           {
             echo "> Szkic zbudowany maszynowo ze znacznika \`$GITHUB_REF_NAME\`."
             echo "> Opis merytoryczny należy dopisać przed publikacją, a ten akapit usunąć."
+            echo
+            echo "## Testy"
+            echo
+            echo "Pełne testy na Linuksie i Windowsie, sprawdziany zachowania i porównanie wyglądu"
+            echo "z obrazami odniesienia przeszły w tym przebiegu na zatwierdzeniu znacznika."
             echo
             echo "## Próbne instalacje"
             echo
