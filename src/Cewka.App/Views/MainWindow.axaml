@@ -206,7 +206,7 @@
                             IsVisible="{Binding HasFormatBadge}"
                             Background="{DynamicResource Glass2Brush}"
                             BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1">
-                      <TextBlock Classes="mono dim" Text="{Binding FormatBadge}"
+                      <TextBlock Classes="tabular dim" Text="{Binding FormatBadge}"
                                  FontSize="9.5" LetterSpacing="0.57" />
                     </Border>
 
@@ -295,8 +295,8 @@
                       </Panel>
 
                       <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Grid.Column="0" Classes="mono faint" Text="{Binding Elapsed}" FontSize="11" />
-                        <TextBlock Grid.Column="1" Classes="mono faint" Text="{Binding Total}" FontSize="11" />
+                        <TextBlock Grid.Column="0" Classes="tabular faint" Text="{Binding Elapsed}" FontSize="11" />
+                        <TextBlock Grid.Column="1" Classes="tabular faint" Text="{Binding Total}" FontSize="11" />
                       </Grid>
                     </StackPanel>
 
@@ -350,7 +350,7 @@
 
                         <!-- Trzy stany: bez powtarzania, kolejka, jeden utwór. Ostatni odróżnia
                              ikona z jedynką, bo sam akcent tego nie pokaże. -->
-                        <Button Classes="icon" Classes.active="{Binding RepeatEnabled}"
+                        <Button x:Name="RepeatModeButton" Classes="icon" Classes.active="{Binding RepeatEnabled}"
                                 Width="36" Height="36"
                                 Click="OnToggleRepeat" ToolTip.Tip="{Binding RepeatTooltip}"
                                 AutomationProperties.Name="{Binding RepeatTooltip}">
@@ -453,7 +453,7 @@
                   </Button>
                 </StackPanel>
 
-                <TextBlock Grid.Column="3" Classes="mono faint" Text="{Binding QueueSummary}"
+                <TextBlock Grid.Column="3" Classes="tabular faint" Text="{Binding QueueSummary}"
                            FontSize="10" VerticalAlignment="Center" Margin="0,3,0,0" />
               </Grid>
 
@@ -511,7 +511,7 @@
                             Classes.current="{Binding IsCurrent}"
                             ToolTip.Tip="{Binding Tooltip}" Opacity="{Binding RowOpacity}">
                         <Panel Grid.Column="0" Width="16" Height="16">
-                          <TextBlock Classes="mono faint" Text="{Binding Number}"
+                          <TextBlock Classes="tabular faint" Text="{Binding Number}"
                                      FontSize="10.5"
                                      HorizontalAlignment="Center" VerticalAlignment="Center"
                                      Opacity="{Binding NumberOpacity}" />
@@ -529,7 +529,7 @@
                                      LineHeight="15" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
 
-                        <TextBlock Grid.Column="2" Classes="mono faint row-duration"
+                        <TextBlock Grid.Column="2" Classes="tabular faint row-duration"
                                    Text="{Binding Duration}"
                                    FontSize="10" VerticalAlignment="Center" />
                       </Grid>
@@ -630,14 +630,14 @@
 
                         <!-- Preamp -->
                         <StackPanel Grid.Column="0" Spacing="8" MinWidth="46">
-                          <TextBlock Classes="mono dim" Text="{Binding Preamp.GainText}"
+                          <TextBlock Classes="tabular dim" Text="{Binding Preamp.GainText}"
                                      FontSize="10.5" HorizontalAlignment="Center" />
                           <c:EqFader Height="116" HorizontalAlignment="Center"
+                                     Classes="accent" Classes.off="{Binding !EqualiserEnabled}"
                                      Value="{Binding Preamp.Gain, Mode=TwoWay}"
                                      AutomationProperties.Name="{l:Translate PreampName}"
                                      ShowCentreLine="False"
                                      TrackBrush="{DynamicResource TrackBrush}"
-                                     FillBrush="{DynamicResource AccentBrush}"
                                      ThumbBrush="{DynamicResource FaderThumbBrush}"
                                      ThumbBorderBrush="{DynamicResource FaderThumbBorderBrush}" />
                           <TextBlock Classes="faint" Text="{l:Translate PreampName}" FontSize="9.5"
@@ -659,7 +659,7 @@
                           <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:EqBandViewModel">
                               <StackPanel Spacing="8">
-                                <TextBlock Classes="mono dim" Text="{Binding GainText}"
+                                <TextBlock Classes="tabular dim" Text="{Binding GainText}"
                                            FontSize="10.5" HorizontalAlignment="Center" />
                                 <c:EqFader Height="116" HorizontalAlignment="Center"
                                            Value="{Binding Gain, Mode=TwoWay}"
@@ -669,7 +669,7 @@
                                            CentreLineBrush="{DynamicResource StrokeBrush}"
                                            ThumbBrush="{DynamicResource FaderThumbBrush}"
                                            ThumbBorderBrush="{DynamicResource FaderThumbBorderBrush}" />
-                                <TextBlock Classes="mono faint" Text="{Binding Label}"
+                                <TextBlock Classes="tabular faint" Text="{Binding Label}"
                                            FontSize="9.5" HorizontalAlignment="Center" />
                               </StackPanel>
                             </DataTemplate>
@@ -720,18 +720,18 @@
                                              TextTrimming="CharacterEllipsis"
                                              ToolTip.Tip="{Binding Description}" />
 
-                                  <TextBlock Grid.Column="1" Classes="mono faint"
+                                  <TextBlock Grid.Column="1" Classes="tabular faint"
                                              Text="{Binding StrengthText}" FontSize="10.5"
                                              VerticalAlignment="Center" />
                                 </Grid>
 
                                 <c:TrackSlider Height="14"
+                                               Classes="accent" Classes.off="{Binding !Enabled}"
                                                Value="{Binding Strength, Mode=TwoWay}" Step="0.1"
                                                KeyboardStep="0.1"
                                                AutomationProperties.Name="{Binding StrengthName}"
                                                TrackThickness="4" ThumbDiameter="11"
-                                               TrackBrush="{DynamicResource TrackBrush}"
-                                               FillBrush="{DynamicResource AccentBrush}" />
+                                               TrackBrush="{DynamicResource TrackBrush}" />
                               </StackPanel>
                             </Grid>
                           </DataTemplate>

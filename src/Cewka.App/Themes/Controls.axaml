@@ -22,8 +22,9 @@
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
   </Style>
 
-  <Style Selector="TextBlock.mono">
-    <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+  <!-- Liczby, czasy i dane techniczne: cyfry równej szerokości, żeby nie skakały przy zmianie. -->
+  <Style Selector="TextBlock.tabular">
+    <Setter Property="FontFeatures" Value="tnum" />
   </Style>
 
   <Style Selector="TextBlock.dim">
@@ -408,6 +409,28 @@
   <Style Selector=":is(Button).option.wide">
     <Setter Property="Padding" Value="10,7,12,7" />
     <Setter Property="FontWeight" Value="Normal" />
+  </Style>
+
+  <!-- ======================= Suwaki w akcencie ======================= -->
+
+  <!--
+    Suwak wyłączonego efektu albo korektora ma barwę tekstu, jak jego etykieta, i tak jak ona
+    przygasa razem z wierszem. Sam akcent pod tym samym kryciem wyglądał w jasnym motywie na aktywny.
+  -->
+  <Style Selector="c|TrackSlider.accent">
+    <Setter Property="FillBrush" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <Style Selector="c|TrackSlider.accent.off">
+    <Setter Property="FillBrush" Value="{DynamicResource FillBrush}" />
+  </Style>
+
+  <Style Selector="c|EqFader.accent">
+    <Setter Property="FillBrush" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <Style Selector="c|EqFader.accent.off">
+    <Setter Property="FillBrush" Value="{DynamicResource FillBrush}" />
   </Style>
 
   <!-- ======================= Okno ustawień ======================= -->

@@ -339,7 +339,9 @@ public partial class MainWindow : Window
 
         // Ekran mógł zniknąć albo zmienić rozdzielczość od ostatniego razu. Okno trafia na ekran,
         // na którym leży największa część jego paska tytułu, i tak, żeby pasek dało się chwycić.
-        if (ScreenForTitleBar(saved) is { } screen)
+        // Gdy pasek nie leży na żadnym ekranie, okno staje na środku głównego.
+        var titleScreen = ScreenForTitleBar(saved);
+        if ((titleScreen ?? Screens.Primary ?? Screens.All.FirstOrDefault()) is { } screen)
         {
             var area = screen.WorkingArea;
             var scale = screen.Scaling;
@@ -348,9 +350,14 @@ public partial class MainWindow : Window
             Height = Math.Max(MinHeight, Math.Min(Height, area.Height / scale));
 
             var width = (int)(Width * scale);
+            var height = (int)(Height * scale);
             var grip = (int)(100 * scale);
-            var x = Math.Clamp(saved.X, area.X - width + grip, area.Right - grip);
-            var y = Math.Clamp(saved.Y, area.Y, Math.Max(area.Y, area.Bottom - (int)(47 * scale)));
+            var x = titleScreen is null
+                ? area.X + Math.Max(0, (area.Width - width) / 2)
+                : Math.Clamp(saved.X, area.X - width + grip, area.Right - grip);
+            var y = titleScreen is null
+                ? area.Y + Math.Max(0, (area.Height - height) / 2)
+                : Math.Clamp(saved.Y, area.Y, Math.Max(area.Y, area.Bottom - (int)(47 * scale)));
 
             WindowStartupLocation = WindowStartupLocation.Manual;
             Position = new PixelPoint(x, y);
@@ -1250,13 +1257,15 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// Spacja i strzałki w fazie tunelowania, czyli przed przyciskiem, który dostał fokus po
-    /// kliknięciu. Wyjątek: lista kolejki, fader i suwak z fokusem, które same używają strzałek;
-    /// klawisz, którego nie zużyją, i tak dochodzi potem do <see cref="OnKeyDown"/>.
+    /// kliknięciu. Wyjątek: lista kolejki, fader i suwak z fokusem, które same używają strzałek,
+    /// oraz przełącznik albo przycisk zmieniający stan z fokusem z klawiatury, który Spacją zmienia
+    /// stan; klawisz, którego nie zużyją, i tak dochodzi potem do <see cref="OnKeyDown"/>.
     /// </summary>
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Handled || e.Key is not (Key.Space or Key.Left or Key.Right or Key.Up or Key.Down)) return;
-        if (KeepsArrowKeys(FocusManager?.GetFocusedElement())) return;
+        var focused = FocusManager?.GetFocusedElement();
+        if (KeepsArrowKeys(focused) || e.Key == Key.Space && KeepsSpace(focused)) return;
 
         HandlePlaybackShortcut(e);
     }
@@ -1264,9 +1273,16 @@ public partial class MainWindow : Window
     /// <summary>Puszczenie Spacji też nie dociera do przycisku, bo ten klika właśnie przy puszczeniu.</summary>
     private void OnPreviewKeyUp(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.None && !KeepsArrowKeys(FocusManager?.GetFocusedElement()))
+        var focused = FocusManager?.GetFocusedElement();
+        if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.None && !KeepsArrowKeys(focused) && !KeepsSpace(focused))
             e.Handled = true;
     }
+
+    /// <summary>Przełącznik albo przycisk zmieniający stan sam obsługuje Spację, gdy ma fokus z klawiatury.</summary>
+    private bool KeepsSpace(IInputElement? focused) =>
+        focused is StyledElement element && element.Classes.Contains(":focus-visible")
+        && (focused is GlassSwitch or Avalonia.Controls.Primitives.ToggleButton
+            || focused is Button button && (button == ThemeButton || button == RepeatModeButton || button == MuteButton));
 
     private bool KeepsArrowKeys(IInputElement? focused) => focused switch
     {

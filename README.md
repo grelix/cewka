@@ -127,5 +127,5 @@ Media Foundation w Windowsie i GStreamer w Linuksie.
 
 ## Licencja
 
-MIT — treść w pliku [LICENSE](LICENSE). Osadzone fonty Cantarell i JetBrains Mono podlegają
+MIT — treść w pliku [LICENSE](LICENSE). Osadzony font Cantarell podlega
 licencji SIL Open Font License 1.1; szczegóły w [docs/licencje.md](docs/licencje.md).
