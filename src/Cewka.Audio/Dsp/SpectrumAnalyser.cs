@@ -15,22 +15,27 @@ namespace Cewka.Audio.Dsp;
 /// </summary>
 public sealed class SpectrumAnalyser : IAudioProcessor
 {
-    /// <summary>Window size. At 48 kHz this is about 11 ms — fine enough to follow a beat.</summary>
-    private const int WindowSize = 512;
+    /// <summary>
+    /// Rozmiar okna przy 48 kHz, około 11 ms: dość krótko, żeby nadążyć za rytmem. Przy innym
+    /// próbkowaniu okno rośnie lub maleje w potęgach dwójki, żeby szerokość prążka, a z nią podział
+    /// na pasma, została mniej więcej ta sama.
+    /// </summary>
+    private const int ReferenceWindowSize = 512;
+    private const int ReferenceSampleRate = 48000;
 
-    /// <summary>Analyse every this many frames; roughly 43 updates per second at 48 kHz.</summary>
-    private const int HopSize = 1024;
+    /// <summary>Stała czasowa opadania wskaźników; wzrost jest natychmiastowy.</summary>
+    private const double DecaySeconds = 0.12;
 
-    /// <summary>How quickly the published values fall back; rises are immediate.</summary>
-    private const float Decay = 0.16f;
-
-    private readonly float[] _window = new float[WindowSize];
-    private readonly float[] _real = new float[WindowSize];
-    private readonly float[] _imaginary = new float[WindowSize];
-    private readonly float[] _hann = new float[WindowSize];
+    private int _windowSize;
+    private int _hopSize;
+    private float[] _window = [];
+    private float[] _real = [];
+    private float[] _imaginary = [];
+    private float[] _hann = [];
 
     private int _writeIndex;
     private int _framesSinceAnalysis;
+    private int _framesSincePublish;
     private int _channels = 2;
     private int _sampleRate = 48000;
 
@@ -39,10 +44,25 @@ public sealed class SpectrumAnalyser : IAudioProcessor
     private float _mid;
     private float _high;
 
-    public SpectrumAnalyser()
+    public SpectrumAnalyser() => Allocate(ReferenceSampleRate);
+
+    private void Allocate(int sampleRate)
     {
-        for (var i = 0; i < WindowSize; i++)
-            _hann[i] = 0.5f * (1 - MathF.Cos(2 * MathF.PI * i / (WindowSize - 1)));
+        var octaves = Math.Round(Math.Log2(sampleRate / (double)ReferenceSampleRate));
+        var size = Math.Clamp((int)(ReferenceWindowSize * Math.Pow(2, octaves)), 256, 4096);
+
+        // Analiza co dwa okna: przy 48 kHz około 47 razy na sekundę.
+        _hopSize = 2 * size;
+
+        if (size == _windowSize) return;
+
+        _windowSize = size;
+        _window = new float[size];
+        _real = new float[size];
+        _imaginary = new float[size];
+        _hann = new float[size];
+        for (var i = 0; i < size; i++)
+            _hann[i] = 0.5f * (1 - MathF.Cos(2 * MathF.PI * i / (size - 1)));
     }
 
     /// <summary>Overall envelope, 0 to 1.</summary>
@@ -61,6 +81,7 @@ public sealed class SpectrumAnalyser : IAudioProcessor
     {
         _sampleRate = sampleRate;
         _channels = channels;
+        Allocate(sampleRate);
         Reset();
     }
 
@@ -74,36 +95,43 @@ public sealed class SpectrumAnalyser : IAudioProcessor
             for (var c = 0; c < _channels; c++) sum += buffer[baseIndex + c];
 
             _window[_writeIndex] = sum / _channels;
-            _writeIndex = (_writeIndex + 1) % WindowSize;
+            _writeIndex = (_writeIndex + 1) % _windowSize;
         }
 
         _framesSinceAnalysis += frames;
-        if (_framesSinceAnalysis < HopSize) return;
+        _framesSincePublish += frames;
+        if (_framesSinceAnalysis < _hopSize) return;
 
-        _framesSinceAnalysis = 0;
-        Analyse();
+        // Reszta ponad krok przechodzi na następną analizę, więc ich średnia częstość nie zależy
+        // od rozmiaru bufora. Opadanie liczone jest z czasu, który faktycznie upłynął.
+        _framesSinceAnalysis %= _hopSize;
+        var decay = (float)(1 - Math.Exp(-_framesSincePublish / (_sampleRate * DecaySeconds)));
+        _framesSincePublish = 0;
+        Analyse(decay);
     }
 
-    private void Analyse()
+    private void Analyse(float decay)
     {
+        var size = _windowSize;
+
         // Copy out in chronological order and apply the window.
-        for (var i = 0; i < WindowSize; i++)
+        for (var i = 0; i < size; i++)
         {
-            _real[i] = _window[(_writeIndex + i) % WindowSize] * _hann[i];
+            _real[i] = _window[(_writeIndex + i) % size] * _hann[i];
             _imaginary[i] = 0;
         }
 
         var rms = 0f;
-        for (var i = 0; i < WindowSize; i++) rms += _real[i] * _real[i];
-        rms = MathF.Sqrt(rms / WindowSize);
+        for (var i = 0; i < size; i++) rms += _real[i] * _real[i];
+        rms = MathF.Sqrt(rms / size);
 
         Fft(_real, _imaginary);
 
-        var binHz = _sampleRate / (float)WindowSize;
+        var binHz = _sampleRate / (float)size;
         float low = 0, mid = 0, high = 0;
 
         // Only the first half carries distinct information for a real input.
-        for (var bin = 1; bin < WindowSize / 2; bin++)
+        for (var bin = 1; bin < size / 2; bin++)
         {
             var magnitude = MathF.Sqrt(_real[bin] * _real[bin] + _imaginary[bin] * _imaginary[bin]);
             var frequency = bin * binHz;
@@ -113,26 +141,36 @@ public sealed class SpectrumAnalyser : IAudioProcessor
             else high += magnitude;
         }
 
-        var scale = 2f / WindowSize;
-        Publish(ref _low, Normalise(low * scale));
-        Publish(ref _mid, Normalise(mid * scale));
-        Publish(ref _high, Normalise(high * scale));
+        var scale = 2f / size;
+        Publish(ref _low, Normalise(low * scale), decay);
+        Publish(ref _mid, Normalise(mid * scale), decay);
+        Publish(ref _high, Normalise(high * scale), decay);
 
-        // Obwiednia jest hojna, żeby ciche fragmenty też pokazywały ruch — ale nie tak hojna,
-        // jak była. Mnożnik cztery sprawiał, że przy zwykłej muzyce wartość stała przyklejona
-        // do jedności i wykres fali prawie się nie ruszał, bo obcięcie zjadało całą zmienność.
-        // Przy 2,6 poziom mieści się w zakresie i faktycznie podąża za muzyką.
-        Publish(ref _level, Math.Clamp(rms * 2.6f, 0f, 1f));
+        // Obwiednia jest hojna, żeby ciche fragmenty też pokazywały ruch. Przy większym mnożniku
+        // zwykła muzyka przyklejałaby wartość do jedności i obcięcie zjadałoby całą zmienność.
+        Publish(ref _level, Math.Clamp(rms * 2.6f, 0f, 1f), decay);
     }
 
     private static float Normalise(float value) => Math.Clamp(MathF.Sqrt(value) * 1.6f, 0f, 1f);
 
-    private static void Publish(ref float field, float value) =>
-        field = value > field ? value : field + (value - field) * Decay;
+    private static void Publish(ref float field, float value, float decay)
+    {
+        // NaN raz zapisany zostałby na zawsze: każde porównanie z nim jest fałszywe.
+        if (float.IsNaN(value) || float.IsNaN(field))
+        {
+            field = 0;
+            return;
+        }
+
+        field = value > field ? value : field + (value - field) * decay;
+
+        // W ciszy wartość opadałaby w liczby subnormalne.
+        if (field < 1e-6f) field = 0;
+    }
 
     /// <summary>
     /// In-place iterative radix-2 FFT. Small and self-contained: pulling in a maths library
-    /// for one 512-point transform per 20 ms would be a poor trade.
+    /// for one short transform per 20 ms would be a poor trade.
     /// </summary>
     private static void Fft(float[] real, float[] imaginary)
     {
@@ -188,6 +226,7 @@ public sealed class SpectrumAnalyser : IAudioProcessor
         Array.Clear(_window);
         _writeIndex = 0;
         _framesSinceAnalysis = 0;
+        _framesSincePublish = 0;
         _level = _low = _mid = _high = 0;
     }
 }

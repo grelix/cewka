@@ -4,7 +4,7 @@ namespace Cewka.Audio.Dsp;
 /// Integrated loudness according to ITU-R BS.1770-4, which is what EBU R128 and
 /// ReplayGain 2.0 are built on.
 ///
-/// <para><b>Jak to działa.</b> Sygnał przechodzi przez dwustopniowy filtr K (półka górna
+/// <para>Sygnał przechodzi przez dwustopniowy filtr K (półka górna
 /// plus filtr górnoprzepustowy), który przybliża sposób, w jaki ucho ocenia głośność.
 /// Następnie liczona jest średnia kwadratu w blokach 400 ms zachodzących na siebie w 75%.
 /// Bloki cichsze niż −70 LUFS są odrzucane bramką bezwzględną, a z pozostałych wyznaczana
@@ -59,6 +59,9 @@ public sealed class LoudnessAnalyser
     /// <summary>Number of 400 ms blocks measured so far.</summary>
     public int BlockCount => _blockEnergies.Count;
 
+    /// <summary>Największa bezwzględna wartość próbki we wszystkich kanałach, bez nadpróbkowania.</summary>
+    public double SamplePeak { get; private set; }
+
     /// <summary>Feeds interleaved samples. Can be called any number of times.</summary>
     public void Add(ReadOnlySpan<float> buffer, int frames)
     {
@@ -68,7 +71,12 @@ public sealed class LoudnessAnalyser
 
             for (var c = 0; c < _channels; c++)
             {
-                var filtered = _highPass[c].ProcessDouble(_shelf[c].ProcessDouble(buffer[baseIndex + c]));
+                // Próbka spoza liczb skończonych zatrułaby stan filtru K i szczyt na cały pomiar.
+                var sample = buffer[baseIndex + c];
+                if (!float.IsFinite(sample)) sample = 0;
+                if (Math.Abs(sample) > SamplePeak) SamplePeak = Math.Abs(sample);
+
+                var filtered = _highPass[c].ProcessDouble(_shelf[c].ProcessDouble(sample));
                 _accumulator[c] += filtered * filtered;
             }
 

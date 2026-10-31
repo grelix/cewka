@@ -4,8 +4,12 @@ namespace Cewka.Audio.Dsp;
 /// Ten-band graphic equaliser with a preamp, matching the bands in the design.
 /// <para>
 /// Each band is one peaking section per channel. Gains are smoothed towards their targets
-/// once per buffer rather than applied immediately: moving a fader recomputes filter
-/// coefficients, and a step change in coefficients is audible as a click.
+/// once per buffer: moving a fader recomputes filter coefficients, and a step change in
+/// coefficients is audible as a click.
+/// </para>
+/// <para>
+/// Przedwzmacniacz zmienia się liniowo w obrębie bufora, a wyłączenie sprowadza wszystkie
+/// pasma płynnie do zera i dopiero wtedy omija korektor.
 /// </para>
 /// </summary>
 public sealed class Equaliser : IAudioProcessor
@@ -14,9 +18,10 @@ public sealed class Equaliser : IAudioProcessor
     public static readonly double[] Frequencies = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
     /// <summary>
-    /// Q for one-octave bands: 1 / (2·sinh(ln2 / 2)). With this value the bells of adjacent
-    /// bands sum to a flat response when every fader is set alike, which is what makes the
-    /// preamp behave predictably.
+    /// Dobroć pasm oktawowych: 1 / (2·sinh(ln2 / 2)). Przy niej połowa wzmocnienia dzwonu
+    /// w decybelach wypada pół oktawy od środka, więc sąsiednie pasma zachodzą na siebie. Przy
+    /// jednakowych suwakach charakterystyka jest wyższa od wskazania (w środkach pasm około
+    /// półtora raza) i lekko falista; dokładność ustawień nie jest celem tego korektora.
     /// </summary>
     private static readonly double OctaveQ = 1.0 / (2.0 * Math.Sinh(Math.Log(2.0) / 2.0));
 
@@ -28,6 +33,7 @@ public sealed class Equaliser : IAudioProcessor
 
     private readonly double[] _targetGains = new double[Frequencies.Length];
     private readonly double[] _currentGains = new double[Frequencies.Length];
+    private readonly bool[] _bandRunning = new bool[Frequencies.Length];
     private Biquad[,] _sections = new Biquad[0, 0];
 
     private double _targetPreamp;
@@ -36,9 +42,8 @@ public sealed class Equaliser : IAudioProcessor
 
     private int _sampleRate = 48000;
     private int _channels = 2;
-    private double _smoothingPerBuffer = 0.5;
 
-    /// <summary>When false the equaliser passes audio through untouched.</summary>
+    /// <summary>When false the equaliser fades to flat and then passes audio through untouched.</summary>
     public bool Enabled { get; set; } = true;
 
     /// <summary>Preamp in decibels, −12 to +12.</summary>
@@ -61,62 +66,96 @@ public sealed class Equaliser : IAudioProcessor
         _sampleRate = sampleRate;
         _channels = channels;
         _sections = new Biquad[Frequencies.Length, channels];
+        Array.Clear(_bandRunning);
 
         for (var band = 0; band < Frequencies.Length; band++)
         for (var channel = 0; channel < channels; channel++)
             _sections[band, channel] = Biquad.Identity();
 
-        // Buffers arrive roughly every 10 ms; convert the smoothing time to a per-buffer factor.
-        const double assumedBufferSeconds = 0.01;
-        _smoothingPerBuffer = 1 - Math.Exp(-assumedBufferSeconds / SmoothingSeconds);
-
-        for (var band = 0; band < Frequencies.Length; band++) _currentGains[band] = _targetGains[band];
-        _currentPreamp = _targetPreamp;
-
-        UpdateCoefficients(force: true);
+        UpdateCoefficients(0, force: true);
     }
 
     public void Process(Span<float> buffer, int frames)
     {
-        if (!Enabled) return;
+        if (!Enabled && IsFlat()) return;
 
-        UpdateCoefficients(force: false);
-
-        var preamp = _preampLinear;
+        var preampBefore = _preampLinear;
+        UpdateCoefficients(frames, force: false);
 
         for (var band = 0; band < Frequencies.Length; band++)
         {
             // Skip bands sitting at zero: with the cookbook coefficients they are an exact
             // pass-through, so running them would only cost time.
-            if (Math.Abs(_currentGains[band]) < RecomputeThresholdDb) continue;
+            if (Math.Abs(_currentGains[band]) < RecomputeThresholdDb)
+            {
+                _bandRunning[band] = false;
+                continue;
+            }
 
             for (var channel = 0; channel < _channels; channel++)
             {
                 ref var section = ref _sections[band, channel];
+
+                // Przy zerowym wzmocnieniu stan dzwonu wynosi zero; zatrzymany przy pominięciu
+                // pochodziłby sprzed wielu buforów.
+                if (!_bandRunning[band]) section.Reset();
+
                 for (var frame = 0; frame < frames; frame++)
                 {
                     var index = frame * _channels + channel;
                     buffer[index] = section.Process(buffer[index]);
                 }
+
+                section.Sanitise();
             }
+
+            _bandRunning[band] = true;
         }
 
-        if (Math.Abs(preamp - 1f) > 1e-6f)
+        ApplyPreamp(buffer, frames, preampBefore, _preampLinear);
+    }
+
+    /// <summary>Przedwzmacniacz przechodzi liniowo od wartości z poprzedniego bufora do bieżącej.</summary>
+    private void ApplyPreamp(Span<float> buffer, int frames, float from, float to)
+    {
+        if (from == to)
         {
-            for (var i = 0; i < frames * _channels; i++) buffer[i] *= preamp;
+            if (Math.Abs(to - 1f) <= 1e-6f) return;
+            for (var i = 0; i < frames * _channels; i++) buffer[i] *= to;
+            return;
+        }
+
+        var step = (to - from) / frames;
+        for (var frame = 0; frame < frames; frame++)
+        {
+            var gain = from + step * (frame + 1);
+            var baseIndex = frame * _channels;
+            for (var c = 0; c < _channels; c++) buffer[baseIndex + c] *= gain;
         }
     }
 
-    private void UpdateCoefficients(bool force)
+    private bool IsFlat()
     {
+        if (_currentPreamp != 0) return false;
+        foreach (var gain in _currentGains)
+            if (gain != 0) return false;
+        return true;
+    }
+
+    private void UpdateCoefficients(int frames, bool force)
+    {
+        // Stała czasowa w sekundach, niezależnie od tego, ile ramek przynosi bufor.
+        var step = force ? 1 : 1 - Math.Exp(-frames / (_sampleRate * SmoothingSeconds));
+        var enabled = Enabled;
+
         for (var band = 0; band < Frequencies.Length; band++)
         {
-            var target = _targetGains[band];
+            var target = enabled ? _targetGains[band] : 0;
             var current = _currentGains[band];
 
-            if (!force && Math.Abs(target - current) < RecomputeThresholdDb) continue;
+            if (!force && current == target) continue;
 
-            var next = force ? target : current + (target - current) * _smoothingPerBuffer;
+            var next = current + (target - current) * step;
 
             // Snap once the remaining distance stops mattering, so the value settles exactly.
             if (Math.Abs(target - next) < RecomputeThresholdDb) next = target;
@@ -127,13 +166,11 @@ public sealed class Equaliser : IAudioProcessor
                 _sections[band, channel].SetPeaking(Frequencies[band], OctaveQ, next, _sampleRate);
         }
 
-        if (force || Math.Abs(_targetPreamp - _currentPreamp) >= RecomputeThresholdDb)
+        var targetPreamp = enabled ? _targetPreamp : 0;
+        if (force || _currentPreamp != targetPreamp)
         {
-            _currentPreamp = force
-                ? _targetPreamp
-                : _currentPreamp + (_targetPreamp - _currentPreamp) * _smoothingPerBuffer;
-
-            if (Math.Abs(_targetPreamp - _currentPreamp) < RecomputeThresholdDb) _currentPreamp = _targetPreamp;
+            _currentPreamp += (targetPreamp - _currentPreamp) * step;
+            if (Math.Abs(targetPreamp - _currentPreamp) < RecomputeThresholdDb) _currentPreamp = targetPreamp;
 
             _preampLinear = (float)Math.Pow(10, _currentPreamp / 20);
         }

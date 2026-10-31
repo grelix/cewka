@@ -4,19 +4,19 @@ namespace Cewka.Audio.Dsp;
 /// Bas wirtualny: dokłada harmoniczne najniższych tonów, żeby były słyszalne tam, gdzie
 /// przetwornik nie potrafi ich wytworzyć.
 ///
-/// <para><b>Po co.</b> Na głośnikach laptopa podbicie 45 Hz korektorem nie daje nic — membrana
+/// <para>Na głośnikach laptopa podbicie 45 Hz korektorem nie daje nic — membrana
 /// tej częstotliwości nie wypromieniuje, a energia idzie w ciepło i zniekształcenia. Słuch
 /// odtwarza jednak wysokość tonu z układu jego harmonicznych: słysząc 90 i 135 Hz, ucho
 /// dopowiada sobie brakującą podstawową 45 Hz, której w powietrzu nie ma. Zjawisko nosi nazwę
 /// brakującej podstawowej i jest znane od XIX wieku; ten stopień korzysta z niego wprost.</para>
 ///
-/// <para><b>Jak.</b> Suma obu kanałów przepuszczana jest przez pasmo najniższych tonów, poddana
+/// <para>Suma obu kanałów przepuszczana jest przez pasmo najniższych tonów, poddana
 /// prostowaniu — które wytwarza harmoniczne parzyste — a wynik wybierany jest pasmem leżącym
 /// wyżej i domieszany do obu kanałów. Poziom harmonicznych podąża za obwiednią pasma
 /// wejściowego, więc pojawiają się wyłącznie wtedy, gdy jest z czego je zrobić; bez tego
 /// stopień dudniłby przez cały czas.</para>
 ///
-/// <para><b>Czego nie robi.</b> Nie usuwa oryginalnych niskich częstotliwości. Rozwiązania
+/// <para>Nie usuwa oryginalnych niskich częstotliwości. Rozwiązania
 /// komercyjne zwykle je odcinają, żeby odciążyć głośnik, ale na zestawie, który bas odtwarza,
 /// byłoby to pogorszeniem. Domieszka jest monofoniczna — kierunku tak niskich tonów i tak
 /// nie słyszymy.</para>
@@ -40,6 +40,8 @@ public sealed class VirtualBass : IAudioProcessor
     /// </summary>
     private const double GateFloor = 1e-4;
 
+    private const double SwitchSeconds = 0.020;
+
     private Biquad _sourceHighPass = Biquad.Identity();
     private Biquad _sourceLowPass = Biquad.Identity();
     private Biquad _harmonicHighPass = Biquad.Identity();
@@ -51,24 +53,23 @@ public sealed class VirtualBass : IAudioProcessor
 
     private int _channels = 2;
     private double _strength = 50;
-    private float _mix;
+    private double _switchCoefficient;
+    private double _mix;
+    private bool _running;
 
-    /// <summary>Gdy wyłączony, sygnał przechodzi bez zmiany ani jednej próbki.</summary>
+    /// <summary>Po wyłączeniu domieszka wygasa płynnie, a potem sygnał przechodzi bez zmiany ani jednej próbki.</summary>
     public bool Enabled { get; set; }
 
     /// <summary>Siła działania w procentach, 0–100.</summary>
     public double Strength
     {
         get => _strength;
-        set
-        {
-            _strength = Math.Clamp(value, 0, 100);
-
-            // Domieszka celowo skromna nawet na maksimum: harmoniczne mają uzupełniać bas,
-            // a nie zastępować go warkotem.
-            _mix = (float)(_strength / 100.0 * 1.6);
-        }
+        set => _strength = Math.Clamp(value, 0, 100);
     }
+
+    // Domieszka celowo skromna nawet na maksimum: harmoniczne mają uzupełniać bas,
+    // a nie zastępować go warkotem.
+    private double TargetMix => Enabled ? _strength / 100.0 * 1.6 : 0;
 
     public void Prepare(int sampleRate, int channels)
     {
@@ -85,17 +86,26 @@ public sealed class VirtualBass : IAudioProcessor
         _harmonicLowPass.SetLowPass(HarmonicHighHz, 0.7071, sampleRate);
 
         _envelopeCoefficient = 1 - Math.Exp(-1.0 / (EnvelopeSeconds * sampleRate));
+        _switchCoefficient = 1 - Math.Exp(-1.0 / (SwitchSeconds * sampleRate));
         _envelope = 0;
         _rectifierMean = 0;
 
-        Strength = _strength;
+        _mix = TargetMix;
+        _running = _mix > 0;
     }
 
     public void Process(Span<float> buffer, int frames)
     {
-        if (!Enabled || _strength <= 0) return;
+        var targetMix = TargetMix;
+        if (targetMix == 0 && _mix == 0)
+        {
+            _running = false;
+            return;
+        }
 
-        var mix = _mix;
+        // Filtry i obwiednie zatrzymane przy wyłączeniu opisują materiał sprzed wielu buforów.
+        if (!_running) Reset();
+        _running = true;
 
         for (var frame = 0; frame < frames; frame++)
         {
@@ -127,10 +137,29 @@ public sealed class VirtualBass : IAudioProcessor
             // znikałby przy cichszej muzyce. Bramka służy do czego innego: ma nie dokładać
             // harmonicznych do materiału, który basu nie ma wcale.
             var gate = _envelope / (_envelope + GateFloor);
-            var added = (float)(shaped * gate) * mix;
+            _mix += (targetMix - _mix) * _switchCoefficient;
+            var added = (float)(shaped * gate * _mix);
 
             for (var c = 0; c < _channels; c++) buffer[baseIndex + c] += added;
         }
+
+        if (Math.Abs(targetMix - _mix) < 1e-5) _mix = targetMix;
+        Sanitise();
+    }
+
+    /// <summary>
+    /// W ciszy cyfrowej obwiednie i stan filtrów wygasają w stronę liczb subnormalnych, kosztownych
+    /// w każdej operacji; NaN zostałby w nich na zawsze.
+    /// </summary>
+    private void Sanitise()
+    {
+        _sourceHighPass.Sanitise();
+        _sourceLowPass.Sanitise();
+        _harmonicHighPass.Sanitise();
+        _harmonicLowPass.Sanitise();
+
+        if (!double.IsFinite(_envelope) || _envelope < 1e-25) _envelope = 0;
+        if (!double.IsFinite(_rectifierMean) || _rectifierMean < 1e-25) _rectifierMean = 0;
     }
 
     public void Reset()
