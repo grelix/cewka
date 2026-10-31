@@ -13,9 +13,8 @@ internal sealed partial class HandoffJsonContext : JsonSerializerContext;
 /// Where the one-copy machinery keeps its two things: the file whose lock decides who is
 /// running, and the address on which that copy listens.
 /// <para>
-/// Ścieżki są tu wypisane, a nie brane wprost ze <see cref="AppPaths"/>, żeby sprawdzenia
-/// mogły uruchamiać ten mechanizm w katalogu tymczasowym, nie ruszając prawdziwych ustawień
-/// ani działającego programu.
+/// Ścieżki są podawane jawnie, żeby sprawdzenia mogły uruchamiać ten mechanizm w katalogu
+/// tymczasowym, nie ruszając prawdziwych ustawień ani działającego programu.
 /// </para>
 /// </summary>
 /// <param name="Name">Nazwa potoku w przestrzeni nazw jądra Windows; pod Linuksem nieużywana.</param>
@@ -31,29 +30,24 @@ public sealed record InstanceAddress(string Name, string LockFile, string Socket
 /// <summary>
 /// Keeps a single running copy of the application and hands paths over to it.
 ///
-/// <para><b>Po co.</b> Skojarzenie plików sprawia, że otwarcie albumu z eksploratora uruchamia
-/// program raz dla każdego zaznaczonego pliku. Bez tego mechanizmu powstałoby kilkanaście okien
-/// walczących o urządzenie dźwiękowe. Tutaj pierwsza kopia zostaje, a każda następna oddaje jej
-/// swoje ścieżki i natychmiast kończy pracę.</para>
+/// <para>Skojarzenie plików sprawia, że otwarcie albumu z eksploratora uruchamia program raz dla
+/// każdego zaznaczonego pliku. Pierwsza kopia zostaje, a każda następna oddaje jej swoje ścieżki
+/// i natychmiast kończy pracę, więc nie powstaje kilkanaście okien walczących o urządzenie
+/// dźwiękowe. O pierwszeństwie rozstrzyga wyłączna blokada pliku w katalogu ustawień; jądro
+/// zwalnia ją także wtedy, gdy program zginie bez pożegnania.</para>
 ///
-/// <para><b>Dlaczego blokada pliku.</b> O pierwszeństwie rozstrzyga wyłączna blokada pliku
-/// w katalogu ustawień. Wcześniej stał tu muteks nazwany i pod Linuksem okazał się zawodny:
-/// .NET trzyma takie muteksy w <c>/tmp/.dotnet/shm/session&lt;SID&gt;</c>, czyli osobno dla każdej
-/// sesji POSIX. Menedżer plików uruchamia programy przez systemd, a ten odcina każdy z nich
-/// własnym <c>setsid</c> — każda kopia trafiała więc do pustego katalogu, uznawała się za
-/// pierwszą i otwierała kolejne okno, choć poprzednia nasłuchiwała tuż obok. Blokada pliku nie
-/// zna pojęcia sesji, a jądro zwalnia ją nawet wtedy, gdy program zginie bez pożegnania.</para>
-///
-/// <para><b>Sprawdzenie po zmianach w tym pliku.</b> Sedno błędu widać wyłącznie między dwiema
-/// sesjami POSIX, więc żadne sprawdzenie w jednym procesie go nie wyłapie. Pod Linuksem:
-/// uruchomić kopię, potem <c>setsid program plik.mp3</c> i policzyć procesy — ma zostać jeden.</para>
+/// <para>Pułapka: muteks nazwany .NET-u żyje pod Linuksem w <c>/tmp/.dotnet/shm/session&lt;SID&gt;</c>,
+/// osobno dla każdej sesji POSIX, a menedżer plików uruchamia każdą kopię we własnej sesji.
+/// Każda uznałaby się za pierwszą. Tego nie wyłapie sprawdzenie w jednym procesie; po zmianach
+/// w tym pliku pod Linuksem uruchomić kopię, potem <c>setsid program plik.mp3</c> i policzyć
+/// procesy. Ma zostać jeden.</para>
 /// </summary>
 public sealed class SingleInstance : IDisposable
 {
     /// <summary>Guards against a hostile or broken sender flooding the channel.</summary>
     private const int MaxMessageBytes = 1 << 20;
 
-    /// <summary>Messages kept until the window attaches; więcej nie przyjdzie przy zwykłym użyciu.</summary>
+    /// <summary>Messages kept until the window attaches.</summary>
     private const int MaxPendingMessages = 256;
 
     /// <summary>
@@ -73,9 +67,8 @@ public sealed class SingleInstance : IDisposable
     private bool _disposed;
 
     /// <summary>
-    /// Nasłuch rusza od razu przy zdobyciu roli, a nie dopiero po zbudowaniu okna. Kopie
-    /// uruchomione w tym czasie oddają ścieżki do bufora, zamiast po kilku sekundach czekania
-    /// otwierać własne okna.
+    /// Nasłuch rusza w chwili zdobycia roli. Kopie uruchomione w trakcie budowania okna
+    /// oddają ścieżki do bufora i od razu kończą pracę.
     /// </summary>
     private SingleInstance(FileStream held, IHandoffListener channel)
     {
