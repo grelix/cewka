@@ -350,7 +350,7 @@
 
                         <!-- Trzy stany: bez powtarzania, kolejka, jeden utwór. Ostatni odróżnia
                              ikona z jedynką, bo sam akcent tego nie pokaże. -->
-                        <Button Classes="icon" Classes.active="{Binding RepeatEnabled}"
+                        <Button x:Name="RepeatModeButton" Classes="icon" Classes.active="{Binding RepeatEnabled}"
                                 Width="36" Height="36"
                                 Click="OnToggleRepeat" ToolTip.Tip="{Binding RepeatTooltip}"
                                 AutomationProperties.Name="{Binding RepeatTooltip}">

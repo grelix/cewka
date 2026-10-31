@@ -172,6 +172,41 @@ public sealed class MainWindowInputTests
         });
     }
 
+    [Theory]
+    [InlineData("ThemeButton")]
+    [InlineData("RepeatModeButton")]
+    [InlineData("MuteButton")]
+    public void SpacjaNaPrzyciskuZmieniajacymStan_ZFokusemZKlawiaturyZmieniaStan(string name)
+    {
+        Ui.Run(() =>
+        {
+            var theme = App.Theme.Mode;
+            var savedTheme = App.Settings.Current.Theme;
+            var (window, h) = Open(tracks: 2);
+
+            try
+            {
+                // Nazwa dla czytnika ekranu podaje bieżący stan każdego z tych przycisków.
+                var button = window.FindControl<Button>(name)!;
+                var before = AutomationProperties.GetName(button);
+                var playing = h.Player.IsPlaying;
+
+                Assert.True(button.Focus(NavigationMethod.Tab));
+                Key(window, Avalonia.Input.Key.Space);
+                h.PumpUntil(() => false, 150);
+
+                Assert.NotEqual(before, AutomationProperties.GetName(button));
+                Assert.Equal(playing, h.Player.IsPlaying);
+            }
+            finally
+            {
+                window.Close();
+                App.Theme.SetMode(theme);
+                App.Settings.Current.Theme = savedTheme;
+            }
+        });
+    }
+
     [Fact]
     public void SpacjaPoKliknieciuPrzelacznikaSterujeOdtwarzaniem()
     {

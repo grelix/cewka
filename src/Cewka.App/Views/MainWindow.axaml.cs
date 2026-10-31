@@ -1258,8 +1258,8 @@ public partial class MainWindow : Window
     /// <summary>
     /// Spacja i strzałki w fazie tunelowania, czyli przed przyciskiem, który dostał fokus po
     /// kliknięciu. Wyjątek: lista kolejki, fader i suwak z fokusem, które same używają strzałek,
-    /// oraz przełącznik z fokusem z klawiatury, który Spacją zmienia stan; klawisz, którego nie
-    /// zużyją, i tak dochodzi potem do <see cref="OnKeyDown"/>.
+    /// oraz przełącznik albo przycisk zmieniający stan z fokusem z klawiatury, który Spacją zmienia
+    /// stan; klawisz, którego nie zużyją, i tak dochodzi potem do <see cref="OnKeyDown"/>.
     /// </summary>
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
@@ -1278,9 +1278,11 @@ public partial class MainWindow : Window
             e.Handled = true;
     }
 
-    /// <summary>Przełącznik kliknięty myszą nie powtarza przełączenia po Spacji.</summary>
-    private static bool KeepsSpace(IInputElement? focused) =>
-        focused is GlassSwitch or Avalonia.Controls.Primitives.ToggleButton &&((StyledElement)focused).Classes.Contains(":focus-visible");
+    /// <summary>Przełącznik albo przycisk zmieniający stan sam obsługuje Spację, gdy ma fokus z klawiatury.</summary>
+    private bool KeepsSpace(IInputElement? focused) =>
+        focused is StyledElement element && element.Classes.Contains(":focus-visible")
+        && (focused is GlassSwitch or Avalonia.Controls.Primitives.ToggleButton
+            || focused is Button button && (button == ThemeButton || button == RepeatModeButton || button == MuteButton));
 
     private bool KeepsArrowKeys(IInputElement? focused) => focused switch
     {
