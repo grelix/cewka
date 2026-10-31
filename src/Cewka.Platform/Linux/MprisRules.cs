@@ -32,7 +32,7 @@ internal static class MprisRules
 }
 
 /// <summary>
-/// Tells a jump in the playing position from normal playback.
+/// Odróżnia skok pozycji odtwarzania od zwykłego grania.
 ///
 /// <para>Panele ekstrapolują pozycję z ostatniego odczytu, więc skok, którego zwykłe granie nie
 /// tłumaczy, trzeba ogłosić sygnałem <c>Seeked</c>. Oczekiwana pozycja liczona jest z zegara,

@@ -4,11 +4,11 @@ namespace Cewka.Platform;
 public static class CommandLinePaths
 {
     /// <summary>
-    /// Turns every relative path into a full one, resolved against <paramref name="baseDirectory"/>.
+    /// Zamienia ścieżki względne na pełne względem <paramref name="baseDirectory"/>.
     ///
-    /// <para>Pułapka: ścieżka względna znaczy coś tylko w katalogu, z którego uruchomiono
-    /// program. Kopia działająca w innym katalogu rozwiązałaby ją po swojemu, a w zapisanej
-    /// kolejce przestałaby działać przy następnym uruchomieniu z innego miejsca.</para>
+    /// <para>Pułapka: ścieżka względna znaczy coś tylko w katalogu uruchomienia. Działająca
+    /// kopia w innym katalogu rozwiązałaby ją po swojemu, a w zapisanej kolejce przestałaby
+    /// działać.</para>
     /// </summary>
     /// <param name="arguments">Argumenty wiersza poleceń.</param>
     /// <param name="baseDirectory">Katalog bieżący; domyślnie katalog bieżący procesu.</param>

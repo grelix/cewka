@@ -4,11 +4,8 @@ using System.Runtime.Versioning;
 namespace Cewka.Platform;
 
 /// <summary>
-/// Whether the machine is running on its battery.
-///
-/// <para>Używane wyłącznie do trybu automatycznego efektów: animowane tło i obracająca się płyta
-/// odświeżają się trzydzieści razy na sekundę, co na zasilaniu bateryjnym jest kosztem
-/// odczuwalnym, a przy zamkniętej pokrywie lub w tle — bezcelowym.</para>
+/// Czy komputer pracuje na baterii. Dla trybu automatycznego efektów, bo tło i płyta
+/// odświeżają się trzydzieści razy na sekundę.
 /// </summary>
 public static class PowerStatus
 {

@@ -203,11 +203,8 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
     // ---------- Zawartość panelu ----------
 
     /// <summary>
-    /// Reports what is playing. Empty values are simply left out of the panel.
-    /// <para>
-    /// Długość nagrania nie jest tu używana: panel systemu Windows przyjmuje ją osobnym
-    /// interfejsem opisującym oś czasu, a bez niego pokazuje sam opis utworu.
-    /// </para>
+    /// Podaje, co gra; puste wartości panel pomija. Długość nie jest przekazywana, bo panel
+    /// przyjmuje ją osobnym interfejsem osi czasu.
     /// </summary>
     public void SetTrack(string title, string? artist, string? album, TimeSpan length)
     {
@@ -411,14 +408,12 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
     }
 
     /// <summary>
-    /// The object handed to the system as the button handler.
+    /// Obiekt przekazywany systemowi jako obsługa przycisków.
     ///
-    /// <para>WinRT expects a delegate of type
-    /// <c>TypedEventHandler&lt;SystemMediaTransportControls, …ButtonPressedEventArgs&gt;</c>. Such a
-    /// delegate has no fixed identifier: it is derived from the type arguments by the algorithm
-    /// described for parameterised types, which is what <see cref="ComputeHandlerIid"/> does.
-    /// A wrong result is harmless — the system asks the object for exactly that identifier,
-    /// gets a refusal, and registration fails visibly instead of silently doing nothing.</para>
+    /// <para>WinRT oczekuje delegata
+    /// <c>TypedEventHandler&lt;SystemMediaTransportControls, …ButtonPressedEventArgs&gt;</c>, który
+    /// nie ma stałego identyfikatora; wylicza go <see cref="ComputeHandlerIid"/> z argumentów typu.
+    /// Zły wynik kończy się widoczną porażką rejestracji.</para>
     /// </summary>
     private static class ButtonHandler
     {

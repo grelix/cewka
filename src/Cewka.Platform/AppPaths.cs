@@ -26,12 +26,9 @@ public static class AppPaths
     public static string CacheDirectory => LazyCache.Value;
 
     /// <summary>
-    /// Directory for things that only make sense while the user is logged in.
-    /// <para>
-    /// Na systemach uniksowych jest to <c>XDG_RUNTIME_DIR</c>: katalog należy do jednego
-    /// użytkownika, ma prawa 0700 i znika przy wylogowaniu. Gniazdo przekazywania ścieżek
-    /// leży właśnie tam, a nie w <c>/tmp</c>, które widzą wszyscy na maszynie.
-    /// </para>
+    /// Katalog na rzeczy ważne tylko w czasie sesji użytkownika. Pod Uniksem to
+    /// <c>XDG_RUNTIME_DIR</c>: należy do jednego użytkownika, ma prawa 0700 i znika przy
+    /// wylogowaniu, dlatego leży tam gniazdo przekazywania ścieżek.
     /// </summary>
     public static string RuntimeDirectory => LazyRuntime.Value;
 
@@ -42,11 +39,8 @@ public static class AppPaths
     public static string QueueFile => Path.Combine(ConfigDirectory, "queue.json");
 
     /// <summary>
-    /// File whose exclusive lock decides which copy of the application is the one running.
-    /// <para>
-    /// Leży w katalogu ustawień, bo ten wskazuje to samo miejsce niezależnie od tego, skąd
-    /// program uruchomiono — z terminala, z menu czy z menedżera plików.
-    /// </para>
+    /// Plik, którego wyłączna blokada rozstrzyga, która kopia programu działa. Leży w katalogu
+    /// ustawień, bo ten jest ten sam bez względu na to, skąd program uruchomiono.
     /// </summary>
     public static string InstanceLockFile => Path.Combine(ConfigDirectory, "instance.lock");
 
@@ -54,15 +48,11 @@ public static class AppPaths
     public static string InstanceSocketFile => Path.Combine(RuntimeDirectory, "instance.sock");
 
     /// <summary>
-    /// Moves both directories under a root of the caller's choosing.
+    /// Przenosi oba katalogi pod wskazany korzeń. Dla narzędzi i testów: zamknięcie prawdziwego
+    /// okna zapisuje kolejkę i bez tego nadpisałoby kolejkę użytkownika.
     /// <para>
-    /// This exists for the development tools. The snapshot renderer opens and closes the real
-    /// main window, and closing it persists the queue — so without this, photographing the
-    /// interface overwrites the queue of whoever ran it.
-    /// </para>
-    /// <para>
-    /// Must be called before anything reads a path: the resolved values are cached for the
-    /// lifetime of the process, and a late call would leave the two halves disagreeing.
+    /// Pułapka: wywołać przed pierwszym odczytem ścieżki. Wartości są zapamiętywane na czas
+    /// życia procesu, a późne wywołanie zostawiłoby obie połowy niezgodne.
     /// </para>
     /// </summary>
     public static void Redirect(string root)
