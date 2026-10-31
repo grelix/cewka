@@ -67,11 +67,6 @@
   </ItemGroup>
 
   <!--
-    Symbole bibliotek natywnych Skia i HarfBuzz przychodza razem z pakietami i nie daja sie
-    wylaczyc wlasciwoscia projektu, bo nie sa zwiazane z zestawem referencyjnym. Sto megabajtow
-    obok jednoplikowego wydania przeczyloby jego sensowi, wiec sa usuwane po publikacji.
-  -->
-  <!--
     Publikacja pod konkretna platforme bierze z Cewka.Audio tylko biblioteke natywna tej
     platformy. Gdy na maszynie zbudowano obie, wariant obcy trafialby do wydania na darmo.
   -->
@@ -85,6 +80,11 @@
     </ItemGroup>
   </Target>
 
+  <!--
+    Symbole bibliotek natywnych Skia i HarfBuzz przychodza razem z pakietami i nie daja sie
+    wylaczyc wlasciwoscia projektu, bo nie sa zwiazane z zestawem referencyjnym. Sto megabajtow
+    obok jednoplikowego wydania przeczyloby jego sensowi, wiec sa usuwane po publikacji.
+  -->
   <Target Name="UsunSymboleZWydania" AfterTargets="Publish" Condition="'$(PublishSingleFile)' == 'true'">
     <ItemGroup>
       <SymboleDoUsuniecia Include="$(PublishDir)**\*.pdb" />
