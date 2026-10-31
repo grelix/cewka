@@ -11,12 +11,18 @@ arch=('x86_64')
 url="https://github.com/grelix/cewka"
 license=('MIT')
 depends=('glibc' 'gcc-libs' 'zlib' 'libx11' 'libxrandr' 'libxi' 'fontconfig')
-optdepends=('gst-plugins-good: obsługa AAC, M4A i ALAC'
-            'gst-libav: obsługa AAC, M4A i ALAC')
+optdepends=('gst-plugins-base: potok dekodowania AAC, M4A i ALAC'
+            'gst-plugins-good: rozpakowanie kontenera M4A'
+            'gst-libav: dekoder AAC i ALAC'
+            'openssl: sprawdzanie nowszej wersji przez HTTPS')
 makedepends=('dotnet-sdk-9.0' 'gcc')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 # Suma kontrolna pominięta: archiwum składa GitHub przy pobraniu.
 sha256sums=('SKIP')
+# Plik jednoplikowy .NET to apphost z pakunkiem doklejonym za sekcjami ELF. Strip składa plik
+# od nowa z samych sekcji i pakunek przepada, więc program przestaje startować (tak samo
+# wyłącza go spec RPM w tools/build-packages.sh). Symboli i tak nie ma: DebugType=none.
+options=('!strip' '!debug')
 
 build() {
     cd "$srcdir/$pkgname-$pkgver"
