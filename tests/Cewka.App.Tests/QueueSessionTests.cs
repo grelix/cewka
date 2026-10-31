@@ -114,6 +114,32 @@ public sealed class QueueSessionTests
     });
 
     [Fact]
+    public void NieudaneOtwarcieUrzadzeniaNieZuzywaWznowienia() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        Save(h, [h.TrackWithTaggedLength("a"), h.TrackWithTaggedLength("b")], 1, 30);
+        h.Player.RestoreQueueState();
+
+        // Długość z tagów decyduje, czy pozycja mieści się w utworze; bez czekania wynik
+        // zależałby od tego, czy odczyt w tle zdążył.
+        Assert.True(h.PumpUntil(() => h.Engine.Queue.All(entry => entry.Duration > TimeSpan.Zero)));
+
+        h.FailAll = true;
+        h.Player.TogglePlay();
+        Assert.False(h.Player.IsPlaying);
+
+        h.Player.SaveQueueState();
+        var saved = QueueStateStore.Load(h.QueueFile)!;
+        Assert.Equal(1, saved.CurrentIndex);
+        Assert.Equal(30, saved.PositionSeconds);
+
+        h.FailAll = false;
+        h.Player.RetryAudio();
+        Assert.True(h.PumpUntil(() => h.Engine.CurrentIndex == 1 && h.Engine.Position.TotalSeconds >= 29),
+            $"wpis {h.Engine.CurrentIndex}, pozycja {h.Engine.Position}");
+    });
+
+    [Fact]
     public void EdycjaKolejkiPrzesuwaUzbrojoneWznowienie() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();

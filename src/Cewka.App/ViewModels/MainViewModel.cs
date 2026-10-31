@@ -1930,6 +1930,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // zostaje samo uruchomienie.
         if (!_resume.TryTake(_engine.CurrentIndex >= 0, out var index, out var seconds)) return false;
 
+        var saved = seconds;
+
         // Pozycja za końcem utworu (plik podmieniono na krótszy) zaczyna go od początku,
         // zamiast od razu przeskakiwać do następnego.
         var duration = _engine.Queue.ElementAtOrDefault(index)?.Duration ?? TimeSpan.Zero;
@@ -1937,6 +1939,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         if (TryPlayback(() => _engine.PlayIndex(index, TimeSpan.FromSeconds(seconds))))
             IsPlaying = _engine.State == PlaybackState.Playing;
+        else
+            // Odtwarzanie nie ruszyło, więc pozycja czeka na ponowienie i trafia do zapisu sesji.
+            _resume.Arm(index, saved, Queue.Count);
 
         return true;
     }
