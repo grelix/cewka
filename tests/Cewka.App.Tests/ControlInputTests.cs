@@ -88,6 +88,42 @@ public sealed class ControlInputTests
     }
 
     [Fact]
+    public void PrzytrzymanaSpacjaPrzelaczaPrzelacznikRazPrzyPuszczeniu()
+    {
+        Ui.Run(() =>
+        {
+            var glass = new GlassSwitch();
+            var window = Host(glass);
+            var toggles = 0;
+            glass.Toggled += (_, _) => toggles++;
+
+            try
+            {
+                Assert.True(glass.Focus(NavigationMethod.Tab));
+
+                // Puszczenie bez wciśnięcia na przełączniku, np. po przejściu fokusu z innej kontrolki.
+                window.KeyRelease(Avalonia.Input.Key.Space, RawInputModifiers.None, PhysicalKey.None, null);
+                Assert.Equal(0, toggles);
+
+                // Autopowtórzenie to kolejne wciśnięcia bez puszczenia.
+                window.KeyPress(Avalonia.Input.Key.Space, RawInputModifiers.None, PhysicalKey.None, null);
+                window.KeyPress(Avalonia.Input.Key.Space, RawInputModifiers.None, PhysicalKey.None, null);
+                window.KeyPress(Avalonia.Input.Key.Space, RawInputModifiers.None, PhysicalKey.None, null);
+                window.KeyRelease(Avalonia.Input.Key.Space, RawInputModifiers.None, PhysicalKey.None, null);
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.Equal(1, toggles);
+                Assert.True(glass.IsChecked);
+
+                Key(window, Avalonia.Input.Key.Enter);
+                Assert.Equal(2, toggles);
+                Assert.False(glass.IsChecked);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
     public void GladzikNaFaderzeSumujeDrobneKroki()
     {
         Ui.Run(() =>

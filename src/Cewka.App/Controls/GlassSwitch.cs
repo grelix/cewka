@@ -18,6 +18,8 @@ public sealed class GlassSwitch : Control, ICustomHitTest
     private const double KnobDiameter = 19.0;
     private const double KnobInset = 2.0;
 
+    private bool _spacePressed;
+
     public static readonly StyledProperty<bool> IsCheckedProperty =
         AvaloniaProperty.Register<GlassSwitch, bool>(
             nameof(IsChecked), defaultBindingMode: Avalonia.Data.BindingMode.TwoWay);
@@ -69,10 +71,32 @@ public sealed class GlassSwitch : Control, ICustomHitTest
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (e.Key is not (Key.Space or Key.Enter)) return;
 
+        switch (e.Key)
+        {
+            case Key.Space: _spacePressed = true; break;
+            case Key.Enter: Toggle(); break;
+            default: return;
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>Spacja przełącza przy puszczeniu, jak przycisk, więc przytrzymana nie przełącza raz za razem.</summary>
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        base.OnKeyUp(e);
+        if (e.Key != Key.Space || !_spacePressed) return;
+
+        _spacePressed = false;
         Toggle();
         e.Handled = true;
+    }
+
+    protected override void OnLostFocus(FocusChangedEventArgs e)
+    {
+        base.OnLostFocus(e);
+        _spacePressed = false;
     }
 
     private void Toggle()
