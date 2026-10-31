@@ -38,17 +38,31 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
 
         _reader = reader;
 
-        // Wylaczamy wszystkie strumienie i wlaczamy pierwszy dzwiekowy: plik moze zawierac
-        // obraz albo rozdzialy, ktorych dekodowanie byloby czysta strata.
-        reader.SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS, false);
-        reader.SetStreamSelection(MF_SOURCE_READER_FIRST_AUDIO_STREAM, true);
+        try
+        {
+            // Wyłączone wszystkie strumienie poza pierwszym dźwiękowym: plik może zawierać
+            // obraz albo rozdziały, których dekodowanie byłoby czystą stratą.
+            reader.SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS, false);
 
-        ConfigureOutput(reader, out var sourceRate, out var sourceChannels);
-        Configure(sourceRate, sourceChannels, outputSampleRate, outputChannels, meter);
+            result = reader.SetStreamSelection(MF_SOURCE_READER_FIRST_AUDIO_STREAM, true);
+            if (result < 0) throw Failure("wybór ścieżki dźwiękowej", result);
 
-        TotalFrames = ReadDuration(reader) is { } duration && duration > TimeSpan.Zero
-            ? (long)Math.Round(duration.TotalSeconds * outputSampleRate)
-            : 0;
+            ConfigureOutput(reader);
+            if (!ReadOutputFormat(reader, out var sourceRate, out var sourceChannels))
+                throw Failure("odczyt formatu wyjściowego", 0);
+
+            Configure(sourceRate, sourceChannels, outputSampleRate, outputChannels, meter);
+
+            TotalFrames = ReadDuration(reader) is { } duration && duration > TimeSpan.Zero
+                ? (long)Math.Round(duration.TotalSeconds * outputSampleRate)
+                : 0;
+        }
+        catch
+        {
+            // Obiekt nie powstał, więc bez tego czytnik trzymałby plik do przebiegu finalizatora.
+            Dispose();
+            throw;
+        }
     }
 
     public override bool CanSeek => true;
@@ -57,33 +71,54 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
     /// Asks for uncompressed float at the file's own rate. Passing a partial type lets the
     /// source reader insert whatever decoder the file needs.
     /// </summary>
-    private static void ConfigureOutput(IMFSourceReader reader, out int sampleRate, out int channels)
+    private static void ConfigureOutput(IMFSourceReader reader)
     {
         var result = MFCreateMediaType(out var target);
         if (result < 0) throw Failure("utworzenie typu wyjściowego", result);
 
-        var major = MFMediaType_Audio;
-        var subtype = MFAudioFormat_Float;
-        var majorKey = MF_MT_MAJOR_TYPE;
-        var subtypeKey = MF_MT_SUBTYPE;
+        try
+        {
+            var major = MFMediaType_Audio;
+            var subtype = MFAudioFormat_Float;
+            var majorKey = MF_MT_MAJOR_TYPE;
+            var subtypeKey = MF_MT_SUBTYPE;
 
-        target.SetGUID(ref majorKey, ref major);
-        target.SetGUID(ref subtypeKey, ref subtype);
+            target.SetGUID(ref majorKey, ref major);
+            target.SetGUID(ref subtypeKey, ref subtype);
 
-        result = reader.SetCurrentMediaType(MF_SOURCE_READER_FIRST_AUDIO_STREAM, IntPtr.Zero, target);
-        if (result < 0) throw Failure("ustawienie formatu wyjściowego", result);
+            result = reader.SetCurrentMediaType(MF_SOURCE_READER_FIRST_AUDIO_STREAM, IntPtr.Zero, target);
+            if (result < 0) throw Failure("ustawienie formatu wyjściowego", result);
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(target);
+        }
+    }
 
-        result = reader.GetCurrentMediaType(MF_SOURCE_READER_FIRST_AUDIO_STREAM, out var actual);
-        if (result < 0) throw Failure("odczyt formatu wyjściowego", result);
+    /// <summary>Reads the rate and channel count the reader currently delivers.</summary>
+    private static bool ReadOutputFormat(IMFSourceReader reader, out int sampleRate, out int channels)
+    {
+        sampleRate = 0;
+        channels = 0;
 
-        var rateKey = MF_MT_AUDIO_SAMPLES_PER_SECOND;
-        var channelsKey = MF_MT_AUDIO_NUM_CHANNELS;
+        if (reader.GetCurrentMediaType(MF_SOURCE_READER_FIRST_AUDIO_STREAM, out var actual) < 0) return false;
 
-        actual.GetUINT32(ref rateKey, out sampleRate);
-        actual.GetUINT32(ref channelsKey, out channels);
+        try
+        {
+            var rateKey = MF_MT_AUDIO_SAMPLES_PER_SECOND;
+            var channelsKey = MF_MT_AUDIO_NUM_CHANNELS;
+
+            actual.GetUINT32(ref rateKey, out sampleRate);
+            actual.GetUINT32(ref channelsKey, out channels);
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(actual);
+        }
 
         if (sampleRate <= 0) sampleRate = 48000;
         if (channels <= 0) channels = 2;
+        return true;
     }
 
     private static TimeSpan? ReadDuration(IMFSourceReader reader)
@@ -135,10 +170,27 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
             MF_SOURCE_READER_FIRST_AUDIO_STREAM, 0,
             out _, out var flags, out _, out var sample);
 
-        if (result < 0) { _endOfStream = true; return false; }
+        if (result < 0)
+        {
+            DecoderFailures.Log($"Media Foundation: odczyt próbki nie powiódł się (0x{result:X8}).");
+            _endOfStream = true;
+            return false;
+        }
 
         if ((flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0)
         {
+            _endOfStream = true;
+            if (sample is not null) Marshal.ReleaseComObject(sample);
+            return false;
+        }
+
+        // Konwerter jest ustawiony na format z otwarcia; bajty w innym formacie dałyby
+        // dźwięk o złej wysokości albo pomieszane kanały, więc taki strumień się kończy.
+        if ((flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) != 0 &&
+            (!ReadOutputFormat(_reader!, out var rate, out var channels) ||
+             rate != SourceSampleRate || channels != SourceChannels))
+        {
+            DecoderFailures.Log("Media Foundation: format próbek zmienił się w trakcie strumienia.");
             _endOfStream = true;
             if (sample is not null) Marshal.ReleaseComObject(sample);
             return false;
@@ -208,14 +260,28 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
             if (_started) return;
 
             var result = MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET);
-            if (result < 0) throw Failure("uruchomienie Media Foundation", result);
+            if (result < 0)
+            {
+                DecoderFailures.Log($"Media Foundation: uruchomienie nie powiodło się (0x{result:X8}).");
+                throw DecoderFailures.Create(DecoderFailure.SystemCodecsUnavailable);
+            }
 
             _started = true;
         }
     }
 
-    private static AudioException Failure(string operation, int hresult) =>
-        new($"Kodek systemowy — {operation} nie powiodło się (0x{hresult:X8}).");
+    private static AudioException Failure(string operation, int hresult)
+    {
+        DecoderFailures.Log($"Media Foundation: {operation} nie powiodło się (0x{hresult:X8}).");
+
+        return DecoderFailures.Create(hresult switch
+        {
+            MF_E_INVALIDSTREAMNUMBER => DecoderFailure.NoAudioStream,
+            MF_E_INVALIDMEDIATYPE or MF_E_TOPO_CODEC_NOT_FOUND => DecoderFailure.CodecMissing,
+            MF_E_UNSUPPORTED_BYTESTREAM_TYPE => DecoderFailure.UnrecognisedFormat,
+            _ => DecoderFailure.DamagedFile,
+        });
+    }
 
     protected override void DisposeCore()
     {

@@ -5,7 +5,7 @@ namespace Cewka.Audio.Decoding.Windows;
 /// <summary>
 /// The slice of Media Foundation needed to decode AAC, M4A and ALAC on Windows.
 ///
-/// <para><b>Dlaczego tak.</b> Interfejsy COM Media Foundation są duże, a kolejność metod
+/// <para>Interfejsy COM Media Foundation są duże, a kolejność metod
 /// w tablicy wirtualnej ma znaczenie — pomyłka nie daje błędu kompilacji, tylko wywołanie
 /// zupełnie innej funkcji. Metody nieużywane są tu zadeklarowane jako puste miejsca
 /// o właściwej sygnaturze, żeby przesunięcia pozostałych się zgadzały. To standardowa
@@ -30,6 +30,13 @@ internal static class MediaFoundation
     internal static readonly Guid MF_MT_AUDIO_NUM_CHANNELS = new("37e48bf5-645e-4c5b-89de-ada9e29b696a");
     internal static readonly Guid MF_MT_AUDIO_SAMPLES_PER_SECOND = new("5faeeae7-0290-4c31-9e8a-c534f68d9dba");
     internal static readonly Guid MF_MT_AUDIO_BITS_PER_SAMPLE = new("f2deb57f-40fa-4764-aa33-ed4f2d1ff669");
+    internal static readonly Guid MF_MT_AUDIO_CHANNEL_MASK = new("55fb5765-644a-4caf-8479-938983bb1588");
+
+    // Kody HRESULT, które dekoder zamienia na przyczyny błędu.
+    internal const int MF_E_INVALIDSTREAMNUMBER = unchecked((int)0xC00D36B3);
+    internal const int MF_E_INVALIDMEDIATYPE = unchecked((int)0xC00D36B4);
+    internal const int MF_E_UNSUPPORTED_BYTESTREAM_TYPE = unchecked((int)0xC00D36C4);
+    internal const int MF_E_TOPO_CODEC_NOT_FOUND = unchecked((int)0xC00D5212);
 
     internal static readonly Guid MFMediaType_Audio = new("73647561-0000-0010-8000-00aa00389b71");
     internal static readonly Guid MFAudioFormat_Float = new("00000003-0000-0010-8000-00aa00389b71");
