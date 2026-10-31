@@ -18,6 +18,9 @@ public static class CoverPalette
     /// <summary>Working resolution. Colour, not detail, is what is being measured.</summary>
     private const int SampleSize = 48;
 
+    /// <summary>Rozpiętość składowych, poniżej której piksel uznaje się za szary.</summary>
+    private const int GreyChroma = 16;
+
     /// <summary>How many colours the background is built from.</summary>
     public const int Count = 4;
 
@@ -35,15 +38,49 @@ public static class CoverPalette
 
         try
         {
-            var pixels = Rasterise(cover, out var stride);
-            var colours = Reduce(pixels, stride, darkTheme, saturation);
-
-            return colours.Length >= Count ? colours : Pad(colours, darkTheme);
+            return FromPixels(Rasterise(cover, out _), darkTheme, saturation);
         }
         catch
         {
             return Fallback(darkTheme);
         }
+    }
+
+    /// <summary>
+    /// Barwy z próbki pikseli BGRA, pobranej raz przez <see cref="Sample"/>. Zmiana motywu
+    /// i intensywności liczy paletę od nowa z tej samej próbki, bez dekodowania okładki.
+    /// </summary>
+    public static Color[] FromPixels(byte[] bgra, bool darkTheme, double saturation = 1.0)
+    {
+        var colours = Reduce(bgra, darkTheme, saturation);
+        return colours.Length >= Count ? colours : Pad(colours, darkTheme);
+    }
+
+    /// <summary>
+    /// Zmniejsza zakodowany obraz wprost przy dekodowaniu i zwraca jego piksele w kolejności
+    /// BGRA. Nie wymaga wątku interfejsu, więc okładka nie dekoduje się drugi raz, żeby z niej
+    /// wyczytać barwy.
+    /// </summary>
+    public static unsafe byte[] Sample(byte[] encoded)
+    {
+        using var stream = new MemoryStream(encoded);
+        using var small = Bitmap.DecodeToWidth(stream, SampleSize, BitmapInterpolationMode.MediumQuality);
+
+        var size = small.PixelSize;
+        var stride = size.Width * 4;
+        var buffer = new byte[stride * size.Height];
+
+        fixed (byte* pointer = buffer)
+        {
+            small.CopyPixels(new PixelRect(size), (IntPtr)pointer, buffer.Length, stride);
+        }
+
+        // Dekoder oddaje format natywny platformy; paleta liczy w BGRA.
+        if (small.Format == Avalonia.Platform.PixelFormat.Rgba8888)
+            for (var i = 0; i < buffer.Length; i += 4)
+                (buffer[i], buffer[i + 2]) = (buffer[i + 2], buffer[i]);
+
+        return buffer;
     }
 
     private static unsafe byte[] Rasterise(IImage cover, out int stride)
@@ -77,7 +114,7 @@ public static class CoverPalette
     /// precisely the problem this replaces.
     /// </para>
     /// </summary>
-    private static Color[] Reduce(byte[] pixels, int stride, bool darkTheme, double saturation)
+    private static Color[] Reduce(byte[] pixels, bool darkTheme, double saturation)
     {
         const int levels = 5;
         var counts = new int[levels * levels * levels];
@@ -90,8 +127,9 @@ public static class CoverPalette
             var maximum = Math.Max(r, Math.Max(g, b));
             var minimum = Math.Min(r, Math.Min(g, b));
 
-            // Pomijamy skrajne jasnosci i barwy prawie szare.
-            if (maximum < 28 || minimum > 232) continue;
+            // Pomijamy skrajne jasności i barwy prawie szare. Szarość ma w HSL odcień zerowy,
+            // czyli czerwień, a podbicie nasycenia zrobiłoby z czarno-białej okładki różowe tło.
+            if (maximum < 28 || minimum > 232 || maximum - minimum < GreyChroma) continue;
 
             var bucket = (r * levels / 256) * levels * levels
                        + (g * levels / 256) * levels

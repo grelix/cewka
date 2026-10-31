@@ -13,7 +13,7 @@ public sealed class CoverLoaderTests
     public async Task SpoznionyOdczytNieNadpisujeOkladkiNastepnegoUtworu()
     {
         using var pierwszyGotowy = new ManualResetEventSlim();
-        var loader = new CoverLoader(path => path == "pierwszy"
+        var loader = new CoverLoader<byte[]>(path => path == "pierwszy"
             ? Czekaj(pierwszyGotowy, PierwszaOkladka)
             : DrugaOkladka);
         var pokazane = new List<byte[]?>();
@@ -31,7 +31,7 @@ public sealed class CoverLoaderTests
     public async Task UniewaznienieOdrzucaTrwajacyOdczyt()
     {
         using var gotowy = new ManualResetEventSlim();
-        var loader = new CoverLoader(_ => Czekaj(gotowy, PierwszaOkladka));
+        var loader = new CoverLoader<byte[]>(_ => Czekaj(gotowy, PierwszaOkladka));
         var pokazane = new List<byte[]?>();
 
         var odczyt = loader.LoadAsync("utwor", pokazane.Add);
@@ -46,7 +46,7 @@ public sealed class CoverLoaderTests
     [Fact]
     public async Task AktualnyOdczytPrzekazujeOkladkeIBrakOkladki()
     {
-        var loader = new CoverLoader(path => path == "z-okladka" ? PierwszaOkladka : null);
+        var loader = new CoverLoader<byte[]>(path => path == "z-okladka" ? PierwszaOkladka : null);
         var pokazane = new List<byte[]?>();
 
         await loader.LoadAsync("z-okladka", pokazane.Add);

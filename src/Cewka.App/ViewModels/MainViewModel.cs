@@ -134,7 +134,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _formatBadge = string.Empty;
 
         // Okładka domyślna od razu, żeby okno nigdy nie pokazało pustej płyty.
-        UpdateArtwork(null);
+        ShowCover(null);
 
         _themeWatcher = (_, _) => Dispatcher.UIThread.Post(OnThemeChanged);
         App.Theme.Changed += _themeWatcher;
@@ -157,7 +157,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public Bitmap? Cover { get => _cover; private set => Set(ref _cover, value); }
 
     /// <summary>Colours drawn from the cover, driving the animated background.</summary>
-    public IReadOnlyList<Color> Palette { get => _palette; private set => Set(ref _palette, value); }
+    public IReadOnlyList<Color> Palette
+    {
+        get => _palette;
+        private set
+        {
+            // Ta sama paleta nie może restartować przejścia barw w tle okna.
+            if (_palette.SequenceEqual(value)) return;
+            Set(ref _palette, value);
+        }
+    }
 
     public string Title { get => _title; private set => Set(ref _title, value); }
 
@@ -1414,8 +1423,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         FormatBadge = string.Empty;
         IsPlaying = _engine.State == PlaybackState.Playing;
 
+        _shownEntry = null;
         _covers.Cancel();
-        UpdateArtwork(null);
+        ShowCover(null);
         PublishToMediaPanel();
         Raise(nameof(CurrentIndex));
     }
@@ -1809,39 +1819,64 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private int _shownBitrate;
 
+    /// <summary>
+    /// Silnik zgłasza zmianę także po przewinięciu i po każdej zmianie kolejki, nie tylko przy
+    /// nowym utworze. Znacznik grającego wiersza przenosi się zawsze; tytuł, okładka i panel
+    /// systemowy zmieniają się tylko wtedy, gdy zmienił się utwór albo doszły jego znaczniki.
+    /// </summary>
     private void OnTrackChanged(int index)
     {
+        // Numer ze zdarzenia powstał na innym wątku i mógł się zestarzeć po edycji kolejki.
+        var live = _engine.CurrentIndex;
+        if (live >= 0) index = live;
+
         if (index < 0 || index >= Queue.Count) return;
+        if (_engine.Queue.ElementAtOrDefault(index) is not { } entry) return;
 
-        _shownBitrate = 0;
-
-        if (_current is not null) _current.IsCurrent = false;
-        _current = Queue[index];
-        _current.IsCurrent = true;
-        _current.ClearTemporaryFailure();
-
-        var entry = _engine.Queue.ElementAtOrDefault(index);
-        if (entry?.Metadata is { } metadata)
+        var row = Queue[index];
+        if (!ReferenceEquals(row, _current))
         {
-            _currentMetadata = metadata;
-            Title = metadata.Title;
-            ArtistLine = BuildAlbumLine(entry);
-            FormatBadge = metadata.BuildBadge(null);
-
-            // Duration read from the tags is usually more accurate than the decoder's estimate.
-            if (metadata.Duration > TimeSpan.Zero)
-            {
-                _current.Duration = FormatTime(metadata.Duration.TotalSeconds);
-                _current.DurationSeconds = metadata.Duration.TotalSeconds;
-            }
-
-            LoadCover(entry.Path);
+            if (_current is not null) _current.IsCurrent = false;
+            _current = row;
+            row.IsCurrent = true;
         }
 
-        PublishToMediaPanel();
+        row.ClearTemporaryFailure();
+
+        var metadata = entry.Metadata;
+        var newTrack = !ReferenceEquals(entry, _shownEntry);
+
+        if (newTrack || (metadata is not null && !ReferenceEquals(metadata, _currentMetadata)))
+        {
+            _shownEntry = entry;
+            _currentMetadata = metadata;
+            _shownBitrate = 0;
+
+            Title = metadata?.Title ?? entry.Title;
+            ArtistLine = BuildAlbumLine(entry);
+            FormatBadge = metadata?.BuildBadge(null) ?? string.Empty;
+
+            // Duration read from the tags is usually more accurate than the decoder's estimate.
+            if (metadata?.Duration > TimeSpan.Zero)
+            {
+                row.Duration = FormatTime(metadata.Duration.TotalSeconds);
+                row.DurationSeconds = metadata.Duration.TotalSeconds;
+            }
+
+            PublishToMediaPanel();
+        }
+
+        if (newTrack)
+        {
+            LoadCover(entry.Path);
+            TouchQueue();
+        }
+
         Raise(nameof(CurrentIndex));
-        TouchQueue();
     }
+
+    /// <summary>Wpis, którego tytuł i okładka są na ekranie.</summary>
+    private QueueEntry? _shownEntry;
 
     public int CurrentIndex => _current is null ? -1 : Queue.IndexOf(_current);
 
@@ -1870,42 +1905,84 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Ile pominiętych plików obejmuje komunikat, który jest teraz na ekranie.</summary>
     private int _skippedInNotice;
 
-    /// <summary>Okładka czytana jest z pliku dopiero dla bieżącego utworu, poza wątkiem interfejsu.</summary>
-    private readonly CoverLoader _covers = new(path => MetadataReader.ReadCover(path));
+    // ---------- Okładka ----------
 
-    private void LoadCover(string path) => _ = _covers.LoadAsync(path, UpdateArtwork);
+    /// <summary>
+    /// Okładka bieżącego utworu: odczyt z pliku, zdekodowanie w zmniejszonej rozdzielczości
+    /// i próbka do palety, wszystko poza wątkiem interfejsu. Spóźniony wynik jest zwalniany.
+    /// </summary>
+    private readonly CoverLoader<DecodedCover> _covers =
+        new(path => DecodeCover(MetadataReader.ReadCover(path)), cover => cover.Display.Dispose());
 
-    private void UpdateArtwork(byte[]? bytes)
+    /// <summary>Ostatni zamówiony odczyt okładki; testy czekają na jego koniec.</summary>
+    internal Task CoverTask { get; private set; } = Task.CompletedTask;
+
+    private void LoadCover(string path) => CoverTask = _covers.LoadAsync(path, ShowCover);
+
+    /// <summary>
+    /// Szerokość, do której dekodowana jest okładka. Płyta ma kilkaset pikseli średnicy także
+    /// przy skalowaniu ekranu 2×; okładki osadzone w plikach miewają 3000 px i więcej.
+    /// </summary>
+    private const int CoverDecodeWidth = 640;
+
+    /// <summary>Obraz do pokazania i próbka pikseli do palety; null, gdy okładki nie ma albo jest uszkodzona.</summary>
+    internal static DecodedCover? DecodeCover(byte[]? bytes)
     {
-        var previousCover = _cover;
+        if (bytes is not { Length: > 0 }) return null;
 
         try
         {
-            if (bytes is { Length: > 0 })
+            using var stream = new MemoryStream(bytes);
+            var display = Bitmap.DecodeToWidth(stream, CoverDecodeWidth, BitmapInterpolationMode.HighQuality);
+
+            byte[]? pixels = null;
+            try
             {
-                using var stream = new MemoryStream(bytes);
-                Cover = new Bitmap(stream);
-                _usingPlaceholderCover = false;
+                pixels = CoverPalette.Sample(bytes);
             }
-            else
+            catch (Exception ex)
             {
-                Cover = LoadPlaceholder();
-                _usingPlaceholderCover = true;
+                Console.Error.WriteLine($"[cewka] próbka okładki: {ex.Message}");
             }
 
-            Palette = ExtractPalette();
+            return new DecodedCover(display, pixels);
         }
-        catch
+        catch (Exception ex)
         {
             // Uszkodzona okładka nie może zatrzymać odtwarzania.
-            Cover = LoadPlaceholder();
-            _usingPlaceholderCover = true;
-            Palette = ExtractPalette();
+            Console.Error.WriteLine($"[cewka] okładka nieczytelna: {ex.Message}");
+            return null;
         }
-        finally
+    }
+
+    /// <summary>Próbka pikseli bieżącej okładki; palety przy zmianie motywu i intensywności liczą się z niej.</summary>
+    private byte[]? _coverPixels;
+
+    private void ShowCover(DecodedCover? cover)
+    {
+        if (cover is not null)
         {
-            if (!ReferenceEquals(previousCover, _cover)) previousCover?.Dispose();
+            _usingPlaceholderCover = false;
+            _coverPixels = cover.Pixels;
+            ReplaceCover(cover.Display);
         }
+        else
+        {
+            _usingPlaceholderCover = true;
+            _coverPixels = null;
+            ReplaceCover(LoadPlaceholder());
+        }
+    }
+
+    /// <summary>Podmienia obraz na płycie, przelicza barwy i zwalnia poprzedni obraz.</summary>
+    private void ReplaceCover(Bitmap? next)
+    {
+        var previous = _cover;
+
+        Cover = next;
+        Palette = ExtractPalette();
+
+        if (!ReferenceEquals(previous, next)) previous?.Dispose();
     }
 
     /// <summary>
@@ -1915,17 +1992,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public void OnThemeChanged()
     {
-        if (!_usingPlaceholderCover)
-        {
-            Palette = ExtractPalette();
-            return;
-        }
-
-        var previous = _cover;
-        Cover = LoadPlaceholder();
-        Palette = ExtractPalette();
-
-        if (!ReferenceEquals(previous, _cover)) previous?.Dispose();
+        if (_usingPlaceholderCover) ReplaceCover(LoadPlaceholder());
+        else Palette = ExtractPalette();
     }
 
     /// <summary>
@@ -1935,18 +2003,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private Color[] ExtractPalette()
     {
         var dark = App.Theme.IsDark;
+        var saturation = ColourPreferences.Saturation(_settings.Current.ColourIntensity);
 
         // Akcent liczony jest z palety pobranej w pełnej sile, a nie z tej, którą przyciemniło
         // ustawienie intensywności. Intensywność dotyczy tła; przełączniki i suwaki mają
         // pokazywać barwę okładki zawsze i w całości.
+        if (_coverPixels is { } pixels)
+        {
+            ApplyAccent(CoverPalette.FromPixels(pixels, dark, 1.0), dark);
+            return CoverPalette.FromPixels(pixels, dark, saturation);
+        }
+
         ApplyAccent(CoverPalette.Extract(Cover, dark, 1.0), dark);
 
         // Przy okładce domyślnej barwy pary są znane dokładnie, więc nie ma po co odczytywać ich
         // z narysowanego obrazka.
         if (_usingPlaceholderCover) return PlaceholderBackdrop(dark);
 
-        return CoverPalette.Extract(
-            Cover, dark, ColourPreferences.Saturation(_settings.Current.ColourIntensity));
+        return CoverPalette.Extract(Cover, dark, saturation);
     }
 
     /// <summary>
@@ -2005,6 +2079,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         var accent = AccentColour.From(vivid, darkTheme);
 
+        // Podmiana zasobu rozgłasza zmianę po drzewie obu okien; przy tej samej barwie szkoda zachodu.
+        if (resources.TryGetValue("AccentColor", out var shown) && shown is Color same && same == accent) return;
+
         resources["AccentColor"] = accent;
         resources["AccentBrush"] = new SolidColorBrush(accent);
     }
@@ -2045,13 +2122,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // Wybranie losowania ma dać skutek od razu, a nie dopiero przy następnym utworze.
         _placeholderDraw.Forget();
 
-        if (!_usingPlaceholderCover) return;
-
-        var previous = _cover;
-        Cover = LoadPlaceholder();
-        Palette = ExtractPalette();
-
-        if (!ReferenceEquals(previous, _cover)) previous?.Dispose();
+        if (_usingPlaceholderCover) ReplaceCover(LoadPlaceholder());
     }
 
     private readonly PlaceholderDraw _placeholderDraw = new();
