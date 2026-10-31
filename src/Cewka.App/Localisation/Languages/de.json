@@ -240,5 +240,6 @@
   "AssociationsFailedExecutable": "Der Speicherort der Programmdatei konnte nicht ermittelt werden. Die Zuordnungen bleiben unverändert.",
   "AssociationsFailedRegistry": "Die Systemregistrierung hat das Speichern der Zuordnungen abgelehnt. Sie bleiben unverändert.",
   "AssociationFileType": "Audiodatei",
-  "AssociationDescription": "Player für Audiodateien"
+  "AssociationDescription": "Player für Audiodateien",
+  "FolderReadFailed": "Der Ordner „{0}“ kann nicht gelesen werden, daher wurden keine Dateien daraus hinzugefügt. Er wurde möglicherweise gelöscht oder das Laufwerk getrennt."
 }

@@ -240,5 +240,6 @@
   "AssociationsFailedExecutable": "Locația fișierului programului nu a putut fi stabilită. Asocierile rămân neschimbate.",
   "AssociationsFailedRegistry": "Registrul sistemului a refuzat salvarea asocierilor. Rămân neschimbate.",
   "AssociationFileType": "Fișier audio",
-  "AssociationDescription": "Player de fișiere audio"
+  "AssociationDescription": "Player de fișiere audio",
+  "FolderReadFailed": "Dosarul „{0}” nu poate fi citit, așa că fișierele din el nu au fost adăugate. Poate a fost șters sau unitatea a fost deconectată."
 }

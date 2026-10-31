@@ -240,5 +240,6 @@
   "AssociationsFailedExecutable": "Không xác định được vị trí tệp chương trình. Các liên kết vẫn giữ nguyên.",
   "AssociationsFailedRegistry": "Sổ đăng ký hệ thống từ chối lưu liên kết. Các liên kết vẫn giữ nguyên.",
   "AssociationFileType": "Tệp âm thanh",
-  "AssociationDescription": "Trình phát tệp âm thanh"
+  "AssociationDescription": "Trình phát tệp âm thanh",
+  "FolderReadFailed": "Không thể đọc thư mục “{0}”, nên các tệp trong đó chưa được thêm. Thư mục có thể đã bị xóa hoặc ổ đĩa đã bị ngắt kết nối."
 }

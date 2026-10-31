@@ -240,5 +240,6 @@
   "AssociationsFailedExecutable": "Lokasi berkas program tidak dapat ditentukan. Asosiasi tetap tidak berubah.",
   "AssociationsFailedRegistry": "Registri sistem menolak menyimpan asosiasi. Asosiasi tetap tidak berubah.",
   "AssociationFileType": "Berkas audio",
-  "AssociationDescription": "Pemutar berkas audio"
+  "AssociationDescription": "Pemutar berkas audio",
+  "FolderReadFailed": "Folder “{0}” tidak dapat dibaca, sehingga berkasnya tidak ditambahkan. Folder mungkin telah dihapus atau drive-nya terputus."
 }

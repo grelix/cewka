@@ -240,5 +240,6 @@
   "AssociationsFailedExecutable": "L’emplacement du fichier du programme n’a pas pu être déterminé. Les associations restent inchangées.",
   "AssociationsFailedRegistry": "Le registre du système a refusé l’enregistrement des associations. Elles restent inchangées.",
   "AssociationFileType": "Fichier audio",
-  "AssociationDescription": "Lecteur de fichiers audio"
+  "AssociationDescription": "Lecteur de fichiers audio",
+  "FolderReadFailed": "Impossible de lire le dossier « {0} » : ses fichiers n’ont pas été ajoutés. Il a peut-être été supprimé, ou son disque déconnecté."
 }

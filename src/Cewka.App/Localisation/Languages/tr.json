@@ -240,5 +240,6 @@
   "AssociationsFailedExecutable": "Program dosyasının konumu belirlenemedi. İlişkilendirmeler değişmeden kaldı.",
   "AssociationsFailedRegistry": "Sistem kayıt defteri ilişkilendirmelerin kaydını reddetti. Değişmeden kaldılar.",
   "AssociationFileType": "Ses dosyası",
-  "AssociationDescription": "Ses dosyası oynatıcı"
+  "AssociationDescription": "Ses dosyası oynatıcı",
+  "FolderReadFailed": "“{0}” klasörü okunamıyor, bu yüzden içindeki dosyalar eklenmedi. Klasör silinmiş veya sürücü çıkarılmış olabilir."
 }

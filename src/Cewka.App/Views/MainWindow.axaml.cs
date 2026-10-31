@@ -674,7 +674,7 @@ public partial class MainWindow : Window
                 .Cast<string>()
                 .ToList();
 
-            if (paths.Count > 0) _ = _viewModel.OpenPaths(paths, replace: _viewModel.IsQueueEmpty);
+            if (paths.Count > 0) _ = _viewModel.AddPaths(paths);
         }
         catch (Exception ex)
         {
@@ -765,7 +765,7 @@ public partial class MainWindow : Window
             });
 
             var path = folders.FirstOrDefault()?.TryGetLocalPath();
-            if (!string.IsNullOrEmpty(path)) _ = _viewModel.OpenPaths([path], replace: _viewModel.IsQueueEmpty);
+            if (!string.IsNullOrEmpty(path)) _ = _viewModel.AddPaths([path]);
         }
         catch (Exception ex)
         {

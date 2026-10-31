@@ -240,5 +240,6 @@
   "AssociationsFailedExecutable": "De locatie van het programmabestand is niet bepaald. De koppelingen blijven ongewijzigd.",
   "AssociationsFailedRegistry": "Het systeemregister weigerde de koppelingen op te slaan. Ze blijven ongewijzigd.",
   "AssociationFileType": "Audiobestand",
-  "AssociationDescription": "Speler voor audiobestanden"
+  "AssociationDescription": "Speler voor audiobestanden",
+  "FolderReadFailed": "De map ‘{0}’ kan niet worden gelezen, dus de bestanden ervan zijn niet toegevoegd. De map is mogelijk verwijderd of het station is losgekoppeld."
 }

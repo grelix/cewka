@@ -240,5 +240,6 @@
   "AssociationsFailedExecutable": "Nie ustalono położenia pliku programu. Skojarzenia pozostały bez zmian.",
   "AssociationsFailedRegistry": "Rejestr systemu odrzucił zapis skojarzeń. Skojarzenia pozostały bez zmian.",
   "AssociationFileType": "Plik dźwiękowy",
-  "AssociationDescription": "Odtwarzacz plików dźwiękowych"
+  "AssociationDescription": "Odtwarzacz plików dźwiękowych",
+  "FolderReadFailed": "Nie można odczytać folderu „{0}”, więc pliki z niego nie zostały dodane. Folder mógł zostać usunięty albo nośnik odłączony."
 }

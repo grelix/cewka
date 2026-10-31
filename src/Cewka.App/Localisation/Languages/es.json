@@ -240,5 +240,6 @@
   "AssociationsFailedExecutable": "No se pudo determinar la ubicación del archivo del programa. Las asociaciones siguen sin cambios.",
   "AssociationsFailedRegistry": "El registro del sistema rechazó guardar las asociaciones. Siguen sin cambios.",
   "AssociationFileType": "Archivo de audio",
-  "AssociationDescription": "Reproductor de archivos de audio"
+  "AssociationDescription": "Reproductor de archivos de audio",
+  "FolderReadFailed": "No se puede leer la carpeta «{0}», así que no se añadieron sus archivos. Puede que se haya eliminado o que se haya desconectado la unidad."
 }

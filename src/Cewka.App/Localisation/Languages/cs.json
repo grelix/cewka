@@ -240,5 +240,6 @@
   "AssociationsFailedExecutable": "Umístění souboru programu se nepodařilo zjistit. Přidružení zůstává beze změny.",
   "AssociationsFailedRegistry": "Systémový registr odmítl zápis přidružení. Přidružení zůstává beze změny.",
   "AssociationFileType": "Zvukový soubor",
-  "AssociationDescription": "Přehrávač zvukových souborů"
+  "AssociationDescription": "Přehrávač zvukových souborů",
+  "FolderReadFailed": "Složku „{0}“ nelze přečíst, a proto z ní nebyly přidány žádné soubory. Mohla být smazána nebo byl odpojen disk."
 }

@@ -240,5 +240,6 @@
   "AssociationsFailedExecutable": "Impossibile determinare la posizione del file del programma. Le associazioni restano invariate.",
   "AssociationsFailedRegistry": "Il registro di sistema ha rifiutato il salvataggio delle associazioni. Restano invariate.",
   "AssociationFileType": "File audio",
-  "AssociationDescription": "Lettore di file audio"
+  "AssociationDescription": "Lettore di file audio",
+  "FolderReadFailed": "Impossibile leggere la cartella «{0}»: i suoi file non sono stati aggiunti. Potrebbe essere stata eliminata o l’unità scollegata."
 }

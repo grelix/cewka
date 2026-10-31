@@ -916,7 +916,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>Loads files or folders into the queue and starts playing.</summary>
-    public Task OpenPaths(IEnumerable<string> paths, bool replace = true) => Open(paths, files =>
+    public Task OpenPaths(IEnumerable<string> paths, bool replace = true) =>
+        Open(paths, files => Load(files, replace));
+
+    /// <summary>
+    /// Dokłada pliki do kolejki, a pustą wypełnia nimi i zaczyna grać. O tym, czy kolejka jest
+    /// pusta, rozstrzyga chwila dołożenia: folder przeglądany w tle mógł ją w międzyczasie wypełnić.
+    /// </summary>
+    public Task AddPaths(IEnumerable<string> paths) =>
+        Open(paths, files => Load(files, replace: IsQueueEmpty));
+
+    private void Load(List<string> files, bool replace)
     {
         if (replace)
         {
@@ -929,7 +939,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _engine.Enqueue(files);
             AppendRows();
         }
-    });
+    }
 
     private Task _openChain = Task.CompletedTask;
 
@@ -945,7 +955,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         if (_openChain.IsCompleted && !list.Any(Directory.Exists))
         {
-            var files = ExpandToAudioFiles(list).ToList();
+            var files = ExpandToAudioFiles(list, out _);
             if (files.Count > 0) apply(files);
             return Task.CompletedTask;
         }
@@ -959,13 +969,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         try
         {
-            var files = await Task.Run(() => ExpandToAudioFiles(paths).ToList());
-            if (!_disposed && files.Count > 0) apply(files);
+            string? unreadable = null;
+            var files = await Task.Run(() => ExpandToAudioFiles(paths, out unreadable));
+            if (_disposed) return;
+
+            if (files.Count > 0) apply(files);
+            if (unreadable is not null)
+                ShowNotice(string.Format(Strings.Current["FolderReadFailed"], FolderName(unreadable)));
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"[cewka] nie udało się dodać plików: {ex}");
         }
+    }
+
+    private static string FolderName(string path)
+    {
+        var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
+        return name.Length > 0 ? name : path;
     }
 
     /// <summary>
@@ -1115,36 +1136,94 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// Folders are walked recursively; anything unrecognised is left out. W każdym katalogu
     /// najpierw pliki, potem podkatalogi, jedne i drugie w porządku naturalnym: „2 - y” przed
     /// „10 - x”, tak jak w menedżerze plików.
+    ///
+    /// <para>Folder, którego nie da się przejrzeć, jest pomijany, a pierwszy taki trafia do
+    /// <paramref name="unreadable"/>. Nieczytelny podkatalog pomija się po cichu.</para>
     /// </summary>
-    private static IEnumerable<string> ExpandToAudioFiles(IEnumerable<string> paths)
+    private static List<string> ExpandToAudioFiles(IEnumerable<string> paths, out string? unreadable)
     {
+        unreadable = null;
+        var result = new List<string>();
+        var visited = new HashSet<string>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+
         foreach (var path in paths)
         {
             if (Directory.Exists(path))
             {
-                foreach (var file in WalkFolder(path)) yield return file;
+                try
+                {
+                    var folder = new DirectoryInfo(path);
+                    var real = IsLink(folder) ? folder.ResolveLinkTarget(returnFinalTarget: true)?.FullName : null;
+                    WalkFolder(folder, real ?? folder.FullName, visited, result, root: true);
+                }
+                catch (Exception ex) when (IsFolderError(ex))
+                {
+                    Console.Error.WriteLine($"[cewka] folder „{path}”: {ex.Message}");
+                    unreadable ??= path;
+                }
             }
             else if (File.Exists(path) && IsAudio(path))
             {
-                yield return path;
+                result.Add(path);
             }
+        }
+
+        return result;
+    }
+
+    private static readonly EnumerationOptions FolderOptions = new() { IgnoreInaccessible = true };
+
+    /// <summary>
+    /// Dowiązania do katalogów są przeglądane, ale każdy katalog tylko raz, rozpoznany po
+    /// ścieżce docelowej <paramref name="real"/>. Dowiązanie do katalogu nadrzędnego dałoby
+    /// inaczej rekurencję bez końca, a do innej części biblioteki — powtórzone pliki.
+    /// </summary>
+    private static void WalkFolder(DirectoryInfo folder, string real, HashSet<string> visited, List<string> result, bool root)
+    {
+        if (!visited.Add(Path.TrimEndingDirectorySeparator(real))) return;
+
+        List<string> files;
+        List<DirectoryInfo> folders;
+
+        try
+        {
+            files = folder.EnumerateFiles("*", FolderOptions).Select(file => file.FullName).Where(IsAudio).ToList();
+            folders = folder.EnumerateDirectories("*", FolderOptions).ToList();
+        }
+        catch (Exception ex) when (!root && IsFolderError(ex))
+        {
+            Console.Error.WriteLine($"[cewka] pominięto podkatalog „{folder.FullName}”: {ex.Message}");
+            return;
+        }
+
+        files.Sort(NaturalOrder.Instance);
+        result.AddRange(files);
+
+        folders.Sort((a, b) => NaturalOrder.Instance.Compare(a.FullName, b.FullName));
+        foreach (var child in folders)
+        {
+            string? childReal;
+
+            try
+            {
+                childReal = IsLink(child)
+                    ? child.ResolveLinkTarget(returnFinalTarget: true)?.FullName
+                    : Path.Combine(real, child.Name);
+            }
+            catch (Exception ex) when (IsFolderError(ex))
+            {
+                childReal = null;
+            }
+
+            if (childReal is not null) WalkFolder(child, childReal, visited, result, root: false);
         }
     }
 
-    private static IEnumerable<string> WalkFolder(string folder)
-    {
-        var options = new EnumerationOptions { IgnoreInaccessible = true };
+    /// <summary>Dowiązanie symboliczne albo punkt połączenia; pliki chmurowe OneDrive nim nie są.</summary>
+    private static bool IsLink(DirectoryInfo folder) =>
+        (folder.Attributes & FileAttributes.ReparsePoint) != 0 && folder.LinkTarget is not null;
 
-        var files = Directory.EnumerateFiles(folder, "*", options).Where(IsAudio).ToList();
-        files.Sort(NaturalOrder.Instance);
-        foreach (var file in files) yield return file;
-
-        var folders = Directory.EnumerateDirectories(folder, "*", options).ToList();
-        folders.Sort(NaturalOrder.Instance);
-        foreach (var child in folders)
-        foreach (var file in WalkFolder(child))
-            yield return file;
-    }
+    private static bool IsFolderError(Exception ex) => ex is IOException or UnauthorizedAccessException;
 
     private static bool IsAudio(string path) =>
         AudioFileFormatDetector.SupportedExtensions

@@ -240,5 +240,6 @@
   "AssociationsFailedExecutable": "The location of the program file could not be determined. The associations remain unchanged.",
   "AssociationsFailedRegistry": "The system registry refused to save the associations. They remain unchanged.",
   "AssociationFileType": "Audio file",
-  "AssociationDescription": "Audio file player"
+  "AssociationDescription": "Audio file player",
+  "FolderReadFailed": "The folder “{0}” could not be read, so its files were not added. It may have been deleted, or its drive disconnected."
 }

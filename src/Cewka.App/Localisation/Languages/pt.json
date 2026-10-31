@@ -240,5 +240,6 @@
   "AssociationsFailedExecutable": "Não foi possível determinar a localização do ficheiro do programa. As associações permanecem inalteradas.",
   "AssociationsFailedRegistry": "O registo do sistema recusou guardar as associações. Permanecem inalteradas.",
   "AssociationFileType": "Ficheiro de áudio",
-  "AssociationDescription": "Leitor de ficheiros de áudio"
+  "AssociationDescription": "Leitor de ficheiros de áudio",
+  "FolderReadFailed": "Não é possível ler a pasta «{0}», pelo que os seus ficheiros não foram adicionados. Pode ter sido eliminada ou a unidade desligada."
 }

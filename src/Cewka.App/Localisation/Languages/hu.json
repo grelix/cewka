@@ -240,5 +240,6 @@
   "AssociationsFailedExecutable": "A programfájl helye nem állapítható meg. A társítások változatlanok maradtak.",
   "AssociationsFailedRegistry": "A rendszerleíró adatbázis elutasította a társítások mentését. Változatlanok maradtak.",
   "AssociationFileType": "Hangfájl",
-  "AssociationDescription": "Hangfájl-lejátszó"
+  "AssociationDescription": "Hangfájl-lejátszó",
+  "FolderReadFailed": "A(z) „{0}” mappa nem olvasható, ezért a fájljai nem kerültek a sorba. Lehet, hogy törölték, vagy leválasztották a meghajtót."
 }
