@@ -99,6 +99,42 @@ public sealed class SettingsStoreTests
     });
 
     [Fact]
+    public void ChwilowoZablokowanyPlikNieZostajeNadpisanyDomyslnymi() => Ui.Run(() =>
+    {
+        const string original = """{ "schemaVersion": 1, "language": "en", "volume": 0.3 }""";
+        var directory = TestEnvironment.NewDirectory();
+        var path = Path.Combine(directory, "settings.json");
+        File.WriteAllText(path, original);
+
+        SettingsStore store;
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            store = new SettingsStore(path);
+
+        store.Current.Volume = 0.9;
+        store.SaveNow();
+
+        Assert.Equal(original, File.ReadAllText(path));
+        Assert.Equal(["settings.json"], Directory.GetFiles(directory).Select(Path.GetFileName));
+    });
+
+    [Fact]
+    public void ZablokowanyPlikUszkodzonyPoZwolnieniuTrafiaDoKopii() => Ui.Run(() =>
+    {
+        var directory = TestEnvironment.NewDirectory();
+        var path = Path.Combine(directory, "settings.json");
+        File.WriteAllText(path, "{ uszkodzony");
+
+        SettingsStore store;
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            store = new SettingsStore(path);
+
+        store.SaveNow();
+
+        Assert.Single(Directory.GetFiles(directory, "settings.json.bad-*"));
+        Assert.Contains("schemaVersion", File.ReadAllText(path));
+    });
+
+    [Fact]
     public void ZapisNieZostawiaPlikowTymczasowych() => Ui.Run(() =>
     {
         var directory = TestEnvironment.NewDirectory();

@@ -78,15 +78,10 @@ public sealed class SettingsStore
         _debounce.Stop();
         _dirty = false;
 
+        if (_readFailed && !MayOverwrite()) return;
+
         try
         {
-            // Pliku nie dało się przeczytać, więc zanim zostanie nadpisany, zostaje kopia.
-            if (_keepOriginal)
-            {
-                KeepCopy(_path);
-                _keepOriginal = false;
-            }
-
             Current.SchemaVersion = AppSettings.CurrentSchema;
             AtomicFile.Write(_path, JsonSerializer.Serialize(Current, SettingsJsonContext.Default.AppSettings));
         }
@@ -97,8 +92,52 @@ public sealed class SettingsStore
         }
     }
 
-    /// <summary>Plik istnieje, ale nie dał się przeczytać; przed pierwszym zapisem trzeba go zachować.</summary>
-    private bool _keepOriginal;
+    /// <summary>Plik istniał, ale przy starcie nie dał się przeczytać, więc obowiązują domyślne.</summary>
+    private bool _readFailed;
+
+    /// <summary>Ponowny odczyt pokazał plik w całości; zostaje nietknięty do końca sesji.</summary>
+    private bool _keepFile;
+
+    /// <summary>
+    /// Plik zablokowany przy starcie przez program antywirusowy albo kopię zapasową ma zwykle
+    /// poprawną treść, a zapis domyślnych by ją zniszczył. Przed pierwszym zapisem plik jest
+    /// czytany jeszcze raz: poprawny zostaje bez zmian, nadal zablokowany czeka na następny
+    /// zapis, a uszkodzony trafia do kopii obok.
+    /// </summary>
+    private bool MayOverwrite()
+    {
+        if (_keepFile) return false;
+
+        string json;
+        try
+        {
+            json = File.ReadAllText(_path);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            _readFailed = false;
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"[cewka] ustawienia nadal niedostępne, zapis odłożony: {ex.Message}");
+            return false;
+        }
+
+        try
+        {
+            JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings);
+            Console.Error.WriteLine("[cewka] plik ustawień jest poprawny; zmiany z tej sesji nie zostaną zapisane");
+            _keepFile = true;
+            return false;
+        }
+        catch (Exception)
+        {
+            KeepCopy(_path);
+            _readFailed = false;
+            return true;
+        }
+    }
 
     private AppSettings Load(string path)
     {
@@ -112,7 +151,7 @@ public sealed class SettingsStore
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Console.Error.WriteLine($"[cewka] nie udało się odczytać ustawień, użyto domyślnych: {ex.Message}");
-            _keepOriginal = true;
+            _readFailed = true;
             return Defaults();
         }
 
