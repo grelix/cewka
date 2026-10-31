@@ -42,8 +42,18 @@ public sealed class LanguageFileTests
         "ColoursSubtle", "ColoursRecommended", "ColoursIntense",
         "QualityOff", "QualityStandard", "QualityHigh",
         "LatencyLow", "LatencyBalanced", "LatencySafe",
-        "FileOpenAppend", "FileOpenAppendPlay", "FileOpenReplace",
     ];
+
+    /// <summary>
+    /// Opcje otwierania plików mają wspólny pasek, więc ich długości liczy się razem, a nie
+    /// każdą osobno: krótka pierwsza opcja zostawia miejsce dłuższym. Wartość z pomiaru
+    /// (<see cref="LocalisedLayoutTests"/>): trzy opcje po 61 znaków łącznie zajmują 412 z 420 px
+    /// w najwęższym oknie ustawień. Układ sprawdza ten test, a ten limit tylko wcześnie
+    /// ostrzega przed tłumaczeniem, które się nie zmieści.
+    /// </summary>
+    private static readonly string[] FileOpenLabels = ["FileOpenAppend", "FileOpenAppendPlay", "FileOpenReplace"];
+
+    private const int FileOpenTotalLimit = 61;
 
     /// <summary>
     /// Przekroczenie tej długości nie mieści się na przycisku segmentu przy najwęższym oknie.
@@ -169,7 +179,7 @@ public sealed class LanguageFileTests
         var translated = Load(code);
 
         // Klucze, których wartość z założenia jest wspólna dla wszystkich języków.
-        string[] shared = ["_language", "_code", "AppName", "Preamp", "NoFormat", "ControlsMacOs"];
+        string[] shared = ["_language", "_code", "AppName", "NoFormat", "ControlsMacOs"];
 
         var copied = reference
             .Where(pair => !shared.Contains(pair.Key))
@@ -197,6 +207,18 @@ public sealed class LanguageFileTests
         Assert.True(
             toolong.Length == 0,
             $"{code}.json ma etykiety dłuższe niż {ShortLabelLimit} znaków: {string.Join(", ", toolong)}");
+    }
+
+    [Theory]
+    [MemberData(nameof(All))]
+    public void OpcjeOtwieraniaPlikowMieszczaSieNaWspolnymPasku(string code)
+    {
+        var strings = Load(code);
+        var total = FileOpenLabels.Sum(key => strings[key].Length);
+
+        Assert.True(
+            total <= FileOpenTotalLimit,
+            $"{code}.json ma opcje otwierania plików o łącznej długości {total} znaków (limit {FileOpenTotalLimit})");
     }
 
     [Theory]

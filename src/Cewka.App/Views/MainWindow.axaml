@@ -629,10 +629,10 @@
                         </Border>
                       </Grid>
 
-                      <Grid ColumnDefinitions="46,Auto,*" Opacity="{Binding EqualiserOpacity}">
+                      <Grid ColumnDefinitions="Auto,Auto,*" Opacity="{Binding EqualiserOpacity}">
 
                         <!-- Preamp -->
-                        <StackPanel Grid.Column="0" Spacing="8">
+                        <StackPanel Grid.Column="0" Spacing="8" MinWidth="46">
                           <TextBlock Classes="mono dim" Text="{Binding Preamp.GainText}"
                                      FontSize="10.5" HorizontalAlignment="Center" />
                           <c:EqFader Height="116" HorizontalAlignment="Center"
@@ -643,8 +643,9 @@
                                      FillBrush="{DynamicResource AccentBrush}"
                                      ThumbBrush="{DynamicResource FaderThumbBrush}"
                                      ThumbBorderBrush="{DynamicResource FaderThumbBorderBrush}" />
-                          <TextBlock Classes="mono faint" Text="{l:Translate Preamp}" FontSize="9.5"
-                                     LetterSpacing="0.4" HorizontalAlignment="Center" />
+                          <TextBlock Classes="faint" Text="{l:Translate PreampName}" FontSize="9.5"
+                                     MaxWidth="88" TextWrapping="Wrap" TextAlignment="Center"
+                                     HorizontalAlignment="Center" />
                         </StackPanel>
 
                         <Rectangle Grid.Column="1" Width="1" Margin="16,0"

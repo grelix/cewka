@@ -254,7 +254,7 @@
                       <TextBlock Classes="setting-label" Text="{l:Translate SettingLatency}" />
                       <c:SegmentBar Group="{Binding Latency}" />
                       <TextBlock Classes="setting-hint" Text="{l:Translate HintLatency}" />
-                      <TextBlock Classes="mono faint" FontSize="10.5" Text="{Binding LatencyDescription}" />
+                      <TextBlock Classes="faint" FontSize="10.5" Text="{Binding LatencyDescription}" />
                     </StackPanel>
                   </StackPanel>
                 </Border>
