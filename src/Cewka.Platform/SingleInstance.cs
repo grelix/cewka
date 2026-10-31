@@ -295,33 +295,42 @@ public sealed class SingleInstance : IDisposable
 
     /// <summary>
     /// Odbiera nadawców połączonych przed zamknięciem nasłuchu. Pod Linuksem ich wysyłanie
-    /// skończyło się już sukcesem, więc nikt inny tych ścieżek nie otworzy.
+    /// skończyło się już sukcesem, więc nikt inny tych ścieżek nie otworzy. Wszystkie połączenia
+    /// czytane są naraz ze wspólnym terminem, więc nadawcy zawieszeni w połowie nie odsuwają
+    /// odbioru tych, którzy wysłali całość.
     /// </summary>
     private void DeliverPending()
     {
-        while (true)
+        var connections = new List<Stream>();
+
+        try
         {
-            Stream? connection;
+            while (_channel.TakePending() is { } connection) connections.Add(connection);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cewka] odbiór połączeń przy zamykaniu nie powiódł się: {ex.Message}");
+        }
 
+        if (connections.Count == 0) return;
+
+        using var timeout = new CancellationTokenSource(HandoffChannel.ReadTimeout);
+        var reads = connections.Select(connection => ReadMessageAsync(connection, timeout.Token)).ToArray();
+
+        // Kolejność przybycia zostaje zachowana; czekanie na pierwsze nie wstrzymuje odczytu następnych.
+        for (var i = 0; i < reads.Length; i++)
+        {
             try
             {
-                connection = _channel.TakePending();
-            }
-            catch (Exception)
-            {
-                // Kanał zamknięty, bo zamykanie nie czekało dłużej na ten wątek.
-                return;
-            }
-
-            if (connection is null) return;
-
-            try
-            {
-                using (connection) Deliver(ReadMessage(connection));
+                Deliver(reads[i].GetAwaiter().GetResult());
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"[cewka] przekazanie ścieżek nie powiodło się: {ex.Message}");
+            }
+            finally
+            {
+                connections[i].Dispose();
             }
         }
     }
@@ -334,25 +343,29 @@ public sealed class SingleInstance : IDisposable
     private static string[] ReadMessage(Stream stream)
     {
         using var timeout = new CancellationTokenSource(HandoffChannel.ReadTimeout);
+        return ReadMessageAsync(stream, timeout.Token).GetAwaiter().GetResult();
+    }
 
+    private static async Task<string[]> ReadMessageAsync(Stream stream, CancellationToken token)
+    {
         var header = new byte[4];
-        if (!ReadExactly(stream, header, timeout.Token)) return [];
+        if (!await ReadExactlyAsync(stream, header, token)) return [];
 
         var length = BitConverter.ToInt32(header);
         if (length <= 0 || length > MaxMessageBytes) return [];
 
         var payload = new byte[length];
-        if (!ReadExactly(stream, payload, timeout.Token)) return [];
+        if (!await ReadExactlyAsync(stream, payload, token)) return [];
 
         return JsonSerializer.Deserialize(
             Encoding.UTF8.GetString(payload), HandoffJsonContext.Default.StringArray) ?? [];
     }
 
-    private static bool ReadExactly(Stream stream, byte[] destination, CancellationToken token)
+    private static async Task<bool> ReadExactlyAsync(Stream stream, byte[] destination, CancellationToken token)
     {
         try
         {
-            stream.ReadExactlyAsync(destination, token).AsTask().GetAwaiter().GetResult();
+            await stream.ReadExactlyAsync(destination, token);
             return true;
         }
         catch (EndOfStreamException)
@@ -371,10 +384,10 @@ public sealed class SingleInstance : IDisposable
         if (_stopped) return;
         _stopped = true;
 
-        // Przerywa samo czekanie na połączenie. Wiadomości już wysłane wątek doczytuje,
-        // a nadawca zawieszony w połowie zatrzyma zamykanie najwyżej na czas odczytu.
+        // Przerywa samo czekanie na połączenie. Wątek doczytuje rozpoczętą wiadomość (jeden limit
+        // odczytu), potem naraz wszystkie oczekujące (drugi limit), więc ten czas mu wystarcza.
         _stop.Cancel();
-        _listener.Join(HandoffChannel.ReadTimeout + TimeSpan.FromMilliseconds(500));
+        _listener.Join(2 * HandoffChannel.ReadTimeout + TimeSpan.FromMilliseconds(500));
 
         _channel.Dispose();
     }

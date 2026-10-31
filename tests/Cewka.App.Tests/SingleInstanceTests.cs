@@ -346,6 +346,89 @@ public sealed class SingleInstanceTests : IDisposable
         lock (all) Assert.Equal(["/muzyka/pierwszy.mp3", "/muzyka/drugi.mp3"], all);
     }
 
+    /// <summary>
+    /// Dwóch nadawców zawieszonych w połowie wiadomości nie może wydłużyć odbioru ponad czas,
+    /// na który czeka zamykanie. Każdy nadawca, któremu przekazanie się udało, ma swoje ścieżki
+    /// u odbiorcy przed powrotem StopListening; nic nie może dojść po nim.
+    /// </summary>
+    [Fact]
+    public void ZamkniecieNasluchuNieGubiNadawcowZaZawieszonymi()
+    {
+        var address = Temporary();
+
+        using var instance = SingleInstance.TryAcquire(address);
+        Assert.NotNull(instance);
+
+        var all = new List<string>();
+        var late = new List<string>();
+        var returned = false;
+
+        instance.Attach(paths =>
+        {
+            lock (all)
+            {
+                all.AddRange(paths);
+                if (returned) late.AddRange(paths);
+            }
+        });
+
+        // Pierwszy zawieszony: czyta go pętla nasłuchu w chwili zamknięcia.
+        var first = Message("/muzyka/pierwszy.mp3");
+        using var a = ConnectRaw(address);
+        a.Write(first, 0, 6);
+        a.Flush();
+        Thread.Sleep(100);
+
+        // Drugi zawieszony: czeka w kolejce gniazda albo na przygotowanej instancji potoku.
+        var second = Message("/muzyka/drugi.mp3");
+        var resume = new ManualResetEventSlim();
+        var secondDone = false;
+
+        var b = new Thread(() =>
+        {
+            try
+            {
+                using var stream = ConnectRaw(address);
+                stream.Write(second, 0, 6);
+                stream.Flush();
+
+                resume.Wait();
+                stream.Write(second, 6, second.Length - 6);
+                stream.Flush();
+                secondDone = true;
+            }
+            catch (Exception)
+            {
+                // Odbiorca zamknął połączenie: nadawca wie, że przekazanie się nie udało.
+            }
+        });
+
+        b.Start();
+        Thread.Sleep(200);
+
+        // Trzeci wysyła całość; pod Linuksem kończy pracę z sukcesem, zanim ktokolwiek go odbierze.
+        var thirdDone = false;
+        var c = new Thread(() => thirdDone = SingleInstance.TryHandOff(address, ["/muzyka/trzeci.mp3"]));
+        c.Start();
+        Thread.Sleep(300);
+
+        instance.StopListening();
+        lock (all) returned = true;
+
+        // Drugi nadawca budzi się po powrocie zamykania: jego zapis nie może się już udać po cichu.
+        resume.Set();
+        Assert.True(b.Join(TimeSpan.FromSeconds(10)));
+        Assert.True(c.Join(TimeSpan.FromSeconds(10)));
+        Thread.Sleep(500);
+
+        lock (all)
+        {
+            Assert.Empty(late);
+            if (secondDone) Assert.Contains("/muzyka/drugi.mp3", all);
+            if (thirdDone) Assert.Contains("/muzyka/trzeci.mp3", all);
+        }
+    }
+
     [Fact]
     public void PrzekazanieDoNikogoSieNieUdaje()
     {
