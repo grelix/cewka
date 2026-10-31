@@ -61,7 +61,14 @@ public sealed class EffectViewModel : ObservableObject
         set
         {
             var snapped = Math.Round(Math.Clamp(value, 0, 1) * Steps) / Steps;
-            if (!Set(ref _strength, snapped)) return;
+            if (!Set(ref _strength, snapped))
+            {
+                // Wartość zaokrągliła się do dotychczasowej, ale suwak stoi w położeniu pośrednim;
+                // zgłoszenie każe mu wrócić na stopień, który pokazuje liczba obok.
+                if (value != snapped) Raise();
+                return;
+            }
+
             Raise(nameof(StrengthText));
         }
     }
