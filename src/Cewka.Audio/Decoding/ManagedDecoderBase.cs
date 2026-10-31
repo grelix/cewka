@@ -11,6 +11,7 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
     private const int MaxSourceFramesPerPull = 16384;
 
     private SampleConverter _converter = null!;
+    private IReadOnlyList<Speaker> _layout = [];
     private float[] _source = [];
     private int _pendingOffset;
     private int _pendingFrames;
@@ -46,6 +47,7 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
         SampleRate = targetRate;
         Channels = targetChannels;
 
+        _layout = layout;
         _converter = new SampleConverter(
             sourceChannels, sourceRate, targetChannels, targetRate, AudioQuality.ResamplerFilterOrder, layout);
     }
@@ -60,14 +62,20 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
     /// </summary>
     protected void Reconfigure(int sourceRate, int sourceChannels, IReadOnlyList<Speaker> layout)
     {
-        var previous = _converter;
-        _converter = new SampleConverter(
-            sourceChannels, sourceRate, Channels, SampleRate, previous.FilterOrder, layout);
-        previous.Dispose();
+        RebuildConverter(sourceRate, sourceChannels, layout);
 
         SourceSampleRate = sourceRate;
         SourceChannels = sourceChannels;
         _reconfigured = true;
+    }
+
+    private void RebuildConverter(int sourceRate, int sourceChannels, IReadOnlyList<Speaker> layout)
+    {
+        var previous = _converter;
+        _converter = new SampleConverter(
+            sourceChannels, sourceRate, Channels, SampleRate, previous.FilterOrder, layout);
+        previous.Dispose();
+        _layout = layout;
     }
 
     /// <summary>
@@ -137,6 +145,9 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
             : (long)Math.Round(frame * (double)SourceSampleRate / SampleRate);
 
         SeekSource(Math.Max(0, sourceFrame));
+
+        // Resampler pamięta ostatnie próbki i stan filtru ze starego miejsca.
+        if (_converter.NeedsResampling) RebuildConverter(SourceSampleRate, SourceChannels, _layout);
 
         _pendingOffset = 0;
         _pendingFrames = 0;

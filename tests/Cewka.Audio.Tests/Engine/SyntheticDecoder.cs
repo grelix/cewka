@@ -16,6 +16,9 @@ internal sealed class SyntheticDecoder(long totalFrames, float value, int channe
     /// <summary>Gdy ustawione, odczyt czeka na sygnał, zanim cokolwiek zwróci.</summary>
     public ManualResetEventSlim? Gate { get; init; }
 
+    /// <summary>Ustawiane, gdy odczyt zaczyna czekać na <see cref="Gate"/>.</summary>
+    public ManualResetEventSlim? Waiting { get; init; }
+
     /// <summary>Przewinięcie, które się nie udaje: dekoder zostaje tam, gdzie był.</summary>
     public bool IgnoreSeeks { get; init; }
 
@@ -32,7 +35,8 @@ internal sealed class SyntheticDecoder(long totalFrames, float value, int channe
 
     public int Read(Span<float> destination)
     {
-        Gate?.Wait();
+        if (Gate is { } gate)
+            while (!gate.Wait(1)) Waiting?.Set();
 
         var wanted = destination.Length / Channels;
         var limit = ThrowAtFrame >= 0 ? Math.Min(TotalFrames, ThrowAtFrame) : TotalFrames;

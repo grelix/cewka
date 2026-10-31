@@ -64,6 +64,137 @@ public class PlaybackEngineTests
         Assert.Equal(0, EngineHarness.CountFrames(h.Output.Samples[samples.Length..], B));
     }
 
+    /// <summary>
+    /// Plik dodany, gdy dekoder doszedł już do końca ostatniego utworu, a jego końcówka jeszcze
+    /// gra z bufora, zagra po niej, zamiast kończyć kolejkę.
+    /// </summary>
+    [Fact]
+    public void TrackAddedAfterTheDecoderReachedTheEndStillPlays()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.3, B);
+
+        StartLastTrackDecodedToTheEnd(h, a);
+
+        h.Engine.Enqueue([b]);
+        h.PumpUntil(() => h.Finished == 1);
+
+        Assert.True(EngineHarness.CountFrames(h.Output.Samples, B) > EngineHarness.Frames(0.25));
+    }
+
+    /// <summary>
+    /// To samo przy pauzie w ostatnim pół sekundy: Play po dodaniu pliku gra dalej i przechodzi
+    /// do nowego wpisu, zamiast zaczynać kolejkę od początku.
+    /// </summary>
+    [Fact]
+    public void TrackAddedWhilePausedNearTheEndPlaysAfterResuming()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.3, B);
+
+        StartLastTrackDecodedToTheEnd(h, a);
+
+        h.Output.StartAutoPump();
+        h.Engine.Pause();
+        h.Output.StopAutoPump();
+
+        h.Engine.Enqueue([b]);
+        h.Engine.Play();
+        h.PumpUntil(() => h.Finished == 1);
+
+        Assert.True(EngineHarness.CountFrames(h.Output.Samples, B) > EngineHarness.Frames(0.25));
+        Assert.Equal(1, h.Engine.CurrentIndex);
+    }
+
+    /// <summary>
+    /// Nieobsługiwany ostatni wpis: dekoder zgłosił go i zapisał koniec kolejki. Usunięcie
+    /// innego wiersza nie przewija słyszanego utworu i nie próbuje otworzyć tego pliku ponownie.
+    /// </summary>
+    [Fact]
+    public void RemovingAnotherRowAfterAnUnsupportedLastEntryLeavesPlaybackAlone()
+    {
+        using var h = new EngineHarness();
+        var z = h.Track("z", 10, C);
+        var a = h.Track("a", 0.3, A);
+        var x = h.Unsupported("x");
+
+        StartLastTrackDecodedToTheEnd(h, [z, a, x], startIndex: 1);
+        EngineHarness.WaitUntil(() => h.Failures.Count == 1);
+
+        h.Engine.RemoveAt(0);
+        Assert.False(h.Engine.IsSeeking);
+
+        h.PumpUntil(() => h.Finished == 1);
+        h.PumpPeriods(20);
+
+        Assert.Equal(new[] { "a.wav" }, h.Opened.ToArray());
+        Assert.Single(h.Failures);
+    }
+
+    /// <summary>
+    /// Plik dodany za nieobsługiwanym ostatnim wpisem gra po słyszanym utworze bez przerwy,
+    /// a nieobsługiwany nie zostaje zgłoszony drugi raz.
+    /// </summary>
+    [Fact]
+    public void TrackAddedAfterAnUnsupportedLastEntryPlaysWithoutReportingItAgain()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var x = h.Unsupported("x");
+        var b = h.Track("b", 0.3, B);
+
+        StartLastTrackDecodedToTheEnd(h, [a, x]);
+        EngineHarness.WaitUntil(() => h.Failures.Count == 1);
+
+        h.Engine.Enqueue([b]);
+        h.PumpUntil(() => h.Finished == 1);
+        h.PumpPeriods(20);
+
+        Assert.True(EngineHarness.CountFrames(h.Output.Samples, B) > EngineHarness.Frames(0.25));
+        Assert.Equal(new[] { "a.wav", "b.wav" }, h.Opened.ToArray());
+        Assert.Single(h.Failures);
+    }
+
+    /// <summary>
+    /// Przy powtarzaniu kolejki plik dodany w ostatnim pół sekundy ostatniego utworu gra przed
+    /// powrotem na początek, choć dekoder otworzył już pierwszy wpis.
+    /// </summary>
+    [Fact]
+    public void TrackAddedNearTheEndOfARepeatedQueuePlaysBeforeItWraps()
+    {
+        using var h = new EngineHarness();
+        var x = h.Track("x", 10, B);
+        var a = h.Track("a", 1.0, A);
+        var c = h.Track("c", 10, C);
+
+        h.Engine.Repeat = RepeatMode.Queue;
+        h.Engine.SetQueue([x, a], startIndex: 1);
+        h.PumpUntil(() => h.Opened.Contains("x.wav"));
+
+        h.Engine.Enqueue([c]);
+        h.PumpUntil(() => h.Engine.CurrentIndex != 1 && h.Engine.Position > TimeSpan.FromSeconds(0.1));
+
+        Assert.Equal(2, h.Engine.CurrentIndex);
+        Assert.Equal(C, h.Output.Samples[^1], 1e-5f);
+    }
+
+    /// <summary>
+    /// Utwór krótszy od bufora: dekoder dochodzi do końca pliku i zapisuje koniec kolejki,
+    /// zanim cokolwiek zagra.
+    /// </summary>
+    private static void StartLastTrackDecodedToTheEnd(EngineHarness h, string track) =>
+        StartLastTrackDecodedToTheEnd(h, [track]);
+
+    private static void StartLastTrackDecodedToTheEnd(EngineHarness h, string[] queue, int startIndex = 0)
+    {
+        h.Engine.SetQueue(queue, startIndex);
+        h.PumpUntil(() => !h.Engine.IsSeeking);
+        EngineHarness.WaitUntil(() => h.Engine.EndOfQueueBuffered);
+        Assert.True(h.Engine.EndOfQueueBuffered);
+    }
+
     // ---------- przewijanie ----------
 
     /// <summary>Przewinięcie zaraz po PlayIndex dotyczy wpisu, który dopiero zacznie grać.</summary>
@@ -545,6 +676,31 @@ public class PlaybackEngineTests
         Assert.Equal(5, h.Opened.Distinct().Count());
     }
 
+    /// <summary>
+    /// Plik dodany w ostatnim pół sekundy utworu, który losowanie postawiło tuż za nim, gra
+    /// jako następny, choć dekoder otworzył już inny. Ziarno 1 stawia go tuż za słyszanym,
+    /// ziarno 1234 dalej, gdzie kolejność się nie zmienia.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 2)]
+    [InlineData(1234, 1)]
+    public void TrackAddedInShuffleNearTheEndPlaysWhereTheOrderPutsIt(int seed, int expectedNext)
+    {
+        using var h = new EngineHarness(seed: seed);
+        var a = h.Track("a", 1.0, A);
+        var b = h.Track("b", 10, B);
+        var c = h.Track("c", 10, C);
+
+        h.Engine.Shuffle = true;
+        h.Engine.SetQueue([a, b]);
+        h.PumpUntil(() => h.Opened.Contains("b.wav"));
+
+        h.Engine.Enqueue([c]);
+        h.PumpUntil(() => h.Engine.CurrentIndex != 0 && h.Engine.Position > TimeSpan.FromSeconds(0.1));
+
+        Assert.Equal(expectedNext, h.Engine.CurrentIndex);
+    }
+
     // ---------- urządzenie ----------
 
     /// <summary>
@@ -577,6 +733,49 @@ public class PlaybackEngineTests
 
         AssertPlaysOnFrom(h.PositionsAfterSeek(), lostAt);
         Assert.Equal(1, h.Engine.CurrentIndex);
+        Assert.Equal(PlaybackState.Playing, h.Engine.State);
+    }
+
+    /// <summary>
+    /// Sterownik potrafi sam uruchomić utracone urządzenie po ponownym podłączeniu sprzętu,
+    /// zanim silnik zdąży je zamknąć. Jeśli w tej chwili Play otworzyło już nowe wyjście, stare
+    /// nie może grać ani dotykać toru, który przygotowano dla nowego.
+    /// </summary>
+    [Fact]
+    public async Task OldDeviceRestartedDuringLossHandlingDoesNotRender()
+    {
+        using var h = new EngineHarness();
+        using var gate = new ManualResetEventSlim(true);
+        using var waiting = new ManualResetEventSlim(false);
+        SyntheticDecoder? stuck = null;
+
+        // Zawiesza się tylko pierwszy dekoder, żeby zamykanie starej sesji czekało na jej wątek.
+        var a = h.Track("a", 10, A, d => stuck is null
+            ? stuck = new SyntheticDecoder(d.TotalFrames, A, d.Channels, d.SampleRate) { Gate = gate, Waiting = waiting }
+            : d);
+
+        h.Engine.SetQueue([a]);
+        h.PumpUntil(() => h.Engine.Position > TimeSpan.FromSeconds(0.5));
+
+        // Bufor starej sesji zostaje prawie pełny, a jej wątek stoi w odczycie.
+        gate.Reset();
+        h.PumpUntil(() => waiting.IsSet);
+
+        var old = h.Outputs[0];
+        var loss = Task.Run(old.Lose);
+        EngineHarness.WaitUntil(() => !h.Engine.IsDeviceOpen);
+
+        h.Engine.Play();
+        Assert.Equal(2, h.Outputs.Count);
+
+        old.ClearSamples();
+        old.Start();
+        old.Pump();
+        Assert.All(old.Samples, sample => Assert.Equal(0f, sample));
+
+        gate.Set();
+        await loss;
+        Assert.Equal(1, h.Lost);
         Assert.Equal(PlaybackState.Playing, h.Engine.State);
     }
 
