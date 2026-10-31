@@ -45,7 +45,9 @@ public static class DecoderFailures
         DecoderFailure.OutOfScopeFormat => "Format WMA jest poza zakresem odtwarzacza.",
         DecoderFailure.SystemCodecsUnavailable =>
             SystemCodecs.UnavailableReason ?? "Brak kodeków systemowych dla formatów AAC, M4A i ALAC.",
-        DecoderFailure.CodecMissing => "W systemie brakuje dekodera dla tego pliku.",
+        DecoderFailure.CodecMissing => OperatingSystem.IsLinux()
+            ? "W GStreamerze brakuje wtyczki dekodującej ten plik. Dla AAC, M4A i ALAC dostarcza ją pakiet gstreamer1.0-libav."
+            : "W systemie brakuje dekodera dla tego pliku.",
         DecoderFailure.DamagedFile => "Plik jest uszkodzony lub nieczytelny.",
         DecoderFailure.NoAudioStream => "Plik nie zawiera ścieżki dźwiękowej.",
         DecoderFailure.UnsupportedChannelLayout => "Układ kanałów tego pliku nie jest obsługiwany.",
