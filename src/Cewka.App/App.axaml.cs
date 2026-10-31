@@ -58,6 +58,8 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        Dispatcher.UIThread.UnhandledException += OnUnhandledException;
+
         Settings = new SettingsStore();
         Theme = new ThemeManager(this, Settings.Current.Theme);
 
@@ -86,6 +88,18 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// Ostatnia siatka dla wyjątków z obsługi zdarzeń interfejsu. Każdy trafia do dziennika;
+    /// zatrzymywany jest tylko błąd warstwy dźwięku, bo nie narusza stanu programu, a reszta
+    /// kończy program jak dotąd, żeby nie zostawić go w stanie niespójnym.
+    /// </summary>
+    private static void OnUnhandledException(object? sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        Console.Error.WriteLine($"[cewka] nieobsłużony wyjątek: {e.Exception}");
+
+        if (e.Exception is Cewka.Audio.AudioException) e.Handled = true;
     }
 
     // ---------- Zakończenie z zewnątrz ----------

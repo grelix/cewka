@@ -6,18 +6,26 @@ namespace Cewka.App.Services;
 
 /// <summary>
 /// Reads and writes the persisted playback queue. Separate from <see cref="SettingsStore"/>
-/// because it is written once, on shutdown, rather than continuously.
+/// because it is far larger and changes with every edit of the queue.
 /// </summary>
 public static class QueueStateStore
 {
-    public static QueueState? Load()
+    public static QueueState? Load() => Load(AppPaths.QueueFile);
+
+    public static QueueState? Load(string path)
     {
         try
         {
-            if (!File.Exists(AppPaths.QueueFile)) return null;
+            if (!File.Exists(path)) return null;
 
-            var json = File.ReadAllText(AppPaths.QueueFile);
-            return JsonSerializer.Deserialize(json, QueueStateJsonContext.Default.QueueState);
+            var json = File.ReadAllText(path);
+            var state = JsonSerializer.Deserialize(json, QueueStateJsonContext.Default.QueueState);
+
+            // Poprawny składniowo plik z "paths": null albo pustymi pozycjami nie może wywrócić startu.
+            if (state is not null)
+                state.Paths = state.Paths?.Where(p => !string.IsNullOrWhiteSpace(p)).ToList() ?? [];
+
+            return state;
         }
         catch (Exception ex)
         {
@@ -26,19 +34,14 @@ public static class QueueStateStore
         }
     }
 
-    public static void Save(QueueState state)
+    public static void Save(QueueState state) => Save(state, AppPaths.QueueFile);
+
+    public static void Save(QueueState state, string path)
     {
         try
         {
-            Directory.CreateDirectory(AppPaths.ConfigDirectory);
-
             var json = JsonSerializer.Serialize(state, QueueStateJsonContext.Default.QueueState);
-
-            // Zapis obok i podmiana, tak jak dla ustawien: przerwany zapis nie moze
-            // zostawic pliku nie do odczytania.
-            var temporary = AppPaths.QueueFile + ".tmp";
-            File.WriteAllText(temporary, json);
-            File.Move(temporary, AppPaths.QueueFile, overwrite: true);
+            AtomicFile.Write(path, json);
         }
         catch (Exception ex)
         {

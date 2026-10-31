@@ -21,6 +21,7 @@
   <!-- Testy podstawiaja atrape wyjscia i dekodera przez skladowe wewnetrzne. -->
   <ItemGroup>
     <InternalsVisibleTo Include="Cewka.Audio.Tests" />
+    <InternalsVisibleTo Include="Cewka.App.Tests" />
   </ItemGroup>
 
   <!--

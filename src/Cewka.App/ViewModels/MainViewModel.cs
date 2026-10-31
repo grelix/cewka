@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
@@ -35,6 +35,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly PlaybackEngine _engine;
     private readonly LoudnessService _loudness;
     private readonly DispatcherTimer _refresh;
+    private readonly string _queueFile;
 
     private QueueItemViewModel? _current;
     private TrackMetadata? _currentMetadata;
@@ -54,8 +55,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _formatBadge = string.Empty;
 
     public MainViewModel(SettingsStore settings)
+        : this(settings, new PlaybackEngine(), new LoudnessService(), AppPaths.QueueFile)
+    {
+    }
+
+    /// <summary>Dla testów: silnik, pomiar głośności i plik kolejki podane z zewnątrz.</summary>
+    internal MainViewModel(SettingsStore settings, PlaybackEngine engine, LoudnessService loudness, string queueFile)
     {
         _settings = settings;
+        _queueFile = queueFile;
         var s = settings.Current;
 
         _panelOpen = s.PanelOpen;
@@ -65,13 +73,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // więc muszą stać na miejscu, zanim cokolwiek powstanie.
         AudioQuality.ResamplerFilterOrder = AudioPreferences.FilterOrder(s.ResamplerQuality);
 
-        _loudness = new LoudnessService
-        {
-            TargetLufs = AudioPreferences.Lufs(s.LoudnessTarget),
-            AlwaysAnalyse = s.AlwaysAnalyse,
-        };
+        _loudness = loudness;
+        _loudness.TargetLufs = AudioPreferences.Lufs(s.LoudnessTarget);
+        _loudness.AlwaysAnalyse = s.AlwaysAnalyse;
 
-        _engine = new PlaybackEngine { PreferredPeriodSize = AudioPreferences.PeriodFrames(s.OutputLatency) };
+        _engine = engine;
+        _engine.PreferredPeriodSize = AudioPreferences.PeriodFrames(s.OutputLatency);
         _engine.Graph.GainSource = _loudness;
         _engine.Graph.NormalisationEnabled = s.NormalisationEnabled;
         _engine.Graph.Limiter.Enabled = s.LimiterEnabled;
@@ -124,7 +131,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // Okładka domyślna od razu, żeby okno nigdy nie pokazało pustej płyty.
         UpdateArtwork(null);
 
-        App.Theme.Changed += (_, _) => Dispatcher.UIThread.Post(OnThemeChanged);
+        _themeWatcher = (_, _) => Dispatcher.UIThread.Post(OnThemeChanged);
+        App.Theme.Changed += _themeWatcher;
 
         _refresh = new DispatcherTimer { Interval = RefreshInterval };
         _refresh.Tick += (_, _) => Refresh();
@@ -601,15 +609,39 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         ApplyOutputDevice();
         Raise(nameof(OutputDevice));
-        Raise(nameof(ActiveDeviceName));
+        RaiseOutputState();
     }
 
     /// <summary>
     /// Points the engine at the chosen device. A name that no longer matches anything — the
     /// headset was unplugged since it was chosen — falls back to the system default rather than
     /// leaving the application silent; the engine resolves the name when it opens the device.
+    ///
+    /// <para>Urządzenie obecne na liście może mimo to odmówić otwarcia: słuchawki zdążyły się
+    /// rozłączyć, inny program zajął je na wyłączność. Odtwarzanie przechodzi wtedy na urządzenie
+    /// domyślne, a komunikat o błędzie zostaje na ekranie.</para>
     /// </summary>
-    private void ApplyOutputDevice() => _engine.SwitchDevice(_settings.Current.OutputDevice);
+    private void ApplyOutputDevice()
+    {
+        var chosen = _settings.Current.OutputDevice;
+        var wasPlaying = _isPlaying;
+
+        if (TryPlayback(() => _engine.SwitchDevice(chosen)) || chosen is null) return;
+
+        var failure = _audioFailure;
+        _engine.SwitchDevice(null);
+        if (wasPlaying && TryPlayback(_engine.Play)) IsPlaying = true;
+
+        AudioFailure = failure;
+    }
+
+    /// <summary>Stan wyjścia mógł się zmienić: otwarcie, zamknięcie albo inne urządzenie.</summary>
+    private void RaiseOutputState()
+    {
+        Raise(nameof(IsOutputOpen));
+        Raise(nameof(ActiveDeviceName));
+        Raise(nameof(LatencyDescription));
+    }
 
     // ---------- Jakość przetwarzania ----------
 
@@ -635,8 +667,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _engine.PreferredPeriodSize = AudioPreferences.PeriodFrames(latency);
 
         // Rozmiar okresu ustala się przy otwarciu urządzenia, więc trzeba je otworzyć na nowo.
-        _engine.Reopen();
-        Raise(nameof(LatencyDescription));
+        TryPlayback(_engine.Reopen);
+        RaiseOutputState();
     }
 
     /// <summary>
@@ -1171,7 +1203,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Repeat = _engine.Repeat.ToString(),
         };
 
-        QueueStateStore.Save(state);
+        QueueStateStore.Save(state, _queueFile);
     }
 
     /// <summary>
@@ -1185,7 +1217,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // żeby ponowne włączenie przywracania miało co przywrócić.
         if (!_settings.Current.RestoreSession) return;
 
-        var state = QueueStateStore.Load();
+        var state = QueueStateStore.Load(_queueFile);
         if (state is null || state.Paths.Count == 0) return;
 
         // Pliki mogly zniknac miedzy uruchomieniami.
@@ -1701,8 +1733,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         return $"{whole / 60}:{whole % 60:00}";
     }
 
+    private readonly EventHandler _themeWatcher;
+
     public void Dispose()
     {
+        App.Theme.Changed -= _themeWatcher;
         _refresh.Stop();
         _noticeTimer.Stop();
         _covers.Cancel();
