@@ -1304,6 +1304,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ShowNotice(Strings.Current["DeviceLostNotice"]);
     }
 
+    /// <summary>Wyłącznie dla testów: wołane przed przejrzeniem folderu, np. żeby je spowolnić.</summary>
+    internal static Action<string>? FolderExpanding;
+
     /// <summary>
     /// Foldery przeglądane są rekurencyjnie, z pominięciem plików nierozpoznanych. W każdym katalogu
     /// najpierw pliki, potem podkatalogi, jedne i drugie w porządku naturalnym: „2 - y” przed
@@ -1312,9 +1315,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <para>Folder, którego nie da się przejrzeć, jest pomijany, a pierwszy taki trafia do
     /// <paramref name="unreadable"/>. Nieczytelny podkatalog pomija się po cichu.</para>
     /// </summary>
-    /// <summary>Wyłącznie dla testów: wołane przed przejrzeniem folderu, np. żeby je spowolnić.</summary>
-    internal static Action<string>? FolderExpanding;
-
     private static List<string> ExpandToAudioFiles(IEnumerable<string> paths, out string? unreadable)
     {
         unreadable = null;
