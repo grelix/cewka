@@ -3,7 +3,7 @@ using System.Globalization;
 namespace Cewka.Audio.Metadata;
 
 /// <summary>
-/// Reads tags, cover art and technical details through ATL.NET.
+/// Reads tags, technical details and, on demand, cover art through ATL.NET.
 /// <para>
 /// ATL was chosen over the more widely used TagLib# purely on licensing: TagLib# is LGPL,
 /// which raises the same difficulty for a single-file MIT build that ruled out FFmpeg.
@@ -42,7 +42,6 @@ public static class MetadataReader
                 Channels = track.ChannelsArrangement?.NbChannels ?? 0,
                 IsVariableBitrate = track.IsVBR,
                 Codec = DescribeCodec(track),
-                CoverArt = track.EmbeddedPictures.Count > 0 ? track.EmbeddedPictures[0].PictureData : null,
                 ReplayGainTrack = ReadGain(track, "REPLAYGAIN_TRACK_GAIN"),
                 ReplayGainAlbum = ReadGain(track, "REPLAYGAIN_ALBUM_GAIN"),
                 ReplayGainTrackPeak = ReadPeak(track, "REPLAYGAIN_TRACK_PEAK"),
@@ -51,6 +50,34 @@ public static class MetadataReader
         catch (Exception)
         {
             return Fallback(path);
+        }
+    }
+
+    /// <summary>Okładka większa niż ten próg to najpewniej skan w pełnej rozdzielczości, nie miniatura.</summary>
+    public const int MaxCoverBytes = 16 * 1024 * 1024;
+
+    /// <summary>
+    /// Reads the embedded cover on demand: the front cover when the file names one, otherwise
+    /// the first picture. Covers are not part of <see cref="TrackMetadata"/>, because metadata
+    /// stays in memory for every queue entry and only the current track needs its picture.
+    /// Returns null when there is no picture, it exceeds <paramref name="maxBytes"/> or the
+    /// file cannot be read. Blocks on disk access, so callers keep it off the UI thread.
+    /// </summary>
+    public static byte[]? ReadCover(string path, int maxBytes = MaxCoverBytes)
+    {
+        try
+        {
+            var pictures = new ATL.Track(path).EmbeddedPictures;
+            if (pictures.Count == 0) return null;
+
+            var cover = pictures.FirstOrDefault(p => p.PicType == ATL.PictureInfo.PIC_TYPE.Front) ?? pictures[0];
+            var data = cover.PictureData;
+
+            return data is { Length: > 0 } && data.Length <= maxBytes ? data : null;
+        }
+        catch (Exception)
+        {
+            return null;
         }
     }
 
