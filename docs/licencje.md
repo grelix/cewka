@@ -21,7 +21,9 @@ po przywróceniu pakietów.
 
 | Pakiet | Wersja | Licencja | Skąd |
 |--------|--------|----------|------|
-| Avalonia.Win32, Avalonia.X11, Avalonia.FreeDesktop, Avalonia.FreeDesktop.AtSpi, Avalonia.Native, Avalonia.Skia, Avalonia.HarfBuzz, Avalonia.Remote.Protocol | 12.1.1 | MIT | Avalonia.Desktop |
+| Avalonia.Win32, Avalonia.X11, Avalonia.Native, Avalonia.Skia, Avalonia.HarfBuzz | 12.1.1 | MIT | Avalonia.Desktop |
+| Avalonia.FreeDesktop, Avalonia.FreeDesktop.AtSpi | 12.1.1 | MIT | Avalonia.X11 |
+| Avalonia.Remote.Protocol | 12.1.1 | MIT | Avalonia |
 | MicroCom.Runtime | 0.11.6 | MIT | Avalonia |
 | Tmds.DBus.Protocol | 0.94.1 | MIT | Avalonia.FreeDesktop |
 | SkiaSharp z bibliotekami natywnymi | 3.119.4 | MIT | Avalonia.Skia |
@@ -83,6 +85,26 @@ Cantarell 0.303 obejmuje alfabet łaciński z rozszerzeniami, grekę i cyrylicę
 wszystkich 17 języków interfejsu. Test `LanguageFileTests` sprawdza, że każdy znak w plikach
 językowych jest w foncie i że znaki z diakrytyką są zapisane w postaci złożonej. Pisma chińskie,
 japońskie, koreańskie, arabskie i dewanagari wymagałyby osobnego fontu.
+
+## Zobowiązania przy rozpowszechnianiu
+
+Większość licencji powyżej pozwala rozpowszechniać plik wykonywalny pod warunkiem, że trafią
+z nim noty składników:
+
+- MIT (Avalonia, NVorbis, Concentus.OggFile, ATL.NET, środowisko .NET i reszta pakietów MIT)
+  i BSD z 3 klauzulami (Concentus, ANGLE): informacja o prawach autorskich i tekst licencji.
+- Biblioteki natywne Skii i HarfBuzz: noty z ich pliku `THIRD-PARTY-NOTICES.txt`.
+- Ude.NetStandard (MPL 1.1): informacja, gdzie można pobrać kod źródłowy pakietu.
+- Fonty (SIL OFL 1.1): informacja o prawach autorskich i tekst licencji przy każdej kopii fontu.
+
+Noty nie wymaga tylko miniaudio (Unlicense albo MIT-0).
+
+Wydanie dziś tego nie spełnia. Archiwum i pakiety dla Linuksa zawierają tylko `LICENSE` Cewki,
+a plik wykonywalny dla Windows wychodzi bez żadnego pliku obok. Teksty OFL są osadzone
+w pliku wykonywalnym razem z fontami, ale program ich nie pokazuje, a sekcja „Licencje”
+w ustawieniach podaje tylko nazwy licencji. Do uzupełnienia jest jeden plik z notami
+(np. `THIRD-PARTY-NOTICES.txt`) dołączany do archiwum, pakietów i wydania dla Windows albo
+dostępny z okna ustawień.
 
 ## Grafika
 
