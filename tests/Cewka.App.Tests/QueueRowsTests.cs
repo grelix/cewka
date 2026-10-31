@@ -1,3 +1,4 @@
+using Cewka.App.Localisation;
 using Cewka.App.Services;
 using Cewka.App.ViewModels;
 using Xunit;
@@ -38,6 +39,18 @@ public sealed class QueueRowsTests
         Assert.Equal([rows[0], rows[2]], h.Player.Queue);
         Assert.Equal([1, 2], h.Player.Queue.Select(row => row.Number));
         Assert.True(rows[0].IsCurrent);
+    });
+
+    [Fact]
+    public void UsuniecieOstatniegoWierszaBezOdtwarzaniaZmieniaTytul() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        h.Player.OpenPaths([h.Track("a")], replace: false);
+        Assert.Equal(Strings.Current["NothingPlaying"], h.Player.Title);
+
+        h.Player.RemoveFromQueue(h.Player.Queue[0]);
+
+        Assert.Equal(Strings.Current["NoTrack"], h.Player.Title);
     });
 
     [Fact]

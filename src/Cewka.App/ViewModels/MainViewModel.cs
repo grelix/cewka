@@ -1267,6 +1267,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         Raise(nameof(QueueSummary));
         Raise(nameof(IsQueueEmpty));
+        if (_current is null) Title = IdleTitle;
         TouchQueue();
     }
 
