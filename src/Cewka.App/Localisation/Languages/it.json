@@ -207,5 +207,7 @@
   "CodecsMissing": "nessun codec di sistema",
 
   "AboutLicences": "Licenze",
-  "LicenceSummary": "Cewka è distribuito con licenza MIT. Avalonia, NVorbis, Concentus e ATL.NET — MIT. miniaudio — MIT-0. I font Cantarell e JetBrains Mono — SIL Open Font License 1.1."
+  "LicenceSummary": "Cewka è distribuito con licenza MIT. Avalonia, NVorbis, Concentus e ATL.NET — MIT. miniaudio — MIT-0. I font Cantarell e JetBrains Mono — SIL Open Font License 1.1.",
+
+  "NothingPlaying": "Nessuna riproduzione"
 }

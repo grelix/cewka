@@ -101,4 +101,34 @@ public class PendingResumeTests
         Assert.Equal(3, index);
         Assert.Equal(200, seconds, precision: 3);
     }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(2, -1)]
+    [InlineData(3, 2)]
+    public void UsuniecieWpisuPrzesuwaAlboPorzucaPozycje(int removed, int expected)
+    {
+        var resume = new PendingResume();
+        resume.Arm(index: 2, seconds: 10, queueLength: 5);
+
+        resume.OnRemoved(removed);
+
+        Assert.Equal(expected, resume.Index);
+    }
+
+    [Theory]
+    [InlineData(2, 0, 0)]
+    [InlineData(0, 4, 1)]
+    [InlineData(4, 0, 3)]
+    [InlineData(3, 4, 2)]
+    [InlineData(0, 1, 2)]
+    public void PrzeniesienieWpisuPrzesuwaPozycje(int from, int to, int expected)
+    {
+        var resume = new PendingResume();
+        resume.Arm(index: 2, seconds: 10, queueLength: 5);
+
+        resume.OnMoved(from, to);
+
+        Assert.Equal(expected, resume.Index);
+    }
 }

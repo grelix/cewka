@@ -207,5 +207,7 @@
   "CodecsMissing": "sistem kodekleri yok",
 
   "AboutLicences": "Lisanslar",
-  "LicenceSummary": "Cewka, MIT lisansı altında yayımlanmaktadır. Avalonia, NVorbis, Concentus ve ATL.NET — MIT. miniaudio — MIT-0. Cantarell ve JetBrains Mono yazı tipleri — SIL Open Font License 1.1."
+  "LicenceSummary": "Cewka, MIT lisansı altında yayımlanmaktadır. Avalonia, NVorbis, Concentus ve ATL.NET — MIT. miniaudio — MIT-0. Cantarell ve JetBrains Mono yazı tipleri — SIL Open Font License 1.1.",
+
+  "NothingPlaying": "Çalan bir şey yok"
 }

@@ -320,6 +320,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _ => RepeatMode.None,
         };
 
+        RaiseRepeat();
+    }
+
+    private void RaiseRepeat()
+    {
         Raise(nameof(RepeatEnabled));
         Raise(nameof(RepeatTrack));
         Raise(nameof(RepeatQueue));
@@ -398,8 +403,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     private void RefreshTextForLanguage()
     {
-        if (_current is null) Title = Strings.Current["NoTrack"];
         RebuildQueue();
+        if (_current is null) Title = IdleTitle;
+        RaiseRepeat();
 
         foreach (var effect in SoundEffects) effect.RefreshLabels();
     }
@@ -630,7 +636,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         var failure = _audioFailure;
         _engine.SwitchDevice(null);
-        if (wasPlaying && TryPlayback(_engine.Play)) IsPlaying = true;
+        if (wasPlaying && TryPlayback(_engine.Play)) SyncPlaying();
 
         AudioFailure = failure;
     }
@@ -825,7 +831,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         if (replace)
         {
-            if (TryPlayback(() => _engine.SetQueue(files))) IsPlaying = true;
+            if (TryPlayback(() => _engine.SetQueue(files))) SyncPlaying();
         }
         else
         {
@@ -851,7 +857,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         switch (_settings.Current.FileOpenAction)
         {
             case FileOpenAction.ReplaceAndPlay:
-                if (TryPlayback(() => _engine.SetQueue(files))) IsPlaying = true;
+                if (TryPlayback(() => _engine.SetQueue(files))) SyncPlaying();
                 break;
 
             case FileOpenAction.AppendAndPlay:
@@ -861,7 +867,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 var first = Queue.Count;
                 _engine.Enqueue(files);
                 _resume.Discard();
-                if (TryPlayback(() => _engine.PlayIndex(first))) IsPlaying = true;
+                if (TryPlayback(() => _engine.PlayIndex(first))) SyncPlaying();
                 break;
             }
 
@@ -870,7 +876,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 // po otwarciu pliku milczy, wygląda na zepsuty.
                 if (IsQueueEmpty)
                 {
-                    if (TryPlayback(() => _engine.SetQueue(files))) IsPlaying = true;
+                    if (TryPlayback(() => _engine.SetQueue(files))) SyncPlaying();
                 }
                 else
                 {
@@ -1082,19 +1088,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (index < 0) return;
 
         _resume.Discard();
-        if (TryPlayback(() => _engine.PlayIndex(index))) IsPlaying = true;
+        if (TryPlayback(() => _engine.PlayIndex(index))) SyncPlaying();
     }
 
     public void Next()
     {
         _resume.Discard();
-        if (TryPlayback(_engine.Next)) IsPlaying = true;
+        if (TryPlayback(_engine.Next)) SyncPlaying();
     }
 
     public void Previous()
     {
         _resume.Discard();
-        if (TryPlayback(_engine.Previous)) IsPlaying = true;
+        if (TryPlayback(_engine.Previous)) SyncPlaying();
     }
 
     public void TogglePlay()
@@ -1102,8 +1108,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // Pierwsze nacisniecie po starcie wznawia utwor przywrocony z poprzedniej sesji.
         if (ResumeRestoredTrack()) return;
 
+        // Pusta kolejka: nie ma czego grać, więc nie ma też powodu zajmować karty dźwiękowej.
+        if (Queue.Count == 0) return;
+
         if (TryPlayback(_engine.TogglePlay)) IsPlaying = _engine.State == PlaybackState.Playing;
     }
+
+    /// <summary>Stan przycisku wprost z silnika: „Poprzedni” w pauzie tylko przewija i nie wznawia gry.</summary>
+    private void SyncPlaying() => IsPlaying = _engine.State == PlaybackState.Playing;
 
     public void Pause()
     {
@@ -1117,13 +1129,25 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     // ---------- Operacje na kolejce ----------
 
+    /// <summary>
+    /// Usuwa wpis z kolejki. Usunięcie grającego utworu zatrzymuje odtwarzanie i nie uruchamia
+    /// niczego samo; pierwsze naciśnięcie odtwarzania rusza od utworu, który zajął jego miejsce.
+    /// </summary>
     public void RemoveFromQueue(QueueItemViewModel item)
     {
         var index = Queue.IndexOf(item);
         if (index < 0) return;
 
+        var wasCurrent = _engine.CurrentIndex == index;
+
         _engine.RemoveAt(index);
+        _resume.OnRemoved(index);
         RebuildQueue();
+
+        if (!wasCurrent || _engine.CurrentIndex >= 0) return;
+
+        ResetNowPlaying();
+        if (Queue.Count > 0) _resume.Arm(Math.Min(index, Queue.Count - 1), 0, Queue.Count);
     }
 
     public void MoveInQueue(int from, int to)
@@ -1132,26 +1156,44 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (from >= Queue.Count || to >= Queue.Count) return;
 
         _engine.Move(from, to);
+        _resume.OnMoved(from, to);
         RebuildQueue();
     }
 
     public void ClearQueue()
     {
         _engine.ClearQueue();
+        _resume.Discard();
+
+        RebuildQueue();
+        ResetNowPlaying();
+    }
+
+    /// <summary>
+    /// Zdejmuje z okna i z panelu systemowego wszystko, co dotyczyło utworu, który przestał
+    /// być bieżący: tytuł, wykonawcę, plakietkę formatu i okładkę.
+    /// </summary>
+    private void ResetNowPlaying()
+    {
+        if (_current is not null) _current.IsCurrent = false;
+
         _current = null;
         _currentMetadata = null;
         _shownBitrate = 0;
 
-        Title = Strings.Current["NoTrack"];
+        Title = IdleTitle;
         ArtistLine = string.Empty;
         FormatBadge = string.Empty;
-        IsPlaying = false;
+        IsPlaying = _engine.State == PlaybackState.Playing;
 
-        RebuildQueue();
         _covers.Cancel();
         UpdateArtwork(null);
         PublishToMediaPanel();
+        Raise(nameof(CurrentIndex));
     }
+
+    /// <summary>Tytuł, gdy nic nie jest wczytane: inny przy pustej kolejce, inny przy pełnej.</summary>
+    private string IdleTitle => Strings.Current[Queue.Count == 0 ? "NoTrack" : "NothingPlaying"];
 
     // ---------- Sterowanie z klawiatury ----------
 
@@ -1194,11 +1236,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Writes the queue and position so the next run resumes where this one stopped.</summary>
     public void SaveQueueState()
     {
+        // Dopóki nic nie zagrało, silnik nie zna pozycji z poprzedniej sesji; czeka ona
+        // w _resume i to ją trzeba zapisać, inaczej samo otwarcie i zamknięcie programu ją kasuje.
+        var armed = _resume.IsArmed;
+
         var state = new QueueState
         {
             Paths = _engine.QueuePaths.ToList(),
-            CurrentIndex = _engine.CurrentIndex,
-            PositionSeconds = _engine.Position.TotalSeconds,
+            CurrentIndex = armed ? _resume.Index : _engine.CurrentIndex,
+            PositionSeconds = armed ? _resume.Seconds : _engine.Position.TotalSeconds,
             Shuffle = _engine.Shuffle,
             Repeat = _engine.Repeat.ToString(),
         };
@@ -1220,8 +1266,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var state = QueueStateStore.Load(_queueFile);
         if (state is null || state.Paths.Count == 0) return;
 
-        // Pliki mogly zniknac miedzy uruchomieniami.
-        var existing = state.Paths.Where(File.Exists).ToList();
+        // Pliki mogły zniknąć między uruchomieniami. Numer bieżącego wpisu liczy się po
+        // odfiltrowaniu, żeby wskazywał ten sam plik; gdy zniknął on sam, wznowienia nie ma.
+        var existing = new List<string>(state.Paths.Count);
+        var resumeIndex = -1;
+
+        for (var i = 0; i < state.Paths.Count; i++)
+        {
+            if (!File.Exists(state.Paths[i])) continue;
+            if (i == state.CurrentIndex) resumeIndex = existing.Count;
+            existing.Add(state.Paths[i]);
+        }
+
         if (existing.Count == 0) return;
 
         _engine.Enqueue(existing);
@@ -1230,10 +1286,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         RebuildQueue();
         Raise(nameof(ShuffleEnabled));
-        Raise(nameof(RepeatEnabled));
-        Raise(nameof(RepeatTrack));
+        RaiseRepeat();
 
-        _resume.Arm(state.CurrentIndex, state.PositionSeconds, existing.Count);
+        if (_current is null) Title = IdleTitle;
+
+        _resume.Arm(resumeIndex, state.PositionSeconds, existing.Count);
     }
 
     // ---------- Komunikaty ----------
@@ -1358,8 +1415,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _engine.ClearQueue();
         _engine.Enqueue(load.Paths);
 
-        IsPlaying = false;
         RebuildQueue();
+        ResetNowPlaying();
 
         _resume.Arm(0, 0, load.Paths.Count);
 
@@ -1381,11 +1438,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // zostaje samo uruchomienie.
         if (!_resume.TryTake(_engine.CurrentIndex >= 0, out var index, out var seconds)) return false;
 
-        if (!TryPlayback(() => _engine.PlayIndex(index))) return true;
+        // Pozycja za końcem utworu (plik podmieniono na krótszy) zaczyna go od początku,
+        // zamiast od razu przeskakiwać do następnego.
+        var duration = _engine.Queue.ElementAtOrDefault(index)?.Duration ?? TimeSpan.Zero;
+        if (seconds <= 1 || (duration > TimeSpan.Zero && seconds >= duration.TotalSeconds - 1)) seconds = 0;
 
-        if (seconds > 1) _engine.SeekTo(TimeSpan.FromSeconds(seconds));
+        if (TryPlayback(() => _engine.PlayIndex(index, TimeSpan.FromSeconds(seconds))))
+            IsPlaying = _engine.State == PlaybackState.Playing;
 
-        IsPlaying = true;
         return true;
     }
 

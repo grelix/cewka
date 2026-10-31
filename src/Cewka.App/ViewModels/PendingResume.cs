@@ -24,6 +24,34 @@ public sealed class PendingResume
     /// <summary>True while a position from the previous session is still waiting.</summary>
     public bool IsArmed => _index >= 0;
 
+    /// <summary>Numer czekającego wpisu w kolejce; −1, gdy nic nie czeka.</summary>
+    public int Index => _index;
+
+    /// <summary>Czekająca pozycja w utworze, w sekundach.</summary>
+    public double Seconds => _seconds;
+
+    /// <summary>
+    /// Kolejka straciła wpis. Usunięcie czekającego utworu porzuca wznowienie; usunięcie
+    /// wcześniejszego przesuwa numer, żeby nadal wskazywał ten sam plik.
+    /// </summary>
+    public void OnRemoved(int index)
+    {
+        if (!IsArmed) return;
+
+        if (index == _index) Discard();
+        else if (index < _index) _index--;
+    }
+
+    /// <summary>Wpis przeniesiono z <paramref name="from"/> na <paramref name="to"/>.</summary>
+    public void OnMoved(int from, int to)
+    {
+        if (!IsArmed || from == to) return;
+
+        if (from == _index) _index = to;
+        else if (from < _index && to >= _index) _index--;
+        else if (from > _index && to <= _index) _index++;
+    }
+
     /// <summary>
     /// Remembers where to resume from. An index outside the queue is ignored rather than stored,
     /// because the file list may have shrunk since it was written.

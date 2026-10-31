@@ -207,5 +207,7 @@
   "CodecsMissing": "brak kodeków systemowych",
 
   "AboutLicences": "Licencje",
-  "LicenceSummary": "Cewka udostępniana jest na licencji MIT. Avalonia, NVorbis, Concentus i ATL.NET — MIT. miniaudio — MIT-0. Fonty Cantarell i JetBrains Mono — SIL Open Font License 1.1."
+  "LicenceSummary": "Cewka udostępniana jest na licencji MIT. Avalonia, NVorbis, Concentus i ATL.NET — MIT. miniaudio — MIT-0. Fonty Cantarell i JetBrains Mono — SIL Open Font License 1.1.",
+
+  "NothingPlaying": "Nic nie jest odtwarzane"
 }
