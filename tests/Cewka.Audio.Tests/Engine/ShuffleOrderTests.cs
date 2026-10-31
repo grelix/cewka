@@ -57,6 +57,47 @@ public class ShuffleOrderTests
         }
     }
 
+    /// <summary>
+    /// Pytanie o następny wpis na końcu rundy, zadane ponownie (sprawdzenie zapasu dekodera
+    /// po zmianie kolejki), daje ten sam wpis, zamiast układać kolejną permutację.
+    /// </summary>
+    [Fact]
+    public void AskingAgainAtTheEndOfARoundGivesTheSameEntry()
+    {
+        var queue = Queue(6);
+        for (var seed = 0; seed < 20; seed++)
+        {
+            var order = new ShuffleOrder(new Random(seed));
+            order.Reset(queue, null);
+            var last = order.Order[^1];
+
+            var first = order.Next(last, wrap: true, queue);
+            var again = order.Next(last, wrap: true, queue);
+
+            Assert.Same(first, again);
+            Assert.Same(first, order.Order[0]);
+        }
+    }
+
+    /// <summary>„Poprzedni” na początku nowej rundy wraca do utworu, który zamknął poprzednią.</summary>
+    [Fact]
+    public void PreviousAtTheStartOfANewRoundReturnsTheLastOfTheOldOne()
+    {
+        var queue = Queue(5);
+        var order = new ShuffleOrder(new Random(11));
+        order.Reset(queue, null);
+        var last = order.Order[^1];
+
+        var first = order.Next(last, wrap: true, queue)!;
+
+        Assert.Same(last, order.Previous(first, wrap: true, queue));
+
+        // Dalej runda biegnie zwyczajnie.
+        var second = order.Next(first, wrap: true, queue)!;
+        Assert.Same(order.Order[1], second);
+        Assert.Same(first, order.Previous(second, wrap: true, queue));
+    }
+
     /// <summary>Utwór wybrany ręcznie trafia za bieżący; „Poprzedni” wraca z niego do bieżącego.</summary>
     [Fact]
     public void PickedEntryGoesRightAfterTheCurrentOne()

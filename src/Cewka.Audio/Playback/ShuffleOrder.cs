@@ -13,6 +13,13 @@ internal sealed class ShuffleOrder
     private readonly List<QueueEntry> _order = [];
     private readonly Random _random;
 
+    /// <summary>
+    /// Wpis, który zamknął poprzednią rundę, dopóki bieżąca nie ruszyła dalej niż o pierwszy
+    /// wpis. Pytanie o następny po nim daje wtedy początek bieżącej rundy, a „Poprzedni”
+    /// z tego początku wraca do niego.
+    /// </summary>
+    private QueueEntry? _closedRound;
+
     public ShuffleOrder(Random? random = null) => _random = random ?? Random.Shared;
 
     public IReadOnlyList<QueueEntry> Order => _order;
@@ -20,6 +27,7 @@ internal sealed class ShuffleOrder
     /// <summary>Nowa permutacja całej kolejki; <paramref name="first"/>, o ile jest w kolejce, staje na początku.</summary>
     public void Reset(IReadOnlyList<QueueEntry> queue, QueueEntry? first)
     {
+        _closedRound = null;
         _order.Clear();
         _order.AddRange(queue);
 
@@ -33,7 +41,11 @@ internal sealed class ShuffleOrder
         if (first is not null && _order.Remove(first)) _order.Insert(0, first);
     }
 
-    public void Clear() => _order.Clear();
+    public void Clear()
+    {
+        _order.Clear();
+        _closedRound = null;
+    }
 
     /// <summary>Nowe wpisy trafiają w losowe miejsca za <paramref name="after"/>, żeby nie zagrały przed już zaplanowanymi wstecz.</summary>
     public void Insert(IEnumerable<QueueEntry> entries, QueueEntry? after)
@@ -47,7 +59,11 @@ internal sealed class ShuffleOrder
         }
     }
 
-    public void Remove(QueueEntry entry) => _order.Remove(entry);
+    public void Remove(QueueEntry entry)
+    {
+        _order.Remove(entry);
+        if (ReferenceEquals(entry, _closedRound)) _closedRound = null;
+    }
 
     /// <summary>
     /// Stawia wpis zaraz za <paramref name="anchor"/>. Utwór wybrany ręcznie gra wtedy jako
@@ -59,6 +75,8 @@ internal sealed class ShuffleOrder
         if (ReferenceEquals(entry, anchor)) return;
         if (!_order.Remove(entry)) return;
 
+        _closedRound = null;
+
         var position = anchor is null ? 0 : _order.IndexOf(anchor) + 1;
         _order.Insert(position, entry);
     }
@@ -66,11 +84,18 @@ internal sealed class ShuffleOrder
     /// <summary>
     /// Wpis po <paramref name="from"/>. Na końcu permutacji: przy <paramref name="wrap"/> nowa
     /// permutacja, której pierwszy wpis różni się od ostatnio granego, w przeciwnym razie null.
+    /// Ponowne pytanie o wpis, który zamknął rundę, daje ten sam początek nowej.
     /// </summary>
     public QueueEntry? Next(QueueEntry? from, bool wrap, IReadOnlyList<QueueEntry> queue)
     {
         EnsureMatches(queue, from);
         if (_order.Count == 0) return null;
+
+        if (_closedRound is not null)
+        {
+            if (ReferenceEquals(from, _closedRound)) return _order[0];
+            _closedRound = null;
+        }
 
         var position = from is null ? -1 : _order.IndexOf(from);
         if (position + 1 < _order.Count) return _order[position + 1];
@@ -80,10 +105,14 @@ internal sealed class ShuffleOrder
         if (_order.Count > 1 && ReferenceEquals(_order[0], from))
             (_order[0], _order[^1]) = (_order[^1], _order[0]);
 
+        _closedRound = from;
         return _order[0];
     }
 
-    /// <summary>Wpis przed <paramref name="from"/>; na początku permutacji przy <paramref name="wrap"/> ostatni, inaczej null.</summary>
+    /// <summary>
+    /// Wpis przed <paramref name="from"/>. Na początku permutacji: wpis, który zamknął
+    /// poprzednią rundę, a gdy takiej nie było, przy <paramref name="wrap"/> ostatni, inaczej null.
+    /// </summary>
     public QueueEntry? Previous(QueueEntry? from, bool wrap, IReadOnlyList<QueueEntry> queue)
     {
         EnsureMatches(queue, from);
@@ -91,6 +120,7 @@ internal sealed class ShuffleOrder
 
         var position = from is null ? -1 : _order.IndexOf(from);
         if (position > 0) return _order[position - 1];
+        if (position == 0 && _closedRound is not null) return _closedRound;
 
         return wrap ? _order[^1] : null;
     }
