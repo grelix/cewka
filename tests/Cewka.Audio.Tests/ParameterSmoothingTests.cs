@@ -113,6 +113,92 @@ public class ParameterSmoothingTests
         Assert.True(LargestStep(added, 0, fromFrame: SampleRate) <= steady * 1.5,
             $"skok domieszki {LargestStep(added, 0, SampleRate):F4} wobec {steady:F4} w stanie ustalonym");
     }
+    // ================= korektor =================
+
+    /// <summary>
+    /// Wyłączenie korektora w trakcie gry sprowadza pasma do zera płynnie, a po wygaszeniu
+    /// sygnał przechodzi bez zmiany ani jednej próbki.
+    /// </summary>
+    [Fact]
+    public void EqualiserFadesOutWhenDisabledThenBypasses()
+    {
+        var equaliser = new Equaliser();
+        equaliser.SetGain(5, 12);
+        equaliser.Preamp = -6;
+        equaliser.Prepare(SampleRate, Channels);
+
+        var tone = Sine(1000, 0.25, 2 * SampleRate, SampleRate);
+        ProcessRange(equaliser, tone, 0, SampleRate + 12);
+        equaliser.Enabled = false;
+        ProcessRange(equaliser, tone, SampleRate + 12, 2 * SampleRate);
+
+        Assert.True(LargestStep(tone, 0, fromFrame: 4800) < NaturalStep(1000, 0.25 * 2),
+            $"skok {LargestStep(tone, 0, 4800):F4}");
+
+        var original = Sine(1000, 0.25, 4800, SampleRate);
+        var processed = (float[])original.Clone();
+        ProcessInBlocks(equaliser, processed, Block);
+        Assert.Equal(original, processed);
+    }
+
+    /// <summary>Przedwzmacniacz przestawiony o 12 dB nie skacze na granicy bufora.</summary>
+    [Fact]
+    public void PreampChangeHasNoStepAtTheBufferBoundary()
+    {
+        var equaliser = new Equaliser();
+        equaliser.Prepare(SampleRate, Channels);
+
+        var buffer = new float[SampleRate * Channels];
+        Array.Fill(buffer, 0.5f);
+        ProcessRange(equaliser, buffer, 0, 4800);
+        equaliser.Preamp = -12;
+        ProcessRange(equaliser, buffer, 4800, SampleRate);
+
+        Assert.True(LargestStep(buffer, 0) < 0.005, $"skok {LargestStep(buffer, 0):F4}");
+        Assert.InRange(buffer[^1], 0.5f * 0.24f, 0.5f * 0.26f);
+    }
+
+    /// <summary>Czas wygładzania liczony w sekundach: okres 256 i 2048 ramek po 100 ms daje to samo.</summary>
+    [Fact]
+    public void EqualiserSmoothingDoesNotDependOnBufferSize()
+    {
+        double Progress(int frames)
+        {
+            var equaliser = new Equaliser();
+            equaliser.Prepare(SampleRate, Channels);
+            equaliser.Preamp = -12;
+
+            var count = (int)Math.Round(0.1024 * SampleRate / frames) * frames;
+            var buffer = new float[count * Channels];
+            Array.Fill(buffer, 1f);
+            ProcessInBlocks(equaliser, buffer, frames);
+            return Db(buffer[^1]) / -12;
+        }
+
+        var small = Progress(256);
+        var large = Progress(2048);
+
+        Assert.InRange(small, 0.75, 0.95);
+        Assert.InRange(large, small - 0.06, small + 0.06);
+    }
+
+    /// <summary>
+    /// Dokumentuje rzeczywiste zachowanie: pasma oktawowe zachodzą na siebie, więc przy
+    /// wszystkich suwakach na +6 dB środek pasma wewnętrznego dostaje około 8,8 dB.
+    /// </summary>
+    [Fact]
+    public void AdjacentBandsOverlap()
+    {
+        var equaliser = new Equaliser();
+        for (var band = 0; band < Equaliser.Frequencies.Length; band++) equaliser.SetGain(band, 6);
+        equaliser.Prepare(SampleRate, Channels);
+
+        var buffer = Sine(1000, 0.05, SampleRate, SampleRate);
+        ProcessInBlocks(equaliser, buffer, Block);
+
+        Assert.InRange(Db(Goertzel(buffer, 0, 1000, SampleRate, 9600) / 0.05), 8.3, 9.3);
+    }
+
     // ================= wzmocnienie =================
 
     /// <summary>
