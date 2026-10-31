@@ -256,7 +256,7 @@ public sealed class LanguageFileTests
     /// programu — i to wyłącznie w swoim języku.
     /// </summary>
     /// <summary>Teksty z jednym symbolem zastępczym {0}.</summary>
-    private static readonly string[] OneArgumentKeys = ["PlaylistSaved", "PlaylistMissing", "VolumeLevel"];
+    private static readonly string[] OneArgumentKeys = ["PlaylistSaved", "PlaylistMissing", "VolumeLevel", "EffectStrength"];
 
     [Theory]
     [MemberData(nameof(All))]

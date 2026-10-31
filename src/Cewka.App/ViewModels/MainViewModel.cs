@@ -234,12 +234,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (value) WakeRefresh();
 
             Raise(nameof(IsPaused));
+            Raise(nameof(PlayPauseTooltip));
             _mediaPanel?.SetStatus(value ? MediaPanelStatus.Playing : MediaPanelStatus.Paused);
             MediaKeys.Playing = value;
         }
     }
 
     public bool IsPaused => !_isPlaying;
+
+    /// <summary>Podpowiedź i nazwa przycisku odtwarzania: to, co zrobi jego naciśnięcie.</summary>
+    public string PlayPauseTooltip => Strings.Current[_isPlaying ? "TooltipPause" : "TooltipPlay"];
 
     /// <summary>Amplitude driving the waveform, taken from the live signal analysis.</summary>
     public float WaveLevel => _engine.Graph.Analyser.Level;
@@ -348,7 +352,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _isMuted = muted;
         _settings.Current.IsMuted = muted;
         Raise(nameof(IsMuted));
+        Raise(nameof(MuteTooltip));
+        Raise(nameof(VolumeOpacity));
     }
+
+    /// <summary>Suwak wyciszonej głośności przygasa, ale zostaje w swoim położeniu.</summary>
+    public double VolumeOpacity => _isMuted ? 0.45 : 1.0;
+
+    /// <summary>Podpowiedź i nazwa przycisku głośnika.</summary>
+    public string MuteTooltip => Strings.Current[_isMuted ? "TooltipUnmute" : "TooltipMute"];
 
     /// <summary>Poziom w procentach, do nazwy dostępności suwaka.</summary>
     public string VolumeLevelText =>
@@ -541,6 +553,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Raise(nameof(LatencyDescription));
         Raise(nameof(VolumeLevelText));
         Raise(nameof(ThemeTooltip));
+        Raise(nameof(PlayPauseTooltip));
+        Raise(nameof(MuteTooltip));
+        Raise(nameof(UndoQueueLabel));
         Preamp.RefreshText();
         foreach (var band in Bands) band.RefreshText();
 
@@ -1341,6 +1356,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void QueueChanged()
     {
+        SetUndo(null);
         Raise(nameof(QueueSummary));
         Raise(nameof(IsQueueEmpty));
         if (_current is null) Title = IdleTitle;
@@ -1533,6 +1549,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (index < 0) return;
 
         var wasCurrent = _engine.CurrentIndex == index;
+        var waiting = _resume.IsArmed && _resume.Index == index;
+        var undo = new QueueUndo("QueueUndoRemove", [item.Path], index,
+            wasCurrent || waiting,
+            waiting ? _resume.Seconds : wasCurrent ? _engine.Position.TotalSeconds : 0);
 
         _engine.RemoveAt(index);
         _resume.OnRemoved(index);
@@ -1544,11 +1564,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (!wasCurrent || _engine.CurrentIndex >= 0)
         {
             RestoreCurrentMarker();
-            return;
+        }
+        else
+        {
+            ResetNowPlaying();
+            if (Queue.Count > 0) _resume.Arm(Math.Min(index, Queue.Count - 1), 0, Queue.Count);
         }
 
-        ResetNowPlaying();
-        if (Queue.Count > 0) _resume.Arm(Math.Min(index, Queue.Count - 1), 0, Queue.Count);
+        SetUndo(undo);
     }
 
     public void MoveInQueue(int from, int to)
@@ -1567,11 +1590,79 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public void ClearQueue()
     {
+        var undo = Queue.Count > 0 ? SnapshotQueue("QueueUndoClear") : null;
+
         _engine.ClearQueue();
         _resume.Discard();
 
         RebuildQueue();
         ResetNowPlaying();
+        SetUndo(undo);
+    }
+
+    // ---------- Cofanie zmian kolejki ----------
+
+    /// <summary>
+    /// Jeden krok wstecz: ostatnie usunięcie wiersza, wyczyszczenie kolejki albo zastąpienie jej
+    /// listą odtwarzania. Każda inna zmiana kolejki unieważnia go.
+    /// </summary>
+    /// <param name="Index">Wiersz usunięty albo wiersz, od którego wznawiać.</param>
+    /// <param name="Resume">Po cofnięciu wznowienie czeka na wierszu <paramref name="Index"/>.</param>
+    private sealed record QueueUndo(string LabelKey, IReadOnlyList<string> Paths, int Index, bool Resume, double Seconds);
+
+    private QueueUndo? _undo;
+
+    public bool CanUndoQueue => _undo is not null;
+
+    /// <summary>Nazwa polecenia cofnięcia, np. „Cofnij usunięcie”.</summary>
+    public string UndoQueueLabel => _undo is null ? string.Empty : Strings.Current[_undo.LabelKey];
+
+    private void SetUndo(QueueUndo? undo)
+    {
+        if (ReferenceEquals(_undo, undo)) return;
+
+        _undo = undo;
+        Raise(nameof(CanUndoQueue));
+        Raise(nameof(UndoQueueLabel));
+    }
+
+    /// <summary>Cała kolejka z miejscem, od którego wznowić, przed jej wyczyszczeniem albo zastąpieniem.</summary>
+    private QueueUndo SnapshotQueue(string labelKey)
+    {
+        var armed = _resume.IsArmed;
+        var index = armed ? _resume.Index : _engine.CurrentIndex;
+
+        return new QueueUndo(labelKey, _engine.QueuePaths.ToList(), index, index >= 0,
+            armed ? _resume.Seconds : _engine.Position.TotalSeconds);
+    }
+
+    /// <summary>
+    /// Cofa ostatnią zmianę kolejki. Przywrócona kolejka nie gra sama: utwór, który grał albo
+    /// czekał na wznowienie, czeka na naciśnięcie odtwarzania w tym samym miejscu.
+    /// </summary>
+    public void UndoQueue()
+    {
+        if (_undo is not { } undo) return;
+        SetUndo(null);
+
+        if (undo.LabelKey == "QueueUndoRemove")
+        {
+            _engine.Enqueue(undo.Paths);
+            AppendRows();
+            MoveInQueue(Queue.Count - 1, Math.Min(undo.Index, Queue.Count - 1));
+
+            if (undo.Resume && _engine.CurrentIndex < 0) _resume.Arm(undo.Index, undo.Seconds, Queue.Count);
+            return;
+        }
+
+        _engine.ClearQueue();
+        _resume.Discard();
+        _engine.Enqueue(undo.Paths);
+
+        RebuildQueue();
+        ResetNowPlaying();
+
+        if (undo.Resume) _resume.Arm(undo.Index, undo.Seconds, Queue.Count);
     }
 
     /// <summary>
@@ -1852,6 +1943,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var load = PlaylistFile.Load(path);
         if (load.Paths.Count == 0) return load;
 
+        var undo = Queue.Count > 0 ? SnapshotQueue("QueueUndoReplace") : null;
+
         _resume.Discard();
         _engine.ClearQueue();
         _engine.Enqueue(load.Paths);
@@ -1860,6 +1953,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ResetNowPlaying();
 
         _resume.Arm(0, 0, load.Paths.Count);
+        SetUndo(undo);
 
         return load;
     }

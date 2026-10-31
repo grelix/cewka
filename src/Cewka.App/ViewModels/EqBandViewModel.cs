@@ -16,6 +16,9 @@ public sealed class EqBandViewModel : ObservableObject
     /// <summary>Frequency caption such as <c>125</c> or <c>16k</c>, or <c>PREAMP</c>.</summary>
     public string Label { get; }
 
+    /// <summary>Nazwa pasma dla czytnika ekranu, z jednostką: „125 Hz”, „16 kHz”.</summary>
+    public string AccessibleName => Label.EndsWith('k') ? $"{Label[..^1]} kHz" : $"{Label} Hz";
+
     /// <summary>Gain in decibels.</summary>
     public double Gain
     {

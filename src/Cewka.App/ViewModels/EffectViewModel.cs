@@ -36,6 +36,9 @@ public sealed class EffectViewModel : ObservableObject
 
     public string Description => Strings.Current["EffectDescription" + Key];
 
+    /// <summary>Nazwa suwaka siły dla czytnika ekranu.</summary>
+    public string StrengthName => string.Format(Strings.Current["EffectStrength"], Label);
+
     public bool Enabled
     {
         get => _enabled;
@@ -82,5 +85,6 @@ public sealed class EffectViewModel : ObservableObject
     {
         Raise(nameof(Label));
         Raise(nameof(Description));
+        Raise(nameof(StrengthName));
     }
 }

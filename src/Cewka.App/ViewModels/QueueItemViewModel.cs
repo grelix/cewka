@@ -25,14 +25,14 @@ public sealed class QueueItemViewModel : ObservableObject
     public required string Title
     {
         get => _title;
-        set => Set(ref _title, value);
+        set { if (Set(ref _title, value)) Raise(nameof(AccessibleName)); }
     }
 
     /// <summary>Performer alone, shown under the title in the queue row.</summary>
     public required string Artist
     {
         get => _artist;
-        set => Set(ref _artist, value);
+        set { if (Set(ref _artist, value)) Raise(nameof(AccessibleName)); }
     }
 
 
@@ -43,8 +43,11 @@ public sealed class QueueItemViewModel : ObservableObject
     public required string Duration
     {
         get => _duration;
-        set => Set(ref _duration, value);
+        set { if (Set(ref _duration, value)) Raise(nameof(AccessibleName)); }
     }
+
+    /// <summary>Nazwa wiersza dla czytnika ekranu: tytuł, wykonawca i czas trwania.</summary>
+    public string AccessibleName => $"{_title}, {_artist}, {_duration}";
 
     public double DurationSeconds { get; set; }
 
