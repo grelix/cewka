@@ -114,7 +114,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UpdateEffects();
 
         _engine.TrackChanged += index => Dispatcher.UIThread.Post(() => OnTrackChanged(index));
-        _engine.TrackFailed += (index, failure) => Dispatcher.UIThread.Post(() => OnTrackFailed(index, failure.Detail ?? string.Empty));
+        _engine.TrackFailed += (index, failure) => Dispatcher.UIThread.Post(() => OnTrackFailed(index, failure));
         _engine.QueueFinished += () => Dispatcher.UIThread.Post(() => IsPlaying = false);
 
         _title = Strings.Current["NoTrack"];
@@ -1446,6 +1446,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (_current is not null) _current.IsCurrent = false;
         _current = Queue[index];
         _current.IsCurrent = true;
+        _current.ClearTemporaryFailure();
 
         var entry = _engine.Queue.ElementAtOrDefault(index);
         if (entry?.Metadata is { } metadata)
@@ -1471,12 +1472,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public int CurrentIndex => _current is null ? -1 : Queue.IndexOf(_current);
 
-    private void OnTrackFailed(int index, string reason)
+    /// <summary>
+    /// Surowy opis wyjątku nie trafia do interfejsu. Do czasu osobnych tekstów dla każdej
+    /// przyczyny pozostałe błędy opisuje ogólny komunikat odtwarzania.
+    /// </summary>
+    private void OnTrackFailed(int index, TrackFailure failure)
     {
         if (index < 0 || index >= Queue.Count) return;
 
-        Queue[index].IsUnsupported = true;
-        Queue[index].UnsupportedReason = reason;
+        Queue[index].ShowFailure(failure.Reason, failure.Detail, Strings.Current["AudioFailure"]);
     }
 
     private void UpdateArtwork(byte[]? bytes)
