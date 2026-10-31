@@ -39,14 +39,14 @@ internal sealed unsafe class SampleConverter : IDisposable
         _sourceChannels = sourceChannels;
         _targetChannels = targetChannels;
 
-        if (sourceChannels > 1 && sourceChannels != targetChannels)
-        {
-            var layout = sourceLayout is { } given && given.Count == sourceChannels
-                ? given
-                : ChannelLayouts.Wave(sourceChannels);
+        var layout = sourceLayout is { } given && given.Count == sourceChannels
+            ? given
+            : ChannelLayouts.Wave(sourceChannels);
 
+        if (sourceChannels > 1 && sourceChannels != targetChannels)
             _matrix = BuildMatrix(layout, targetChannels);
-        }
+        else if (sourceChannels > 2 && sourceChannels == targetChannels)
+            _matrix = BuildReorder(layout);
 
         SourceRate = sourceRate;
         TargetRate = targetRate;
@@ -109,7 +109,7 @@ internal sealed unsafe class SampleConverter : IDisposable
     /// <summary>Mono is duplicated across every output; anything else goes through the mix matrix.</summary>
     private ReadOnlySpan<float> MapChannels(ReadOnlySpan<float> source, int frames)
     {
-        if (_sourceChannels == _targetChannels)
+        if (_matrix is null && _sourceChannels == _targetChannels)
             return source[..(frames * _targetChannels)];
 
         var needed = frames * _targetChannels;
@@ -208,6 +208,53 @@ internal sealed unsafe class SampleConverter : IDisposable
 
         return matrix;
     }
+
+    /// <summary>
+    /// Przy tej samej liczbie kanałów urządzenie dostaje je w kolejności WAVE, więc źródło
+    /// o innej kolejności (Vorbis, Opus) trzeba przestawić. Kanały boczne i tylne mogą się
+    /// zastępować, bo urządzenie 5.1 bywa w obu wariantach. Null, gdy nic nie trzeba
+    /// przestawiać albo któregoś głośnika nie da się dopasować.
+    /// </summary>
+    private static float[]? BuildReorder(IReadOnlyList<Speaker> layout)
+    {
+        var channels = layout.Count;
+        var target = ChannelLayouts.Wave(channels);
+        var taken = new bool[channels];
+        var matrix = new float[channels * channels];
+        var identity = true;
+
+        for (var s = 0; s < channels; s++)
+        {
+            var t = FreeIndex(target, taken, layout[s]);
+            if (t < 0) t = FreeIndex(target, taken, Counterpart(layout[s]));
+            if (t < 0) return null;
+
+            taken[t] = true;
+            matrix[t * channels + s] = 1f;
+            identity &= t == s;
+        }
+
+        return identity ? null : matrix;
+    }
+
+    private static int FreeIndex(Speaker[] layout, bool[] taken, Speaker speaker)
+    {
+        if (speaker == Speaker.Other) return -1;
+
+        for (var i = 0; i < layout.Length; i++)
+            if (!taken[i] && layout[i] == speaker) return i;
+
+        return -1;
+    }
+
+    private static Speaker Counterpart(Speaker speaker) => speaker switch
+    {
+        Speaker.SideLeft => Speaker.BackLeft,
+        Speaker.SideRight => Speaker.BackRight,
+        Speaker.BackLeft => Speaker.SideLeft,
+        Speaker.BackRight => Speaker.SideRight,
+        _ => Speaker.Other,
+    };
 
     private static (float Left, float Right) StereoWeights(Speaker speaker) => speaker switch
     {

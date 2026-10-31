@@ -113,6 +113,33 @@ public class SampleConverterTests
         Assert.Equal(ChannelLayouts.Wave(6), ChannelLayouts.FromWaveMask(0x3, 6));
     }
 
+    [Theory]
+    [InlineData(6, 1, 2)] // Vorbis 5.1: środek na trzeci kanał WAVE
+    [InlineData(6, 2, 1)] // prawy przedni
+    [InlineData(6, 5, 3)] // LFE
+    [InlineData(8, 3, 6)] // Vorbis 7.1: lewy boczny
+    [InlineData(8, 7, 3)]
+    public void VorbisSurroundIsReorderedForAnEqualWaveDevice(int channels, int source, int expected)
+    {
+        var output = Convert(Impulse(channels, source), channels, channels, ChannelLayouts.Vorbis(channels));
+
+        for (var c = 0; c < channels; c++)
+            Assert.Equal(c == expected ? 0.5f : 0f, output[c]);
+    }
+
+    [Fact]
+    public void WaveOrderedSurroundIsCopiedToAnEqualDevice()
+    {
+        // Boczne zamiast tylnych: urządzenie i tak dostaje je na tych samych pozycjach.
+        var layout = ChannelLayouts.FromWaveMask(0x60F, 6);
+
+        for (var channel = 0; channel < 6; channel++)
+        {
+            var output = Convert(Impulse(6, channel), 6, 6, layout);
+            for (var c = 0; c < 6; c++) Assert.Equal(c == channel ? 0.5f : 0f, output[c]);
+        }
+    }
+
     [Fact]
     public void MonoIsDuplicated()
     {
