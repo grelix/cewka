@@ -434,12 +434,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public bool QueueOpen
     {
         get => _queueOpen;
-        set
-        {
-            if (!Set(ref _queueOpen, value)) return;
-            _settings.Current.QueueOpen = value;
-            _settings.Touch();
-        }
+        set => SetQueueOpen(value, remember: true);
+    }
+
+    /// <summary>
+    /// Pokazuje albo chowa kolejkę. Bez <paramref name="remember"/> ustawienia zachowują zamiar
+    /// użytkownika: kolejka schowana przez zbyt wąskie okno wraca przy następnym starcie.
+    /// </summary>
+    public void SetQueueOpen(bool value, bool remember)
+    {
+        if (!Set(ref _queueOpen, value, nameof(QueueOpen))) return;
+        if (!remember) return;
+
+        _settings.Current.QueueOpen = value;
+        _settings.Touch();
     }
 
     /// <summary>

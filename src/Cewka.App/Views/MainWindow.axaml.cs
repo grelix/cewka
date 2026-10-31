@@ -104,8 +104,8 @@ public partial class MainWindow : Window
     private bool _queueAsOverlay;
 
     /// <summary>
-    /// Kolejkę schowało zwężenie okna, a nie użytkownik. Po poszerzeniu wraca sama, a do ustawień
-    /// trafia jako otwarta.
+    /// Kolejkę schowało zwężenie okna, a nie użytkownik. Po poszerzeniu wraca sama, a ustawienia
+    /// zachowują ją jako otwartą.
     /// </summary>
     private bool _queueCollapsedByWidth;
     private bool _adjustingQueue;
@@ -237,10 +237,6 @@ public partial class MainWindow : Window
         App.BeginClosing();
         _rotation.Stop();
         PersistGeometry();
-
-        // Kolejkę schowało tylko wąskie okno; przy następnym starcie ma wrócić, jeśli się zmieści.
-        if (_queueCollapsedByWidth) App.Settings.Current.QueueOpen = true;
-
         _viewModel.SaveQueueState();
         App.Settings.SaveNow();
         App.ReleaseSingleInstance();
@@ -525,7 +521,7 @@ public partial class MainWindow : Window
     private void SetQueueOpen(bool open)
     {
         _adjustingQueue = true;
-        try { _viewModel.QueueOpen = open; }
+        try { _viewModel.SetQueueOpen(open, remember: false); }
         finally { _adjustingQueue = false; }
     }
 

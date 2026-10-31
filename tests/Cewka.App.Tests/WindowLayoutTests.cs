@@ -114,10 +114,37 @@ public sealed class WindowLayoutTests
                 Assert.True(window.QueueIsOverlay);
                 Assert.False(Player(window).QueueOpen);
 
+                // Zwężenie nie zmienia zamiaru zapisanego w ustawieniach, także przed zamknięciem.
+                Assert.True(App.Settings.Current.QueueOpen);
+
                 window.Width = 1200;
                 Settle(window);
                 Assert.False(window.QueueIsOverlay);
                 Assert.True(Player(window).QueueOpen);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void KolejkaZamknietaRecznieWWaskimOknieZostajeZamknieta()
+    {
+        Ui.Run(() =>
+        {
+            var window = Open(1200, 680, queue: true);
+
+            try
+            {
+                window.Width = 900;
+                Settle(window);
+
+                Player(window).QueueOpen = true;
+                Player(window).QueueOpen = false;
+                Assert.False(App.Settings.Current.QueueOpen);
+
+                window.Width = 1200;
+                Settle(window);
+                Assert.False(Player(window).QueueOpen);
             }
             finally { window.Close(); }
         });
