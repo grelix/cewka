@@ -5,8 +5,25 @@ using Xunit;
 namespace Cewka.App.Tests;
 
 /// <summary>Sprawdzenia warstwy systemowej, które nie wymagają okna ani urządzenia dźwiękowego.</summary>
-public sealed class PlatformTests
+public sealed class PlatformTests : IDisposable
 {
+    private readonly List<string> _directories = [];
+
+    public void Dispose()
+    {
+        foreach (var directory in _directories)
+        {
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Sprzątanie katalogu tymczasowego nie jest powodem, żeby sprawdzenie upadło.
+            }
+        }
+    }
+
     // ---------- Ścieżki z wiersza poleceń ----------
 
     /// <summary>
@@ -90,6 +107,61 @@ public sealed class PlatformTests
 
     private static Func<string, string?> Variables(params (string Name, string Value)[] values) =>
         name => values.FirstOrDefault(v => v.Name == name).Value;
+
+    // ---------- Zasilanie w Linuksie ----------
+
+    /// <summary>Laptop ładowany przez USB-C z wyłączonym wpisem zasilacza sieciowego jest na zasilaniu.</summary>
+    [Fact]
+    public void LadowanieUsbCToNieBateria()
+    {
+        var root = PowerSupplies(
+            ("ACAD", [("type", "Mains"), ("online", "0")]),
+            ("ucsi-source-psy-USBC000-001", [("type", "USB"), ("online", "1")]),
+            ("BAT0", [("type", "Battery"), ("status", "Charging")]));
+
+        Assert.False(PowerStatus.LinuxOnBattery(root));
+    }
+
+    [Fact]
+    public void RozladowujacaSieBateriaBezZasilaczaToBateria()
+    {
+        var root = PowerSupplies(
+            ("AC", [("type", "Mains"), ("online", "0")]),
+            ("BAT0", [("type", "Battery"), ("status", "Discharging")]));
+
+        Assert.True(PowerStatus.LinuxOnBattery(root));
+    }
+
+    /// <summary>Wpis zasilacza bez pliku online to stan nieznany, a nieznany stan to sieć.</summary>
+    [Fact]
+    public void ZasilaczBezStanuIBezBateriiToSiec()
+    {
+        Assert.False(PowerStatus.LinuxOnBattery(PowerSupplies(("AC", [("type", "Mains")]))));
+    }
+
+    /// <summary>Rozładowująca się bateria myszy nie przełącza komputera stacjonarnego na tryb oszczędny.</summary>
+    [Fact]
+    public void BateriaUrzadzeniaNieLiczySie()
+    {
+        var root = PowerSupplies(
+            ("hidpp_battery_0", [("type", "Battery"), ("scope", "Device"), ("status", "Discharging")]));
+
+        Assert.False(PowerStatus.LinuxOnBattery(root));
+    }
+
+    private string PowerSupplies(params (string Name, (string File, string Value)[] Files)[] supplies)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "cewka-zasilanie-" + Guid.NewGuid().ToString("N")[..8]);
+        _directories.Add(root);
+
+        foreach (var (name, files) in supplies)
+        {
+            var directory = Directory.CreateDirectory(Path.Combine(root, name)).FullName;
+            foreach (var (file, value) in files) File.WriteAllText(Path.Combine(directory, file), value + "\n");
+        }
+
+        return root;
+    }
 
     // ---------- MPRIS ----------
 
