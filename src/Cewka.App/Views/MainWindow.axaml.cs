@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Chrome;
 using Avalonia.Input;
@@ -1084,11 +1085,25 @@ public partial class MainWindow : Window
     private void UpdateQueueMenu()
     {
         var index = SelectedRow is { } row ? _viewModel.Queue.IndexOf(row) : -1;
+        var s = Strings.Current;
+
+        SetCommand(QueuePlayItem, s["QueuePlay"], KeyNames.Enter);
+        SetCommand(QueueRemoveItem, s["QueueRemove"], KeyNames.Delete);
+        SetCommand(QueueMoveUpItem, s["QueueMoveUp"], KeyNames.Chord(KeyNames.Alt, "↑"));
+        SetCommand(QueueMoveDownItem, s["QueueMoveDown"], KeyNames.Chord(KeyNames.Alt, "↓"));
+        SetCommand(QueueUndoItem, _viewModel.UndoQueueLabel, KeyNames.Chord(KeyNames.Ctrl, "Z"));
 
         QueuePlayItem.IsEnabled = index >= 0;
         QueueRemoveItem.IsEnabled = index >= 0;
         QueueMoveUpItem.IsEnabled = index > 0;
         QueueMoveDownItem.IsEnabled = index >= 0 && index < _viewModel.Queue.Count - 1;
+    }
+
+    private static void SetCommand(MenuItem item, string text, string gesture)
+    {
+        item.Header = new MenuCommandText(text, gesture);
+        AutomationProperties.SetName(item, text);
+        AutomationProperties.SetAcceleratorKey(item, gesture);
     }
 
     private void OnQueuePlay(object? sender, RoutedEventArgs e)

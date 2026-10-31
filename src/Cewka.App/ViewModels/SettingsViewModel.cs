@@ -703,21 +703,22 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Skróty klawiszowe okna głównego dla zakładki „O programie”. Nazwy klawiszy Spacja, Ctrl
-    /// i Delete pochodzą ze słownika, bo na klawiaturach w innych językach są podpisane inaczej.
+    /// Skróty klawiszowe okna głównego dla zakładki „O programie”. Nazwy klawiszy pochodzą ze
+    /// słownika, tak samo jak w menu kolejki.
     /// </summary>
     public IReadOnlyList<ShortcutRow> Shortcuts
     {
         get
         {
             var s = Strings.Current;
-            var ctrl = s["KeyCtrl"];
+            var ctrl = KeyNames.Ctrl;
+            var alt = KeyNames.Alt;
 
             return
             [
-                new(s["KeySpace"], s["ShortcutPlayPause"]),
+                new(KeyNames.Space, s["ShortcutPlayPause"]),
                 new("← →", s["ShortcutSeek"]),
-                new($"{ctrl}+← {ctrl}+→", s["ShortcutTrack"]),
+                new($"{KeyNames.Chord(ctrl, "←")} {KeyNames.Chord(ctrl, "→")}", s["ShortcutTrack"]),
                 new("↑ ↓", s["TooltipVolume"]),
                 new("M", s["ShortcutMute"]),
                 new("S", s["ShortcutShuffle"]),
@@ -726,14 +727,14 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
                 new("L", s["Queue"]),
                 new("T", s["SettingTheme"]),
                 new("F11", s["ShortcutFullScreen"]),
-                new("Esc", s["ShortcutEscape"]),
-                new($"{ctrl}+O", s["OpenFiles"]),
-                new($"{ctrl}+Shift+O", s["OpenFolder"]),
-                new($"{ctrl}+,", s["Settings"]),
-                new("Enter", s["ShortcutQueuePlay"]),
-                new(s["KeyDelete"], s["ShortcutQueueRemove"]),
-                new("Alt+↑ Alt+↓", s["ShortcutQueueMove"]),
-                new($"{ctrl}+Z", s["ShortcutUndo"]),
+                new(KeyNames.Escape, s["ShortcutEscape"]),
+                new(KeyNames.Chord(ctrl, "O"), s["OpenFiles"]),
+                new(KeyNames.Chord(ctrl, KeyNames.Shift, "O"), s["OpenFolder"]),
+                new(KeyNames.Chord(ctrl, ","), s["Settings"]),
+                new(KeyNames.Enter, s["ShortcutQueuePlay"]),
+                new(KeyNames.Delete, s["ShortcutQueueRemove"]),
+                new($"{KeyNames.Chord(alt, "↑")} {KeyNames.Chord(alt, "↓")}", s["ShortcutQueueMove"]),
+                new(KeyNames.Chord(ctrl, "Z"), s["ShortcutUndo"]),
             ];
         }
     }

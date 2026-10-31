@@ -481,16 +481,26 @@
                   </ListBox.Styles>
                   <ListBox.ContextMenu>
                     <ContextMenu x:Name="QueueMenu">
-                      <MenuItem x:Name="QueuePlayItem" Header="{l:Translate QueuePlay}" InputGesture="Enter"
-                                Click="OnQueuePlay" />
-                      <MenuItem x:Name="QueueRemoveItem" Header="{l:Translate QueueRemove}" InputGesture="Delete"
-                                Click="OnQueueRemove" />
-                      <MenuItem x:Name="QueueMoveUpItem" Header="{l:Translate QueueMoveUp}" InputGesture="Alt+Up"
-                                Click="OnQueueMoveUp" />
-                      <MenuItem x:Name="QueueMoveDownItem" Header="{l:Translate QueueMoveDown}" InputGesture="Alt+Down"
-                                Click="OnQueueMoveDown" />
+                      <!-- Nagłówki ze skrótami nadaje kod przy otwarciu menu, nazwami klawiszy ze słownika. -->
+                      <ContextMenu.DataTemplates>
+                        <DataTemplate DataType="vm:MenuCommandText">
+                          <Grid>
+                            <Grid.ColumnDefinitions>
+                              <ColumnDefinition Width="Auto" SharedSizeGroup="QueueMenuText" />
+                              <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding Text}" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="1" Classes="faint" Text="{Binding Gesture}"
+                                       Margin="24,0,0,0" VerticalAlignment="Center" />
+                          </Grid>
+                        </DataTemplate>
+                      </ContextMenu.DataTemplates>
+                      <MenuItem x:Name="QueuePlayItem" Click="OnQueuePlay" />
+                      <MenuItem x:Name="QueueRemoveItem" Click="OnQueueRemove" />
+                      <MenuItem x:Name="QueueMoveUpItem" Click="OnQueueMoveUp" />
+                      <MenuItem x:Name="QueueMoveDownItem" Click="OnQueueMoveDown" />
                       <Separator />
-                      <MenuItem Header="{Binding UndoQueueLabel}" InputGesture="Ctrl+Z"
+                      <MenuItem x:Name="QueueUndoItem"
                                 IsVisible="{Binding CanUndoQueue}"
                                 Click="OnQueueUndo" />
                       <MenuItem Header="{l:Translate QueueClear}" Click="OnQueueClear"

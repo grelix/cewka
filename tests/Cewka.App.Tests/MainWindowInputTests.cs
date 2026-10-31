@@ -448,6 +448,47 @@ public sealed class MainWindowInputTests
     }
 
     [Fact]
+    public void MenuKolejkiPodajeSkrotyTakJakListaSkrotow()
+    {
+        Ui.Run(() =>
+        {
+            var (window, h) = Open(tracks: 2);
+
+            try
+            {
+                var list = Queue(window);
+                var menu = list.ContextMenu!;
+                Click(window, Centre(Row(window, 0), window), MouseButton.Right);
+                h.PumpUntil(() => false, 100);
+                Assert.True(menu.IsOpen);
+
+                using var settings = new SettingsViewModel(h.Settings, h.Player);
+                string Keys(string action) => settings.Shortcuts.Single(row => row.Action == Strings.Current[action]).Keys;
+
+                var items = menu.Items.OfType<MenuItem>().ToList();
+                MenuCommandText Command(string name) => (MenuCommandText)items.Single(item => item.Name == name).Header!;
+
+                Assert.All(items, item => Assert.Null(item.InputGesture));
+                Assert.Equal(Strings.Current["KeyEnter"], Command("QueuePlayItem").Gesture);
+                Assert.Equal(Keys("ShortcutQueuePlay"), Command("QueuePlayItem").Gesture);
+                Assert.Equal(Keys("ShortcutQueueRemove"), Command("QueueRemoveItem").Gesture);
+                Assert.Equal(Keys("ShortcutUndo"), Command("QueueUndoItem").Gesture);
+                Assert.Equal(Keys("ShortcutQueueMove"), $"{Command("QueueMoveUpItem").Gesture} {Command("QueueMoveDownItem").Gesture}");
+                Assert.Equal(Strings.Current["QueuePlay"], AutomationProperties.GetName(items[0]));
+                Assert.Contains(items[0].GetVisualDescendants().OfType<TextBlock>(), text => text.Text == Strings.Current["KeyEnter"]);
+
+                // Skróty stoją w jednej kolumnie, choć polecenia mają różną długość.
+                double GestureX(MenuItem item) => item.GetVisualDescendants().OfType<TextBlock>()
+                    .Single(text => text.Text == ((MenuCommandText)item.Header!).Gesture).TranslatePoint(default, item)!.Value.X;
+                Assert.Equal(GestureX(items[0]), GestureX(items[1]), 1.0);
+
+                menu.Close();
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
     public void PrzyciskIkonaMaNazweTakaJakPodpowiedz()
     {
         Ui.Run(() =>
