@@ -23,7 +23,16 @@ public static class QueueStateStore
 
             // Poprawny składniowo plik z "paths": null albo pustymi pozycjami nie może wywrócić startu.
             if (state is not null)
+            {
                 state.Paths = state.Paths?.Where(p => !string.IsNullOrWhiteSpace(p)).ToList() ?? [];
+
+                // Tak samo otwarcia oczekujące: bez pustych wpisów i ścieżek.
+                foreach (var open in state.PendingOpens ?? [])
+                    if (open is not null) open.Paths = open.Paths?.Where(p => !string.IsNullOrWhiteSpace(p)).ToList() ?? [];
+
+                var opens = state.PendingOpens?.Where(open => open is not null && open.Paths.Count > 0).ToList();
+                state.PendingOpens = opens is { Count: > 0 } ? opens : null;
+            }
 
             return state;
         }

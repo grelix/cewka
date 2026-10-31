@@ -30,6 +30,13 @@ public sealed class QueueState
     /// </summary>
     public bool RepeatQueue { get; set; }
 
+    /// <summary>
+    /// Otwarcia niedokończone przed zamknięciem okna, w kolejności przybycia; następne uruchomienie
+    /// je dokańcza. Pominięte w pliku, gdy ich nie ma; starsze wersje pomijają nieznane pole.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<PendingOpenState>? PendingOpens { get; set; }
+
     /// <summary>Resolves the mode from whichever form the file happens to carry.</summary>
     public RepeatMode ReadRepeat() => Repeat switch
     {
@@ -38,6 +45,16 @@ public sealed class QueueState
         "None" => RepeatMode.None,
         _ => RepeatQueue ? RepeatMode.Queue : RepeatMode.None,
     };
+}
+
+/// <summary>Otwarcie plików przerwane zamknięciem okna.</summary>
+public sealed class PendingOpenState
+{
+    /// <summary>Ścieżki w postaci przysłanej: pliki i foldery.</summary>
+    public List<string> Paths { get; set; } = [];
+
+    /// <summary>Akcja otwierania: <c>Outside</c>, <c>Add</c>, <c>Replace</c> albo <c>Append</c>.</summary>
+    public string? Action { get; set; }
 }
 
 [JsonSourceGenerationOptions(WriteIndented = false, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
