@@ -61,6 +61,11 @@ public sealed class TitleBarHitTestTests
         // Bez menu systemowego system nie uznaje maksymalizacji za dostępną i nie pokazuje układów przyciągania.
         if ((long.Parse(results["glowne|styl"]) & WsSysMenu) == 0) failures.Add("glowne|styl: brak WS_SYSMENU");
 
+        // „Zamknij” w menu systemowym dostępne po pokazaniu okna, choć Avalonia je wyszarza,
+        // i po otwarciu menu, nawet gdy coś wyszarzyło je w międzyczasie.
+        Expect("glowne|menuZamknij", 0);
+        Expect("glowne|menuZamknijPoOtwarciu", 0);
+
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
     }
 

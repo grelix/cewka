@@ -44,9 +44,6 @@ public partial class MainWindow : Window
             (2400, 468, 64, 400, 132),
         ];
 
-    /// <summary>Styl okna Win32 z menu systemowym (WS_SYSMENU).</summary>
-    internal const uint WsSysMenu = 0x00080000;
-
     /// <summary>Grab band along the window border for resizing, where the system gives none.</summary>
     private const double ResizeMargin = 6;
 
@@ -135,10 +132,7 @@ public partial class MainWindow : Window
         {
             WindowDecorations = WindowDecorations.BorderOnly;
             TitleBarRoles.Apply(TitleBar);
-
-            // Ramka bez paska tytułu nie ma menu systemowego, a bez niego system nie uznaje
-            // przycisku maksymalizacji za dostępny i nie pokazuje nad nim układów przyciągania.
-            Win32Properties.AddWindowStylesCallback(this, (style, extended) => (style | WsSysMenu, extended));
+            SystemMenu.Attach(this);
         }
 
         ApplyWindowShape();

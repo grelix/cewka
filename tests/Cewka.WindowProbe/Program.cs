@@ -83,6 +83,7 @@ internal static class Program
 
             Report("glowne", "styl", Native.GetWindowLong(Handle(main), Native.GWL_STYLE));
             ReportRect("glowne", main);
+            ReportSystemMenuClose(main);
 
             var buttons = main.GetVisualDescendants().OfType<WindowButtons>().First(b => b.IsEffectivelyVisible);
             Probe(main, "Korektor", main.PanelToggle);
@@ -235,6 +236,33 @@ internal static class Program
         Console.WriteLine($"{window}|ukryte|{(cloaked != 0 ? 1 : 0)}");
     }
 
+    /// <summary>
+    /// Stan „Zamknij” w menu systemowym (0 = dostępne, −1 = brak menu): po pokazaniu okna oraz po
+    /// wyszarzeniu go tak, jak robi to Avalonia, i otwarciu menu (WM_INITMENU).
+    /// </summary>
+    private static void ReportSystemMenuClose(Window window)
+    {
+        var handle = Handle(window);
+        Report("glowne", "menuZamknij", CloseState(handle));
+
+        var menu = Native.GetSystemMenu(handle, false);
+        if (menu != 0)
+        {
+            Native.EnableMenuItem(menu, Native.SC_CLOSE, Native.MF_GRAYED | Native.MF_DISABLED);
+            Native.SendMessage(handle, Native.WM_INITMENU, menu, 0);
+        }
+
+        Report("glowne", "menuZamknijPoOtwarciu", CloseState(handle));
+    }
+
+    private static long CloseState(nint handle)
+    {
+        var menu = Native.GetSystemMenu(handle, false);
+        if (menu == 0) return -1;
+        var state = Native.GetMenuState(menu, Native.SC_CLOSE, Native.MF_BYCOMMAND);
+        return state == uint.MaxValue ? -1 : state & (Native.MF_GRAYED | Native.MF_DISABLED);
+    }
+
     private static void Report(string window, string element, long value) =>
         Console.WriteLine($"{window}|{element}|{value}");
 
@@ -248,6 +276,21 @@ internal static class Program
 
         public const int DWMWA_CLOAK = 13;
         public const int DWMWA_CLOAKED = 14;
+
+        public const uint WM_INITMENU = 0x0116;
+        public const uint SC_CLOSE = 0xF060;
+        public const uint MF_BYCOMMAND = 0x0000;
+        public const uint MF_GRAYED = 0x0001;
+        public const uint MF_DISABLED = 0x0002;
+
+        [DllImport("user32.dll")]
+        public static extern nint GetSystemMenu(nint hWnd, [MarshalAs(UnmanagedType.Bool)] bool revert);
+
+        [DllImport("user32.dll")]
+        public static extern uint GetMenuState(nint menu, uint id, uint flags);
+
+        [DllImport("user32.dll")]
+        public static extern int EnableMenuItem(nint menu, uint id, uint flags);
 
         [DllImport("user32.dll")]
         public static extern nint GetWindow(nint hWnd, uint command);
