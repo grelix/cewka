@@ -48,8 +48,8 @@ public class QueueStateTests
         const string starszy =
             """{"paths":["a.mp3"],"currentIndex":0,"positionSeconds":12.5,"shuffle":true,"repeatQueue":true}""";
 
-        var state = JsonSerializer.Deserialize<QueueState>(
-            starszy, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        // Ten sam kontekst, którym czyta QueueStateStore.
+        var state = JsonSerializer.Deserialize(starszy, QueueStateJsonContext.Default.QueueState);
 
         Assert.NotNull(state);
         Assert.Single(state.Paths);

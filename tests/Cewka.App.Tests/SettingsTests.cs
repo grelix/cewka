@@ -1,6 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Cewka.App.Models;
 using Cewka.Audio;
 using Cewka.Audio.Dsp;
@@ -14,12 +14,8 @@ namespace Cewka.App.Tests;
 /// </summary>
 public sealed class SettingsTests
 {
-    private static readonly JsonSerializerOptions FileFormat = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter() },
-    };
+    /// <summary>Ten sam kontekst, którym program zapisuje i czyta plik ustawień.</summary>
+    private static JsonTypeInfo<AppSettings> FileFormat => SettingsJsonContext.Default.AppSettings;
 
     // ---------- Przełożenie wyborów na liczby ----------
 
@@ -110,8 +106,18 @@ public sealed class SettingsTests
         var source = new AppSettings();
         var properties = typeof(AppSettings).GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
+        var defaults = new AppSettings();
+
         foreach (var property in properties.Where(p => p.CanWrite))
+        {
             property.SetValue(source, Vary(property, property.GetValue(source)));
+
+            // Własność, której Vary nie umie zmienić, przeszłaby porównanie niezależnie od Clone.
+            Assert.True(
+                JsonSerializer.Serialize(property.GetValue(source), property.PropertyType) !=
+                JsonSerializer.Serialize(property.GetValue(defaults), property.PropertyType),
+                $"Vary nie zmienia własności {property.Name} typu {property.PropertyType.Name}.");
+        }
 
         var clone = source.Clone();
 
@@ -268,7 +274,9 @@ public sealed class SettingsTests
         string value => value + "-inne",
         double[] value => value.Select(gain => gain - 1).ToArray(),
         Enum value => NextEnumValue(value),
+        DateTimeOffset value => value.AddDays(1),
         null when property.PropertyType == typeof(string) => "cokolwiek",
+        null when property.PropertyType == typeof(DateTimeOffset?) => DateTimeOffset.UnixEpoch.AddDays(1),
         null when property.PropertyType == typeof(WindowGeometry) =>
             new WindowGeometry { X = 3, Y = 4, Width = 1280, Height = 800, Maximized = true },
         _ => current,
