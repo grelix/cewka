@@ -87,7 +87,7 @@ public partial class App : Application
     /// <summary>
     /// Ostatnia siatka dla wyjątków z obsługi zdarzeń interfejsu. Każdy trafia do dziennika;
     /// zatrzymywany jest tylko błąd warstwy dźwięku, bo nie narusza stanu programu, a reszta
-    /// kończy program jak dotąd, żeby nie zostawić go w stanie niespójnym.
+    /// kończy program, żeby nie zostawić go w stanie niespójnym.
     /// </summary>
     private static void OnUnhandledException(object? sender, DispatcherUnhandledExceptionEventArgs e)
     {
