@@ -586,6 +586,12 @@ public sealed class PlaybackEngine : IDisposable
     /// <summary>
     /// Przewija słyszany utwór w miejscu, żeby dekoder wybrał następny od nowa. Wpisu spoza
     /// kolejki przewinąć się nie da, więc wtedy bufor zostaje bez zmian.
+    ///
+    /// <para>Znane ograniczenie: gdy słyszany wpis usunięto z kolejki, a dekoder ma już otwarty
+    /// następny, wpis wstawiony między kotwicę (<c>PreviousHeard</c>) a dekodowany zostaje
+    /// pominięty — kasuje się tylko <c>ContinueWith</c>, a dekodowanego nikt nie cofa. Okno
+    /// czasowe to czas grania krótkiego, usuniętego utworu zapisanego w buforze. Zachowanie
+    /// opisuje pominięty test <c>RemovedHeardThenEntryInsertedBeforeDecodedIsSkipped</c>.</para>
     /// </summary>
     private void RestartAfterHeardLocked(QueueEntry heard, FeederSession session)
     {

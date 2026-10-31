@@ -1167,4 +1167,38 @@ public class PlaybackEngineTests
         gate.Set();
         EngineHarness.WaitUntil(() => stuck.DisposeCount == 1);
     }
+
+    // ---------- znane ograniczenia ----------
+
+    /// <summary>
+    /// Słyszany wpis usunięty z kolejki, dekoder już na następnym, nowy wpis wstawiony przed
+    /// dekodowany: nowy wpis powinien zagrać, a zostaje pominięty. Opis w komentarzu
+    /// <c>PlaybackEngine.RestartAfterHeardLocked</c>.
+    /// </summary>
+    [Fact(Skip = "Znane ograniczenie: wpis wstawiony przed dekodowany, gdy słyszany usunięto z kolejki, zostaje pominięty (PlaybackEngine.RestartAfterHeardLocked).")]
+    public void RemovedHeardThenEntryInsertedBeforeDecodedIsSkipped()
+    {
+        const float decoded = 0.625f;
+        const float inserted = 0.75f;
+
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.1, B);
+        var c = h.Track("c", 0.6, decoded);
+        var d = h.Track("d", 0.3, inserted);
+
+        h.Engine.SetQueue([a, b, c]);
+        h.PumpUntil(() => !h.Engine.IsSeeking);
+        EngineHarness.WaitUntil(() => h.Opened.Contains("c.wav"));
+
+        // Krótki b jest już w buforze; po usunięciu gra dalej jako słyszany spoza kolejki.
+        h.Engine.RemoveAt(1);
+        h.PumpUntil(() => EngineHarness.CountFrames(h.Output.Samples, B) > 0);
+
+        h.Engine.Enqueue([d]);
+        h.Engine.Move(2, 1);
+        h.PumpUntil(() => h.Finished == 1, 30000);
+
+        Assert.Equal(EngineHarness.Frames(0.3), EngineHarness.CountFrames(h.Output.Samples, inserted));
+    }
 }
