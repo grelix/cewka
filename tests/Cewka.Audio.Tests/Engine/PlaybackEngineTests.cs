@@ -158,6 +158,29 @@ public class PlaybackEngineTests
     }
 
     /// <summary>
+    /// Przy powtarzaniu kolejki plik dodany w ostatnim pół sekundy ostatniego utworu gra przed
+    /// powrotem na początek, choć dekoder otworzył już pierwszy wpis.
+    /// </summary>
+    [Fact]
+    public void TrackAddedNearTheEndOfARepeatedQueuePlaysBeforeItWraps()
+    {
+        using var h = new EngineHarness();
+        var x = h.Track("x", 10, B);
+        var a = h.Track("a", 1.0, A);
+        var c = h.Track("c", 10, C);
+
+        h.Engine.Repeat = RepeatMode.Queue;
+        h.Engine.SetQueue([x, a], startIndex: 1);
+        h.PumpUntil(() => h.Opened.Contains("x.wav"));
+
+        h.Engine.Enqueue([c]);
+        h.PumpUntil(() => h.Engine.CurrentIndex != 1 && h.Engine.Position > TimeSpan.FromSeconds(0.1));
+
+        Assert.Equal(2, h.Engine.CurrentIndex);
+        Assert.Equal(C, h.Output.Samples[^1], 1e-5f);
+    }
+
+    /// <summary>
     /// Utwór krótszy od bufora: dekoder dochodzi do końca pliku i zapisuje koniec kolejki,
     /// zanim cokolwiek zagra.
     /// </summary>
@@ -651,6 +674,31 @@ public class PlaybackEngineTests
 
         Assert.Equal(5, h.Opened.Count);
         Assert.Equal(5, h.Opened.Distinct().Count());
+    }
+
+    /// <summary>
+    /// Plik dodany w ostatnim pół sekundy utworu, który losowanie postawiło tuż za nim, gra
+    /// jako następny, choć dekoder otworzył już inny. Ziarno 1 stawia go tuż za słyszanym,
+    /// ziarno 1234 dalej, gdzie kolejność się nie zmienia.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 2)]
+    [InlineData(1234, 1)]
+    public void TrackAddedInShuffleNearTheEndPlaysWhereTheOrderPutsIt(int seed, int expectedNext)
+    {
+        using var h = new EngineHarness(seed: seed);
+        var a = h.Track("a", 1.0, A);
+        var b = h.Track("b", 10, B);
+        var c = h.Track("c", 10, C);
+
+        h.Engine.Shuffle = true;
+        h.Engine.SetQueue([a, b]);
+        h.PumpUntil(() => h.Opened.Contains("b.wav"));
+
+        h.Engine.Enqueue([c]);
+        h.PumpUntil(() => h.Engine.CurrentIndex != 0 && h.Engine.Position > TimeSpan.FromSeconds(0.1));
+
+        Assert.Equal(expectedNext, h.Engine.CurrentIndex);
     }
 
     // ---------- urządzenie ----------
