@@ -1,5 +1,6 @@
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="using:Cewka.App.Controls">
 
   <Styles.Resources>
     <ResourceDictionary>
@@ -31,6 +32,17 @@
 
   <Style Selector="TextBlock.faint">
     <Setter Property="Foreground" Value="{DynamicResource Text3Brush}" />
+  </Style>
+
+  <!-- ======================= Fokus z klawiatury ======================= -->
+
+  <!-- Jeden pierścień dla wszystkich kontrolek: 2 px w akcencie, z odstępem od krawędzi. -->
+  <Style Selector=":is(Control)">
+    <Setter Property="FocusAdorner">
+      <FocusAdornerTemplate>
+        <c:FocusRing Brush="{DynamicResource FocusRingBrush}" />
+      </FocusAdornerTemplate>
+    </Setter>
   </Style>
 
   <!-- ======================= Przyciski ikonowe ======================= -->

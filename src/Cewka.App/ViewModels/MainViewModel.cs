@@ -2258,6 +2258,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         resources["AccentColor"] = accent;
         resources["AccentBrush"] = new SolidColorBrush(accent);
+        resources["FocusRingBrush"] = new SolidColorBrush(Contrast.FocusRing(accent, darkTheme));
     }
 
     /// <summary>Progi siły plam tła; czytane przez tło okna, które waha się między nimi.</summary>

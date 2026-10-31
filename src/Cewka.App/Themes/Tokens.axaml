@@ -47,6 +47,8 @@
       <SolidColorBrush x:Key="TrackBrush" Color="#29FFFFFF" />
       <SolidColorBrush x:Key="FillBrush" Color="#FFF3F3F5" />
       <SolidColorBrush x:Key="AccentBrush" Color="#FF7FB6EF" />
+      <!-- Pierścień fokusu: akcent o kontraście co najmniej 3:1 do najjaśniejszej powierzchni (Contrast.FocusRing). -->
+      <SolidColorBrush x:Key="FocusRingBrush" Color="#FF7FB6EF" />
       <SolidColorBrush x:Key="AccentSoftBrush" Color="#387FB6EF" />
       <SolidColorBrush x:Key="AccentSoftHiBrush" Color="#527FB6EF" />
       <SolidColorBrush x:Key="OverlayBrush" Color="#FF18191D" />
@@ -93,6 +95,7 @@
       <SolidColorBrush x:Key="TrackBrush" Color="#21000000" />
       <SolidColorBrush x:Key="FillBrush" Color="#FF1B1B1D" />
       <SolidColorBrush x:Key="AccentBrush" Color="#FF2A75BA" />
+      <SolidColorBrush x:Key="FocusRingBrush" Color="#FF2A75BA" />
       <SolidColorBrush x:Key="AccentSoftBrush" Color="#2E2A75BA" />
       <SolidColorBrush x:Key="AccentSoftHiBrush" Color="#452A75BA" />
       <SolidColorBrush x:Key="OverlayBrush" Color="#FFF2F2F5" />

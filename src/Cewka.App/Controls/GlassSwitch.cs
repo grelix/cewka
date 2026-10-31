@@ -1,7 +1,11 @@
 using Avalonia;
+using Avalonia.Automation;
+using Avalonia.Automation.Peers;
+using Avalonia.Automation.Provider;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Rendering;
 
 namespace Cewka.App.Controls;
 
@@ -10,7 +14,7 @@ namespace Cewka.App.Controls;
 /// with a header, an on/off caption and its own metrics; drawing this one directly is both
 /// shorter and an exact match for the design.
 /// </summary>
-public sealed class GlassSwitch : Control
+public sealed class GlassSwitch : Control, ICustomHitTest
 {
     private const double KnobDiameter = 19.0;
     private const double KnobInset = 2.0;
@@ -77,6 +81,40 @@ public sealed class GlassSwitch : Control
         IsChecked = !IsChecked;
         Toggled?.Invoke(this, IsChecked);
     }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property == IsCheckedProperty && ControlAutomationPeer.FromElement(this) is { } peer)
+        {
+            peer.RaisePropertyChangedEvent(TogglePatternIdentifiers.ToggleStateProperty,
+                State(change.GetOldValue<bool>()), State(change.GetNewValue<bool>()));
+        }
+    }
+
+    private static ToggleState State(bool on) => on ? ToggleState.On : ToggleState.Off;
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new GlassSwitchAutomationPeer(this);
+
+    /// <summary>Przełącznik dla czytnika ekranu: pole wyboru ze stanem włączenia.</summary>
+    private sealed class GlassSwitchAutomationPeer(GlassSwitch owner) : ControlAutomationPeer(owner), IToggleProvider
+    {
+        private GlassSwitch Switch => (GlassSwitch)Owner;
+
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.CheckBox;
+
+        protected override bool IsContentElementCore() => true;
+
+        protected override bool IsControlElementCore() => true;
+
+        public ToggleState ToggleState => State(Switch.IsChecked);
+
+        public void Toggle() => Switch.Toggle();
+    }
+
+    /// <summary>Cały prostokąt kontrolki przyjmuje wskaźnik, nie tylko narysowany pasek.</summary>
+    public bool HitTest(Point point) => new Rect(Bounds.Size).Contains(point);
 
     public override void Render(DrawingContext context)
     {

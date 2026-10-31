@@ -1,7 +1,11 @@
 using Avalonia;
+using Avalonia.Automation;
+using Avalonia.Automation.Peers;
+using Avalonia.Automation.Provider;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Rendering;
 
 namespace Cewka.App.Controls;
 
@@ -9,12 +13,15 @@ namespace Cewka.App.Controls;
 /// A vertical equaliser fader. The fill grows out of the centre in whichever direction
 /// the band is cut or boosted, which is what makes a ten-band curve readable at a glance.
 /// </summary>
-public sealed class EqFader : Control
+public sealed class EqFader : Control, ICustomHitTest
 {
     /// <summary>Thumb height; the travel is the control height minus this.</summary>
     private const double ThumbHeight = 11.0;
     private const double ThumbWidth = 22.0;
     private const double TrackWidth = 5.0;
+
+    /// <summary>Krok klawiszy PageUp i PageDown, w decybelach.</summary>
+    private const double PageStep = 3.0;
 
     public static readonly StyledProperty<double> ValueProperty =
         AvaloniaProperty.Register<EqFader, double>(
@@ -57,6 +64,7 @@ public sealed class EqFader : Control
     {
         Cursor = new Cursor(StandardCursorType.SizeNorthSouth);
         Width = 26;
+        Focusable = true;
     }
 
     /// <summary>Gain in decibels, between −<see cref="Range"/> and +<see cref="Range"/>.</summary>
@@ -75,11 +83,31 @@ public sealed class EqFader : Control
     public event EventHandler<double>? Adjusted;
 
     private bool _dragging;
+    private double _wheel;
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property == ValueProperty && ControlAutomationPeer.FromElement(this) is { } peer)
+        {
+            peer.RaisePropertyChangedEvent(RangeValuePatternIdentifiers.ValueProperty,
+                change.GetOldValue<double>(), change.GetNewValue<double>());
+        }
+    }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+
+        // Dwuklik ustawia pasmo płasko, tak jak w mikserach.
+        if (e.ClickCount == 2)
+        {
+            SetFromUser(0);
+            e.Handled = true;
+            return;
+        }
 
         _dragging = true;
         e.Pointer.Capture(this);
@@ -112,19 +140,60 @@ public sealed class EqFader : Control
         _dragging = false;
     }
 
-    /// <summary>Scroll wheel nudges the band, which is far quicker than dragging for fine work.</summary>
+    /// <summary>
+    /// Scroll wheel nudges the band, which is far quicker than dragging for fine work. Gest
+    /// nad faderem nie przewija pasa, nawet na końcu zakresu.
+    /// </summary>
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
         base.OnPointerWheelChanged(e);
 
-        var next = Math.Clamp(Value + Math.Sign(e.Delta.Y) * Step, -Range, Range);
-        if (Math.Abs(next - Value) > 1e-9)
-        {
-            Value = next;
-            Adjusted?.Invoke(this, next);
-        }
+        var steps = WheelAccumulator.Add(ref _wheel, e.Delta.Y);
+        if (steps != 0) SetFromUser(Value + steps * Step);
 
         e.Handled = true;
+    }
+
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        _wheel = 0;
+    }
+
+    /// <summary>
+    /// Strzałki o krok, PageUp i PageDown o 3 dB, Home i End na skraj zakresu, Delete i 0
+    /// zerują pasmo. Kombinacje z modyfikatorami idą dalej do okna.
+    /// </summary>
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Handled || e.KeyModifiers != KeyModifiers.None) return;
+
+        double? target = e.Key switch
+        {
+            Key.Up or Key.Right => Value + Step,
+            Key.Down or Key.Left => Value - Step,
+            Key.PageUp => Value + PageStep,
+            Key.PageDown => Value - PageStep,
+            Key.Home => -Range,
+            Key.End => Range,
+            Key.Delete or Key.D0 or Key.NumPad0 => 0,
+            _ => null,
+        };
+
+        if (target is not { } value) return;
+
+        SetFromUser(value);
+        e.Handled = true;
+    }
+
+    internal void SetFromUser(double value)
+    {
+        value = Math.Clamp(value, -Range, Range);
+        if (Math.Abs(value - Value) < 1e-9) return;
+
+        Value = value;
+        Adjusted?.Invoke(this, value);
     }
 
     private void ApplyPointer(double y)
@@ -134,13 +203,14 @@ public sealed class EqFader : Control
 
         var raw = (1 - fraction) * 2 * Range - Range;
         var stepped = Step > 0 ? Math.Round(raw / Step) * Step : raw;
-        var value = Math.Clamp(stepped, -Range, Range);
 
-        if (Math.Abs(value - Value) < 1e-9) return;
-
-        Value = value;
-        Adjusted?.Invoke(this, value);
+        SetFromUser(stepped);
     }
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new EqFaderAutomationPeer(this);
+
+    /// <summary>Cały prostokąt kontrolki przyjmuje wskaźnik, nie tylko narysowany pasek.</summary>
+    public bool HitTest(Point point) => new Rect(Bounds.Size).Contains(point);
 
     public override void Render(DrawingContext context)
     {
@@ -193,5 +263,31 @@ public sealed class EqFader : Control
             ThumbBrush,
             ThumbBorderBrush is null ? null : new Pen(ThumbBorderBrush, 1),
             new RoundedRect(thumbRect, 6));
+    }
+
+    /// <summary>Fader dla czytnika ekranu, z wartością w decybelach.</summary>
+    private sealed class EqFaderAutomationPeer(EqFader owner) : ControlAutomationPeer(owner), IRangeValueProvider
+    {
+        private EqFader Fader => (EqFader)Owner;
+
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Slider;
+
+        protected override bool IsContentElementCore() => true;
+
+        protected override bool IsControlElementCore() => true;
+
+        public bool IsReadOnly => !Fader.IsEffectivelyEnabled;
+
+        public double Minimum => -Fader.Range;
+
+        public double Maximum => Fader.Range;
+
+        public double Value => Fader.Value;
+
+        public double SmallChange => Fader.Step;
+
+        public double LargeChange => PageStep;
+
+        public void SetValue(double value) => Fader.SetFromUser(value);
     }
 }
