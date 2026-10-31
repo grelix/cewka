@@ -1,8 +1,6 @@
 # Pakiety dla Linuksa wraz z próbną instalacją w kontenerach.
 #
-# Osobny plik, bo to samo potrzebne jest w dwóch miejscach: przy wydaniu ze znacznika oraz
-# na żądanie, gdy trzeba sprawdzić, czy pakiety nadal się instalują. Powielenie tych kroków
-# w dwóch workflow skończyłoby się tym, że jedno z nich zostaje w tyle.
+# Osobny plik, bo korzystają z niego wydanie ze znacznika i sprawdzenie na żądanie.
 
 name: Pakiety Linuksa
 

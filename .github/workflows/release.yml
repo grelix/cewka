@@ -1,11 +1,9 @@
 # Wydanie budowane ze znacznika.
 #
-# Powstaje szkic, nie gotowe wydanie: pliki i sumy kontrolne przygotowuje maszyna, a opis
-# merytoryczny pisze autor i on decyduje o publikacji. Dzięki temu błąd w opisie nie staje się
-# widoczny publicznie, zanim ktokolwiek zdąży zareagować.
+# Powstaje szkic: pliki i sumy kontrolne przygotowuje maszyna, opis i publikacja należą do autora.
 #
 # Ponowne uruchomienie dla tego samego znacznika nie powiedzie się, dopóki poprzedni szkic
-# istnieje — to celowe. Szkic należy najpierw usunąć, żeby nie powstały dwa wydania tej wersji.
+# istnieje; szkic trzeba najpierw usunąć, żeby nie powstały dwa wydania jednej wersji.
 
 name: Wydanie
 

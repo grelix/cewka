@@ -6,9 +6,9 @@
 #   .pkg.tar.zst  Arch, Manjaro, EndeavourOS
 #
 # Wymaga: dpkg-deb, rpmbuild, bsdtar, zstd
-# Uzycie:  ./tools/build-packages.sh
+# Użycie:  ./tools/build-packages.sh
 #
-# Plik wykonywalny musi juz istniec — najpierw ./tools/publish-linux.sh
+# Plik wykonywalny musi już istnieć; najpierw ./tools/publish-linux.sh
 
 set -euo pipefail
 
@@ -27,22 +27,19 @@ if [ -z "$WERSJA" ]; then
     exit 1
 fi
 
-# Czy plik wykonywalny jest z TEJ wersji.
+# Czy plik wykonywalny jest z bieżącej wersji; po przerwanej publikacji zostaje poprzedni.
 #
-# Sam fakt istnienia pliku nie wystarcza: po przerwanej publikacji na dysku zostaje plik
-# poprzedniej wersji. Pakunek jest skompresowany, poza deps.json, ktory host czyta wprost.
-# Tam lezy klucz "Cewka/<wersja>" w cudzyslowach, wiec szukany jest doslownie (-F), z obu
-# stron zamkniety. Bez -F kropki pasowalyby do dowolnego bajtu, a w skompresowanych danych
-# losowe trafienie jest niemal pewne.
+# Pułapka: pakunek jest skompresowany poza deps.json, gdzie leży klucz "Cewka/<wersja>"
+# w cudzysłowach. Szukany jest dosłownie (-F), bo kropki w wyrażeniu pasowałyby do dowolnego
+# bajtu, a w danych skompresowanych przypadkowe trafienie jest niemal pewne.
 if ! grep -a -q -F "\"Cewka/$WERSJA\"" "$BINARKA"; then
     echo "Plik $BINARKA nie pochodzi z wersji $WERSJA." >&2
     echo "Pochodzi z innej kompilacji — uruchom najpierw ./tools/publish-linux.sh" >&2
     exit 1
 fi
 
-# Najnowsza wersja glibc, jakiej wymaga biblioteka natywna, musi zgadzac sie z deklaracja
-# w zaleznosciach pakietu .deb. Inaczej zmiana obrazu maszyny budujacej podnioslaby wymaganie
-# po cichu, a pakiet instalowalby sie tam, gdzie dzwiek nie ruszy.
+# Najnowsza wersja glibc wymagana przez bibliotekę natywną musi zgadzać się z zależnościami
+# pakietu .deb, żeby nowszy obraz maszyny budującej nie podniósł wymagania po cichu.
 GLIBC_MIN="2.34"
 BIBLIOTEKA="$REPO/src/Cewka.Audio/runtimes/linux-x64/native/libcewka_audio.so"
 if [ ! -f "$BIBLIOTEKA" ]; then
@@ -61,9 +58,8 @@ OPIEKUN="Maciej Grela <51171746+grelix@users.noreply.github.com>"
 STRONA="https://github.com/grelix/cewka"
 SKROT="Minimalistyczny odtwarzacz plikow lokalnych"
 
-# Budowanie odbywa sie w systemie plikow Linuksa, a nie na /mnt/c. Na NTFS nie da sie ustawic
-# wlasciciela ani praw dostepu, a pakiet z plikami nalezacymi do przypadkowego uzytkownika
-# i z prawami 777 jest bledem, ktory wychodzi dopiero przy instalacji u kogos innego.
+# Pułapka: budowanie w systemie plików Linuksa, nie na /mnt/c, bo na NTFS nie da się ustawić
+# właściciela ani praw dostępu i pakiet dostałby prawa 777.
 PRACA="$(mktemp -d /tmp/cewka-pakiety.XXXXXX)"
 trap 'rm -rf "$PRACA"' EXIT
 
@@ -72,7 +68,7 @@ echo "  katalog roboczy: $PRACA"
 echo
 
 # ---------------------------------------------------------------------------
-# Wspolne drzewo plikow, zgodne z FHS. Te same sciezki we wszystkich pakietach.
+# Wspólne drzewo plików zgodne z FHS, te same ścieżki we wszystkich pakietach.
 # ---------------------------------------------------------------------------
 przygotuj_drzewo() {
     local root="$1"
@@ -80,8 +76,7 @@ przygotuj_drzewo() {
     install -Dm755 "$BINARKA" "$root/usr/bin/cewka"
     install -Dm644 "$REPO/packaging/linux/cewka.desktop" "$root/usr/share/applications/cewka.desktop"
 
-    # Kazdy rozmiar w swoim katalogu motywu — tego wymaga specyfikacja katalogu ikon
-    # freedesktop i tylko wtedy pulpit bierze wariant narysowany dla danej wielkosci.
+    # Każdy rozmiar we własnym katalogu motywu, jak wymaga specyfikacja ikon freedesktop.
     local rozmiar
     for rozmiar in 48 64 128 256; do
         install -Dm644 "$REPO/packaging/linux/icons/cewka-$rozmiar.png" \
@@ -89,8 +84,7 @@ przygotuj_drzewo() {
     done
 }
 
-# Odswiezenie baz pulpitu. Bez tego wpis w menu pojawia sie dopiero po przelogowaniu,
-# a ikona bywa zastapiona znakiem zapytania.
+# Odświeżenie baz pulpitu; bez tego wpis w menu pojawia się dopiero po przelogowaniu.
 SKRYPT_PO_INSTALACJI='
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database -q /usr/share/applications || true
@@ -100,11 +94,10 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
 fi
 '
 
-# Znacznik czasu przekazany z zewnatrz, zeby ten sam material dawal ten sam pakiet.
+# Znacznik czasu z zewnątrz, żeby ten sam materiał dawał ten sam pakiet.
 CZAS="${SOURCE_DATE_EPOCH:-$(date +%s)}"
 
-# Pakiety poprzednich wersji usuwane: proba instalacji bierze pliki z tego katalogu,
-# a dwie wersje jednego pakietu obok siebie mylily menedzery pakietow.
+# Pakiety poprzednich wersji są usuwane, bo próbna instalacja bierze pliki z tego katalogu.
 mkdir -p "$WYNIK"
 rm -f "$WYNIK"/cewka_*.deb "$WYNIK"/cewka-*.rpm "$WYNIK"/cewka-*.pkg.tar.zst
 
@@ -157,7 +150,7 @@ KONIEC
 
 chmod 755 "$DEB/DEBIAN/postinst" "$DEB/DEBIAN/postrm"
 
-# --root-owner-group: pliki w pakiecie naleza do root, niezaleznie od tego, kto buduje.
+# --root-owner-group: pliki w pakiecie należą do root bez względu na to, kto buduje.
 dpkg-deb --root-owner-group --build "$DEB" "$WYNIK/cewka_${WERSJA}_amd64.deb" >/dev/null
 echo "      $(basename "$WYNIK/cewka_${WERSJA}_amd64.deb")"
 
@@ -170,19 +163,17 @@ mkdir -p "$RPM_ROOT"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 DRZEWO_RPM="$PRACA/rpm-drzewo"
 przygotuj_drzewo "$DRZEWO_RPM"
 
-# Data wpisu w %changelog z tego samego znacznika czasu co reszta pakietu. Nazwy dni
-# i miesiecy po angielsku, bo tylko takie rpmbuild przyjmuje.
+# Data wpisu w %changelog z tego samego znacznika czasu. Nazwy dni i miesięcy po angielsku,
+# bo tylko takie przyjmuje rpmbuild.
 DATA_ZMIANY="$(LC_ALL=C date -u -d "@$CZAS" '+%a %b %d %Y')"
 
 cat > "$RPM_ROOT/SPECS/cewka.spec" <<KONIEC
-# Plik wykonywalny jest gotowy i samodzielny: pakiet niczego nie kompiluje.
-# Wylaczenie debuginfo i skryptow poinstalacyjnych rpmbuilda jest tu konieczne —
-# domyslne "strip" naruszylo by strukture jednoplikowego pakietu .NET.
+# Pułapka: debuginfo i skrypty poinstalacyjne rpmbuilda muszą być wyłączone, bo domyślny
+# "strip" uszkodziłby jednoplikowy pakunek .NET.
 %global debug_package %{nil}
 %global __os_install_post %{nil}
 %global __strip /bin/true
-# Bez tego rpm dokłada dowiazania w /usr/lib/.build-id, wyprowadzone z identyfikatora
-# kompilacji. Przy pakiecie z gotowym binarium nie sluza niczemu poza zasmiecaniem listy plikow.
+# Bez tego rpm dokłada dowiązania w /usr/lib/.build-id, zbędne przy gotowym pliku wykonywalnym.
 %global _build_id_links none
 
 Name:           cewka
@@ -197,7 +188,7 @@ BuildArch:      x86_64
 Requires:       glibc >= $GLIBC_MIN, libgcc, libstdc++, zlib, libX11, libXrandr, libXi, fontconfig
 Recommends:     gstreamer1-plugins-base
 Recommends:     gstreamer1-plugins-good
-# Dekoder libav nazywa sie w Fedorze inaczej niz w RPM Fusion; wystarczy ktorykolwiek.
+# Dekoder libav nazywa się w Fedorze inaczej niż w RPM Fusion; wystarczy którykolwiek.
 Recommends:     (gstreamer1-plugin-libav or gstreamer1-libav)
 Recommends:     openssl-libs
 
@@ -274,7 +265,7 @@ optdepend = gst-libav: dekoder AAC i ALAC
 optdepend = openssl: sprawdzanie nowszej wersji przez HTTPS
 KONIEC
 
-# Skrypt instalacyjny pacmana odswieza bazy pulpitu tak samo jak w pozostalych pakietach.
+# Skrypt instalacyjny pacmana odświeża bazy pulpitu jak w pozostałych pakietach.
 cat > "$ARCH_ROOT/.INSTALL" <<KONIEC
 post_install() {
 $SKRYPT_PO_INSTALACJI
@@ -289,9 +280,8 @@ post_remove() {
 }
 KONIEC
 
-# Powtarzalnosc: wszystkie pliki z jednym czasem modyfikacji i lista wpisow posortowana,
-# bo czasy z chwili budowy i kolejnosc readdir roznilyby archiwa z tego samego materialu.
-# Kolejnosc ma tez drugie znaczenie: pacman czyta .PKGINFO jako pierwszy element archiwum.
+# Powtarzalność: jeden czas modyfikacji i posortowana lista wpisów. Pułapka: pacman czyta
+# .PKGINFO jako pierwszy element archiwum.
 find "$ARCH_ROOT" -exec touch -h -d "@$CZAS" {} +
 (
     cd "$ARCH_ROOT"

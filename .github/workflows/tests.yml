@@ -51,8 +51,7 @@ jobs:
       - name: Testy
         run: dotnet test Cewka.sln --configuration Release
 
-      # CEWKA_NULL_AUDIO=1 to prośba o puste wyjście silnika. Silnik jej jeszcze nie obsługuje,
-      # więc do tego czasu narzędzie zrzutów gra przez puste urządzenie pulseaudio.
+      # CEWKA_NULL_AUDIO=1 włącza puste wyjście silnika, żeby nic nie grało przez urządzenie.
       - name: Materiał dźwiękowy
         env:
           CEWKA_NULL_AUDIO: '1'
