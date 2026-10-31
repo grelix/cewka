@@ -4,12 +4,8 @@ using Xunit;
 namespace Cewka.App.Tests;
 
 /// <summary>
-/// Tests for the position restored from the previous session.
-///
-/// <para>Te testy istnieją z konkretnego powodu: usterka, w której pierwsze naciśnięcie pauzy
-/// po uruchomieniu utworu kliknięciem w kolejkę zamiast zatrzymania przeskakiwało na pozycję
-/// z poprzedniej sesji, przeszła niezauważona przez cały etap 6 i 7. Trzydzieści testów, jakie
-/// wtedy istniały, dotyczyło wyłącznie przetwarzania sygnału.</para>
+/// Pozycja przywrócona z poprzedniej sesji. Pilnują, żeby pierwsza pauza po uruchomieniu utworu
+/// kliknięciem w kolejkę nie przeskakiwała na zapamiętaną pozycję.
 /// </summary>
 public class PendingResumeTests
 {

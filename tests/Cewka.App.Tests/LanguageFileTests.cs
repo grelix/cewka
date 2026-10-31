@@ -7,15 +7,11 @@ namespace Cewka.App.Tests;
 /// <summary>
 /// Sprawdzenia plików językowych.
 ///
-/// <para>Brakujący klucz nie wywraca programu — wraca wtedy tekst polski — i właśnie dlatego
-/// wymaga testu. Luka w tłumaczeniu wygląda jak zdanie w obcym języku pośród reszty i można ją
-/// przeoczyć w każdym języku poza własnym.</para>
+/// <para>Brakujący klucz nie wywraca programu, tylko pokazuje tekst polski, więc łatwo go
+/// przeoczyć.</para>
 ///
-/// <para><b>Jedna lista języków.</b> Wcześniej każdy sprawdzian miał własny zestaw atrybutów
-/// <c>InlineData</c> i dołożenie języka znaczyło dopisanie go w sześciu miejscach. Teraz lista
-/// jest jedna, a wszystkie sprawdziany biorą ją stąd — zapomnieć o którymś nie ma jak.
-/// Zgodność listy z tym, co program faktycznie udostępnia, pilnuje narzędzie zrzutów: renderuje
-/// okno ustawień w każdym języku z tej listy, korzystając z prawdziwej klasy Strings.</para>
+/// <para>Wszystkie sprawdziany biorą języki z jednej listy. Jej zgodność z programem pilnuje
+/// narzędzie zrzutów, które renderuje okno ustawień w każdym języku z listy.</para>
 /// </summary>
 public sealed class LanguageFileTests
 {
@@ -52,13 +48,8 @@ public sealed class LanguageFileTests
     private const int ShortLabelLimit = 18;
 
     /// <summary>
-    /// Nazwy par barw domyślnej okładki. Stoją na przycisku szerokim na 168 px obok próbki
-    /// barwy szerokiej na 34 px, więc na sam tekst zostaje około 113 px — mniej niż na pasku
-    /// segmentowym, choć przycisk jest większy.
-    /// </summary>
-    /// <summary>
-    /// Klucze wyprowadzone z wyliczenia, a nie wypisane. Lista wypisana z ręki rozjechała się
-    /// już raz z rzeczywistością: doszło sześć par barw, a nazw dla nich nie dołożył nikt.
+    /// Nazwy par barw domyślnej okładki, wyprowadzone z wyliczenia, żeby nowa para nie została
+    /// bez nazwy. Stoją na przycisku 168 px obok próbki 34 px, więc na tekst zostaje około 113 px.
     /// </summary>
     private static readonly string[] PaletteLabels =
         Enum.GetValues<PlaceholderPalette>().Select(value => "Palette" + value).ToArray();
@@ -343,13 +334,8 @@ public sealed class LanguageFileTests
     /// <summary>
     /// Każdy znak w każdym tekście musi mieć glif w osadzonym foncie interfejsu.
     ///
-    /// <para><b>Dlaczego czytany jest sam font.</b> Wcześniej ten sprawdzian miał wpisaną na
-    /// sztywno granicę U+0250 i listę dopuszczonych znaków interpunkcyjnych — dobraną ręcznie do
-    /// tego, co zawierał osadzony wtedy Cantarell 1.004. Po wymianie fontu na wydanie 0.303,
-    /// które ma cyrylicę i grekę, taka lista opisywała już nie ten font i odrzucałaby teksty
-    /// rosyjskie oraz ukraińskie, choć font potrafi je narysować. Teraz sprawdzian pyta font,
-    /// a nie pamięć: znak, którego font nie ma, wyświetla się jako pusty prostokąt i wykryć to
-    /// można inaczej tylko patrząc na ekran w tym właśnie języku.</para>
+    /// <para>Zakres znaków odczytywany jest z samego fontu, bo znak bez glifu wyświetla się jako
+    /// pusty prostokąt, widoczny tylko na ekranie w danym języku.</para>
     /// </summary>
     [Theory]
     [MemberData(nameof(All))]
