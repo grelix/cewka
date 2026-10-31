@@ -64,6 +64,62 @@ public class PlaybackEngineTests
         Assert.Equal(0, EngineHarness.CountFrames(h.Output.Samples[samples.Length..], B));
     }
 
+    /// <summary>
+    /// Plik dodany, gdy dekoder doszedł już do końca ostatniego utworu, a jego końcówka jeszcze
+    /// gra z bufora, zagra po niej, zamiast kończyć kolejkę.
+    /// </summary>
+    [Fact]
+    public void TrackAddedAfterTheDecoderReachedTheEndStillPlays()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.3, B);
+
+        StartLastTrackDecodedToTheEnd(h, a);
+
+        h.Engine.Enqueue([b]);
+        h.PumpUntil(() => h.Finished == 1);
+
+        Assert.True(EngineHarness.CountFrames(h.Output.Samples, B) > EngineHarness.Frames(0.25));
+    }
+
+    /// <summary>
+    /// To samo przy pauzie w ostatnim pół sekundy: Play po dodaniu pliku gra dalej i przechodzi
+    /// do nowego wpisu, zamiast zaczynać kolejkę od początku.
+    /// </summary>
+    [Fact]
+    public void TrackAddedWhilePausedNearTheEndPlaysAfterResuming()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.3, B);
+
+        StartLastTrackDecodedToTheEnd(h, a);
+
+        h.Output.StartAutoPump();
+        h.Engine.Pause();
+        h.Output.StopAutoPump();
+
+        h.Engine.Enqueue([b]);
+        h.Engine.Play();
+        h.PumpUntil(() => h.Finished == 1);
+
+        Assert.True(EngineHarness.CountFrames(h.Output.Samples, B) > EngineHarness.Frames(0.25));
+        Assert.Equal(1, h.Engine.CurrentIndex);
+    }
+
+    /// <summary>
+    /// Utwór krótszy od bufora: dekoder dochodzi do końca pliku i zapisuje koniec kolejki,
+    /// zanim cokolwiek zagra.
+    /// </summary>
+    private static void StartLastTrackDecodedToTheEnd(EngineHarness h, string track)
+    {
+        h.Engine.SetQueue([track]);
+        h.PumpUntil(() => !h.Engine.IsSeeking);
+        EngineHarness.WaitUntil(() => h.Engine.BufferedFrames >= EngineHarness.Frames(0.25));
+        Thread.Sleep(100);
+    }
+
     // ---------- przewijanie ----------
 
     /// <summary>Przewinięcie zaraz po PlayIndex dotyczy wpisu, który dopiero zacznie grać.</summary>

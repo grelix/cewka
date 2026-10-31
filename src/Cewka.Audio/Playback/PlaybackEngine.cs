@@ -443,6 +443,8 @@ public sealed class PlaybackEngine : IDisposable
             var added = paths.Select(path => new QueueEntry { Path = path }).ToList();
             _queue.AddRange(added);
             _shuffleOrder.Insert(added, AudibleOrPendingEntry());
+
+            RevalidatePrefetchLocked();
         }
     }
 
@@ -489,9 +491,10 @@ public sealed class PlaybackEngine : IDisposable
     }
 
     /// <summary>
-    /// W ostatnim pół sekundy utworu dekoder ma już otwarty następny. Gdy zmiana kolejki
-    /// sprawia, że następnym jest inny wpis, bufor zawiera niewłaściwy początek; przewinięcie
-    /// słyszanego utworu w miejscu opróżnia go i każe dekoderowi wybrać następny od nowa.
+    /// W ostatnim pół sekundy utworu dekoder ma już otwarty następny albo zapisał koniec
+    /// kolejki. Gdy zmiana kolejki sprawia, że następnym jest inny wpis, bufor kończy się
+    /// niewłaściwie; przewinięcie słyszanego utworu w miejscu opróżnia go i każe dekoderowi
+    /// wybrać następny od nowa.
     /// </summary>
     private void RevalidatePrefetchLocked()
     {
@@ -499,7 +502,7 @@ public sealed class PlaybackEngine : IDisposable
         var decoding = _session?.Entry;
 
         // W trakcie przewinięcia słyszany wpis jest nieaktualny, a dekoder otwiera właśnie cel.
-        if (IsSeeking || heard is null || decoding is null || ReferenceEquals(heard, decoding)) return;
+        if (IsSeeking || _ended || heard is null || ReferenceEquals(heard, decoding)) return;
 
         var expected = Repeat == RepeatMode.Track ? heard : FollowingEntryLocked(heard, userInitiated: false);
         if (ReferenceEquals(expected, decoding)) return;
