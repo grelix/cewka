@@ -134,10 +134,15 @@ public partial class App : Application
 
     private static bool _closing;
 
+    /// <summary>Stops taking paths from other copies once the window starts closing.</summary>
+    internal static void BeginClosing() => _closing = true;
+
     /// <summary>
-    /// Gives up the role of the running copy as the window starts closing, before the queue is
-    /// saved. Kopia uruchomiona w tej chwili otwiera wtedy własne okno, zamiast oddać ścieżki
-    /// programowi, który już ich nie przyjmie.
+    /// Gives up the role of the running copy once the queue and settings are saved.
+    /// <para>
+    /// Kopia uruchomiona po zwolnieniu roli otwiera własne okno i czyta kolejkę oraz ustawienia
+    /// z dysku, więc muszą tam już być. Ścieżki przysłane w trakcie zapisu przepadają.
+    /// </para>
     /// </summary>
     internal static void ReleaseSingleInstance()
     {

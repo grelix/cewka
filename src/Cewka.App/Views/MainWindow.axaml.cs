@@ -278,11 +278,12 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(WindowClosingEventArgs e)
     {
-        App.ReleaseSingleInstance();
+        App.BeginClosing();
         _rotation.Stop();
         PersistGeometry();
         _viewModel.SaveQueueState();
         App.Settings.SaveNow();
+        App.ReleaseSingleInstance();
         base.OnClosing(e);
     }
 
