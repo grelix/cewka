@@ -33,15 +33,49 @@ public sealed class TitleBarStateTests
 
             Assert.False(h.Player.ShowProcessingDot);
 
-            h.Player.LimiterEnabled = true;
+            h.Player.SoundEffects[0].Enabled = true;
             Assert.True(h.Player.ShowProcessingDot);
 
             h.Player.PanelOpen = true;
             Assert.False(h.Player.ShowProcessingDot);
+        });
+    }
 
-            h.Player.PanelOpen = false;
-            h.Player.LimiterEnabled = false;
-            h.Player.SoundEffects[0].Enabled = true;
+    [Fact]
+    public void KropkaPrzetwarzaniaGasiePrzyUstawieniachDomyslnych()
+    {
+        Ui.Run(() =>
+        {
+            using var h = new PlayerHarness(s => s.PanelOpen = false);
+
+            Assert.True(h.Player.EqualiserEnabled);
+            Assert.True(h.Player.LimiterEnabled);
+            Assert.True(h.Player.NormalisationEnabled);
+            Assert.False(h.Player.ShowProcessingDot);
+        });
+    }
+
+    [Fact]
+    public void KorektorZapalaKropkeTylkoZeZmienionaKrzywa()
+    {
+        Ui.Run(() =>
+        {
+            using var h = new PlayerHarness(s => s.PanelOpen = false);
+            var raised = new List<string?>();
+            h.Player.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+            h.Player.Bands[3].Gain = 4;
+            Assert.True(h.Player.ShowProcessingDot);
+            Assert.Contains(nameof(MainViewModel.ShowProcessingDot), raised);
+
+            h.Player.EqualiserEnabled = false;
+            Assert.False(h.Player.ShowProcessingDot);
+
+            h.Player.EqualiserEnabled = true;
+            h.Player.ResetEqualiser();
+            Assert.False(h.Player.ShowProcessingDot);
+
+            h.Player.Preamp.Gain = -3;
             Assert.True(h.Player.ShowProcessingDot);
         });
     }

@@ -101,6 +101,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _settings.Current.Preamp = Preamp.Gain;
             _settings.Touch();
             Raise(nameof(CanResetEqualiser));
+            RaiseProcessing();
         };
 
         Bands = new ObservableCollection<EqBandViewModel>(
@@ -116,6 +117,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 _settings.Current.EqualiserGains[index] = Bands[index].Gain;
                 _settings.Touch();
                 Raise(nameof(CanResetEqualiser));
+                RaiseProcessing();
             };
         }
 
@@ -440,9 +442,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Włączone jest którekolwiek przetwarzanie: korektor, limiter, normalizacja albo efekt.</summary>
+    /// <summary>
+    /// Dźwięk zmienia korektor z niepłaską krzywą albo włączony efekt. Limiter i normalizacja są
+    /// włączone domyślnie i pilnują tylko poziomu, więc z nimi kropka świeciłaby zawsze.
+    /// </summary>
     public bool ProcessingActive =>
-        EqualiserEnabled || LimiterEnabled || NormalisationEnabled || SoundEffects.Any(effect => effect.Enabled);
+        (EqualiserEnabled && CanResetEqualiser) || SoundEffects.Any(effect => effect.Enabled);
 
     /// <summary>Kropka na przycisku pasa: przetwarzanie działa, a pasa nie widać.</summary>
     public bool ShowProcessingDot => !PanelOpen && ProcessingActive;
