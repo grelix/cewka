@@ -43,8 +43,9 @@ public struct Biquad
             return;
         }
 
-        // Keep the centre away from Nyquist: at 44.1 kHz the 16 kHz band sits close enough
-        // that the bilinear transform would warp it badly.
+        // Środek trzymany z dala od Nyquista, bo dzwon RBJ ma tam wymuszone 0 dB. Ogranicza to
+        // częstotliwość dopiero przy próbkowaniu poniżej około 35 kHz; przy 44,1 kHz pasmo
+        // 16 kHz zostaje na miejscu, z górnym zboczem ściśniętym przez Nyquista.
         var nyquist = sampleRate / 2;
         frequency = Math.Min(frequency, nyquist * 0.92);
 
@@ -114,6 +115,14 @@ public struct Biquad
     /// <summary>High-shelf in the Audio EQ Cookbook form. Not used by the loudness meter.</summary>
     public void SetHighShelf(double frequency, double q, double gainDb, double sampleRate)
     {
+        // Półka blisko Nyquista nie ma sensu, a powyżej niego staje się niestabilna albo
+        // podbija całe pasmo. Przy niskim próbkowaniu zostaje więc przepustem.
+        if (Math.Abs(gainDb) < 1e-6 || frequency >= sampleRate * 0.45)
+        {
+            SetCoefficients(1, 0, 0, 1, 0, 0);
+            return;
+        }
+
         var a = Math.Pow(10, gainDb / 40);
         var w0 = 2 * Math.PI * frequency / sampleRate;
         var cosW0 = Math.Cos(w0);
@@ -140,6 +149,9 @@ public struct Biquad
             SetCoefficients(1, 0, 0, 1, 0, 0);
             return;
         }
+
+        var nyquist = sampleRate / 2;
+        frequency = Math.Min(frequency, nyquist * 0.92);
 
         var a = Math.Pow(10, gainDb / 40);
         var w0 = 2 * Math.PI * frequency / sampleRate;
@@ -203,6 +215,9 @@ public struct Biquad
     /// <summary>High-pass, used by the second stage of the K-weighting filter.</summary>
     public void SetHighPass(double frequency, double q, double sampleRate)
     {
+        var nyquist = sampleRate / 2;
+        frequency = Math.Min(frequency, nyquist * 0.92);
+
         var w0 = 2 * Math.PI * frequency / sampleRate;
         var cosW0 = Math.Cos(w0);
         var alpha = Math.Sin(w0) / (2 * q);
@@ -240,5 +255,22 @@ public struct Biquad
     {
         _s1 = 0;
         _s2 = 0;
+    }
+
+    /// <summary>
+    /// Wołane raz na bufor. Zeruje stan, który przestał być liczbą skończoną, bo jedno NaN
+    /// zostałoby w nim na zawsze, oraz stan wygasły do poziomu, na którym w ciszy cyfrowej
+    /// przeszedłby w liczby subnormalne, kosztowne w każdej operacji.
+    /// </summary>
+    public void Sanitise()
+    {
+        if (!double.IsFinite(_s1) || !double.IsFinite(_s2))
+        {
+            Reset();
+            return;
+        }
+
+        if (Math.Abs(_s1) < 1e-25) _s1 = 0;
+        if (Math.Abs(_s2) < 1e-25) _s2 = 0;
     }
 }
