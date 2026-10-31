@@ -1,12 +1,12 @@
 # Maintainer: Maciej Grela <51171746+grelix@users.noreply.github.com>
 #
-# Buduje Cewkę ze źródeł na Archu. Pakiet dołączony do wydania powstaje na Ubuntu
-# bez makepkg, więc nie ma pliku .MTREE — ten plik jest właściwą drogą na samym Archu.
+# Pakiet pacmana z wydania powstaje na Ubuntu bez makepkg i nie ma pliku .MTREE.
+# Na Archu lepiej zbudować go z tego pliku.
 
 pkgname=cewka
 pkgver=0.8.1
 pkgrel=1
-pkgdesc="Minimalistyczny odtwarzacz plików lokalnych"
+pkgdesc="Odtwarzacz plików muzycznych z korektorem i wyrównaniem głośności"
 arch=('x86_64')
 url="https://github.com/grelix/cewka"
 license=('MIT')

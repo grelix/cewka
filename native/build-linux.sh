@@ -2,7 +2,7 @@
 # Buduje libcewka_audio.so dla linux-x64.
 # Wymaga wyłącznie kompilatora C (gcc lub clang).
 #
-# Nagłówki ALSA, PulseAudio i PipeWire nie są potrzebne: miniaudio samo deklaruje ich symbole
+# Nagłówki ALSA i PulseAudio nie są potrzebne: miniaudio samo deklaruje ich symbole
 # i ładuje biblioteki przez dlopen w czasie działania, a zaplecze wybiera przy otwarciu urządzenia.
 
 set -euo pipefail

@@ -121,6 +121,18 @@ public sealed class PlatformTests : IDisposable
         Assert.False(string.IsNullOrWhiteSpace(texts.FileTypeName));
     }
 
+    /// <summary>Opis w metadanych pliku wykonywalnego jest tym samym zdaniem co opis pakietów.</summary>
+    [Fact]
+    public void OpisZestawuZgodnyZOpisemPakietow()
+    {
+        var description = typeof(Cewka.App.ViewModels.SettingsViewModel).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyDescriptionAttribute), false)
+            .Cast<System.Reflection.AssemblyDescriptionAttribute>()
+            .Single().Description;
+
+        Assert.Equal("Odtwarzacz plików muzycznych z korektorem i wyrównaniem głośności", description);
+    }
+
     // ---------- Zasilanie w Linuksie ----------
 
     /// <summary>Laptop ładowany przez USB-C z wyłączonym wpisem zasilacza sieciowego jest na zasilaniu.</summary>

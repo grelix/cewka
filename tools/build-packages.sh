@@ -56,7 +56,7 @@ fi
 
 OPIEKUN="Maciej Grela <51171746+grelix@users.noreply.github.com>"
 STRONA="https://github.com/grelix/cewka"
-SKROT="Minimalistyczny odtwarzacz plikow lokalnych"
+SKROT="Odtwarzacz plików muzycznych z korektorem i wyrównaniem głośności"
 
 # Pułapka: budowanie w systemie plików Linuksa, nie na /mnt/c, bo na NTFS nie da się ustawić
 # właściciela ani praw dostępu i pakiet dostałby prawa 777.
@@ -125,13 +125,15 @@ Depends: libc6 (>= $GLIBC_MIN), libgcc-s1, libstdc++6, zlib1g, libx11-6, libxran
 Recommends: gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-libav, libssl3t64 | libssl3
 Homepage: $STRONA
 Description: $SKROT
- Odtwarzacz plikow lokalnych z korektorem dziesieciopasmowym, wyrownaniem
- glosnosci wedlug EBU R128 oraz tlem skladanym z barw okladki. Nie wymaga
- zainstalowanego srodowiska .NET — cala zawartosc jest w jednym pliku.
+ Odtwarza pliki muzyczne i całe foldery z dysku. Kolejkę można zapisać jako
+ listę M3U. Ma korektor dziesięciopasmowy, pięć efektów (crossfeed,
+ kompensacja głośności, bas wirtualny, kompresja dynamiki, szerokość stereo)
+ i wyrównanie głośności według tagów ReplayGain albo pomiaru EBU R128.
+ Współpracuje z panelem multimediów pulpitu przez MPRIS.
  .
- Formaty MP3, FLAC, WAV, Ogg Vorbis i Opus obsluguje samodzielnie. AAC, M4A
- i ALAC dekoduje GStreamer: potok z gstreamer1.0-plugins-base, kontener M4A
- z gstreamer1.0-plugins-good, a sam dekoder wylacznie z gstreamer1.0-libav.
+ MP3, FLAC, WAV, Ogg Vorbis i Opus dekoduje sam. AAC, M4A i ALAC dekoduje
+ GStreamer: potok daje gstreamer1.0-plugins-base, kontener M4A
+ gstreamer1.0-plugins-good, a dekoder gstreamer1.0-libav.
 KONIEC
 
 cat > "$DEB/DEBIAN/postinst" <<KONIEC
@@ -193,13 +195,15 @@ Recommends:     (gstreamer1-plugin-libav or gstreamer1-libav)
 Recommends:     openssl-libs
 
 %description
-Odtwarzacz plikow lokalnych z korektorem dziesieciopasmowym, wyrownaniem
-glosnosci wedlug EBU R128 oraz tlem skladanym z barw okladki. Nie wymaga
-zainstalowanego srodowiska .NET — cala zawartosc jest w jednym pliku.
+Odtwarza pliki muzyczne i całe foldery z dysku. Kolejkę można zapisać jako
+listę M3U. Ma korektor dziesięciopasmowy, pięć efektów (crossfeed,
+kompensacja głośności, bas wirtualny, kompresja dynamiki, szerokość stereo)
+i wyrównanie głośności według tagów ReplayGain albo pomiaru EBU R128.
+Współpracuje z panelem multimediów pulpitu przez MPRIS.
 
-Formaty MP3, FLAC, WAV, Ogg Vorbis i Opus obsluguje samodzielnie. AAC, M4A
-i ALAC dekoduje GStreamer: potok z gstreamer1-plugins-base, kontener M4A
-z gstreamer1-plugins-good, a sam dekoder wylacznie z pakietu libav.
+MP3, FLAC, WAV, Ogg Vorbis i Opus dekoduje sam. AAC, M4A i ALAC dekoduje
+GStreamer: potok daje gstreamer1-plugins-base, kontener M4A
+gstreamer1-plugins-good, a dekoder pakiet libav.
 
 %install
 cp -a $DRZEWO_RPM/. %{buildroot}/
