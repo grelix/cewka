@@ -24,6 +24,7 @@ internal sealed class OpusDecoder : ManagedDecoderBase
     private short[] _packet = [];
     private int _packetOffset;
     private int _packetFrames;
+    private bool _exhausted;
 
     public OpusDecoder(Stream stream, bool ownsStream, int outputSampleRate, int outputChannels, BitrateMeter? meter = null)
     {
@@ -43,6 +44,8 @@ internal sealed class OpusDecoder : ManagedDecoderBase
 
     protected override int ReadSource(Span<float> destination, int frames)
     {
+        if (_exhausted) return 0;
+
         var written = 0;
 
         while (written < frames)
@@ -87,12 +90,28 @@ internal sealed class OpusDecoder : ManagedDecoderBase
         _packetOffset = 0;
         _packetFrames = 0;
 
+        _exhausted = false;
+
         _reader.Close();
         _stream.Position = 0;
         _reader = CreateReader();
 
-        if (sourceFrame > 0)
-            _reader.SeekTo(TimeSpan.FromSeconds(sourceFrame / (double)OpusSampleRate));
+        if (sourceFrame <= 0) return;
+
+        // Czytnik odrzuca cel dalszy niż TotalTime. Takty liczone całkowicie zaokrąglają
+        // w dół, więc cel obcięty do długości nigdy jej nie przekracza.
+        var target = TimeSpan.FromTicks(sourceFrame * TimeSpan.TicksPerSecond / OpusSampleRate);
+        if (target > _reader.TotalTime) target = _reader.TotalTime;
+
+        try
+        {
+            _reader.SeekTo(target);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            DecoderFailures.Log($"Concentus nie przewinął pliku Opus: {ex.Message}");
+            _exhausted = true;
+        }
     }
 
     private OpusOggReadStream CreateReader()
