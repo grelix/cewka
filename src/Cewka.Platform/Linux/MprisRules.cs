@@ -37,11 +37,17 @@ internal static class MprisRules
 /// <para>Panele ekstrapolują pozycję z ostatniego odczytu, więc skok, którego zwykłe granie nie
 /// tłumaczy, trzeba ogłosić sygnałem <c>Seeked</c>. Oczekiwana pozycja liczona jest z zegara,
 /// bo przy zminimalizowanym oknie odświeżenia przychodzą rzadziej.</para>
+///
+/// <para>Pułapka: odświeżenie pozycji przychodzi czasem przed metadanymi następnego utworu.
+/// Spadek z ostatniej sekundy utworu na początek w trakcie grania uchodzi więc za przejście
+/// do następnego. Ręczny powrót na początek z tej ostatniej sekundy też nie zostanie ogłoszony.</para>
 /// </summary>
 internal sealed class SeekDetector
 {
     /// <summary>Larger than any drift between the refresh clock and the audio clock.</summary>
     public const long ToleranceMilliseconds = 1000;
+
+    private static readonly TimeSpan Tolerance = TimeSpan.FromMilliseconds(ToleranceMilliseconds);
 
     private TimeSpan? _last;
     private long _lastTime;
@@ -49,7 +55,8 @@ internal sealed class SeekDetector
     /// <param name="position">Pozycja odtwarzania.</param>
     /// <param name="playing">Czy od poprzedniego odczytu trwało odtwarzanie.</param>
     /// <param name="now">Czas w milisekundach z zegara monotonicznego.</param>
-    public bool Report(TimeSpan position, bool playing, long now)
+    /// <param name="length">Długość utworu, do którego należał poprzedni odczyt; zero, gdy nieznana.</param>
+    public bool Report(TimeSpan position, bool playing, long now, TimeSpan length = default)
     {
         var last = _last;
         var elapsed = now - _lastTime;
@@ -58,10 +65,14 @@ internal sealed class SeekDetector
         _lastTime = now;
 
         if (last is null) return false;
+        if (playing && IsNextTrack(last.Value, position, length)) return false;
 
         var expected = last.Value + (playing ? TimeSpan.FromMilliseconds(elapsed) : TimeSpan.Zero);
         return Math.Abs((position - expected).TotalMilliseconds) > ToleranceMilliseconds;
     }
+
+    private static bool IsNextTrack(TimeSpan last, TimeSpan position, TimeSpan length) =>
+        length > TimeSpan.Zero && last >= length - Tolerance && position <= Tolerance;
 
     public void Reset() => _last = null;
 }

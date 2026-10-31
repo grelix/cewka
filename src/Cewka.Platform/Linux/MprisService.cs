@@ -216,7 +216,7 @@ public sealed unsafe class MprisService : IMediaPanel
             TrackId = id,
         };
 
-        // Początek nowego utworu to nie przewinięcie; panel dowie się o nim z metadanych.
+        // Panel dowie się o nowym utworze z metadanych, więc pozycja liczy się od nowa.
         _seekDetector.Reset();
         _changed = true;
     }
@@ -248,7 +248,10 @@ public sealed unsafe class MprisService : IMediaPanel
     {
         Interlocked.Exchange(ref _positionMicroseconds, (long)Math.Max(0, position.TotalMilliseconds * 1000));
 
-        if (_seekDetector.Report(position, _state.Status == MediaPanelStatus.Playing, Environment.TickCount64))
+        var state = _state;
+        var length = TimeSpan.FromMilliseconds(state.LengthMicroseconds / 1000.0);
+
+        if (_seekDetector.Report(position, state.Status == MediaPanelStatus.Playing, Environment.TickCount64, length))
             _seeked = true;
     }
 

@@ -224,6 +224,33 @@ public sealed class PlatformTests : IDisposable
         Assert.False(detector.Report(TimeSpan.Zero, playing: true, now: 25));
     }
 
+    /// <summary>
+    /// Odświeżenie pozycji potrafi przyjść przed metadanymi następnego utworu. Przejście z końca
+    /// utworu na początek następnego to wtedy zwykłe granie, a nie przewinięcie starego.
+    /// </summary>
+    [Fact]
+    public void PrzejscieDoNastepnegoPrzedMetadanymiNieJestPrzewinieciem()
+    {
+        var detector = new SeekDetector();
+        var length = TimeSpan.FromSeconds(200);
+
+        detector.Report(TimeSpan.FromSeconds(199.8), playing: true, now: 0, length);
+
+        Assert.False(detector.Report(TimeSpan.FromSeconds(0.1), playing: true, now: 25, length));
+    }
+
+    /// <summary>Powrót na początek ze środka utworu pozostaje przewinięciem.</summary>
+    [Fact]
+    public void PowrotNaPoczatekZeSrodkaJestPrzewinieciem()
+    {
+        var detector = new SeekDetector();
+        var length = TimeSpan.FromSeconds(200);
+
+        detector.Report(TimeSpan.FromSeconds(120), playing: true, now: 0, length);
+
+        Assert.True(detector.Report(TimeSpan.Zero, playing: true, now: 25, length));
+    }
+
     /// <summary>Puszczenie suwaka w panelu w chwili zmiany utworu nie może przewinąć następnego.</summary>
     [Fact]
     public void PozycjaDlaInnegoUtworuJestPomijana()
