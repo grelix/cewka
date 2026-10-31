@@ -70,15 +70,22 @@
   <!--
     Publikacja pod konkretna platforme bierze z Cewka.Audio tylko biblioteke natywna tej
     platformy. Gdy na maszynie zbudowano obie, wariant obcy trafialby do wydania na darmo.
+    Pulapka: MSBuild w Linuksie zamienia ukosniki odwrotne w napisach, wiec porownanie
+    sciezki z separatorem zawodzi i odrzuca takze wlasciwy wariant. Wystarczy sprawdzic,
+    czy sciezka zawiera identyfikator platformy. Wydanie bez biblioteki konczy sie bledem.
   -->
   <Target Name="TylkoBibliotekaNatywnaPlatformy" AfterTargets="ComputeResolvedFilesToPublishList"
           Condition="'$(RuntimeIdentifier)' != ''">
     <ItemGroup>
-      <_BibliotekaObcejPlatformy Include="@(ResolvedFileToPublish)"
-          Condition="('%(ResolvedFileToPublish.Filename)' == 'cewka_audio' Or '%(ResolvedFileToPublish.Filename)' == 'libcewka_audio')
-                     And !$([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').Replace('/', '\').StartsWith('runtimes\$(RuntimeIdentifier)\'))" />
+      <_BibliotekaNatywna Include="@(ResolvedFileToPublish)"
+          Condition="'%(ResolvedFileToPublish.Filename)' == 'cewka_audio' Or '%(ResolvedFileToPublish.Filename)' == 'libcewka_audio'" />
+      <_BibliotekaObcejPlatformy Include="@(_BibliotekaNatywna)"
+          Condition="!$([System.String]::Copy('%(_BibliotekaNatywna.RelativePath)').Contains('$(RuntimeIdentifier)'))" />
       <ResolvedFileToPublish Remove="@(_BibliotekaObcejPlatformy)" />
+      <_BibliotekaTejPlatformy Include="@(_BibliotekaNatywna)" Exclude="@(_BibliotekaObcejPlatformy)" />
     </ItemGroup>
+    <Error Condition="'@(_BibliotekaTejPlatformy)' == ''"
+           Text="W wydaniu dla $(RuntimeIdentifier) brak biblioteki natywnej cewka_audio. Najpierw native/build-linux.sh albo native\build-windows.cmd." />
   </Target>
 
   <!--
