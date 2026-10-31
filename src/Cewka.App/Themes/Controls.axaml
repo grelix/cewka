@@ -411,6 +411,28 @@
     <Setter Property="FontWeight" Value="Normal" />
   </Style>
 
+  <!-- ======================= Suwaki w akcencie ======================= -->
+
+  <!--
+    Suwak wyłączonego efektu albo korektora ma barwę tekstu, jak jego etykieta, i tak jak ona
+    przygasa razem z wierszem. Sam akcent pod tym samym kryciem wyglądał w jasnym motywie na aktywny.
+  -->
+  <Style Selector="c|TrackSlider.accent">
+    <Setter Property="FillBrush" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <Style Selector="c|TrackSlider.accent.off">
+    <Setter Property="FillBrush" Value="{DynamicResource FillBrush}" />
+  </Style>
+
+  <Style Selector="c|EqFader.accent">
+    <Setter Property="FillBrush" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <Style Selector="c|EqFader.accent.off">
+    <Setter Property="FillBrush" Value="{DynamicResource FillBrush}" />
+  </Style>
+
   <!-- ======================= Okno ustawień ======================= -->
 
   <!--

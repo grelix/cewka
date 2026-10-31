@@ -633,11 +633,11 @@
                           <TextBlock Classes="tabular dim" Text="{Binding Preamp.GainText}"
                                      FontSize="10.5" HorizontalAlignment="Center" />
                           <c:EqFader Height="116" HorizontalAlignment="Center"
+                                     Classes="accent" Classes.off="{Binding !EqualiserEnabled}"
                                      Value="{Binding Preamp.Gain, Mode=TwoWay}"
                                      AutomationProperties.Name="{l:Translate PreampName}"
                                      ShowCentreLine="False"
                                      TrackBrush="{DynamicResource TrackBrush}"
-                                     FillBrush="{DynamicResource AccentBrush}"
                                      ThumbBrush="{DynamicResource FaderThumbBrush}"
                                      ThumbBorderBrush="{DynamicResource FaderThumbBorderBrush}" />
                           <TextBlock Classes="faint" Text="{l:Translate PreampName}" FontSize="9.5"
@@ -726,12 +726,12 @@
                                 </Grid>
 
                                 <c:TrackSlider Height="14"
+                                               Classes="accent" Classes.off="{Binding !Enabled}"
                                                Value="{Binding Strength, Mode=TwoWay}" Step="0.1"
                                                KeyboardStep="0.1"
                                                AutomationProperties.Name="{Binding StrengthName}"
                                                TrackThickness="4" ThumbDiameter="11"
-                                               TrackBrush="{DynamicResource TrackBrush}"
-                                               FillBrush="{DynamicResource AccentBrush}" />
+                                               TrackBrush="{DynamicResource TrackBrush}" />
                               </StackPanel>
                             </Grid>
                           </DataTemplate>
