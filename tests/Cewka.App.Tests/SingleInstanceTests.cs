@@ -274,6 +274,78 @@ public sealed class SingleInstanceTests : IDisposable
         Assert.NotNull(next);
     }
 
+    /// <summary>
+    /// Pod Linuksem wysłanie kończy się, gdy dane leżą w buforze jądra, więc nadawca, który zaczął
+    /// pisać przed zamknięciem nasłuchu, uznał już przekazanie za udane. Wiadomość musi dojść.
+    /// </summary>
+    [Fact]
+    public void ZamkniecieNasluchuDoczytujeRozpoczetaWiadomosc()
+    {
+        var address = Temporary();
+
+        using var instance = SingleInstance.TryAcquire(address);
+        Assert.NotNull(instance);
+
+        var received = Listen(instance);
+        var message = Message("/muzyka/utwor.mp3");
+
+        using var sender = ConnectRaw(address);
+        sender.Write(message, 0, 6);
+        sender.Flush();
+        Thread.Sleep(100);
+
+        var stopping = new Thread(instance.StopListening);
+        stopping.Start();
+        Thread.Sleep(100);
+
+        sender.Write(message, 6, message.Length - 6);
+        sender.Flush();
+
+        Assert.True(stopping.Join(Patience));
+        Assert.Equal(["/muzyka/utwor.mp3"], Await(received));
+    }
+
+    /// <summary>
+    /// Nadawca połączony w czasie, gdy odbiorca czyta poprzednią wiadomość, czeka w kolejce
+    /// gniazda albo na przygotowanej instancji potoku. Zamknięcie nasłuchu odbiera i jego ścieżki.
+    /// </summary>
+    [Fact]
+    public void ZamkniecieNasluchuOdbieraNadawcowJuzPolaczonych()
+    {
+        var address = Temporary();
+
+        using var instance = SingleInstance.TryAcquire(address);
+        Assert.NotNull(instance);
+
+        var all = new List<string>();
+        instance.Attach(paths => { lock (all) all.AddRange(paths); });
+
+        var message = Message("/muzyka/pierwszy.mp3");
+
+        using var first = ConnectRaw(address);
+        first.Write(message, 0, 6);
+        first.Flush();
+        Thread.Sleep(100);
+
+        // W Windows zapis do potoku czeka na odczyt, więc drugi nadawca idzie osobnym wątkiem.
+        var handedOff = false;
+        var second = new Thread(() => handedOff = SingleInstance.TryHandOff(address, ["/muzyka/drugi.mp3"]));
+        second.Start();
+        Thread.Sleep(200);
+
+        var stopping = new Thread(instance.StopListening);
+        stopping.Start();
+        Thread.Sleep(100);
+
+        first.Write(message, 6, message.Length - 6);
+        first.Flush();
+
+        Assert.True(stopping.Join(Patience));
+        Assert.True(second.Join(Patience));
+        Assert.True(handedOff);
+        lock (all) Assert.Equal(["/muzyka/pierwszy.mp3", "/muzyka/drugi.mp3"], all);
+    }
+
     [Fact]
     public void PrzekazanieDoNikogoSieNieUdaje()
     {
@@ -391,7 +463,10 @@ public sealed class SingleInstanceTests : IDisposable
     }
 
     /// <summary>Łączy się z kanałem i nic nie wysyła.</summary>
-    private static IDisposable ConnectSilently(InstanceAddress address)
+    private static IDisposable ConnectSilently(InstanceAddress address) => ConnectRaw(address);
+
+    /// <summary>Połączenie nadawcy, który pisze wiadomość sam, po kawałku.</summary>
+    private static Stream ConnectRaw(InstanceAddress address)
     {
         if (OperatingSystem.IsWindows())
         {
@@ -407,7 +482,14 @@ public sealed class SingleInstanceTests : IDisposable
             System.Net.Sockets.ProtocolType.Unspecified);
 
         socket.Connect(new System.Net.Sockets.UnixDomainSocketEndPoint(address.SocketFile));
-        return socket;
+        return new System.Net.Sockets.NetworkStream(socket, ownsSocket: true);
+    }
+
+    /// <summary>Wiadomość w postaci, w jakiej idzie kanałem: długość, potem lista w JSON.</summary>
+    private static byte[] Message(params string[] paths)
+    {
+        var payload = System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(paths));
+        return [.. BitConverter.GetBytes(payload.Length), .. payload];
     }
 
     private static string[] Await(Task<string[]> received)

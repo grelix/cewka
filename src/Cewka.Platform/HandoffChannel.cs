@@ -11,6 +11,12 @@ internal interface IHandoffListener : IDisposable
     /// <c>null</c> once the channel is closing.
     /// </summary>
     Stream? Accept(CancellationToken token);
+
+    /// <summary>
+    /// Bez czekania zwraca połączenie nadawcy, który połączył się, zanim odbiorca go przyjął,
+    /// albo <c>null</c>. Wołane przy zamykaniu, więc nie przygotowuje miejsca dla następnych.
+    /// </summary>
+    Stream? TakePending();
 }
 
 /// <summary>
@@ -113,6 +119,35 @@ internal static class HandoffChannel
             }
 
             return server;
+        }
+
+        public Stream? TakePending()
+        {
+            NamedPipeServerStream? server;
+
+            lock (_gate)
+            {
+                server = _ready;
+                _ready = null;
+            }
+
+            if (server is null) return null;
+
+            // Połączony już nadawca kończy oczekiwanie od razu; inaczej oczekiwanie zostaje przerwane.
+            using var none = new CancellationTokenSource();
+            var connected = server.WaitForConnectionAsync(none.Token);
+            none.Cancel();
+
+            try
+            {
+                connected.GetAwaiter().GetResult();
+                return server;
+            }
+            catch
+            {
+                server.Dispose();
+                return null;
+            }
         }
 
         public void Dispose()
@@ -229,6 +264,10 @@ internal static class HandoffChannel
 
             return new NetworkStream(accepted, ownsSocket: true);
         }
+
+        public Stream? TakePending() => _socket.Poll(0, SelectMode.SelectRead)
+            ? new NetworkStream(_socket.Accept(), ownsSocket: true)
+            : null;
 
         public void Dispose()
         {
