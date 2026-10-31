@@ -43,6 +43,7 @@
   "HintEqualiserInMainWindow": "Эквалайзер и звуковые эффекты находятся в главном окне, на панели под проигрывателем (Q).",
 
   "OpenFiles": "Открыть файлы",
+  "TooltipOpenFiles": "Открыть файлы (Ctrl+O)",
   "OpenFolder": "Открыть папку",
   "AudioFilter": "Аудиофайлы",
   "DropHint": "Файлы и папки можно также перетащить на окно",
@@ -253,8 +254,7 @@
   "SeekPosition": "Позиция в треке",
   "PreampName": "Предусилитель",
   "EffectStrength": "Сила: {0}",
-  "EqualiserReset": "Сбросить",
-  "TooltipEqualiserReset": "Установка всех полос и предусилителя на 0 дБ",
+  "TooltipEqualiserReset": "Сбросить эквалайзер: все полосы и предусилитель на 0 дБ",
   "QueuePlay": "Воспроизвести",
   "QueueUndoRemove": "Отменить удаление",
   "QueueUndoClear": "Отменить очистку",

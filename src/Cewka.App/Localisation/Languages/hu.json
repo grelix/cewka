@@ -43,6 +43,7 @@
   "HintEqualiserInMainWindow": "Az equalizer és a hangeffektek a főablakban, a lejátszó alatti sávban találhatók (Q).",
 
   "OpenFiles": "Fájlok megnyitása",
+  "TooltipOpenFiles": "Fájlok megnyitása (Ctrl+O)",
   "OpenFolder": "Mappa megnyitása",
   "AudioFilter": "Hangfájlok",
   "DropHint": "Fájlok és mappák az ablakra is húzhatók",
@@ -253,8 +254,7 @@
   "SeekPosition": "Pozíció a számban",
   "PreampName": "Előerősítő",
   "EffectStrength": "Erősség: {0}",
-  "EqualiserReset": "Nullázás",
-  "TooltipEqualiserReset": "Minden sáv és az előerősítő 0 dB-re állítása",
+  "TooltipEqualiserReset": "Equalizer nullázása: minden sáv és az előerősítő 0 dB-re",
   "QueuePlay": "Lejátszás",
   "QueueUndoRemove": "Eltávolítás visszavonása",
   "QueueUndoClear": "Ürítés visszavonása",

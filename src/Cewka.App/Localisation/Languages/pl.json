@@ -43,6 +43,7 @@
   "HintEqualiserInMainWindow": "Korektor i efekty dźwiękowe są w oknie głównym, w pasie pod odtwarzaczem (Q).",
 
   "OpenFiles": "Otwórz pliki",
+  "TooltipOpenFiles": "Otwórz pliki (Ctrl+O)",
   "OpenFolder": "Otwórz folder",
   "AudioFilter": "Pliki dźwiękowe",
   "DropHint": "Można też przeciągnąć pliki lub folder na okno",
@@ -253,8 +254,7 @@
   "SeekPosition": "Pozycja w utworze",
   "PreampName": "Przedwzmacniacz",
   "EffectStrength": "Siła: {0}",
-  "EqualiserReset": "Wyzeruj",
-  "TooltipEqualiserReset": "Ustawienie wszystkich pasm i przedwzmacniacza na 0 dB",
+  "TooltipEqualiserReset": "Wyzeruj korektor: wszystkie pasma i przedwzmacniacz na 0 dB",
   "QueuePlay": "Odtwórz",
   "QueueUndoRemove": "Cofnij usunięcie",
   "QueueUndoClear": "Cofnij wyczyszczenie",

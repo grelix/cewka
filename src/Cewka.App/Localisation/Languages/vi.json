@@ -43,6 +43,7 @@
   "HintEqualiserInMainWindow": "Bộ cân bằng âm và hiệu ứng âm thanh nằm trong cửa sổ chính, ở dải bên dưới trình phát (Q).",
 
   "OpenFiles": "Mở tệp",
+  "TooltipOpenFiles": "Mở tệp (Ctrl+O)",
   "OpenFolder": "Mở thư mục",
   "AudioFilter": "Tệp âm thanh",
   "DropHint": "Cũng có thể kéo tệp hoặc thư mục vào cửa sổ",
@@ -253,8 +254,7 @@
   "SeekPosition": "Vị trí trong bài",
   "PreampName": "Tiền khuếch đại",
   "EffectStrength": "Mức độ: {0}",
-  "EqualiserReset": "Đặt lại",
-  "TooltipEqualiserReset": "Đưa mọi dải tần và tiền khuếch đại về 0 dB",
+  "TooltipEqualiserReset": "Đặt lại bộ cân bằng âm: mọi dải tần và tiền khuếch đại về 0 dB",
   "QueuePlay": "Phát",
   "QueueUndoRemove": "Hoàn tác xóa",
   "QueueUndoClear": "Hoàn tác xóa hàng đợi",

@@ -43,6 +43,7 @@
   "HintEqualiserInMainWindow": "Ekvalizér a zvukové efekty jsou v hlavním okně, v pásu pod přehrávačem (Q).",
 
   "OpenFiles": "Otevřít soubory",
+  "TooltipOpenFiles": "Otevřít soubory (Ctrl+O)",
   "OpenFolder": "Otevřít složku",
   "AudioFilter": "Zvukové soubory",
   "DropHint": "Soubory a složky lze také přetáhnout na okno",
@@ -253,8 +254,7 @@
   "SeekPosition": "Pozice ve skladbě",
   "PreampName": "Předzesilovač",
   "EffectStrength": "Síla: {0}",
-  "EqualiserReset": "Vynulovat",
-  "TooltipEqualiserReset": "Nastavení všech pásem a předzesilovače na 0 dB",
+  "TooltipEqualiserReset": "Vynulovat ekvalizér: všechna pásma a předzesilovač na 0 dB",
   "QueuePlay": "Přehrát",
   "QueueUndoRemove": "Vrátit odebrání",
   "QueueUndoClear": "Vrátit vymazání",

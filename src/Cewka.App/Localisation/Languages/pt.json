@@ -43,6 +43,7 @@
   "HintEqualiserInMainWindow": "O equalizador e os efeitos sonoros ficam na janela principal, na faixa abaixo do reprodutor (Q).",
 
   "OpenFiles": "Abrir arquivos",
+  "TooltipOpenFiles": "Abrir arquivos (Ctrl+O)",
   "OpenFolder": "Abrir pasta",
   "AudioFilter": "Arquivos de áudio",
   "DropHint": "Também é possível arrastar arquivos ou uma pasta para a janela",
@@ -253,8 +254,7 @@
   "SeekPosition": "Posição na faixa",
   "PreampName": "Pré-amplificador",
   "EffectStrength": "Intensidade: {0}",
-  "EqualiserReset": "Zerar",
-  "TooltipEqualiserReset": "Coloca todas as bandas e o pré-amplificador em 0 dB",
+  "TooltipEqualiserReset": "Zerar o equalizador: todas as bandas e o pré-amplificador em 0 dB",
   "QueuePlay": "Reproduzir",
   "QueueUndoRemove": "Desfazer remoção",
   "QueueUndoClear": "Desfazer limpeza",

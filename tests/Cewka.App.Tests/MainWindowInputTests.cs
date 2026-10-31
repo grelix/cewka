@@ -448,6 +448,28 @@ public sealed class MainWindowInputTests
     }
 
     [Fact]
+    public void PrzyciskIkonaMaNazweTakaJakPodpowiedz()
+    {
+        Ui.Run(() =>
+        {
+            var (window, _) = Open(tracks: 1);
+
+            try
+            {
+                var different = window.GetVisualDescendants().OfType<Button>()
+                    .Where(b => b.Classes.Contains("icon") && ToolTip.GetTip(b) is string)
+                    .Where(b => AutomationProperties.GetName(b) != (string)ToolTip.GetTip(b)!)
+                    .Select(b => $"{b.Name}: {AutomationProperties.GetName(b)} / {ToolTip.GetTip(b)}")
+                    .ToList();
+
+                Assert.True(different.Count == 0, string.Join("; ", different));
+                Assert.Contains("Ctrl+O", Strings.Current["TooltipOpenFiles"]);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
     public void GlosnikWyciszaAKolkoZmieniaGlosnosc()
     {
         Ui.Run(() =>

@@ -43,6 +43,7 @@
   "HintEqualiserInMainWindow": "De equalizer en geluidseffecten staan in het hoofdvenster, in de strook onder de speler (Q).",
 
   "OpenFiles": "Bestanden openen",
+  "TooltipOpenFiles": "Bestanden openen (Ctrl+O)",
   "OpenFolder": "Map openen",
   "AudioFilter": "Audiobestanden",
   "DropHint": "Bestanden of een map kunnen ook op het venster worden gesleept",
@@ -253,8 +254,7 @@
   "SeekPosition": "Positie in nummer",
   "PreampName": "Voorversterker",
   "EffectStrength": "Sterkte: {0}",
-  "EqualiserReset": "Resetten",
-  "TooltipEqualiserReset": "Zet alle banden en de voorversterker op 0 dB",
+  "TooltipEqualiserReset": "Equalizer resetten: alle banden en de voorversterker op 0 dB",
   "QueuePlay": "Afspelen",
   "QueueUndoRemove": "Verwijderen ongedaan maken",
   "QueueUndoClear": "Leegmaken ongedaan maken",

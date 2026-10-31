@@ -43,6 +43,7 @@
   "HintEqualiserInMainWindow": "Egalizatorul și efectele sonore se află în fereastra principală, în banda de sub player (Q).",
 
   "OpenFiles": "Deschide fișiere",
+  "TooltipOpenFiles": "Deschide fișiere (Ctrl+O)",
   "OpenFolder": "Deschide folder",
   "AudioFilter": "Fișiere audio",
   "DropHint": "Fișierele și folderele pot fi plasate și prin tragere pe fereastră",
@@ -253,8 +254,7 @@
   "SeekPosition": "Poziție în piesă",
   "PreampName": "Preamplificator",
   "EffectStrength": "Intensitate: {0}",
-  "EqualiserReset": "Resetează",
-  "TooltipEqualiserReset": "Aduce toate benzile și preamplificatorul la 0 dB",
+  "TooltipEqualiserReset": "Resetează egalizatorul: toate benzile și preamplificatorul la 0 dB",
   "QueuePlay": "Redă",
   "QueueUndoRemove": "Anulează eliminarea",
   "QueueUndoClear": "Anulează golirea",

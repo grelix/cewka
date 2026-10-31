@@ -43,6 +43,7 @@
   "HintEqualiserInMainWindow": "Ekolayzer ve ses efektleri ana pencerede, oynatıcının altındaki şeritte bulunur (Q).",
 
   "OpenFiles": "Dosya açma",
+  "TooltipOpenFiles": "Dosya açma (Ctrl+O)",
   "OpenFolder": "Klasör açma",
   "AudioFilter": "Ses dosyaları",
   "DropHint": "Dosyalar ve klasörler pencereye de sürüklenip bırakılabilir",
@@ -253,8 +254,7 @@
   "SeekPosition": "Parça içindeki konum",
   "PreampName": "Ön yükseltici",
   "EffectStrength": "Güç: {0}",
-  "EqualiserReset": "Sıfırla",
-  "TooltipEqualiserReset": "Tüm bantları ve ön yükselticiyi 0 dB'e ayarlar",
+  "TooltipEqualiserReset": "Ekolayzeri sıfırla: tüm bantlar ve ön yükseltici 0 dB'e",
   "QueuePlay": "Çal",
   "QueueUndoRemove": "Kaldırmayı geri al",
   "QueueUndoClear": "Temizlemeyi geri al",

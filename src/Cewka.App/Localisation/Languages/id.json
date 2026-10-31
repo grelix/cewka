@@ -43,6 +43,7 @@
   "HintEqualiserInMainWindow": "Equalizer dan efek suara ada di jendela utama, pada bilah di bawah pemutar (Q).",
 
   "OpenFiles": "Pembukaan file",
+  "TooltipOpenFiles": "Pembukaan file (Ctrl+O)",
   "OpenFolder": "Pembukaan folder",
   "AudioFilter": "Berkas audio",
   "DropHint": "File atau folder juga dapat diseret ke jendela",
@@ -253,8 +254,7 @@
   "SeekPosition": "Posisi dalam lagu",
   "PreampName": "Pra-penguat",
   "EffectStrength": "Kekuatan: {0}",
-  "EqualiserReset": "Atur ulang",
-  "TooltipEqualiserReset": "Mengatur semua pita dan pra-penguat ke 0 dB",
+  "TooltipEqualiserReset": "Atur ulang equalizer: semua pita dan pra-penguat ke 0 dB",
   "QueuePlay": "Putar",
   "QueueUndoRemove": "Batalkan penghapusan",
   "QueueUndoClear": "Batalkan pengosongan",

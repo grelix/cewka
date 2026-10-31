@@ -43,6 +43,7 @@
   "HintEqualiserInMainWindow": "The equaliser and sound effects are in the main window, in the strip below the player (Q).",
 
   "OpenFiles": "Open files",
+  "TooltipOpenFiles": "Open files (Ctrl+O)",
   "OpenFolder": "Open folder",
   "AudioFilter": "Audio files",
   "DropHint": "Files and folders can also be dropped onto the window",
@@ -253,8 +254,7 @@
   "SeekPosition": "Position in track",
   "PreampName": "Preamplifier",
   "EffectStrength": "Strength: {0}",
-  "EqualiserReset": "Reset",
-  "TooltipEqualiserReset": "Sets every band and the preamplifier to 0 dB",
+  "TooltipEqualiserReset": "Reset the equaliser: every band and the preamplifier to 0 dB",
   "QueuePlay": "Play",
   "QueueUndoRemove": "Undo removal",
   "QueueUndoClear": "Undo clearing",

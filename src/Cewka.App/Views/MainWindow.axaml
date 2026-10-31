@@ -371,8 +371,8 @@
 
                         <!-- Dodanie plikow do kolejki; ostatni w rzedzie, bo nie nalezy do transportu -->
                         <Button Classes="icon" Width="32" Height="32"
-                                Click="OnOpenFiles" ToolTip.Tip="{l:Translate OpenFiles}"
-                                AutomationProperties.Name="{l:Translate OpenFiles}">
+                                Click="OnOpenFiles" ToolTip.Tip="{l:Translate TooltipOpenFiles}"
+                                AutomationProperties.Name="{l:Translate TooltipOpenFiles}">
                           <Viewbox Width="15" Height="15">
                             <Path Classes="fill" Data="{StaticResource IconFolder}" Width="16" Height="16" />
                           </Viewbox>
@@ -584,7 +584,7 @@
                                 IsEnabled="{Binding CanResetEqualiser}"
                                 ToolTip.Tip="{l:Translate TooltipEqualiserReset}"
                                 ToolTip.ShowOnDisabled="True"
-                                AutomationProperties.Name="{l:Translate EqualiserReset}">
+                                AutomationProperties.Name="{l:Translate TooltipEqualiserReset}">
                           <Viewbox Width="15" Height="15">
                             <Path Classes="stroke" Data="{StaticResource IconResetStroke}"
                                   Width="16" Height="16" StrokeThickness="1.3" />

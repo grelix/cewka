@@ -43,6 +43,7 @@
   "HintEqualiserInMainWindow": "Equalizer und Klangeffekte befinden sich im Hauptfenster, im Bereich unter dem Player (Q).",
 
   "OpenFiles": "Dateien öffnen",
+  "TooltipOpenFiles": "Dateien öffnen (Strg+O)",
   "OpenFolder": "Ordner öffnen",
   "AudioFilter": "Audiodateien",
   "DropHint": "Dateien oder Ordner können auch auf das Fenster gezogen werden",
@@ -253,8 +254,7 @@
   "SeekPosition": "Position im Titel",
   "PreampName": "Vorverstärker",
   "EffectStrength": "Stärke: {0}",
-  "EqualiserReset": "Zurücksetzen",
-  "TooltipEqualiserReset": "Setzt alle Bänder und den Vorverstärker auf 0 dB",
+  "TooltipEqualiserReset": "Equalizer zurücksetzen: alle Bänder und den Vorverstärker auf 0 dB",
   "QueuePlay": "Wiedergeben",
   "QueueUndoRemove": "Entfernen rückgängig machen",
   "QueueUndoClear": "Leeren rückgängig machen",
