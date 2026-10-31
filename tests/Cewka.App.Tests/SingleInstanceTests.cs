@@ -204,6 +204,27 @@ public sealed class SingleInstanceTests : IDisposable
         Assert.True(clock.Elapsed < TimeSpan.FromMilliseconds(500), $"start trwał {clock.ElapsedMilliseconds} ms");
     }
 
+    /// <summary>
+    /// Zajęta blokada to wyłącznie EWOULDBLOCK (Unix) albo naruszenie współdzielenia (Windows).
+    /// Inny błąd wejścia-wyjścia, uznany za zajętą blokadę, kosztowałby trzy sekundy prób
+    /// połączenia z kopią, której nie ma.
+    /// </summary>
+    [Theory]
+    [InlineData(11, false, true, true)]
+    [InlineData(35, false, false, true)]
+    [InlineData(30, false, true, false)]
+    [InlineData(5, false, true, false)]
+    [InlineData(2, false, true, false)]
+    [InlineData(35, false, true, false)]
+    [InlineData(unchecked((int)0x80070020), true, false, true)]
+    [InlineData(unchecked((int)0x80070021), true, false, true)]
+    [InlineData(unchecked((int)0x80070003), true, false, false)]
+    [InlineData(unchecked((int)0x80070005), true, false, false)]
+    public void ZajetaBlokadaRozpoznanaPoKodzieBledu(int hresult, bool windows, bool linux, bool expected)
+    {
+        Assert.Equal(expected, SingleInstance.IsLockConflict(hresult, windows, linux));
+    }
+
     /// <summary>Zamknięta kopia przestaje przyjmować ścieżki, więc następna przejmuje rolę.</summary>
     [Fact]
     public void PoZwolnieniuRoliNiktNiePrzyjmujeSciezek()

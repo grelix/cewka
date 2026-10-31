@@ -195,19 +195,33 @@ public sealed class SingleInstance : IDisposable
         }
     }
 
+    private static bool IsHeldByAnother(IOException ex) =>
+        IsLockConflict(ex.HResult, OperatingSystem.IsWindows(), OperatingSystem.IsLinux());
+
     /// <summary>
-    /// Naruszenie współdzielenia albo blokady. Brak katalogu czy zbyt długa ścieżka to też
-    /// <see cref="IOException"/>, ale wtedy nikt inny blokady nie trzyma.
+    /// Whether the error code .NET puts in <see cref="Exception.HResult"/> means that another
+    /// process holds the lock.
+    /// <para>
+    /// Brak katalogu, system plików tylko do odczytu czy błąd wejścia-wyjścia to też
+    /// <see cref="IOException"/>, ale wtedy nikt blokady nie trzyma i nie ma komu oddawać ścieżek.
+    /// W Windows rozstrzyga naruszenie współdzielenia albo blokady, na Uniksie EWOULDBLOCK
+    /// z <c>flock</c>, które .NET podaje jako surowy numer błędu.
+    /// </para>
     /// </summary>
-    private static bool IsHeldByAnother(IOException ex)
+    internal static bool IsLockConflict(int hresult, bool windows, bool linux)
     {
-        if (!OperatingSystem.IsWindows()) return ex.GetType() == typeof(IOException);
+        if (windows)
+        {
+            const int sharingViolation = 32;
+            const int lockViolation = 33;
 
-        const int sharingViolation = 32;
-        const int lockViolation = 33;
+            return (hresult & 0xFFFF) is sharingViolation or lockViolation;
+        }
 
-        var code = ex.HResult & 0xFFFF;
-        return code is sharingViolation or lockViolation;
+        const int wouldBlockLinux = 11;
+        const int wouldBlockBsd = 35;
+
+        return hresult == (linux ? wouldBlockLinux : wouldBlockBsd);
     }
 
     /// <summary>
