@@ -5,10 +5,13 @@ namespace Cewka.Audio.Dsp;
 /// <para>
 /// It exists because the equaliser can add up to 12 dB in several bands at once, and most
 /// modern recordings already peak close to full scale. Without it, boosting the bass would
-/// simply clip. Wzmocnienie dla każdej próbki to minimum wymaganego wzmocnienia z całego
-/// okna wyprzedzenia, wygładzone średnią ruchomą tej samej długości. Zejście jest więc liniowe
-/// i kończy się dokładnie wtedy, gdy szczyt wychodzi z linii opóźnienia, nawet gdy trwa on
-/// jedną próbkę. Powrót jest wolny, żeby ograniczanie nie brzmiało jak oddychanie.
+/// simply clip.
+/// </para>
+/// <para>
+/// Wzmocnienie dla każdej próbki to minimum wymaganego wzmocnienia z całego okna wyprzedzenia,
+/// wygładzone średnią ruchomą tej samej długości. Zejście jest więc liniowe i kończy się
+/// dokładnie wtedy, gdy szczyt wychodzi z linii opóźnienia, nawet gdy trwa on jedną próbkę.
+/// Powrót jest wolny, żeby ograniczanie nie brzmiało jak oddychanie.
 /// </para>
 /// <para>
 /// Gain reduction is shared by all channels. Reducing each channel on its own would move

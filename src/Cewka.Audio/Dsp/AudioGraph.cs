@@ -26,7 +26,7 @@ public interface ITrackGainSource
 /// its preamp, effects, analysis tap, master volume, limiter.
 ///
 /// <para>Normalizacja idzie pierwsza, bo wyrównuje materiał przed jakąkolwiek korekcją. Analiza
-/// sygnału jest przed głośnością, żeby fala na ekranie odpowiadała muzyce, a nie pokrętłu.
+/// sygnału jest przed głośnością, żeby fala na ekranie nie zależała od położenia suwaka.
 /// Limiter stoi na samym końcu, za głośnością: chroni przed przesterowaniem rzeczywistego
 /// wyjścia, a po ściszeniu podbicia korektora i kompensacji zwykle mieszczą się w skali.</para>
 /// </summary>

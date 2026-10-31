@@ -139,8 +139,8 @@ public struct Biquad
     }
 
     /// <summary>
-    /// Low-shelf in the Audio EQ Cookbook form. Używany przez kompensację głośności, która
-    /// podnosi bas tym mocniej, im ciszej gra muzyka.
+    /// Półka dolna według Audio EQ Cookbook. Używa jej kompensacja głośności, która podnosi bas
+    /// tym mocniej, im ciszej gra muzyka.
     /// </summary>
     public void SetLowShelf(double frequency, double q, double gainDb, double sampleRate)
     {

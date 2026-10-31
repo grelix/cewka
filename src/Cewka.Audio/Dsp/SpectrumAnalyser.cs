@@ -16,9 +16,9 @@ namespace Cewka.Audio.Dsp;
 public sealed class SpectrumAnalyser : IAudioProcessor
 {
     /// <summary>
-    /// Window size at 48 kHz, about 11 ms — fine enough to follow a beat. Przy innym próbkowaniu
-    /// okno rośnie lub maleje w potęgach dwójki, żeby szerokość prążka, a z nią podział na pasma,
-    /// została mniej więcej ta sama.
+    /// Rozmiar okna przy 48 kHz, około 11 ms: dość krótko, żeby nadążyć za rytmem. Przy innym
+    /// próbkowaniu okno rośnie lub maleje w potęgach dwójki, żeby szerokość prążka, a z nią podział
+    /// na pasma, została mniej więcej ta sama.
     /// </summary>
     private const int ReferenceWindowSize = 512;
     private const int ReferenceSampleRate = 48000;

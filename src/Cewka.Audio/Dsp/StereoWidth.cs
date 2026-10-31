@@ -85,8 +85,7 @@ public sealed class StereoWidth : IAudioProcessor
             var middle = (left + right) * 0.5f;
             var side = (left - right) * 0.5f;
 
-            // Filtr pracuje na sygnale boku, a nie na kanałach osobno — inaczej stan filtrów
-            // rozjechałby się między nimi.
+            // Jeden filtr na sygnale boku; dwa osobne filtry na kanałach mogłyby rozjechać się stanem.
             var shelved = _sideShelf.Process(side);
 
             _amount += (target - _amount) * _switchCoefficient;

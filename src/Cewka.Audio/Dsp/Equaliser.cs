@@ -4,10 +4,12 @@ namespace Cewka.Audio.Dsp;
 /// Ten-band graphic equaliser with a preamp, matching the bands in the design.
 /// <para>
 /// Each band is one peaking section per channel. Gains are smoothed towards their targets
-/// once per buffer rather than applied immediately: moving a fader recomputes filter
-/// coefficients, and a step change in coefficients is audible as a click. Przedwzmacniacz
-/// zmienia się liniowo w obrębie bufora, a wyłączenie sprowadza wszystkie pasma płynnie do
-/// zera i dopiero wtedy omija korektor.
+/// once per buffer: moving a fader recomputes filter coefficients, and a step change in
+/// coefficients is audible as a click.
+/// </para>
+/// <para>
+/// Przedwzmacniacz zmienia się liniowo w obrębie bufora, a wyłączenie sprowadza wszystkie
+/// pasma płynnie do zera i dopiero wtedy omija korektor.
 /// </para>
 /// </summary>
 public sealed class Equaliser : IAudioProcessor
@@ -16,7 +18,7 @@ public sealed class Equaliser : IAudioProcessor
     public static readonly double[] Frequencies = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
     /// <summary>
-    /// Q for one-octave bands: 1 / (2·sinh(ln2 / 2)). Przy tej dobroci połowa wzmocnienia dzwonu
+    /// Dobroć pasm oktawowych: 1 / (2·sinh(ln2 / 2)). Przy niej połowa wzmocnienia dzwonu
     /// w decybelach wypada pół oktawy od środka, więc sąsiednie pasma zachodzą na siebie. Przy
     /// jednakowych suwakach charakterystyka jest wyższa od wskazania (w środkach pasm około
     /// półtora raza) i lekko falista; dokładność ustawień nie jest celem tego korektora.

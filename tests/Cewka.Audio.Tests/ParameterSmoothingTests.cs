@@ -328,7 +328,7 @@ public class ParameterSmoothingTests
         Assert.Equal(original, processed);
     }
 
-    /// <summary>Głośność zero daje dokładne zero, a nie mnożenie przez liczbę subnormalną.</summary>
+    /// <summary>Głośność zero daje dokładne zero, bez liczb subnormalnych w wyniku.</summary>
     [Fact]
     public void GainStageAtZeroOutputsExactSilence()
     {

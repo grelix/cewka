@@ -44,7 +44,7 @@ public class LoudnessCompensationTests
 
     /// <summary>
     /// Zmiana siły wchodzi płynnie: pierwszy bufor po kliknięciu w tor suwaka przenosi tylko
-    /// ułamek różnicy, a nie całą w jednym kroku.
+    /// ułamek różnicy.
     /// </summary>
     [Fact]
     public void StrengthChangeIsSmoothed()
@@ -61,7 +61,7 @@ public class LoudnessCompensationTests
     }
 
     /// <summary>
-    /// Czas dojścia do nowej wartości liczony w sekundach, a nie w buforach: przy okresie
+    /// Czas dojścia do nowej wartości nie zależy od rozmiaru bufora: przy okresie
     /// 256 i 2048 ramek po 100 ms podbicie przebywa taką samą część drogi.
     /// </summary>
     [Fact]
