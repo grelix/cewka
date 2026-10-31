@@ -230,31 +230,6 @@ public sealed class TitleBarStateTests
         });
     }
 
-    [Fact]
-    public void OknoUstawienPrzekazujeSkrotyOdtwarzania()
-    {
-        Ui.Run(() =>
-        {
-            using var h = new PlayerHarness();
-            var settings = new SettingsViewModel(h.Settings, h.Player);
-            Key? received = null;
-
-            var window = new SettingsWindow(settings)
-            {
-                PlaybackShortcuts = e => { received = e.Key; return true; },
-            };
-
-            window.Show();
-
-            try
-            {
-                window.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.M });
-                Assert.Equal(Key.M, received);
-            }
-            finally { window.Close(); }
-        });
-    }
-
     private static void Tick(int count)
     {
         for (var i = 0; i < count; i++)

@@ -361,6 +361,44 @@ public sealed class WindowLayoutTests
     }
 
     [Fact]
+    public void OknoUstawienPrzekazujeSkrotyOdtwarzaniaOknuGlownemu()
+    {
+        Ui.Run(() =>
+        {
+            var window = Open(1100, 600);
+
+            try
+            {
+                window.OpenSettings();
+                var settings = window.OpenSettingsWindow!;
+                var muted = Player(window).IsMuted;
+
+                Press(settings, Key.M);
+                Assert.NotEqual(muted, Player(window).IsMuted);
+
+                // Klawisz zużyty przez kontrolkę w oknie ustawień nie steruje odtwarzaniem.
+                var area = settings.FindControl<ScrollViewer>("ContentArea")!;
+                area.AddHandler(InputElement.KeyDownEvent, (_, e) => e.Handled = true);
+                area.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.M, Source = area });
+                Assert.NotEqual(muted, Player(window).IsMuted);
+
+                // Oba okna przyjmują te same skróty z tymi samymi modyfikatorami.
+                foreach (var target in new Window[] { window, settings })
+                {
+                    target.RaiseEvent(new KeyEventArgs
+                    {
+                        RoutedEvent = InputElement.KeyDownEvent, Key = Key.M, KeyModifiers = KeyModifiers.Control,
+                    });
+                    Assert.NotEqual(muted, Player(window).IsMuted);
+                }
+
+                settings.Close();
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
     public void OknoUstawienMiesciSieNaNiskimEkranie()
     {
         // 1366×768 przy 125%: obszar roboczy ok. 1093×590 jednostek.

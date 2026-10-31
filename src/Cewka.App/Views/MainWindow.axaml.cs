@@ -1119,6 +1119,9 @@ public partial class MainWindow : Window
         base.OnKeyDown(e);
         if (e.Handled) return;
 
+        // Transport i głośność wspólne z oknem ustawień, z tymi samymi modyfikatorami.
+        if (HandlePlaybackShortcut(e)) return;
+
         var control = e.KeyModifiers.HasFlag(KeyModifiers.Control);
         var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
 
@@ -1127,18 +1130,6 @@ public partial class MainWindow : Window
             // --- pliki ---
             case Key.O when control && shift: OnOpenFolder(this, new RoutedEventArgs()); break;
             case Key.O when control: OnOpenFiles(this, new RoutedEventArgs()); break;
-
-            // --- transport ---
-            case Key.Space: _viewModel.TogglePlay(); break;
-            case Key.Right when control: _viewModel.Next(); break;
-            case Key.Left when control: _viewModel.Previous(); break;
-            case Key.Right: _viewModel.SeekRelative(_viewModel.SeekStep); break;
-            case Key.Left: _viewModel.SeekRelative(-_viewModel.SeekStep); break;
-
-            // --- glosnosc ---
-            case Key.Up: _viewModel.AdjustVolume(0.05); break;
-            case Key.Down: _viewModel.AdjustVolume(-0.05); break;
-            case Key.M: _viewModel.ToggleMute(); break;
 
             // --- interfejs ---
             case Key.Q: _viewModel.TogglePanel(); break;
