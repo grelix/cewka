@@ -99,19 +99,28 @@ public sealed class AudioGraph
     }
 
     /// <summary>
-    /// Called from the decode thread as a track is opened. Picks up the track's gain so the
-    /// change is already smoothed in by the time its audio reaches the output.
+    /// Ustawia od razu wzmocnienie utworu, który już gra. Na zmianę ustawień wyrównania;
+    /// przy zmianie utworu wzmocnienie zmienia wątek dźwiękowy przez <see cref="ApplyTrackGain"/>.
     /// </summary>
-    public void OnTrackChanged(QueueEntry entry)
-    {
-        if (!NormalisationEnabled)
-        {
-            Normalisation.TargetDecibels = 0;
-            return;
-        }
+    public void OnTrackChanged(QueueEntry entry) => ApplyTrackGain(TrackGainDecibels(entry), snap: false);
 
-        var gain = GainSource?.GetGainDecibels(entry);
-        Normalisation.TargetDecibels = gain ?? 0;
+    /// <summary>
+    /// Surowe wzmocnienie utworu ze źródła, niezależnie od tego, czy wyrównanie jest włączone.
+    /// Wołane przez wątek dekodujący przy otwieraniu pliku, bo źródło może czytać plik.
+    /// </summary>
+    public double? TrackGainDecibels(QueueEntry entry) => GainSource?.GetGainDecibels(entry);
+
+    /// <summary>
+    /// Ustawia wzmocnienie wyrównania w chwili, gdy utwór dociera do wyjścia. Wątek dźwiękowy:
+    /// bez alokacji. Wzmocnienie ustawione przy otwarciu pliku objęłoby końcówkę poprzedniego
+    /// utworu, która w tej chwili jeszcze czeka w buforze.
+    /// </summary>
+    /// <param name="gainDecibels">Wzmocnienie z <see cref="TrackGainDecibels"/>; null, gdy nieznane.</param>
+    /// <param name="snap">True po opróżnieniu bufora: nowy utwór zaczyna się od właściwego poziomu, bez dochodzenia do niego.</param>
+    public void ApplyTrackGain(double? gainDecibels, bool snap)
+    {
+        Normalisation.TargetDecibels = NormalisationEnabled ? gainDecibels ?? 0 : 0;
+        if (snap) Normalisation.SnapToTarget();
     }
 
     public void Reset()
