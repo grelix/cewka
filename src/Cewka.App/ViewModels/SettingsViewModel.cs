@@ -214,9 +214,35 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         // ustawienia wyżej. Bez tego próbki zostawałyby w barwach poprzedniego motywu.
         _themeWatcher = (_, _) => RefreshPalettePreviews();
         App.Theme.Changed += _themeWatcher;
+
+        // Motyw przełącza też przycisk w oknie głównym. Znacznik bierze tryb z menedżera motywu,
+        // bo zgłoszenie przychodzi, zanim okno zapisze nowy tryb w ustawieniach.
+        _modeWatcher = (_, _) => Theme.Mark(App.Theme.Mode);
+        App.Theme.ModeChanged += _modeWatcher;
+
+        // Okno ustawień jest niemodalne, a normalizację i limiter przełącza też nagłówek
+        // korektora w oknie głównym. Jedno źródło prawdy: tutaj tylko odbicie stanu odtwarzacza.
+        _playerWatcher = (_, e) =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(MainViewModel.NormalisationEnabled):
+                case nameof(MainViewModel.LimiterEnabled):
+                case nameof(MainViewModel.LatencyDescription):
+                    Raise(e.PropertyName);
+                    break;
+                case nameof(MainViewModel.IsOutputOpen):
+                case nameof(MainViewModel.ActiveDeviceName):
+                    Raise(nameof(ActiveDeviceName));
+                    break;
+            }
+        };
+        _player.PropertyChanged += _playerWatcher;
     }
 
     private readonly EventHandler _themeWatcher;
+    private readonly EventHandler _modeWatcher;
+    private readonly PropertyChangedEventHandler _playerWatcher;
 
     private void RefreshPalettePreviews()
     {
@@ -716,5 +742,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     {
         Strings.Current.PropertyChanged -= _languageWatcher;
         App.Theme.Changed -= _themeWatcher;
+        App.Theme.ModeChanged -= _modeWatcher;
+        _player.PropertyChanged -= _playerWatcher;
     }
 }

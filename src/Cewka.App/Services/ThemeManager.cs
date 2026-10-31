@@ -31,6 +31,9 @@ public sealed class ThemeManager
     /// <summary>Raised after the effective variant changes, whatever the cause.</summary>
     public event EventHandler? Changed;
 
+    /// <summary>Wybrany tryb się zmienił, nawet gdy wariant na ekranie został ten sam.</summary>
+    public event EventHandler? ModeChanged;
+
     public ThemeMode Mode { get; private set; }
 
     /// <summary>
@@ -48,6 +51,7 @@ public sealed class ThemeManager
         if (Mode == mode) return;
         Mode = mode;
         Apply();
+        ModeChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>
@@ -76,9 +80,16 @@ public sealed class ThemeManager
         Dispatcher.UIThread.Post(Apply);
     }
 
+    /// <summary>
+    /// Zgłasza zmianę tylko przy innym wariancie. Platforma zgłasza zmianę barw także przy samym
+    /// akcencie systemu albo kontraście, a każde zgłoszenie rysuje okładkę i paletę od nowa.
+    /// </summary>
     private void Apply()
     {
-        _application.RequestedThemeVariant = ResolveVariant();
+        var next = ResolveVariant();
+        if (_application.RequestedThemeVariant == next) return;
+
+        _application.RequestedThemeVariant = next;
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
