@@ -1482,8 +1482,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     // ---------- Listy odtwarzania ----------
 
     /// <summary>Obecna kolejka w postaci gotowej do zapisania na listę.</summary>
-    public IReadOnlyList<PlaylistEntry> QueueAsPlaylist() => Queue
-        .Select(item => new PlaylistEntry(item.Path, item.Title, item.Artist, item.DurationSeconds))
+    /// <remarks>
+    /// Z wpisów silnika, a nie z wierszy: wiersz zastępuje brak wykonawcy napisem
+    /// w języku interfejsu, który na liście udawałby prawdziwego wykonawcę.
+    /// </remarks>
+    public IReadOnlyList<PlaylistEntry> QueueAsPlaylist() => _engine.Queue
+        .Select(entry => new PlaylistEntry(
+            entry.Path,
+            entry.Title,
+            entry.Metadata?.Artist ?? entry.Metadata?.AlbumArtist,
+            entry.Duration.TotalSeconds))
         .ToList();
 
     /// <summary>

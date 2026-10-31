@@ -32,6 +32,110 @@ public sealed class PlaylistFileTests : IDisposable
     }
 
     [Fact]
+    public void ListaM3uWStronieKodowejZachowujePolskieZnaki()
+    {
+        var katalog = Path.Combine(_katalog, "Męskie Granie");
+        Directory.CreateDirectory(katalog);
+        var utwor = Path.Combine(katalog, "Kołysanka.mp3");
+        File.WriteAllText(utwor, "x");
+
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        var lista = Path.Combine(_katalog, "Ulubione.m3u");
+        File.WriteAllBytes(lista, Encoding.GetEncoding(1250).GetBytes("#EXTM3U\r\nMęskie Granie\\Kołysanka.mp3\r\n"));
+
+        var wynik = PlaylistFile.Load(lista, fallbackCodePage: 1250);
+
+        Assert.Equal(0, wynik.Missing);
+        Assert.Equal([Path.GetFullPath(utwor)], wynik.Paths.Select(Path.GetFullPath));
+    }
+
+    [Fact]
+    public void AdresyPlikowWczytujaSieJakSciezki()
+    {
+        var utwor = Plik("a b ł.mp3");
+        var lista = Path.Combine(_katalog, "vlc.m3u8");
+        File.WriteAllText(lista, $"#EXTM3U\n{new Uri(utwor).AbsoluteUri}\n");
+
+        var wynik = PlaylistFile.Load(lista);
+
+        Assert.Equal(0, wynik.Missing);
+        Assert.Equal([utwor], wynik.Paths);
+    }
+
+    [Fact]
+    public void StrumienieNieSaLiczoneJakoBrakujacePliki()
+    {
+        var utwor = Plik("a.mp3");
+        var lista = Path.Combine(_katalog, "radio.m3u8");
+        File.WriteAllText(lista, $"#EXTM3U\nhttps://radio.example/strumien\n{utwor}\n");
+
+        var wynik = PlaylistFile.Load(lista);
+
+        Assert.Equal(0, wynik.Missing);
+        Assert.Equal(1, wynik.Streams);
+        Assert.Equal([utwor], wynik.Paths);
+    }
+
+    [Fact]
+    public void UkosnikOdwrotnyWSciezceWzglednejDziala()
+    {
+        Directory.CreateDirectory(Path.Combine(_katalog, "CD1"));
+        var utwor = Path.Combine(_katalog, "CD1", "01 - Intro.mp3");
+        File.WriteAllText(utwor, "x");
+
+        var lista = Path.Combine(_katalog, "album.m3u");
+        File.WriteAllText(lista, "#EXTM3U\r\nCD1\\01 - Intro.mp3\r\n");
+
+        var wynik = PlaylistFile.Load(lista);
+
+        Assert.Equal(0, wynik.Missing);
+        Assert.Single(wynik.Paths);
+    }
+
+    [Fact]
+    public void NazwaZaczynajacaSieOdKrzyzykaPrzechodziZapisIOdczyt()
+    {
+        var utwor = Plik("#1 przebój.mp3");
+        var lista = Path.Combine(_katalog, "lista.m3u8");
+
+        PlaylistFile.Save(lista, [new PlaylistEntry(utwor, "Przebój", null, 10)]);
+        var wynik = PlaylistFile.Load(lista);
+
+        Assert.Equal([utwor], wynik.Paths);
+    }
+
+    [Fact]
+    public void ZnakiBialeNaKoncuLiniiNieGubiaPliku()
+    {
+        var utwor = Plik("a.mp3");
+        var lista = Path.Combine(_katalog, "lista.m3u8");
+        File.WriteAllText(lista, $"#EXTM3U\n{utwor}   \n");
+
+        Assert.Equal([utwor], PlaylistFile.Load(lista).Paths);
+    }
+
+    [Fact]
+    public void NieznanyCzasZapisanyJakoMinusJeden()
+    {
+        var lista = Path.Combine(_katalog, "lista.m3u8");
+        PlaylistFile.Save(lista, [new PlaylistEntry(Plik("a.mp3"), "Utwór", null, 0)]);
+
+        Assert.Contains("#EXTINF:-1,Utwór", File.ReadAllText(lista));
+    }
+
+    [Fact]
+    public void ZapisM3uMaZnacznikUtf8()
+    {
+        var lista = Path.Combine(_katalog, "lista.m3u");
+        PlaylistFile.Save(lista, [new PlaylistEntry(Plik("ż.mp3"), "Żuraw", null, 5)]);
+
+        var bajty = File.ReadAllBytes(lista);
+
+        Assert.True(bajty[0] == 0xEF && bajty[1] == 0xBB && bajty[2] == 0xBF);
+        Assert.Single(PlaylistFile.Load(lista).Paths);
+    }
+
+    [Fact]
     public void ObiegZamknietyZachowujeKolejnosc()
     {
         var pierwszy = Plik("a.mp3");

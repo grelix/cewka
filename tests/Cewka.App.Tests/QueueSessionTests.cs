@@ -187,6 +187,16 @@ public sealed class QueueSessionTests
         Assert.True(h.Player.QueueSavePending);
     });
 
+    [Fact]
+    public void ListaZKolejkiNieWpisujeZastepczegoWykonawcy() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        h.Player.OpenPaths([h.Track("a")], replace: false);
+
+        var entry = Assert.Single(h.Player.QueueAsPlaylist());
+        Assert.Null(entry.Artist);
+    });
+
     private static void Save(PlayerHarness h, List<string> paths, int current, double seconds) =>
         QueueStateStore.Save(new QueueState { Paths = paths, CurrentIndex = current, PositionSeconds = seconds }, h.QueueFile);
 }
