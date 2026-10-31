@@ -4,14 +4,11 @@ using Xunit;
 namespace Cewka.Audio.Tests;
 
 /// <summary>
-/// Kodeki systemowe na plikach zbudowanych w teście. Na Windows to Media Foundation;
-/// w pozostałych systemach testy kończą się bez sprawdzeń, bo GStreamer nie jest tam pewny.
+/// Media Foundation na plikach zbudowanych w teście. GStreamer sprawdza <see cref="GStreamerDecoderTests"/>.
 /// </summary>
 public sealed class SystemCodecTests : IDisposable
 {
     private readonly string _directory = Directory.CreateTempSubdirectory("cewka-test-").FullName;
-
-    private static bool Available => OperatingSystem.IsWindows() && SystemCodecs.IsAvailable;
 
     private string Write(string name, byte[] bytes)
     {
@@ -20,11 +17,9 @@ public sealed class SystemCodecTests : IDisposable
         return path;
     }
 
-    [Fact]
+    [MediaFoundationFact]
     public void FailedOpenReleasesTheFile()
     {
-        if (!Available) return;
-
         var path = Write("nieznany-kodek.wav", TestAudioFiles.WavWithUnknownCodec());
 
         var ex = Assert.Throws<AudioException>(() => SystemCodecs.Open(path, 48000, 2, null));
@@ -36,11 +31,9 @@ public sealed class SystemCodecTests : IDisposable
         Assert.Equal(DecoderFailures.Describe(DecoderFailure.CodecMissing), ex.Message);
     }
 
-    [Fact]
+    [MediaFoundationFact]
     public void StereoFileDecodesUnchanged()
     {
-        if (!Available) return;
-
         var source = TestAudioFiles.ToneInChannel(2, 1, 48000, 48000);
         var path = Write("stereo.wav", TestAudioFiles.Wav(source, 2, 48000));
 
@@ -52,11 +45,9 @@ public sealed class SystemCodecTests : IDisposable
         Assert.InRange(right, 0.34, 0.37);
     }
 
-    [Fact]
+    [MediaFoundationFact]
     public void SurroundCentreIsHeardOnBothSides()
     {
-        if (!Available) return;
-
         // WAVE 5.1: FL, FR, FC, LFE, BL, BR; ton tylko w kanale centralnym.
         var source = TestAudioFiles.ToneInChannel(6, 2, 48000, 48000);
         var path = Write("surround.wav", TestAudioFiles.Wav(source, 6, 48000));
