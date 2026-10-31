@@ -77,6 +77,50 @@ public class ParameterSmoothingTests
         Assert.True(buffer[^1] > 0.03f, "wzmocnienie wyrównawcze nie weszło");
     }
 
+    // ================= poszerzenie stereo =================
+
+    [Fact]
+    public void StereoWidthSwitchesOnWithoutAStep()
+    {
+        var width = new StereoWidth { Enabled = false, Strength = 100 };
+        width.Prepare(SampleRate, Channels);
+
+        // Przełączenie w szczycie sinusa, gdzie skok mnożnika jest największy.
+        var signal = SideOnly(1000, 0.4, 2 * SampleRate, SampleRate);
+        ProcessRange(width, signal, 0, SampleRate + 12);
+        width.Enabled = true;
+        ProcessRange(width, signal, SampleRate + 12, 2 * SampleRate);
+
+        Assert.True(LargestStep(signal, 0) < NaturalStep(1000, 0.4 * 1.8), $"skok {LargestStep(signal, 0):F4}");
+        Assert.InRange(Goertzel(signal, 0, 1000, SampleRate, SampleRate + 9600), 0.4 * 1.6, 0.4 * 1.85);
+    }
+
+    /// <summary>
+    /// Bas w bokach zostaje prawie nietknięty, a przejście ku pełnej szerokości jest monotoniczne:
+    /// bez garbu przy częstotliwości podziału i bez dołka poniżej niej.
+    /// </summary>
+    [Theory]
+    [InlineData(100.0)]
+    [InlineData(50.0)]
+    public void StereoWidthLeavesTheBassWidthAlone(double strength)
+    {
+        double[] frequencies = [40, 63, 100, 160, 250, 400, 630, 1000, 2000, 5000];
+        var gains = frequencies.Select(f => SideGainDb(f, strength)).ToArray();
+        var full = Db(1 + 0.8 * strength / 100);
+
+        Assert.True(gains[0] < 0.1, $"40 Hz: {gains[0]:F2} dB");
+        Assert.True(gains[2] < 0.8, $"100 Hz: {gains[2]:F2} dB");
+        Assert.True(gains[^1] > full - 0.3, $"5 kHz: {gains[^1]:F2} dB wobec {full:F2} dB");
+
+        for (var i = 0; i < gains.Length; i++)
+        {
+            Assert.True(gains[i] > -0.05, $"dołek przy {frequencies[i]} Hz: {gains[i]:F2} dB");
+            Assert.True(gains[i] < full + 0.05, $"garb przy {frequencies[i]} Hz: {gains[i]:F2} dB");
+            if (i > 0) Assert.True(gains[i] >= gains[i - 1] - 0.02,
+                $"spadek między {frequencies[i - 1]} a {frequencies[i]} Hz: {gains[i - 1]:F2} → {gains[i]:F2} dB");
+        }
+    }
+
     // ================= bas wirtualny =================
 
     /// <summary>
