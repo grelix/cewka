@@ -3,13 +3,13 @@ namespace Cewka.Audio.Dsp;
 /// <summary>
 /// Crossfeed: domieszka sygnału z kanału przeciwnego, przytłumiona w górze pasma.
 ///
-/// <para><b>Po co.</b> Nagrania stereo miksuje się z myślą o głośnikach, przy których każde ucho
+/// <para>Nagrania stereo miksuje się z myślą o głośnikach, przy których każde ucho
 /// słyszy oba kanały — z opóźnieniem i przytłumieniem wysokich tonów, bo dźwięk musi obejść
 /// głowę. W słuchawkach ta droga nie istnieje i rozdział kanałów jest zupełny. Partie
 /// spanoramowane do skraju — częste w nagraniach z lat sześćdziesiątych i siedemdziesiątych —
 /// siedzą wtedy „w głowie" i po dłuższym słuchaniu męczą. Ten stopień przywraca brakującą drogę.</para>
 ///
-/// <para><b>Jak.</b> Do każdego kanału dodawana jest różnica kanałów przepuszczona przez filtr
+/// <para>Do każdego kanału dodawana jest różnica kanałów przepuszczona przez filtr
 /// dolnoprzepustowy odpowiadający cieniowi akustycznemu głowy; opóźnienie fazowe tego filtru,
 /// około ćwierć milisekundy, odpowiada czasowi obejścia głowy. Niskie tony stają się więc
 /// w części wspólne, wysokie pozostają rozdzielone. Materiał wspólny obu kanałom nie ma różnicy,

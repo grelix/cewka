@@ -44,8 +44,8 @@ public sealed class GainStage : IAudioProcessor
     {
         var target = _target;
 
-        // Wartość bieżąca w double, bo w float przyrost ginął w zaokrągleniu przed dojściem do
-        // celu. Przyciąganie pozwala szybkiej ścieżce zadziałać, a przy celu zero nie zostawia
+        // Wartość bieżąca jest w double, bo w float przyrost ginie w zaokrągleniu przed dojściem
+        // do celu. Przyciąganie pozwala szybkiej ścieżce zadziałać, a przy celu zero nie zostawia
         // mnożnika w liczbach subnormalnych.
         if (Math.Abs(target - _current) < SnapDistance) _current = target;
 

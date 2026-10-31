@@ -4,19 +4,19 @@ namespace Cewka.Audio.Dsp;
 /// Bas wirtualny: dokłada harmoniczne najniższych tonów, żeby były słyszalne tam, gdzie
 /// przetwornik nie potrafi ich wytworzyć.
 ///
-/// <para><b>Po co.</b> Na głośnikach laptopa podbicie 45 Hz korektorem nie daje nic — membrana
+/// <para>Na głośnikach laptopa podbicie 45 Hz korektorem nie daje nic — membrana
 /// tej częstotliwości nie wypromieniuje, a energia idzie w ciepło i zniekształcenia. Słuch
 /// odtwarza jednak wysokość tonu z układu jego harmonicznych: słysząc 90 i 135 Hz, ucho
 /// dopowiada sobie brakującą podstawową 45 Hz, której w powietrzu nie ma. Zjawisko nosi nazwę
 /// brakującej podstawowej i jest znane od XIX wieku; ten stopień korzysta z niego wprost.</para>
 ///
-/// <para><b>Jak.</b> Suma obu kanałów przepuszczana jest przez pasmo najniższych tonów, poddana
+/// <para>Suma obu kanałów przepuszczana jest przez pasmo najniższych tonów, poddana
 /// prostowaniu — które wytwarza harmoniczne parzyste — a wynik wybierany jest pasmem leżącym
 /// wyżej i domieszany do obu kanałów. Poziom harmonicznych podąża za obwiednią pasma
 /// wejściowego, więc pojawiają się wyłącznie wtedy, gdy jest z czego je zrobić; bez tego
 /// stopień dudniłby przez cały czas.</para>
 ///
-/// <para><b>Czego nie robi.</b> Nie usuwa oryginalnych niskich częstotliwości. Rozwiązania
+/// <para>Nie usuwa oryginalnych niskich częstotliwości. Rozwiązania
 /// komercyjne zwykle je odcinają, żeby odciążyć głośnik, ale na zestawie, który bas odtwarza,
 /// byłoby to pogorszeniem. Domieszka jest monofoniczna — kierunku tak niskich tonów i tak
 /// nie słyszymy.</para>

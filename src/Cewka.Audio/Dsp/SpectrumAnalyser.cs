@@ -146,10 +146,8 @@ public sealed class SpectrumAnalyser : IAudioProcessor
         Publish(ref _mid, Normalise(mid * scale), decay);
         Publish(ref _high, Normalise(high * scale), decay);
 
-        // Obwiednia jest hojna, żeby ciche fragmenty też pokazywały ruch — ale nie tak hojna,
-        // jak była. Mnożnik cztery sprawiał, że przy zwykłej muzyce wartość stała przyklejona
-        // do jedności i wykres fali prawie się nie ruszał, bo obcięcie zjadało całą zmienność.
-        // Przy 2,6 poziom mieści się w zakresie i faktycznie podąża za muzyką.
+        // Obwiednia jest hojna, żeby ciche fragmenty też pokazywały ruch. Przy większym mnożniku
+        // zwykła muzyka przyklejałaby wartość do jedności i obcięcie zjadałoby całą zmienność.
         Publish(ref _level, Math.Clamp(rms * 2.6f, 0f, 1f), decay);
     }
 

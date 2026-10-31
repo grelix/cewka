@@ -4,12 +4,12 @@ namespace Cewka.Audio.Dsp;
 /// Ograniczanie dynamiki — „tryb nocny". Ścisza to, co głośne, i podnosi całość, przez co ciche
 /// fragmenty stają się słyszalne bez podkręcania głośności w miejscach głośnych.
 ///
-/// <para><b>Po co.</b> Nagranie o dużej rozpiętości dynamicznej — muzyka poważna, dobrze
+/// <para>Nagranie o dużej rozpiętości dynamicznej — muzyka poważna, dobrze
 /// zrealizowany jazz, ścieżka filmowa — w cichym pokoju wymaga ciągłego sięgania do suwaka,
 /// a w hałasie po prostu ginie w tle. Ten stopień zawęża rozpiętość, zamiast kazać użytkownikowi
 /// wybierać między zbyt cicho a za głośno.</para>
 ///
-/// <para><b>Jak.</b> Zwykły kompresor progowy z miękkim kolanem i wzmocnieniem wyrównawczym.
+/// <para>Zwykły kompresor progowy z miękkim kolanem i wzmocnieniem wyrównawczym.
 /// Redukcja jest wspólna dla wszystkich kanałów — osobna dla każdego przesuwałaby obraz stereo
 /// za każdym razem, gdy jedna strona zagra głośniej. Ta sama zasada rządzi limiterem na końcu
 /// łańcucha.</para>

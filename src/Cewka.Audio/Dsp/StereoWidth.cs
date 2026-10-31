@@ -3,9 +3,9 @@ namespace Cewka.Audio.Dsp;
 /// <summary>
 /// Poszerzenie bazy stereo macierzą środek–boki.
 ///
-/// <para><b>Jak.</b> Sygnał rozkładany jest na środek — to, co wspólne obu kanałom — i boki,
+/// <para>Sygnał rozkładany jest na środek — to, co wspólne obu kanałom — i boki,
 /// czyli ich różnicę. Wzmacniane są wyłącznie boki. Środek pozostaje nietknięty, a to znaczy,
-/// że <b>suma monofoniczna nie zmienia się wcale</b>: odsłuch na jednym głośniku brzmi tak samo
+/// że suma monofoniczna nie zmienia się wcale: odsłuch na jednym głośniku brzmi tak samo
 /// przy każdym ustawieniu. Poszerzanie opóźnieniem, spotykane w prostszych rozwiązaniach, tej
 /// własności nie ma i potrafi wydrążyć nagranie odtworzone monofonicznie.</para>
 ///

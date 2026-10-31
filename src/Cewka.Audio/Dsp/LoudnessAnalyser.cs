@@ -4,7 +4,7 @@ namespace Cewka.Audio.Dsp;
 /// Integrated loudness according to ITU-R BS.1770-4, which is what EBU R128 and
 /// ReplayGain 2.0 are built on.
 ///
-/// <para><b>Jak to działa.</b> Sygnał przechodzi przez dwustopniowy filtr K (półka górna
+/// <para>Sygnał przechodzi przez dwustopniowy filtr K (półka górna
 /// plus filtr górnoprzepustowy), który przybliża sposób, w jaki ucho ocenia głośność.
 /// Następnie liczona jest średnia kwadratu w blokach 400 ms zachodzących na siebie w 75%.
 /// Bloki cichsze niż −70 LUFS są odrzucane bramką bezwzględną, a z pozostałych wyznaczana
