@@ -1,19 +1,24 @@
 using Avalonia;
+using Avalonia.Automation;
+using Avalonia.Automation.Peers;
+using Avalonia.Automation.Provider;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Rendering;
 
 namespace Cewka.App.Controls;
 
 /// <summary>
-/// The 44×25 switch that arms the equaliser. Fluent's <c>ToggleSwitch</c> carries a template
-/// with a header, an on/off caption and its own metrics; drawing this one directly is both
-/// shorter and an exact match for the design.
+/// Przełącznik 44×25 włączający korektor, rysowany wprost zamiast <c>ToggleSwitch</c>
+/// z Fluent, który ma nagłówek, podpis i własne wymiary.
 /// </summary>
-public sealed class GlassSwitch : Control
+public sealed class GlassSwitch : Control, ICustomHitTest
 {
     private const double KnobDiameter = 19.0;
     private const double KnobInset = 2.0;
+
+    private bool _spacePressed;
 
     public static readonly StyledProperty<bool> IsCheckedProperty =
         AvaloniaProperty.Register<GlassSwitch, bool>(
@@ -66,10 +71,32 @@ public sealed class GlassSwitch : Control
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (e.Key is not (Key.Space or Key.Enter)) return;
 
+        switch (e.Key)
+        {
+            case Key.Space: _spacePressed = true; break;
+            case Key.Enter: Toggle(); break;
+            default: return;
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>Spacja przełącza przy puszczeniu, jak przycisk, więc przytrzymana nie przełącza raz za razem.</summary>
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        base.OnKeyUp(e);
+        if (e.Key != Key.Space || !_spacePressed) return;
+
+        _spacePressed = false;
         Toggle();
         e.Handled = true;
+    }
+
+    protected override void OnLostFocus(FocusChangedEventArgs e)
+    {
+        base.OnLostFocus(e);
+        _spacePressed = false;
     }
 
     private void Toggle()
@@ -77,6 +104,40 @@ public sealed class GlassSwitch : Control
         IsChecked = !IsChecked;
         Toggled?.Invoke(this, IsChecked);
     }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property == IsCheckedProperty && ControlAutomationPeer.FromElement(this) is { } peer)
+        {
+            peer.RaisePropertyChangedEvent(TogglePatternIdentifiers.ToggleStateProperty,
+                State(change.GetOldValue<bool>()), State(change.GetNewValue<bool>()));
+        }
+    }
+
+    private static ToggleState State(bool on) => on ? ToggleState.On : ToggleState.Off;
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new GlassSwitchAutomationPeer(this);
+
+    /// <summary>Przełącznik dla czytnika ekranu: pole wyboru ze stanem włączenia.</summary>
+    private sealed class GlassSwitchAutomationPeer(GlassSwitch owner) : ControlAutomationPeer(owner), IToggleProvider
+    {
+        private GlassSwitch Switch => (GlassSwitch)Owner;
+
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.CheckBox;
+
+        protected override bool IsContentElementCore() => true;
+
+        protected override bool IsControlElementCore() => true;
+
+        public ToggleState ToggleState => State(Switch.IsChecked);
+
+        public void Toggle() => Switch.Toggle();
+    }
+
+    /// <summary>Cały prostokąt kontrolki przyjmuje wskaźnik, nie tylko narysowany pasek.</summary>
+    public bool HitTest(Point point) => new Rect(Bounds.Size).Contains(point);
 
     public override void Render(DrawingContext context)
     {

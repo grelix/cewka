@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
@@ -10,24 +11,22 @@ using Cewka.App.Models;
 using Cewka.App.Services;
 using Cewka.App.ViewModels;
 using Cewka.App.Views;
+using Cewka.Audio.Devices;
 using Cewka.Platform;
 
-// "Cewka.App" is both a namespace and the Application subclass inside it,
-// so the type needs an alias to be usable here.
+// „Cewka.App” to zarazem przestrzeń nazw i klasa aplikacji w niej, stąd alias.
 using CewkaApplication = Cewka.App.App;
 
 namespace Cewka.Snapshots;
 
 /// <summary>
-/// Renders the main window off-screen with the real Skia backend and writes PNGs.
-/// This is how I check the interface against the design without opening a window at all,
-/// and it is deterministic enough to diff one version against the next.
+/// Renderuje okna poza ekranem prawdziwym zapleczem Skia i zapisuje PNG, bez otwierania okna.
+/// Wynik jest powtarzalny, więc zrzuty da się porównywać.
 ///
-/// Uzycie:  dotnet run --project tools/Cewka.Snapshots -- [katalog-wyjsciowy] [plik-audio]
+/// Użycie:  dotnet run --project tools/Cewka.Snapshots -- [katalog-wyjściowy] [plik-audio]
 ///
-/// Podanie pliku audio wpuszcza go do okna tak samo, jak zrobiloby to otwarcie pliku
-/// z menedzera plikow - z tytulem, wykonawca, okladka i czasem trwania. Bez niego okno
-/// fotografuje sie z pusta kolejka.
+/// Plik audio trafia do okna tak, jak przy otwarciu z menedżera plików: z tytułem, wykonawcą,
+/// okładką i czasem trwania. Bez niego zrzuty pokazują pustą kolejkę.
 /// </summary>
 internal static class Program
 {
@@ -36,69 +35,82 @@ internal static class Program
         string Section = "Appearance",
         ColourIntensity Intensity = ColourIntensity.Recommended,
         bool QueueOpen = true,
-        PlaceholderPalette Palette = PlaceholderPalette.BlueViolet);
+        PlaceholderPalette Palette = PlaceholderPalette.BlueViolet,
+        bool QueueOverlay = false,
+        string? Focus = null);
 
     private static readonly Shot[] Shots =
     [
         new("ciemny-1180", 1200, 680, ThemeVariant.Dark, true),
         new("jasny-1180", 1200, 680, ThemeVariant.Light, true),
-        new("ciemny-zwiniety", 1180, 448, ThemeVariant.Dark, false, QueueOpen: false),
-        new("jasny-zwiniety", 1180, 448, ThemeVariant.Light, false, QueueOpen: false),
+        new("ciemny-zwiniety", 1180, 520, ThemeVariant.Dark, false, QueueOpen: false),
+        new("jasny-zwiniety", 1180, 520, ThemeVariant.Light, false, QueueOpen: false),
 
-        // Waskie okna z kolejka — tam, gdzie blok odtwarzania wchodzil na liste utworow.
-        // 1160 px to zmierzona szerokosc minimalna z kolejka, wiec przypadek najciasniejszy
-        // z mozliwych; 1200 to ten sam uklad z niewielkim zapasem.
-        new("waskie-z-kolejka", 1200, 665, ThemeVariant.Dark, true),
+        // Kolumna kolejki tuż nad progiem nakładki: najciaśniej dla bloku odtwarzania obok kolumny.
+        new("waskie-z-kolejka", 1040, 680, ThemeVariant.Dark, true),
         new("waskie-z-kolejka-zapas", 1260, 680, ThemeVariant.Dark, true),
-        new("waskie-z-kolejka-bez-pasa", 1200, 480, ThemeVariant.Dark, false),
+        new("waskie-z-kolejka-bez-pasa", 1040, 520, ThemeVariant.Dark, false),
 
-        // Cztery mozliwe stany dwoch niezaleznych obszarow. Odkad pas dolny i kolejka wlaczaja
-        // sie osobno, kazde z tych zestawien uzytkownik moze zobaczyc — wiec kazde musi wygladac.
+        // Kolejka jako panel nakładany nad treść w oknie węższym niż próg kolumny.
+        new("nakladka-ciemny", 900, 620, ThemeVariant.Dark, true, QueueOpen: false, QueueOverlay: true),
+        new("nakladka-jasny", 900, 620, ThemeVariant.Light, true, QueueOpen: false, QueueOverlay: true),
+        new("nakladka-minimum", 760, 520, ThemeVariant.Dark, false, QueueOpen: false, QueueOverlay: true),
+
+        // Niskie okna z pasem: pas się przewija, a blok odtwarzania dostaje mniejszą płytę albo żadnej.
+        new("niskie-z-pasem", 1200, 560, ThemeVariant.Dark, true),
+        new("niskie-z-pasem-jasny", 1200, 560, ThemeVariant.Light, true),
+        new("niskie-waskie-z-pasem", 900, 520, ThemeVariant.Dark, true, QueueOpen: false),
+
+        // Szerokie okno: blok wyśrodkowany z granicą szerokości, pasek postępu niezależny od tytułu.
+        new("szeroki-1920", 1920, 1040, ThemeVariant.Dark, true),
+
+        // Cztery zestawienia pasa dolnego i kolejki, które włącza się osobno.
         new("obszary-oba", 1200, 680, ThemeVariant.Dark, true),
         new("obszary-tylko-pas", 1180, 680, ThemeVariant.Dark, true, QueueOpen: false),
         new("obszary-tylko-kolejka", 1180, 680, ThemeVariant.Dark, false),
-        new("obszary-zadne", 1180, 448, ThemeVariant.Dark, false, QueueOpen: false),
+        new("obszary-zadne", 1180, 520, ThemeVariant.Dark, false, QueueOpen: false),
         new("obszary-tylko-kolejka-jasny", 1180, 680, ThemeVariant.Light, false),
 
-        // Pary o skrajnych barwach najdalszych od siebie. Odkad tlo bierze barwy wprost z pary,
-        // a nie z analizy narysowanej spirali, wlasnie na nich roznica jest najwieksza — wczesniej
-        // oba te zestawy dawaly na tle jeden zamglony odcien.
+        // Pary o skrajnych barwach najdalszych od siebie; tło ma pokazać oba końce pary.
         new("para-turkus", 1180, 680, ThemeVariant.Dark, true, Palette: PlaceholderPalette.Turquoise),
         new("para-wisnia", 1180, 680, ThemeVariant.Dark, true, Palette: PlaceholderPalette.Cherry),
         new("para-mieta-jasny", 1180, 680, ThemeVariant.Light, true, Palette: PlaceholderPalette.Mint),
-        // Waskie okna maja kolejke schowana, bo z nia widoczna okno tak wezsze byc nie moze —
-        // szerokosc minimalna z kolejka to 1200 px. Zrzut stanu nieosiagalnego nic nie mowi.
+        // Wąskie okno poniżej progu kolumny: kolejka schowana, blok odtwarzania na całą szerokość.
         new("ciemny-waski", 920, 660, ThemeVariant.Dark, true, QueueOpen: false),
         new("ciemny-szeroki", 1600, 820, ThemeVariant.Dark, true),
         new("ciemny-pelnyekran", 2560, 1400, ThemeVariant.Dark, true),
         new("przyciski-lewo", 1180, 680, ThemeVariant.Dark, false, WindowControlsPosition.Left),
         new("przyciski-macos", 1180, 680, ThemeVariant.Dark, false, WindowControlsPosition.MacOs),
 
-        // Najciasniejsze przypadki: dokladnie wysokosc minimalna dla obu stanow panelu, w tym
-        // przy najwezszym dopuszczalnym oknie. Tu wychodzi kazde nachodzenie elementow na siebie.
-        new("minimum-panel", 1200, 665, ThemeVariant.Dark, true),
-        new("minimum-panel-waskie", 1000, 665, ThemeVariant.Dark, true, QueueOpen: false),
-        new("minimum-zwiniety", 900, 360, ThemeVariant.Dark, false, QueueOpen: false),
+        // Najciaśniejsze przypadki: okno w rozmiarze minimalnym, z pasem i bez niego. Rozmiar
+        // minimalny jest stały, więc tu wychodzi każde nachodzenie elementów na siebie.
+        new("minimum-panel", 760, 520, ThemeVariant.Dark, true, QueueOpen: false),
+        new("minimum-panel-jasny", 760, 520, ThemeVariant.Light, true, QueueOpen: false),
+        new("minimum-zwiniety", 760, 520, ThemeVariant.Dark, false, QueueOpen: false),
 
-        // Interfejs po angielsku: sprawdzenie, ze przelaczenie jezyka faktycznie dociera
-        // do wszystkich napisow, a nie tylko do tych zlozonych na nowo.
+        // Najdłuższe etykiety przełączników w nagłówku korektora (Auto-Limiter, Normalisierung) przy oknie minimalnym.
+        new("minimum-panel-niemiecki", 760, 520, ThemeVariant.Dark, true, Language: "de", QueueOpen: false),
+
+        // Interfejs po angielsku: zmiana języka ma objąć wszystkie napisy.
         new("angielski", 1180, 680, ThemeVariant.Dark, true, Language: "en"),
 
-        // Skrajne intensywnosci barw. Wariant zalecany jest juz sfotografowany jako
-        // "ciemny-1180" i sluzy za odniesienie: musi wyjsc identyczny jak przed dodaniem
-        // tego ustawienia, bo mnozniki wynosza tam dokladnie jeden.
+        // Skrajne intensywności barw; wariant zalecany to zrzut „ciemny-1180”.
         new("barwy-subtelne", 1180, 680, ThemeVariant.Dark, true, Intensity: ColourIntensity.Subtle),
         new("barwy-intensywne", 1180, 680, ThemeVariant.Dark, true, Intensity: ColourIntensity.Intense),
         new("barwy-subtelne-jasny", 1180, 680, ThemeVariant.Light, true, Intensity: ColourIntensity.Subtle),
         new("barwy-intensywne-jasny", 1180, 680, ThemeVariant.Light, true, Intensity: ColourIntensity.Intense),
+
+        // Fokus z klawiatury: pierścień wokół przycisku, fadera i wiersza kolejki w obu motywach.
+        new("fokus-odtwarzanie-ciemny", 1200, 680, ThemeVariant.Dark, true, Focus: "PlayButton"),
+        new("fokus-odtwarzanie-jasny", 1200, 680, ThemeVariant.Light, true, Focus: "PlayButton"),
+        new("fokus-fader-ciemny", 1200, 680, ThemeVariant.Dark, true, Focus: "EqFader"),
+        new("fokus-fader-jasny", 1200, 680, ThemeVariant.Light, true, Focus: "EqFader"),
+        new("fokus-kolejka-ciemny", 1200, 680, ThemeVariant.Dark, true, Focus: "QueueRow"),
+        new("fokus-przelacznik-jasny", 1200, 680, ThemeVariant.Light, true, Focus: "PanelToggle"),
     ];
 
     /// <summary>
-    /// Samo tlo, z paleta o wyraznie roznych barwach.
-    ///
-    /// Paleta domyslnej okladki jest praktycznie jednobarwna, wiec na zwyklym zrzucie nie widac,
-    /// czy tlo sklada sie z osobnych plam, czy z jednego nalotu - kilka odcieni tego samego
-    /// blekitu zleje sie tak czy owak. Dopiero rozne barwy pokazuja ksztalt i polozenie plam.
+    /// Samo tło z paletą o wyraźnie różnych barwach, żeby było widać kształt i położenie plam.
     /// </summary>
     private static readonly Shot[] BackdropShots =
     [
@@ -119,9 +131,7 @@ internal static class Program
     ];
 
     /// <summary>
-    /// The settings window, which is a window of its own and needs its own pass. Zawartosc jest
-    /// podzielona na zakladki, wiec kazda wymaga osobnego zrzutu - inaczej sprawdzona zostalaby
-    /// tylko ta, ktora otwiera sie pierwsza.
+    /// Okno ustawień, po jednym zrzucie na zakładkę.
     /// </summary>
     private static readonly Shot[] SettingsShots =
     [
@@ -129,8 +139,7 @@ internal static class Program
         new("ustawienia-dzwiek", 820, 640, ThemeVariant.Dark, true, Section: "Audio"),
         new("ustawienia-odtwarzanie", 820, 640, ThemeVariant.Dark, true, Section: "Playback"),
         new("ustawienia-system", 820, 640, ThemeVariant.Dark, true, Section: "Integration"),
-        // Zakladka informacji urosla o wpis o repozytorium i o sprawdzanie nowszego wydania,
-        // wiec doszedl zrzut wyzszy, pokazujacy ja calosciowo.
+        // Zakładka informacji w całości, w wyższym oknie.
         new("ustawienia-informacje", 820, 640, ThemeVariant.Dark, true, Section: "About"),
         new("ustawienia-informacje-cala", 820, 820, ThemeVariant.Dark, true, Section: "About"),
         new("ustawienia-informacje-jasny", 820, 820, ThemeVariant.Light, true, Section: "About"),
@@ -139,16 +148,13 @@ internal static class Program
         // Okno w rozmiarze najmniejszym dopuszczalnym, na zakladce o najbogatszej zawartosci.
         new("ustawienia-minimum", 700, 520, ThemeVariant.Dark, true, Section: "Audio"),
 
-        // Zakladka wygladu jest teraz najwyzsza z wszystkich — doszly intensywnosc barw,
-        // przelacznik plakietki i piec probek barw domyslnej okladki. Osobny, wysoki zrzut
-        // pokazuje ja calosciowo; ten w rozmiarze 820x640 pokazuje, co widac bez przewijania.
+        // Zakładka wyglądu jest najwyższa: wysoki zrzut pokazuje ją w całości, a 820x640 to,
+        // co widać bez przewijania.
         new("ustawienia-wyglad-cala", 820, 1000, ThemeVariant.Dark, true),
         new("ustawienia-wyglad-cala-jasny", 820, 1000, ThemeVariant.Light, true),
 
-        // Kazdy jezyk osobno, na zakladce dzwieku: tam etykiety paskow segmentowych sa
-        // najdluzsze. To zarazem jedyne miejsce, ktore sprawdza, czy jezyk jest w ogole
-        // zarejestrowany w klasie Strings — plik jezykowy bez wpisu na liscie kodow nie
-        // zmienilby tutaj niczego i zrzut wyszedlby po polsku.
+        // Każdy język osobno, na zakładce dźwięku, gdzie etykiety pasków segmentowych są
+        // najdłuższe. Język niezarejestrowany w klasie Strings dałby tu zrzut po polsku.
         new("ustawienia-niemiecki", 820, 640, ThemeVariant.Dark, true, Language: "de"),
         new("ustawienia-niemiecki-dzwiek", 820, 640, ThemeVariant.Dark, true, Language: "de", Section: "Audio"),
         new("ustawienia-hiszpanski", 820, 640, ThemeVariant.Dark, true, Language: "es", Section: "Audio"),
@@ -162,18 +168,14 @@ internal static class Program
         new("ustawienia-turecki", 820, 640, ThemeVariant.Dark, true, Language: "tr", Section: "Audio"),
         new("ustawienia-wietnamski", 820, 640, ThemeVariant.Dark, true, Language: "vi", Section: "Audio"),
 
-        // Wietnamski takze w zakladce wygladu: tam stoja nazwy par barw, a wietnamski zapis
-        // rozbija wyrazy na sylaby, wiec akurat te etykiety sa tam najbardziej narazone.
+        // Wietnamski także w zakładce wyglądu, bo zapis sylabami najbardziej wydłuża nazwy par barw.
         new("ustawienia-wietnamski-wyglad", 820, 1000, ThemeVariant.Dark, true, Language: "vi"),
 
-        // Zakladka efektow: piec wpisow z opisem, przelacznikiem i suwakiem. Najdluzsza
-        // z zakladek, wiec obok widoku bez przewijania stoi zrzut calosciowy.
-        new("ustawienia-efekty", 820, 640, ThemeVariant.Dark, true, Section: "Effects"),
-        new("ustawienia-efekty-cala", 820, 1180, ThemeVariant.Dark, true, Section: "Effects"),
-        new("ustawienia-efekty-jasny", 820, 1180, ThemeVariant.Light, true, Section: "Effects"),
-        new("ustawienia-efekty-wloski", 820, 1180, ThemeVariant.Dark, true, Language: "it", Section: "Effects"),
+        // Zakładka dźwięku w całości: na jej końcu odsyłacz do korektora w oknie głównym.
+        new("ustawienia-dzwiek-cala", 820, 1000, ThemeVariant.Dark, true, Section: "Audio"),
+        new("ustawienia-dzwiek-jasny", 820, 1000, ThemeVariant.Light, true, Section: "Audio"),
 
-        // Zakladka jezyka: lista trzynastu pozycji i nota o tlumaczeniu maszynowym.
+        // Zakładka języka: lista języków i nota o tłumaczeniu maszynowym.
         new("ustawienia-jezyk", 820, 640, ThemeVariant.Dark, true, Section: "Language"),
         new("ustawienia-jezyk-jasny", 820, 640, ThemeVariant.Light, true, Section: "Language"),
         new("ustawienia-jezyk-waski", 700, 640, ThemeVariant.Dark, true, Section: "Language"),
@@ -181,8 +183,7 @@ internal static class Program
         new("ustawienia-jezyk-wietnamski", 820, 640, ThemeVariant.Dark, true, Language: "vi", Section: "Language"),
         new("ustawienia-jezyk-grecki", 820, 640, ThemeVariant.Dark, true, Language: "el", Section: "Language"),
 
-        // Jezyki dolozone w 0.7.0. Grecki jest wsrod nich przypadkiem osobnym: to pierwsze
-        // w programie pismo inne niz lacinskie i cyrylica.
+        // Pisma inne niż łacińskie: grecki i cyrylica.
         new("ustawienia-grecki", 820, 640, ThemeVariant.Dark, true, Language: "el", Section: "Audio"),
         new("ustawienia-grecki-wyglad", 820, 1000, ThemeVariant.Dark, true, Language: "el"),
         new("ustawienia-niderlandzki", 820, 640, ThemeVariant.Dark, true, Language: "nl", Section: "Audio"),
@@ -190,7 +191,7 @@ internal static class Program
         new("ustawienia-wegierski", 820, 640, ThemeVariant.Dark, true, Language: "hu", Section: "Audio"),
         new("ustawienia-wegierski-odtwarzanie", 820, 640, ThemeVariant.Dark, true, Language: "hu", Section: "Playback"),
 
-        // Cyrylica takze w zakladce wygladu: tam stoja nazwy par barw.
+        // Cyrylica także w zakładce wyglądu, przy nazwach par barw.
         new("ustawienia-rosyjski-wyglad", 820, 940, ThemeVariant.Dark, true, Language: "ru"),
         new("ustawienia-ukrainski-odtwarzanie", 820, 640, ThemeVariant.Dark, true, Language: "uk", Section: "Playback"),
     ];
@@ -198,6 +199,10 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // Zrzuty i sprawdziany odtwarzają materiał, ale nie mogą grać przez głośniki ani
+        // zależeć od tego, czy maszyna ma kartę dźwiękową.
+        AudioDevice.UseNullOutput = true;
+
         var pozycyjne = new List<string>();
         string? materialDo = null;
         string? odniesienieW = null;
@@ -207,8 +212,7 @@ internal static class Program
         {
             switch (args[i])
             {
-                // Wytwarza material dzwiekowy i konczy prace. Osobny tryb, bo material powstaje
-                // raz, a zrzuty moga potem korzystac z niego wielokrotnie.
+                // Wytwarza materiał dźwiękowy i kończy pracę; materiał powstaje raz dla wielu przebiegów.
                 case "--material":
                     if (++i >= args.Length)
                     {
@@ -229,9 +233,8 @@ internal static class Program
                     odniesienieW = args[i];
                     break;
 
-                // Same sprawdziany zachowania, bez rysowania czegokolwiek. Trwaja sekundy zamiast
-                // minut, wiec nadaja sie na pierwsza brame przebiegu — i na powtarzanie ich
-                // w kolko, gdy trzeba rozstrzygnac, czy sprawdzian jest chwiejny.
+                // Same sprawdziany zachowania, bez rysowania. Trwają sekundy, więc nadają się na
+                // pierwszą bramkę i na powtarzanie przy podejrzeniu niestabilności.
                 case "--sprawdzenia":
                     tylkoSprawdzenia = true;
                     break;
@@ -264,9 +267,8 @@ internal static class Program
             return 1;
         }
 
-        // Trzeci argument, opcjonalny: drugi plik dzwiekowy o innym czasie trwania. Sluzy
-        // wylacznie sprawdzeniu, czy zastapienie kolejki plikiem z zewnatrz faktycznie
-        // przelacza dekoder.
+        // Trzeci argument, opcjonalny: drugi plik o innym czasie trwania, do sprawdzenia, czy
+        // zastąpienie kolejki plikiem z zewnątrz przełącza dekoder.
         var second = pozycyjne.Count > 2 ? pozycyjne[2] : null;
         if (second is not null && !File.Exists(second))
         {
@@ -274,10 +276,8 @@ internal static class Program
             return 1;
         }
 
-        // Everything the running player would write goes to a throwaway directory instead of the
-        // real one. Photographing the interface closes a genuine MainWindow, and closing it saves
-        // the queue — so without this, taking snapshots would replace my own saved queue with
-        // whatever track this run happened to be given.
+        // Wszystko, co zapisuje odtwarzacz, trafia do katalogu tymczasowego: zamknięcie
+        // prawdziwego MainWindow zapisuje kolejkę i nadpisałoby kolejkę użytkownika.
         var scratchRoot = Path.Combine(Path.GetTempPath(), "cewka-zrzuty");
         if (Directory.Exists(scratchRoot)) Directory.Delete(scratchRoot, recursive: true);
         AppPaths.Redirect(scratchRoot);
@@ -288,14 +288,15 @@ internal static class Program
             .With(CewkaApplication.FontOptions)
             .SetupWithoutStarting();
 
-        // No desktop lifetime runs here, so the shared services must be created by hand.
+        // Bez cyklu życia pulpitu wspólne usługi trzeba utworzyć ręcznie.
         ((CewkaApplication)Application.Current!).InitialiseServicesForHeadless(
             new SettingsStore(AppPaths.SettingsFile), track is null ? null : [track]);
 
         // Sprawdziany zachowania okna idą przed zrzutami: obracają stanem panelu i rozmiarem,
         // a zrzuty mają zastać ustawienia takie, jakie sobie ustawiają same.
-        var zachowanieOk = CheckPanelHeightMemory();
-        zachowanieOk &= CheckQueueWidthMemory();
+        var zachowanieOk = CheckAreasKeepWindowSize();
+        zachowanieOk &= CheckQueueModes();
+        zachowanieOk &= CheckLowWindows();
         zachowanieOk &= CheckPlaceholderBackdrop();
 
         if (track is not null && second is not null)
@@ -326,8 +327,7 @@ internal static class Program
 
         Console.WriteLine($"Zrzuty zapisane w: {outputDirectory}");
 
-        // Zadne z ponizszych sprawdzen nie przerywa pozostalych: przebieg w chmurze ma powiedziec
-        // wszystko, co znalazl, a nie pierwsza rzecz, na ktora trafil.
+        // Żadne sprawdzenie nie przerywa pozostałych, żeby przebieg zgłosił wszystko naraz.
         if (_worstHeadingOffset > HeadingTolerance)
         {
             Console.Error.WriteLine(
@@ -341,22 +341,17 @@ internal static class Program
                 $"Naglowki panelu wyrownane w pionie (najwiekszy rozjazd {_worstHeadingOffset:F2} px).");
         }
 
-        if (_worstQueueOverlap > 0)
+        if (_worstQueueOverlap > 0.5)
         {
             Console.Error.WriteLine(
-                $"BLAD ukladu: blok odtwarzania wchodzi na kolumne kolejki o " +
-                $"{_worstQueueOverlap:F1} px. Trzeba albo scisnac zawartosc, albo podniesc " +
-                "szerokosc minimalna z kolejka.");
+                $"BLAD ukladu: blok odtwarzania wchodzi na kolumne kolejki albo za prawa krawedz okna o " +
+                $"{_worstQueueOverlap:F1} px. Trzeba scisnac zawartosc albo podniesc prog kolumny kolejki.");
             zachowanieOk = false;
-        }
-        else if (double.IsNegativeInfinity(_worstQueueOverlap))
-        {
-            Console.WriteLine("Nachodzenia na kolejke nie mierzono: w tym przebiegu nie bylo jej widac.");
         }
         else
         {
             Console.WriteLine(
-                $"Blok odtwarzania miesci sie obok kolejki (najmniejszy zapas " +
+                $"Blok odtwarzania miesci sie w swoim obszarze (najmniejszy zapas " +
                 $"{-_worstQueueOverlap:F1} px).");
         }
 
@@ -370,9 +365,8 @@ internal static class Program
     }
 
     /// <summary>
-    /// Renders the settings window. It needs a live player behind it, because most of what it
-    /// shows — devices, decoders, the state of the effects — is read from the running engine
-    /// rather than from the settings file.
+    /// Renderuje okno ustawień. Potrzebuje działającego odtwarzacza, bo urządzenia, dekodery
+    /// i stan efektów czyta z silnika.
     /// </summary>
     private static void CaptureSettings(Shot shot, string outputDirectory)
     {
@@ -403,12 +397,11 @@ internal static class Program
         }
     }
 
-    /// <summary>Position the track is photographed at, in seconds.</summary>
+    /// <summary>Pozycja w utworze na zrzucie, w sekundach.</summary>
     private const double SnapshotPositionSeconds = 79;
 
     /// <summary>
-    /// Brings the loaded track to the state it should be photographed in: tags and cover read,
-    /// playback moved into the track and then stopped.
+    /// Przygotowuje utwór do zrzutu: tagi i okładka wczytane, pozycja w głębi utworu, pauza.
     /// </summary>
     private static void PrepareTrack(MainWindow window)
     {
@@ -416,19 +409,13 @@ internal static class Program
 
         WaitForMetadata(player);
 
-        // Pasek postepu stojacy na zerze wyglada jak program, ktorego nikt jeszcze nie
-        // uruchomil. Przewiniecie w glab utworu pokazuje interfejs w uzyciu.
-        //
-        // Kolejnosc jest istotna: przewijanie uzgadniaja miedzy soba trzy watki, a jednym z nich
-        // jest watek dzwiekowy. Przewiniecie po zatrzymaniu odtwarzania zostaloby w zawieszeniu,
-        // bo nie ma kto go dokonczyc - dlatego najpierw przewiniecie, dopiero potem pauza.
+        // Pułapka: najpierw przewinięcie, potem pauza. Przewijanie uzgadniają trzy wątki, w tym
+        // dźwiękowy, i po zatrzymaniu odtwarzania nie miałby go kto dokończyć.
         player.SeekToPosition(TimeSpan.FromSeconds(SnapshotPositionSeconds));
         SettleAfterSeek(player);
         player.Pause();
 
-        // Obrot plyty, dryf plam tla i faza fali liczyly sie od czasu rzeczywistego, wiec dwa
-        // przebiegi tego samego kodu dawaly rozne obrazy - a wtedy zrzuty nie nadaja sie do
-        // porownywania wersji, czyli do tego, po co istnieja. Tu wszystkie trzy staja.
+        // Obrót płyty, dryf plam i faza fali idą według zegara; zatrzymane dają powtarzalny zrzut.
         window.FreezeAnimationsForCapture();
 
         Console.WriteLine(player.AudioFailure.Length > 0
@@ -437,12 +424,10 @@ internal static class Program
     }
 
     /// <summary>
-    /// Checks that replacing the queue with a file opened from outside actually plays that file.
+    /// Sprawdza, czy zastąpienie kolejki plikiem z zewnątrz odtwarza ten plik.
     ///
-    /// <para>Sprawdzane jest czas trwania, a nie numer pozycji ani tytuł. Numer i tytuł biorą się
-    /// z listy kolejki i po podmianie są poprawne nawet wtedy, gdy dekoder trzyma jeszcze
-    /// poprzedni plik — a to był właśnie błąd. Czas trwania czytany jest z otwartego dekodera,
-    /// więc mówi, co gra naprawdę.</para>
+    /// <para>Pułapka: numer i tytuł pochodzą z kolejki i są poprawne, nawet gdy dekoder trzyma
+    /// poprzedni plik. Dlatego sprawdzany jest czas trwania z otwartego dekodera.</para>
     /// </summary>
     private static bool CheckReplaceQueue(string first, string second)
     {
@@ -475,8 +460,7 @@ internal static class Program
                 Console.Error.WriteLine(
                     "  BLAD: po zastapieniu kolejki gra nadal poprzedni plik — czas trwania sie nie zmienil " +
                     $"({drugi}). Numer pozycji zostal ten sam, wiec dekoder nie zostal wymieniony.");
-                // Do tego miejsca dochodzi sie wylacznie po wyczerpaniu calego oczekiwania:
-                // petla konczy sie wczesniej dopiero wtedy, gdy czas trwania sie zmieni.
+                // Tutaj tylko po wyczerpaniu oczekiwania; wcześniej pętlę kończy zmiana czasu trwania.
                 Console.Error.WriteLine(
                     $"       czekano pelne {czasDrugiego} ms; w kolejce stoi \"{player.Queue[0].Title}\", " +
                     $"oczekiwano pliku {Path.GetFileName(second)}.");
@@ -496,11 +480,8 @@ internal static class Program
     /// Czeka, aż dekoder poda czas trwania. <paramref name="avoid"/> pozwala odczekać na zmianę:
     /// bez tego odczyt mógłby trafić w moment, w którym nowy plik jeszcze się nie otworzył.
     ///
-    /// <para>Zwracany jest także czas oczekiwania. Sprawdzian raz nie przeszedł na maszynie
-    /// obciążonej innym zadaniem, a przy samym werdykcie „przeszedł / nie przeszedł" nie sposób
-    /// odróżnić błędu w programie od zbyt krótkiego oczekiwania. Zapas jest więc duży, a rzeczywisty
-    /// czas trafia do dziennika — jeśli otwarcie pliku zacznie kiedyś trwać sekundy zamiast
-    /// milisekund, będzie to widać, zanim sprawdzian zacznie zapalać się bez powodu.</para>
+    /// <para>Zwraca też czas oczekiwania, który trafia do dziennika, żeby odróżnić błąd programu
+    /// od zbyt krótkiego czekania na obciążonej maszynie.</para>
     /// </summary>
     private static (string Czas, long Milisekund) WaitForDuration(MainViewModel player, string? avoid = null)
     {
@@ -521,32 +502,18 @@ internal static class Program
     }
 
     /// <summary>
-    /// Ile czekać na czas trwania z dekodera. Otwarcie pliku trwa milisekundy, więc piętnaście
-    /// sekund to zapas na maszynę zajętą czym innym, a nie realny czas działania.
+    /// Ile czekać na czas trwania z dekodera; otwarcie trwa milisekundy, reszta to zapas na
+    /// obciążoną maszynę.
     /// </summary>
     private const int DurationWaitMilliseconds = 15_000;
 
     /// <summary>
-    /// Checks that expanding the panel in a window too short for it is reversible: the height
-    /// from before comes back when the panel is collapsed again, unless the user has resized
-    /// the window in between.
-    /// <para>
-    /// Three cases, because only the first two are obvious and the third is the one that used to
-    /// be wrong in the opposite direction — restoring a height the user had since overruled.
-    /// </para>
-    /// </summary>
-    /// <summary>
-    /// Czy plamy tla przy okladce domyslnej biora skrajne barwy pary, a nie ich usrednienie.
-    ///
-    /// <para>Odczyt barw z narysowanego obrazka przechodzi przez kubelkowanie i usrednianie,
-    /// wiec para „turkus i roz" dawala na tle dwa odcienie jednego zamglonego fioletu. Tutaj
-    /// sprawdzane jest wprost, czy paleta tla rowna sie skrajnym barwom pary — porownanie
-    /// z wartosciami, a nie ogladanie obrazka, bo roznicy miedzy fioletem a fioletem nie widac.</para>
+    /// Czy plamy tła przy okładce domyślnej biorą skrajne barwy pary, a nie ich uśrednienie.
+    /// Porównanie wartości, bo na obrazku różnicy między dwoma fioletami nie widać.
     /// </summary>
     private static bool CheckPlaceholderBackdrop()
     {
-        // Turkus i roz: para o skrajnych barwach najdalszych od siebie, wiec usrednienie
-        // rzucaloby sie w oczy najbardziej.
+        // Turkus i róż: skrajne barwy najdalej od siebie, więc uśrednienie widać najbardziej.
         const PlaceholderPalette wybrana = PlaceholderPalette.Turquoise;
 
         CewkaApplication.Settings.Current.PlaceholderPalette = wybrana;
@@ -561,9 +528,7 @@ internal static class Program
             var oczekiwane = CoilCover.RampColours(wybrana, Application.Current!.ActualThemeVariant == ThemeVariant.Dark);
             var paleta = player.Palette;
 
-            // Porownywane sa odcienie, a nie barwy w calosci: nasycenie skaluje ustawienie
-            // intensywnosci, wiec dokladne barwy zaleza od niego, a odcien nie. Sedno sprawdzianu
-            // dotyczy wlasnie odcienia — czy na tle sa dwa konce pary, czy jeden kolor po srodku.
+            // Porównywane są odcienie, bo nasycenie zależy od ustawienia intensywności.
             Console.WriteLine(
                 $"       tlo okladki domyslnej: {Odcienie(paleta)}   para: {Odcienie(oczekiwane)}");
 
@@ -586,8 +551,7 @@ internal static class Program
                 return false;
             }
 
-            // Odcien barwy srodkowej nie ma prawa pojawic sie na tle — to on powstawal
-            // z usrednienia i to on zamienial pare w jeden kolor.
+            // Odcień barwy środkowej nie może się pojawić na tle, bo to on powstaje z uśrednienia.
             var srodkowy = oczekiwane[oczekiwane.Length / 2].ToHsl().H;
             if (paleta.Any(c => Math.Abs(c.ToHsl().H - srodkowy) < tolerancja))
             {
@@ -608,67 +572,57 @@ internal static class Program
     private static string Odcienie(IReadOnlyList<Color> colours) =>
         string.Join(" ", colours.Select(c => $"{c}({c.ToHsl().H:F0})"));
 
+    /// <summary>Daje układowi okna ustalić się przy zadanym rozmiarze, bez robienia zdjęcia.</summary>
+    private static void Settle(Window window, double width, double height)
+    {
+        for (var i = 0; i < 8; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            window.Measure(new Size(width, height));
+            window.Arrange(new Rect(0, 0, width, height));
+        }
+    }
+
     /// <summary>
-    /// To samo dla szerokosci, ktora pilnuje kolumna kolejki.
-    ///
-    /// <para>Odkad pas dolny i kolejka wlaczaja sie niezaleznie, kazdy z nich odpowiada za swoj
-    /// wymiar: pas za wysokosc, kolejka za szerokosc. Wspolny warunek przywracania cofalby
-    /// szerokosc przy chowaniu korektora, ktory z szerokoscia nie ma nic wspolnego.</para>
+    /// Pokazanie i schowanie pasa dolnego oraz kolejki nie zmienia rozmiaru okna. Treść oddaje
+    /// miejsce sama: pas się przewija, kolejka w wąskim oknie staje się nakładką.
     /// </summary>
-    private static bool CheckQueueWidthMemory()
+    private static bool CheckAreasKeepWindowSize()
     {
         CewkaApplication.Settings.Current.Window = null;
         CewkaApplication.Settings.Current.PanelOpen = false;
         CewkaApplication.Settings.Current.QueueOpen = false;
 
-        // Ponizej minimum z kolejka (1000), powyzej minimum bez niej (900).
-        const double startingWidth = 950;
-        var window = new MainWindow { Width = startingWidth, Height = 500 };
+        const double width = 1000, height = 560;
+        var window = new MainWindow { Width = width, Height = height };
         var player = (MainViewModel)window.DataContext!;
         var dobrze = true;
 
         try
         {
             window.Show();
-            Dispatcher.UIThread.RunJobs();
+            Settle(window, width, height);
 
-            player.ToggleQueue();
-            Dispatcher.UIThread.RunJobs();
-            var zKolejka = window.Width;
-
-            player.ToggleQueue();
-            Dispatcher.UIThread.RunJobs();
-            var bezKolejki = window.Width;
-
-            Console.WriteLine($"       szerokosc: start {startingWidth}  -> kolejka {zKolejka}" +
-                              $"  -> po schowaniu {bezKolejki}");
-
-            if (zKolejka <= startingWidth)
+            foreach (var (nazwa, przelacz) in new (string, Action)[]
+                     {
+                         ("pas", player.TogglePanel), ("kolejka", player.ToggleQueue),
+                         ("pas", player.TogglePanel), ("kolejka", player.ToggleQueue),
+                     })
             {
-                Console.Error.WriteLine("  BLAD: pokazanie kolejki nie poszerzylo okna.");
-                dobrze = false;
+                przelacz();
+                Settle(window, width, height);
+
+                if (Math.Abs(window.Width - width) > 0.5 || Math.Abs(window.Height - height) > 0.5)
+                {
+                    Console.Error.WriteLine(
+                        $"  BLAD: przelaczenie obszaru „{nazwa}” zmienilo rozmiar okna z {width}x{height} " +
+                        $"na {window.Width}x{window.Height}.");
+                    dobrze = false;
+                    break;
+                }
             }
 
-            if (Math.Abs(bezKolejki - startingWidth) > 0.5)
-            {
-                Console.Error.WriteLine(
-                    $"  BLAD: po schowaniu kolejki okno ma {bezKolejki}, a powinno wrocic " +
-                    $"do {startingWidth}.");
-                dobrze = false;
-            }
-
-            // Pas dolny nie ma prawa ruszyc szerokosci — to osobny wymiar i osobny obszar.
-            var przedPasem = window.Width;
-            player.TogglePanel();
-            Dispatcher.UIThread.RunJobs();
-
-            if (Math.Abs(window.Width - przedPasem) > 0.5)
-            {
-                Console.Error.WriteLine(
-                    $"  BLAD: pokazanie pasa dolnego zmienilo szerokosc z {przedPasem} " +
-                    $"na {window.Width}; obszary maja byc niezalezne.");
-                dobrze = false;
-            }
+            Console.WriteLine($"       rozmiar minimalny okna: {window.MinWidth}x{window.MinHeight}");
         }
         finally
         {
@@ -676,99 +630,167 @@ internal static class Program
             Dispatcher.UIThread.RunJobs();
         }
 
-        if (dobrze) Console.WriteLine("  ok   pamiec szerokosci okna i niezaleznosc obszarow");
+        if (dobrze) Console.WriteLine("  ok   pokazanie i schowanie pasa i kolejki nie zmienia rozmiaru okna");
         return dobrze;
     }
 
-    private static bool CheckPanelHeightMemory()
+    /// <summary>Szerokości okna, przy których sprawdzany jest układ kolejki i bloku odtwarzania.</summary>
+    private static readonly int[] QueueSweep =
+        [760, 820, 900, 960, 1000, 1020, 1030, 1040, 1060, 1080, 1100, 1140, 1200, 1300, 1500, 1900];
+
+    /// <summary>
+    /// Kolejka w kolumnie, gdy okno jest dość szerokie, a w węższym jako nakładka. Dla każdej
+    /// szerokości mierzone jest, czy blok odtwarzania nie sięga kolumny kolejki (albo prawej
+    /// krawędzi okna przy nakładce). Nakładka nie otwiera się sama przy zwężeniu okna, a Esc ją zamyka.
+    /// Najmniejsza szerokość z kolumną to zmierzony próg.
+    /// </summary>
+    private static bool CheckQueueModes()
     {
-        // Zadnej zapamietanej geometrii: inaczej odtworzenie rozmiaru z ustawien nadpisalo by
-        // wysokosc, ktora ten sprawdzian wlasnie ustawia.
-        CewkaApplication.Settings.Current.Window = null;
-        CewkaApplication.Settings.Current.PanelOpen = false;
-        CewkaApplication.Settings.Current.QueueOpen = false;
-
-        const double startingHeight = 500;
-        var window = new MainWindow { Width = 1180, Height = startingHeight };
-        var player = (MainViewModel)window.DataContext!;
         var dobrze = true;
+        int? prog = null;
 
-        try
+        foreach (var width in QueueSweep)
         {
-            window.Show();
-            Dispatcher.UIThread.RunJobs();
+            CewkaApplication.Settings.Current.Window = null;
+            CewkaApplication.Settings.Current.PanelOpen = true;
+            CewkaApplication.Settings.Current.QueueOpen = true;
 
-            player.TogglePanel();
-            Dispatcher.UIThread.RunJobs();
-            var rozwiniete = window.Height;
+            const double height = 680;
+            var window = new MainWindow { Width = width, Height = height };
+            var player = (MainViewModel)window.DataContext!;
 
-            player.TogglePanel();
-            Dispatcher.UIThread.RunJobs();
-            var zwiniete = window.Height;
-
-            Console.WriteLine($"       wysokosc: start {startingHeight}  -> panel {rozwiniete}" +
-                              $"  -> po schowaniu {zwiniete}");
-
-            if (rozwiniete <= startingHeight)
+            try
             {
-                Console.Error.WriteLine("  BLAD: rozwiniecie panelu nie podnioslo okna.");
-                dobrze = false;
+                window.Show();
+                Settle(window, width, height);
+
+                var queue = window.FindControl<Border>("QueueColumn")!;
+                var overlay = queue.Classes.Contains("queue-overlay");
+
+                if (overlay)
+                {
+                    if (prog is not null)
+                    {
+                        Console.Error.WriteLine($"  BLAD: przy {width} px kolejka znow jest nakladka, choc przy {prog} px byla kolumna.");
+                        dobrze = false;
+                    }
+
+                    if (player.QueueOpen)
+                    {
+                        Console.Error.WriteLine($"  BLAD: przy {width} px nakladka kolejki otworzyla sie sama.");
+                        dobrze = false;
+                    }
+
+                    player.QueueOpen = true;
+                    Settle(window, width, height);
+                }
+                else
+                {
+                    prog ??= width;
+                }
+
+                var zapas = -MeasureRightEdgeOverlap(window, report: false);
+                var disc = window.FindControl<Panel>("DiscHost")!;
+                Console.WriteLine(
+                    $"       {width,5} px: {(overlay ? "nakladka" : "kolumna "),-8}  plyta {(disc.IsVisible ? disc.Bounds.Width : 0),4:F0}" +
+                    $"  zapas {zapas,6:F1} px");
+
+                if (zapas < -0.5)
+                {
+                    Console.Error.WriteLine($"  BLAD: przy {width} px blok odtwarzania wychodzi o {-zapas:F1} px za swoj obszar.");
+                    dobrze = false;
+                }
+
+                if (overlay)
+                {
+                    window.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
+                    Settle(window, width, height);
+
+                    if (player.QueueOpen)
+                    {
+                        Console.Error.WriteLine($"  BLAD: przy {width} px Esc nie zamknal nakladki kolejki.");
+                        dobrze = false;
+                    }
+                }
             }
-
-            if (Math.Abs(zwiniete - startingHeight) > 0.5)
+            finally
             {
-                Console.Error.WriteLine(
-                    $"  BLAD: po schowaniu panelu okno ma {zwiniete}, a powinno wrocic " +
-                    $"do {startingHeight}.");
-                dobrze = false;
-            }
-
-            // Trzeci przypadek: uzytkownik sam zmienia rozmiar, gdy panel jest rozwiniety.
-            // Wtedy zapamietana wysokosc traci waznosc i okno ma zostac tam, gdzie je postawil.
-            player.TogglePanel();
-            Dispatcher.UIThread.RunJobs();
-
-            const double wybranaPrzezUzytkownika = 760;
-            window.Height = wybranaPrzezUzytkownika;
-            Dispatcher.UIThread.RunJobs();
-
-            player.TogglePanel();
-            Dispatcher.UIThread.RunJobs();
-
-            Console.WriteLine($"       po recznej zmianie na {wybranaPrzezUzytkownika}: {window.Height}");
-
-            if (Math.Abs(window.Height - wybranaPrzezUzytkownika) > 0.5)
-            {
-                Console.Error.WriteLine(
-                    $"  BLAD: okno cofnelo reczna zmiane rozmiaru — ma {window.Height}, " +
-                    $"a powinno zostac na {wybranaPrzezUzytkownika}.");
-                dobrze = false;
+                window.Close();
+                Dispatcher.UIThread.RunJobs();
             }
         }
-        finally
-        {
-            window.Close();
-            Dispatcher.UIThread.RunJobs();
-        }
 
-        if (dobrze) Console.WriteLine("  ok   pamiec wysokosci okna przy zwijaniu panelu");
+        Console.WriteLine(prog is null
+            ? "       kolejka nie stanela w kolumnie przy zadnej szerokosci"
+            : $"       prog kolumny kolejki: {prog} px");
+
+        if (dobrze) Console.WriteLine("  ok   kolejka w kolumnie albo w nakladce, bez nachodzenia na blok odtwarzania");
         return dobrze;
     }
 
     /// <summary>
-    /// Checks that the two panel headings sit on the same line, and reports by how much they
-    /// miss if they do not.
-    /// <para>
-    /// The two sit in separate grids on either side of a divider, so nothing in the layout makes
-    /// them agree — they only look aligned as long as both rows happen to be the same height,
-    /// and the equaliser row is driven by the switch and the mode buttons beside it. Measuring
-    /// is the only way to know; by eye a few pixels read as "roughly right".
-    /// </para>
+    /// Niskie okna z pasem dolnym: rząd transportu mieści się w obszarze nad pasem, a pas przewija
+    /// to, czego nie zmieści.
+    /// </summary>
+    private static bool CheckLowWindows()
+    {
+        var dobrze = true;
+
+        foreach (var (width, height) in new[] { (760, 520), (900, 520), (1200, 520), (1200, 560), (1200, 680), (1600, 600) })
+        {
+            CewkaApplication.Settings.Current.Window = null;
+            CewkaApplication.Settings.Current.PanelOpen = true;
+            CewkaApplication.Settings.Current.QueueOpen = false;
+
+            var window = new MainWindow { Width = width, Height = height };
+
+            try
+            {
+                window.Show();
+                Settle(window, width, height);
+
+                var host = window.FindControl<Panel>("CentreHost")!;
+                var transport = window.FindControl<Grid>("TransportRow")!;
+                var info = window.FindControl<StackPanel>("TrackInfo")!;
+                var scroll = window.FindControl<ScrollViewer>("PanelScroll")!;
+                var disc = window.FindControl<Panel>("DiscHost")!;
+
+                var hostTop = host.TranslatePoint(new Point(0, 0), window)!.Value.Y;
+                var hostBottom = host.TranslatePoint(new Point(0, host.Bounds.Height), window)!.Value.Y;
+                var infoTop = info.TranslatePoint(new Point(0, 0), window)!.Value.Y;
+                var transportBottom = transport.TranslatePoint(new Point(0, transport.Bounds.Height), window)!.Value.Y;
+
+                var zapas = Math.Min(hostBottom - transportBottom, infoTop - hostTop);
+                var przewijanie = scroll.Extent.Height > scroll.Viewport.Height + 0.5;
+
+                Console.WriteLine(
+                    $"       {width}x{height}: obszar {host.Bounds.Height:F0}  pas {scroll.Bounds.Height:F0}" +
+                    $"{(przewijanie ? " (przewija)" : "")}  plyta {(disc.IsVisible ? disc.Bounds.Width : 0):F0}  zapas {zapas:F1} px");
+
+                if (zapas < -0.5)
+                {
+                    Console.Error.WriteLine(
+                        $"  BLAD: przy {width}x{height} blok odtwarzania wychodzi o {-zapas:F1} px poza obszar nad pasem.");
+                    dobrze = false;
+                }
+            }
+            finally
+            {
+                window.Close();
+                Dispatcher.UIThread.RunJobs();
+            }
+        }
+
+        if (dobrze) Console.WriteLine("  ok   blok odtwarzania miesci sie nad pasem takze w niskim oknie");
+        return dobrze;
+    }
+    /// <summary>
+    /// Sprawdza, czy nagłówki obu części pasa stoją na jednej linii, i podaje odchyłkę.
+    /// Stoją w osobnych siatkach, więc zgadzają się tylko przy równej wysokości wierszy.
     /// </summary>
     private static double MeasureHeadingOffset(MainWindow window)
     {
-        // Odkad kolejka wyprowadzila sie do wlasnej kolumny, sasiadami w pasie dolnym sa
-        // naglowki korektora i efektow — i to one musza stac na jednej wysokosci.
+        // W pasie dolnym sąsiadują nagłówki korektora i efektów.
         var eq = window.FindControl<TextBlock>("EqHeading");
         var effects = window.FindControl<TextBlock>("EffectsHeading");
         if (eq is null || effects is null || !eq.IsVisible || !effects.IsVisible) return 0;
@@ -784,7 +806,7 @@ internal static class Program
         return offset;
     }
 
-    /// <summary>Lets the refresh timer pick the new position up before the frame is captured.</summary>
+    /// <summary>Daje zegarowi odświeżania przejąć nową pozycję przed zrzutem.</summary>
     private static void SettleAfterSeek(MainViewModel player)
     {
         for (var i = 0; i < 20; i++)
@@ -798,9 +820,8 @@ internal static class Program
     }
 
     /// <summary>
-    /// Waits for the tags and the cover to arrive. Both are read off the decode thread, so a
-    /// snapshot taken straight after opening the file would show the placeholder disc and the
-    /// "no track" caption — which is exactly what the picture is meant not to show.
+    /// Czeka na tagi i okładkę, czytane poza wątkiem interfejsu; zrzut tuż po otwarciu pliku
+    /// pokazałby okładkę domyślną i brak utworu.
     /// </summary>
     private static void WaitForMetadata(MainViewModel player)
     {
@@ -817,7 +838,7 @@ internal static class Program
             Thread.Sleep(50);
         }
 
-        // Okladka dekoduje sie osobno od tagow; chwila zapasu, zeby nie trafic w moment miedzy.
+        // Okładka dekoduje się osobno od tagów; chwila zapasu na moment pomiędzy.
         for (var i = 0; i < 10; i++)
         {
             Dispatcher.UIThread.RunJobs();
@@ -828,7 +849,6 @@ internal static class Program
     private static SettingsSection SectionOf(SettingsViewModel viewModel, string name) => name switch
     {
         "Language" => viewModel.LanguageSection,
-        "Effects" => viewModel.EffectsSection,
         "Audio" => viewModel.Audio,
         "Playback" => viewModel.Playback,
         "Integration" => viewModel.Integration,
@@ -837,7 +857,7 @@ internal static class Program
     };
 
     /// <summary>
-    /// Renders the moving colour field on its own, under the same scrim the player puts over it.
+    /// Renderuje samo ruchome tło pod tym samym przyciemnieniem co w odtwarzaczu.
     /// </summary>
     private static void CaptureBackdrop(Shot shot, string outputDirectory, double atSeconds = 0)
     {
@@ -877,9 +897,7 @@ internal static class Program
     /// <summary>
     /// Kilka chwil jednego cyklu jasnienia, na jednym tle i przy jednej palecie.
     ///
-    /// <para>Każda plama ma własny okres, więc na nieruchomym obrazie nie widać, że w ogóle
-    /// jaśnieją. Dopiero kilka chwil obok siebie pokazuje, że każda idzie swoim rytmem — i że
-    /// nie robią tego wszystkie razem, co wyglądałoby jak migotanie całego okna.</para>
+    /// <para>Dopiero kilka chwil obok siebie pokazuje, że każda plama jaśnieje własnym rytmem.</para>
     /// </summary>
     private static void CaptureBackdropPulse(string outputDirectory)
     {
@@ -899,10 +917,8 @@ internal static class Program
     /// <summary>
     /// Sama fala nad paskiem postępu, przy kilku poziomach sygnału.
     ///
-    /// <para>Na zwykłym zrzucie okna fali praktycznie nie widać: przed zdjęciem odtwarzanie jest
-    /// zatrzymywane, a wtedy wykres opada do linii spoczynkowej. Amplitudy nie dało się więc
-    /// obejrzeć ani porównać między wersjami. Tutaj kontrolka rysowana jest osobno, z podanym
-    /// poziomem i w stanie czynnym.</para>
+    /// <para>Na zwykłym zrzucie odtwarzanie jest wstrzymane i fala leży na linii spoczynkowej,
+    /// więc tu kontrolka rysowana jest osobno, w stanie czynnym.</para>
     /// </summary>
     private static void CaptureWaveform(string outputDirectory)
     {
@@ -939,11 +955,7 @@ internal static class Program
     private static IBrush Brush(string colour) => new SolidColorBrush(Color.Parse(colour));
 
     /// <summary>
-    /// Writes the five default-cover colour pairs in both themes, straight from the drawing code.
-    /// <para>
-    /// These used to be two files in the repository, so looking at them meant opening the files.
-    /// Now they are drawn at run time and the only way to see what they became is to render them.
-    /// </para>
+    /// Zapisuje pary barw okładki domyślnej w obu motywach, prosto z kodu rysującego.
     /// </summary>
     private static void CaptureCoils(string outputDirectory)
     {
@@ -973,22 +985,27 @@ internal static class Program
         CewkaApplication.Settings.Current.ColourIntensity = shot.Intensity;
         Cewka.App.Localisation.Strings.Current.SetLanguage(shot.Language);
 
-        // Rozmiar nigdy poniżej tego, co okno dopuszcza. Przypisanie Width wprost omija
-        // ograniczenie, którego pilnuje ApplyPanelConstraints, i zrzut pokazywałby wtedy układ
-        // nieosiągalny dla użytkownika — a wraz z nim usterki, których w programie nie ma.
+        // Rozmiar nigdy poniżej minimalnego okna: zrzut pokazywałby wtedy układ nieosiągalny dla
+        // użytkownika, a wraz z nim usterki, których w programie nie ma.
         var window = new MainWindow();
         window.Width = Math.Max(shot.Width, window.MinWidth);
         window.Height = Math.Max(shot.Height, window.MinHeight);
 
-        // Plik wskazany w wierszu polecen wczytuje samo okno, ale dopiero w OnOpened - czyli
-        // przy pokazaniu, nie przy utworzeniu. Dlatego przygotowanie utworu do zdjecia idzie
-        // wywolaniem zwrotnym z wnetrza Render, po Show.
-        // Modelu widoku nie zwalniamy tutaj: robi to MainWindow.OnClosed, a drugie zwolnienie
-        // konczy sie wyjatkiem.
+        // Okno wczytuje plik z wiersza poleceń dopiero w OnOpened, więc utwór przygotowuje
+        // wywołanie zwrotne z Render, po Show. Model widoku zwalnia MainWindow.OnClosed;
+        // drugie zwolnienie kończy się wyjątkiem.
         Render(window, shot, outputDirectory,
-            afterShow: () => PrepareTrack(window),
+            afterShow: () =>
+            {
+                PrepareTrack(window);
+
+                // Nakładka kolejki otwiera się tylko na żądanie, więc zrzut otwiera ją sam.
+                if (shot.QueueOverlay && window.DataContext is MainViewModel player) player.QueueOpen = true;
+            },
             beforeCapture: () =>
             {
+                if (shot.Focus is not null) FocusForCapture(window, shot);
+
                 MeasureQueueOverlap(window);
 
                 if (!shot.PanelOpen) return;
@@ -998,70 +1015,102 @@ internal static class Program
             });
     }
 
-    /// <summary>Largest heading misalignment seen in this run, in device-independent pixels.</summary>
+    /// <summary>Fokus z klawiatury na wskazanej kontrolce, żeby zrzut pokazał pierścień fokusu.</summary>
+    private static void FocusForCapture(MainWindow window, Shot shot)
+    {
+        var descendants = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window);
+        InputElement? target = shot.Focus switch
+        {
+            "EqFader" => descendants.OfType<EqFader>().Skip(3).FirstOrDefault(),
+            "QueueRow" => window.FindControl<ListBox>("QueueList")?.ContainerFromIndex(0),
+            var name => window.FindControl<Control>(name!),
+        };
+
+        if (target is null) throw new InvalidOperationException($"brak kontrolki do fokusu: {shot.Focus}");
+
+        target.Focus(NavigationMethod.Tab);
+
+        for (var i = 0; i < 3; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            window.Measure(new Size(shot.Width, shot.Height));
+            window.Arrange(new Rect(0, 0, shot.Width, shot.Height));
+        }
+    }
+
+    /// <summary>Największa odchyłka nagłówków w tym przebiegu, w pikselach logicznych.</summary>
     private static double _worstHeadingOffset;
 
     /// <summary>
-    /// Najglebsze wejscie bloku odtwarzania na kolumne kolejki, w pikselach.
+    /// Najgłębsze wejście bloku odtwarzania na kolumnę kolejki, w pikselach.
     ///
-    /// <para>Rzad transportu ma naturalna szerokosc okolo 440 px i nic go nie sciska. Przy oknie
-    /// wezszym niz suma plyty, odstepu i tego rzedu zawartosc wychodzila poza swoj obszar
-    /// i rysowala sie na kolumnie kolejki — pasek glosnosci lezal na liscie utworow. Golym okiem
-    /// widac to tylko przy niektorych szerokosciach, wiec mierzone jest przy kazdym zrzucie.</para>
+    /// <para>Rząd transportu ma około 440 px i nic go nie ściska, więc w zbyt wąskim oknie
+    /// wchodziłby na kolejkę. Gołym okiem widać to tylko przy niektórych szerokościach.</para>
     /// </summary>
     /// <remarks>
-    /// Zaczyna od minus nieskonczonosci, zeby zapas nad krawedzia dal sie odczytac tak samo jak
-    /// nachodzenie: wartosc ujemna znaczy „tyle pikseli wolnego", dodatnia „tyle za krawedzia".
+    /// Zaczyna od minus nieskończoności, żeby zapas dało się odczytać tak samo jak nachodzenie:
+    /// wartość ujemna to wolne piksele, dodatnia to piksele za krawędzią.
     /// </remarks>
     private static double _worstQueueOverlap = double.NegativeInfinity;
 
-    /// <summary>Nazwy elementow, ktore nie maja prawa siegnac kolumny kolejki.</summary>
-    private static readonly string[] MustNotReachQueue = ["VolumeSlider", "TrackInfo", "Seek"];
+    /// <summary>Elementy, które nie mogą sięgać kolumny kolejki ani prawej krawędzi okna.</summary>
+    private static readonly string[] MustNotReachQueue = ["VolumeSlider", "TrackInfo", "Seek", "TransportRow"];
 
     private static void MeasureQueueOverlap(MainWindow window)
     {
-        var queue = window.FindControl<Border>("QueueColumn");
-        if (queue is null || !queue.IsVisible) return;
+        var overlap = MeasureRightEdgeOverlap(window, report: true);
+        if (overlap > _worstQueueOverlap) _worstQueueOverlap = overlap;
+    }
 
-        var queueLeft = queue.TranslatePoint(new Point(0, 0), window)?.X;
-        if (queueLeft is null) return;
+    /// <summary>
+    /// Najgłębsze wejście bloku odtwarzania za jego prawą krawędź: lewą krawędź kolumny kolejki,
+    /// a przy nakładce albo bez kolejki prawą krawędź okna. Wartość ujemna to zapas.
+    /// </summary>
+    private static double MeasureRightEdgeOverlap(MainWindow window, bool report)
+    {
+        var queue = window.FindControl<Border>("QueueColumn");
+        var column = queue is { IsVisible: true } && !queue.Classes.Contains("queue-overlay");
+
+        var edge = column ? queue!.TranslatePoint(new Point(0, 0), window)?.X ?? window.Bounds.Width : window.Bounds.Width;
+        var worst = double.NegativeInfinity;
 
         foreach (var name in MustNotReachQueue)
         {
             var control = window.FindControl<Control>(name);
-            if (control is null || !control.IsVisible || control.Bounds.Width <= 0) continue;
+            if (control is null || !control.IsEffectivelyVisible || control.Bounds.Width <= 0) continue;
 
             var right = control.TranslatePoint(new Point(control.Bounds.Width, 0), window)?.X;
             if (right is null) continue;
 
-            var overlap = right.Value - queueLeft.Value;
-            if (overlap > _worstQueueOverlap) _worstQueueOverlap = overlap;
+            var overlap = right.Value - edge;
+            if (overlap > worst) worst = overlap;
 
-            if (overlap > 0)
+            if (report && overlap > 0.5)
             {
                 Console.WriteLine(
-                    $"       nachodzi: {name} konczy sie {overlap:F1} px za krawedzia kolejki");
+                    $"       nachodzi: {name} konczy sie {overlap:F1} px za krawedzia " +
+                    (column ? "kolejki" : "okna"));
             }
         }
 
-        if (_worstQueueOverlap > 0)
+        if (report && worst > 0.5)
         {
-            // Rozbicie szerokosci na skladniki: bez tego widac tylko, ze nie miesci sie,
-            // a nie wiadomo, co zabiera miejsce.
+            // Rozbicie szerokości na składniki, żeby było widać, co zabiera miejsce.
             var centre = window.FindControl<StackPanel>("CentreArea");
             var playing = window.FindControl<Grid>("NowPlaying");
             var disc = window.FindControl<Panel>("DiscHost");
             var volume = window.FindControl<Control>("VolumeSlider");
 
             Console.WriteLine(
-                $"       szerokosci: okno {window.Bounds.Width:F0}  kolejka od {queueLeft:F0}" +
+                $"       szerokosci: okno {window.Bounds.Width:F0}  krawedz {edge:F0}" +
                 $"  srodek {centre?.Bounds.Width ?? -1:F0}  blok {playing?.Bounds.Width ?? -1:F0}" +
                 $"  plyta {disc?.Bounds.Width ?? -1:F0}  glosnosc {volume?.Bounds.Width ?? -1:F0}");
         }
-    }
 
+        return worst;
+    }
     /// <summary>
-    /// Half a pixel: anything below that is rounding in the layout pass, not a mistake in it.
+    /// Pół piksela; mniejsze odchyłki to zaokrąglenia układu.
     /// </summary>
     private const double HeadingTolerance = 0.5;
 
@@ -1070,12 +1119,11 @@ internal static class Program
     {
         window.Show();
 
-        // Okno wczytuje zawartosc w OnOpened, wiec wszystko, co dotyczy tej zawartosci, moze
-        // wydarzyc sie dopiero tutaj.
+        // Okno wczytuje zawartość w OnOpened, więc wszystko, co jej dotyczy, dzieje się tutaj.
         Dispatcher.UIThread.RunJobs();
         afterShow?.Invoke();
 
-        // Let layout, bindings and the first render pass settle before capturing.
+        // Układ, wiązania i pierwsze rysowanie mają się ustalić przed zrzutem.
         for (var i = 0; i < 8; i++)
         {
             Dispatcher.UIThread.RunJobs();

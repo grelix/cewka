@@ -1,23 +1,16 @@
 namespace Cewka.Audio.Dsp;
 
 /// <summary>
-/// Poszerzenie bazy stereo macierzą środek–boki.
+/// Poszerzenie bazy stereo macierzą środek–boki. Wzmacniane są tylko boki, więc suma
+/// monofoniczna zostaje bez zmian.
 ///
-/// <para><b>Jak.</b> Sygnał rozkładany jest na środek — to, co wspólne obu kanałom — i boki,
-/// czyli ich różnicę. Wzmacniane są wyłącznie boki. Środek pozostaje nietknięty, a to znaczy,
-/// że <b>suma monofoniczna nie zmienia się wcale</b>: odsłuch na jednym głośniku brzmi tak samo
-/// przy każdym ustawieniu. Poszerzanie opóźnieniem, spotykane w prostszych rozwiązaniach, tej
-/// własności nie ma i potrafi wydrążyć nagranie odtworzone monofonicznie.</para>
-///
-/// <para><b>Niskie tony zostają nietknięte.</b> Poszerzanie basu rozjeżdża fazę między
-/// głośnikami i odbiera nagraniu podstawę, a kierunku najniższych tonów i tak nie słyszymy.
-/// Boki są więc rozdzielane na część niską i wysoką, i tylko ta druga jest wzmacniana. Nie
-/// sprowadzam przy tym basu do monofonii — to, co nagrano, zostaje takie, jakie było.</para>
+/// <para>Boki wzmacnia półka górna o dobroci 0,7071 (przejście monotoniczne), żeby bas prawie
+/// nie zmieniał szerokości.</para>
 /// </summary>
 public sealed class StereoWidth : IAudioProcessor
 {
-    /// <summary>Granica między basem zostawionym w spokoju a pasmem, które wolno poszerzać.</summary>
-    private const double SplitFrequencyHz = 200;
+    /// <summary>Środek przejścia półki: poniżej boki zostają prawie bez zmian.</summary>
+    private const double ShelfFrequencyHz = 300;
 
     /// <summary>
     /// Najszersze dopuszczalne ustawienie. Powyżej mniej więcej tej wartości boki zaczynają
@@ -25,44 +18,55 @@ public sealed class StereoWidth : IAudioProcessor
     /// </summary>
     private const double MaximumWidth = 1.8;
 
+    private const double SwitchSeconds = 0.020;
+
     /// <summary>
-    /// Jeden filtr, nie dwa: pracuje na sygnale boku, który jest już pojedynczym przebiegiem.
+    /// Filtr sygnału boku ustawiony na pełną szerokość; słabsze ustawienia mieszają jego wynik
+    /// z bokiem bez zmian.
     /// </summary>
-    private Biquad _sideLowPass = Biquad.Identity();
+    private Biquad _sideShelf = Biquad.Identity();
 
     private int _channels = 2;
     private double _strength;
-    private float _width = 1;
+    private double _switchCoefficient;
+    private double _amount;
+    private bool _running;
 
-    /// <summary>Gdy wyłączone, sygnał przechodzi bez zmiany ani jednej próbki.</summary>
+    /// <summary>Po wyłączeniu poszerzenie wygasa płynnie, a potem sygnał przechodzi bez zmiany ani jednej próbki.</summary>
     public bool Enabled { get; set; }
 
     /// <summary>Siła działania w procentach: 0 to brak poszerzenia, 100 to ustawienie najszersze.</summary>
     public double Strength
     {
         get => _strength;
-        set
-        {
-            _strength = Math.Clamp(value, 0, 100);
-            _width = (float)(1 + (MaximumWidth - 1) * (_strength / 100.0));
-        }
+        set => _strength = Math.Clamp(value, 0, 100);
     }
+
+    private double TargetAmount => Enabled && _channels == 2 ? _strength / 100.0 : 0;
 
     public void Prepare(int sampleRate, int channels)
     {
         _channels = channels;
 
-        // Filtr dolnoprzepustowy o dobroci Butterwortha: przy takiej dobroci część niska
-        // i wysoka sumują się z powrotem bez garbu w okolicy podziału.
-        _sideLowPass = Biquad.Identity();
-        _sideLowPass.SetLowPass(SplitFrequencyHz, 0.7071, sampleRate);
+        _sideShelf = Biquad.Identity();
+        _sideShelf.SetHighShelf(ShelfFrequencyHz, 0.7071, 20 * Math.Log10(MaximumWidth), sampleRate);
+
+        _switchCoefficient = 1 - Math.Exp(-1.0 / (SwitchSeconds * sampleRate));
+        _amount = TargetAmount;
+        _running = _amount > 0;
     }
 
     public void Process(Span<float> buffer, int frames)
     {
-        if (!Enabled || _channels != 2 || _strength <= 0) return;
+        var target = TargetAmount;
+        if (target == 0 && _amount == 0)
+        {
+            _running = false;
+            return;
+        }
 
-        var width = _width;
+        if (!_running) _sideShelf.Reset();
+        _running = true;
 
         for (var frame = 0; frame < frames; frame++)
         {
@@ -73,17 +77,19 @@ public sealed class StereoWidth : IAudioProcessor
             var middle = (left + right) * 0.5f;
             var side = (left - right) * 0.5f;
 
-            // Bok rozdzielony na to, co poniżej granicy, i resztę. Filtr pracuje na sygnale
-            // boku, a nie na kanałach osobno — inaczej stan filtrów rozjechałby się między nimi.
-            var sideLow = _sideLowPass.Process(side);
-            var sideHigh = side - sideLow;
+            // Jeden filtr na sygnale boku; dwa osobne filtry na kanałach mogłyby rozjechać się stanem.
+            var shelved = _sideShelf.Process(side);
 
-            var widened = sideLow + sideHigh * width;
+            _amount += (target - _amount) * _switchCoefficient;
+            var widened = side + (float)_amount * (shelved - side);
 
             buffer[index] = middle + widened;
             buffer[index + 1] = middle - widened;
         }
+
+        _sideShelf.Sanitise();
+        if (Math.Abs(target - _amount) < 1e-4) _amount = target;
     }
 
-    public void Reset() => _sideLowPass.Reset();
+    public void Reset() => _sideShelf.Reset();
 }

@@ -5,16 +5,11 @@ using System.Text;
 namespace Cewka.Platform.Linux;
 
 /// <summary>
-/// The part of libdbus needed to expose one object on the session bus.
+/// Część <c>libdbus-1</c> potrzebna do wystawienia jednego obiektu na szynie sesji. Biblioteka
+/// jest na każdym pulpicie Linuksa, więc obywa się bez dodatkowej zależności.
 ///
-/// <para><b>Dlaczego bezpośrednio.</b> To samo rozstrzygnięcie, co przy Media Foundation,
-/// panelu multimediów systemu Windows i rejestrze: biblioteka <c>libdbus-1</c> jest obecna
-/// wszędzie tam, gdzie MPRIS w ogóle ma znaczenie, czyli na każdym pulpicie Linuksa. Wciąganie
-/// zależności dla jednego obiektu na szynie byłoby nieproporcjonalne.</para>
-///
-/// <para><b>Wątek.</b> Połączenie nie jest bezpieczne wątkowo. Wszystkie wywołania poniżej
-/// wykonuje wyłącznie wątek utworzony przez <see cref="MprisService"/>; stan przekazywany jest
-/// do niego przez podmianę niezmiennego zdjęcia, a nie przez blokady.</para>
+/// <para>Pułapka: połączenie nie jest bezpieczne wątkowo. Wszystko poniżej woła wyłącznie wątek
+/// utworzony przez <see cref="MprisService"/>.</para>
 /// </summary>
 [SupportedOSPlatform("linux")]
 internal static unsafe class DBus
@@ -45,6 +40,10 @@ internal static unsafe class DBus
     internal const int Handled = 0;
     internal const int NotHandled = 1;
 
+    internal const string ErrorUnknownProperty = "org.freedesktop.DBus.Error.UnknownProperty";
+    internal const string ErrorPropertyReadOnly = "org.freedesktop.DBus.Error.PropertyReadOnly";
+    internal const string ErrorInvalidArgs = "org.freedesktop.DBus.Error.InvalidArgs";
+
     [DllImport(Library)]
     internal static extern void dbus_error_init(Error* error);
 
@@ -54,8 +53,14 @@ internal static unsafe class DBus
     [DllImport(Library)]
     internal static extern void dbus_error_free(Error* error);
 
+    /// <summary>
+    /// Połączenie prywatne. Tylko takie da się zamknąć, a zamknięcie zwalnia nazwę na szynie.
+    /// </summary>
     [DllImport(Library)]
-    internal static extern nint dbus_bus_get(int type, Error* error);
+    internal static extern nint dbus_bus_get_private(int type, Error* error);
+
+    [DllImport(Library)]
+    internal static extern void dbus_connection_close(nint connection);
 
     [DllImport(Library)]
     internal static extern int dbus_bus_request_name(nint connection, byte* name, uint flags, Error* error);
@@ -74,6 +79,9 @@ internal static unsafe class DBus
     internal static extern void dbus_connection_set_exit_on_disconnect(nint connection, int exit);
 
     [DllImport(Library)]
+    internal static extern int dbus_connection_get_is_connected(nint connection);
+
+    [DllImport(Library)]
     internal static extern int dbus_connection_send(nint connection, nint message, uint* serial);
 
     [DllImport(Library)]
@@ -90,6 +98,13 @@ internal static unsafe class DBus
 
     [DllImport(Library)]
     internal static extern nint dbus_message_new_signal(byte* path, byte* iface, byte* name);
+
+    [DllImport(Library)]
+    internal static extern nint dbus_message_new_method_call(byte* destination, byte* path, byte* iface, byte* method);
+
+    [DllImport(Library)]
+    internal static extern nint dbus_connection_send_with_reply_and_block(
+        nint connection, nint message, int timeoutMilliseconds, Error* error);
 
     [DllImport(Library)]
     internal static extern void dbus_message_unref(nint message);
@@ -114,6 +129,9 @@ internal static unsafe class DBus
 
     [DllImport(Library)]
     internal static extern int dbus_message_iter_next(MessageIter* iter);
+
+    [DllImport(Library)]
+    internal static extern void dbus_message_iter_recurse(MessageIter* iter, MessageIter* sub);
 
     [DllImport(Library)]
     internal static extern int dbus_message_iter_append_basic(MessageIter* iter, int type, void* value);

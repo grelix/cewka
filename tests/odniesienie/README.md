@@ -1,40 +1,49 @@
 # Obrazy odniesienia
 
-Pięć zrzutów interfejsu, z którymi porównywany jest wygląd przy każdej zmianie w gałęzi głównej.
-Porównanie uruchamia narzędzie zrzutów:
+Pięć zrzutów, z którymi narzędzie `tools/Cewka.Snapshots` porównuje wygląd programu. Listę
+porównywanych obrazów trzyma `Odniesienie.Sprawdzane` w `tools/Cewka.Snapshots/Odniesienie.cs`.
+
+| Plik | Zawartość |
+|------|-----------|
+| `ciemny-1180.png` | okno główne 1200 × 680, motyw ciemny, korektor i kolejka widoczne |
+| `jasny-1180.png` | to samo w motywie jasnym |
+| `ciemny-zwiniety.png` | okno 1180 × 520, motyw ciemny, korektor i kolejka schowane |
+| `ustawienia-wyglad-cala.png` | ustawienia, zakładka Wygląd w całości (820 × 1000) |
+| `ustawienia-jezyk.png` | ustawienia, zakładka Język (820 × 640) |
+
+Pozostałe zrzuty, które narzędzie rysuje, służą do oglądania i nie są porównywane.
+
+## Porównanie
 
 ```bash
-dotnet run --project tools/Cewka.Snapshots -- artifacts/zrzuty utwor.wav drugi.wav --porownaj tests/odniesienie
+dotnet run --project tools/Cewka.Snapshots -c Release -- --material artifacts/material
+dotnet run --project tools/Cewka.Snapshots -c Release -- \
+    artifacts/zrzuty artifacts/material/probka-dluga.wav artifacts/material/probka-krotka.wav \
+    --porownaj tests/odniesienie
 ```
 
-Obrazy pokrywają układ okna głównego w obu motywach, stan zwinięty oraz dwie najbogatsze
-zakładki ustawień. Nie ma tu kompletu kilkudziesięciu zrzutów, które narzędzie potrafi
-wyrenderować — komplet rósłby w historii repozytorium przy każdej zmianie wyglądu, a te pięć
-wystarcza, żeby przesunięcie układu nie przeszło niezauważone.
+Narzędzie samo przełącza silnik na wyjście puste (`AudioDevice.UseNullOutput`), więc nic nie gra
+przez głośniki i karta dźwiękowa nie jest potrzebna. W CI kroki zrzutów mają dodatkowo ustawione
+`CEWKA_NULL_AUDIO=1`.
 
-## Skąd się biorą
-
-Pliku odniesienia nie da się przygotować na dowolnej maszynie. Rasteryzacja tekstu w Linuksie
-różni się od tej w Windowsie na tyle, że obraz zrobiony na jednym systemie nie zgadza się
-z obrazem z drugiego. Obrazy powstają więc na maszynie budującej w chmurze i tam też są
-porównywane.
-
-Gdy pliku brakuje, przebieg go tworzy, mówi o tym wprost i **nie** kończy się porażką — inaczej
-pierwsze uruchomienie zawsze byłoby czerwone. Nowe obrazy trafiają wtedy do artefaktu
-`odniesienie`, skąd należy je pobrać, obejrzeć i dodać do repozytorium. Dopóki tego nikt nie
-zrobi, porównanie niczego nie pilnuje.
-
-## Gdy wygląd zmienia się celowo
-
-Zmiana wyglądu zatrzyma budowę — i tak ma być. Należy wtedy:
-
-1. obejrzeć obraz różnicowy z artefaktu `zrzuty` (różnice zaznaczone na czerwono),
-2. upewnić się, że zmiana jest tą zamierzoną,
-3. zastąpić pliki w tym katalogu nowymi, z artefaktu `odniesienie`.
+Obrazy powstają i są porównywane w CI na Linuksie (`.github/workflows/tests.yml`). Rasteryzacja
+tekstu w Windowsie daje inne piksele, więc lokalne porównanie w Windowsie się nie zgodzi.
 
 ## Tolerancja
 
-Dwa przebiegi na tym samym kodzie dają dziś obrazy identyczne co do piksela. Porównanie
-dopuszcza mimo to 200 różniących się pikseli skupionych w prostokącie o boku najwyżej 24 —
-jest to zapas na maszynę w chmurze, której obraz systemu bywa podmieniany, a nie na cokolwiek,
-co widać. Przesunięcie układu daje różnicę rozlaną po całym oknie i przekracza oba progi naraz.
+Piksel uchodzi za ten sam, gdy żaden kanał barwy nie różni się o więcej niż 8. Zrzut przechodzi,
+jeśli różnych pikseli jest najwyżej 200 i mieszczą się w prostokącie o boku najwyżej 24 px.
+Przy różnicy większej narzędzie zapisuje obraz różnicowy w `artifacts/zrzuty/roznice`
+(różnice na czerwono na przygaszonym odniesieniu) i kończy się kodem 1.
+
+## Brak obrazu i zmiana wyglądu
+
+Gdy obrazu odniesienia brakuje, narzędzie zapisuje w tym katalogu bieżący zrzut. Lokalnie przebieg
+kończy się wtedy powodzeniem. W CI krok „Wymagaj kompletu odniesienia” kończy go błędem, a katalog
+z nowymi obrazami trafia do artefaktu `odniesienie`.
+
+Po zamierzonej zmianie wyglądu:
+
+1. obejrzeć obrazy różnicowe w katalogu `roznice` artefaktu `zrzuty`,
+2. skopiować z tego artefaktu zmienione zrzuty o nazwach z tabeli do tego katalogu,
+3. zatwierdzić je razem ze zmianą wyglądu.

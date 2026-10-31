@@ -19,19 +19,40 @@ public enum AssociationState
     Current,
 }
 
+/// <summary>Why registering the file types failed, for the settings window to put into words.</summary>
+public enum AssociationFailure
+{
+    /// <summary>The path of the running program could not be determined.</summary>
+    ExecutableUnknown,
+
+    /// <summary>The registry refused a write.</summary>
+    RegistryWrite,
+}
+
+/// <summary>A failed registration. The message is for the log; <see cref="Reason"/> is for the user.</summary>
+public sealed class AssociationException(AssociationFailure reason, string message)
+    : InvalidOperationException(message)
+{
+    public AssociationFailure Reason { get; } = reason;
+}
+
+/// <summary>What Explorer and the default apps settings show about the program, in the user's language.</summary>
+/// <param name="FileTypeName">Nazwa typu w kolumnie „Typ” Eksploratora.</param>
+/// <param name="Description">Opis programu w ustawieniach aplikacji domyślnych.</param>
+public sealed record AssociationTexts(string FileTypeName, string Description)
+{
+    /// <summary>Used until the caller supplies texts in the interface language.</summary>
+    public static AssociationTexts Default { get; } = new("Plik dźwiękowy", "Odtwarzacz plików dźwiękowych");
+}
+
 /// <summary>
-/// Registers the application as a program able to open audio files.
+/// Rejestruje program jako zdolny do otwierania plików dźwiękowych.
+/// Wpisy trafiają pod <c>HKEY_CURRENT_USER</c>, więc nie trzeba uprawnień administratora.
+/// Program żadnego rozszerzenia nie przejmuje: dopisuje się do „Otwórz za pomocą” i do listy
+/// aplikacji domyślnych.
 ///
-/// <para><b>Tylko dla bieżącego użytkownika.</b> Wszystkie wpisy trafiają pod
-/// <c>HKEY_CURRENT_USER</c>, więc skojarzenie nie wymaga uprawnień administratora i nie zmienia
-/// niczego innym użytkownikom komputera. Program nie przejmuje przy tym żadnego rozszerzenia na
-/// siłę: dopisuje się do listy „Otwórz za pomocą", a wpis w rejestrze programów sprawia, że można
-/// go wskazać w ustawieniach domyślnych aplikacji. Wybór należy do użytkownika, nie do instalacji.</para>
-///
-/// <para><b>Dlaczego rejestr obsługiwany bezpośrednio.</b> Klasa <c>Microsoft.Win32.Registry</c>
-/// jest dostępna dopiero dla platform docelowych z sufiksem <c>-windows</c>. Przejście na taką
-/// platformę wciągnęłoby cały pakiet referencyjny Windows SDK do projektu, który poza tym jednym
-/// miejscem jest w pełni wieloplatformowy — trzy funkcje z <c>advapi32</c> są tańsze.</para>
+/// <para>Rejestr obsługiwany przez trzy funkcje z <c>advapi32</c>, bo <c>Microsoft.Win32.Registry</c>
+/// wymaga platformy docelowej <c>-windows</c> i całego pakietu Windows SDK.</para>
 /// </summary>
 public static unsafe class FileAssociations
 {
@@ -65,14 +86,18 @@ public static unsafe class FileAssociations
     /// Adds the application to the list of programs able to open the given extensions.
     /// </summary>
     /// <param name="extensions">Extensions including the leading dot, for example <c>.mp3</c>.</param>
-    public static void Register(IReadOnlyList<string> extensions)
+    /// <param name="texts">Teksty w języku interfejsu; po zmianie języka rejestrację warto ponowić.</param>
+    public static void Register(IReadOnlyList<string> extensions, AssociationTexts? texts = null)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
 
-        var executable = ExecutablePath
-                         ?? throw new InvalidOperationException("Nie udało się ustalić ścieżki programu.");
+        texts ??= AssociationTexts.Default;
 
-        Native.WriteString(ClassKey, null, "Plik dźwiękowy");
+        var executable = ExecutablePath
+                         ?? throw new AssociationException(
+                             AssociationFailure.ExecutableUnknown, "Nie udało się ustalić ścieżki programu.");
+
+        Native.WriteString(ClassKey, null, texts.FileTypeName);
         Native.WriteString($@"{ClassKey}\DefaultIcon", null, $"{executable},0");
         Native.WriteString($@"{ClassKey}\shell\open", "FriendlyAppName", ApplicationName);
         Native.WriteString($@"{ClassKey}\shell\open\command", null, BuildCommand());
@@ -86,8 +111,7 @@ public static unsafe class FileAssociations
         }
 
         Native.WriteString(CapabilitiesKey, "ApplicationName", ApplicationName);
-        Native.WriteString(CapabilitiesKey, "ApplicationDescription",
-            "Minimalistyczny odtwarzacz plików lokalnych.");
+        Native.WriteString(CapabilitiesKey, "ApplicationDescription", texts.Description);
         Native.WriteString(CapabilitiesKey, "ApplicationIcon", $"{executable},0");
         Native.WriteString(RegisteredApplicationsKey, ApplicationName, CapabilitiesKey);
 
@@ -168,8 +192,8 @@ public static unsafe class FileAssociations
         private static void Check(int result, string subKey)
         {
             if (result != Success)
-                throw new InvalidOperationException(
-                    $"Zapis do rejestru nie powiódł się ({subKey}, kod {result}).");
+                throw new AssociationException(
+                    AssociationFailure.RegistryWrite, $"Zapis do rejestru nie powiódł się ({subKey}, kod {result}).");
         }
 
         [DllImport("advapi32.dll", CharSet = CharSet.Unicode)]

@@ -6,12 +6,9 @@ using Avalonia.Media.Imaging;
 namespace Cewka.App.Controls;
 
 /// <summary>
-/// The record: body, grooves, inner ring, album label and spindle hole.
-/// <para>
-/// Rotation is applied through <see cref="Visual.RenderTransform"/> rather than inside
-/// <see cref="Render"/>, so spinning costs nothing beyond a matrix update — the ~36 groove
-/// rings are tessellated once and then reused frame after frame.
-/// </para>
+/// Płyta: korpus, rowki, pierścień, naklejka i otwór. Obrót idzie przez
+/// <see cref="Visual.RenderTransform"/>, więc rowki są teselowane raz, a klatka kosztuje
+/// tylko zmianę macierzy.
 /// </summary>
 public sealed class VinylDisc : Control
 {
@@ -45,7 +42,7 @@ public sealed class VinylDisc : Control
     public static readonly StyledProperty<IBrush?> HoleBrushProperty =
         AvaloniaProperty.Register<VinylDisc, IBrush?>(nameof(HoleBrush));
 
-    /// <summary>Draw the grooves. Turned off by the reduced-effects mode.</summary>
+    /// <summary>Draw the grooves.</summary>
     public static readonly StyledProperty<bool> ShowGroovesProperty =
         AvaloniaProperty.Register<VinylDisc, bool>(nameof(ShowGrooves), true);
 

@@ -1,6 +1,9 @@
-﻿using Avalonia.Controls;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Chrome;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Cewka.App.Controls;
 using Cewka.App.Models;
 using Cewka.App.ViewModels;
 using Cewka.Platform;
@@ -8,19 +11,24 @@ using Cewka.Platform;
 namespace Cewka.App.Views;
 
 /// <summary>
-/// The settings window: everything the player remembers between runs, in one place.
-/// <para>
-/// Frameless like the main window, and deliberately not modal — a device or a theme is chosen
-/// by listening and looking, which means the music has to keep playing and the window behind
-/// has to stay usable while the choice is made.
-/// </para>
+/// Okno ustawień, bez ramki jak okno główne i niemodalne, bo urządzenie czy motyw wybiera się
+/// słuchając i patrząc. Z tego powodu przyjmuje skróty odtwarzania i staje obok okna głównego.
 /// </summary>
 public partial class SettingsWindow : Window
 {
     /// <summary>Grab band along the window border for resizing, as in the main window.</summary>
     private const double ResizeMargin = 6;
 
+    /// <summary>Odstęp od okna głównego przy ustawianiu obok niego.</summary>
+    private const double Gap = 12;
+
+    /// <summary>Zapas na niewidoczną ramkę systemową przy sprawdzaniu zapamiętanego położenia.</summary>
+    private const double FrameTolerance = 8;
+
     private SettingsViewModel? _viewModel;
+
+    /// <summary>Ramka systemowa w Windows, jak w oknie głównym.</summary>
+    private readonly bool _systemFrame;
 
     /// <summary>
     /// Required by the XAML runtime loader. The window is always created with a view model
@@ -31,8 +39,17 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         ApplyControlsPosition();
 
-        // Wlasny pasek przewijania, ten sam co przy kolejce; domyslny z motywu Fluent
-        // jest szerszy i nie nalezy do jezyka wizualnego reszty programu.
+        _systemFrame = OperatingSystem.IsWindows();
+        if (_systemFrame)
+        {
+            WindowDecorations = WindowDecorations.BorderOnly;
+            WindowDecorationProperties.SetElementRole(TitleBar, WindowDecorationsElementRole.TitleBar);
+            TitleBarRoles.Apply(TitleBar);
+            Shell.Classes.Add("square");
+        }
+
+        // Własny pasek przewijania, ten sam co przy kolejce; domyślny z motywu Fluent jest
+        // szerszy i odstaje od reszty programu.
         ContentScrollBar.Target = ContentArea;
     }
 
@@ -41,14 +58,15 @@ public partial class SettingsWindow : Window
         _viewModel = viewModel;
         DataContext = viewModel;
 
-        // Pozycja przycisków okna jest jednym z ustawień w tym oknie, więc musi się w nim
-        // przestawić natychmiast — inaczej jedyne miejsce, gdzie tej zmiany nie widać, byłoby
-        // to, w którym się jej dokonuje.
+        // Położenie przycisków okna zmienia się w tym oknie, więc i tutaj ma się przestawić od razu.
         _viewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(SettingsViewModel.CurrentWindowControls)) ApplyControlsPosition();
         };
     }
+
+    /// <summary>Obsługa skrótów odtwarzania z okna głównego; zwraca prawdę, gdy klawisz był skrótem.</summary>
+    public Func<KeyEventArgs, bool>? PlaybackShortcuts { get; init; }
 
     private void ApplyControlsPosition()
     {
@@ -62,6 +80,87 @@ public partial class SettingsWindow : Window
         ControlsRight.IsVisible = onRight;
     }
 
+    // ================= Położenie =================
+
+    /// <summary>
+    /// Ustawia okno przed pokazaniem. Zapamiętane położenie wraca, jeśli okno mieści się na
+    /// którymś z ekranów. Inaczej okno staje obok głównego, gdy obok jest miejsce w obszarze
+    /// roboczym, a gdy go nie ma — przy krawędzi ekranu po stronie, gdzie wolnego miejsca jest więcej.
+    /// </summary>
+    public void PlaceBeside(Window owner)
+    {
+        if ((Screens.ScreenFromWindow(owner) ?? Screens.Primary) is not { } screen)
+        {
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            return;
+        }
+
+        var scale = screen.Scaling;
+
+        // Na małym ekranie (np. 1366×768 przy 125%) okno o wysokości z projektu wystawałoby
+        // poza obszar roboczy i nigdy nie wróciłoby w zapamiętane miejsce.
+        Width = FitLength(Width, MinWidth, screen.WorkingArea.Width / scale);
+        Height = FitLength(Height, MinHeight, screen.WorkingArea.Height / scale);
+
+        var size = new PixelSize((int)Math.Ceiling(Width * scale), (int)Math.Ceiling(Height * scale));
+        var saved = App.Settings.Current.SettingsWindow;
+
+        if (saved is not null
+            && FitsOn(new PixelRect(new PixelPoint(saved.X, saved.Y), size),
+                      Screens.All.Select(s => s.WorkingArea), (int)(FrameTolerance * scale)))
+        {
+            Position = new PixelPoint(saved.X, saved.Y);
+            return;
+        }
+
+        var ownerRect = new PixelRect(owner.Position, PixelSize.FromSize(owner.ClientSize, owner.RenderScaling));
+        Position = Beside(ownerRect, size, screen.WorkingArea, (int)(Gap * scale));
+    }
+
+    /// <summary>Długość okna przycięta do dostępnego miejsca, ale nie poniżej minimum.</summary>
+    internal static double FitLength(double length, double minimum, double available) =>
+        Math.Max(minimum, Math.Min(length, available));
+
+    /// <summary>
+    /// Okno leży na którymś z obszarów roboczych. Kilka pikseli zapasu obejmuje niewidoczną ramkę
+    /// systemową i okno przyciągnięte do krawędzi, które zaczyna się tuż poza obszarem.
+    /// </summary>
+    internal static bool FitsOn(PixelRect window, IEnumerable<PixelRect> areas, int tolerance) =>
+        areas.Any(area => new PixelRect(area.X - tolerance, area.Y - tolerance,
+                                        area.Width + 2 * tolerance, area.Height + 2 * tolerance).Contains(window));
+
+    /// <summary>Położenie obok prostokąta okna głównego w obrębie obszaru roboczego.</summary>
+    internal static PixelPoint Beside(PixelRect owner, PixelSize size, PixelRect area, int gap)
+    {
+        var y = Math.Clamp(owner.Y, area.Y, Math.Max(area.Y, area.Bottom - size.Height));
+
+        var right = owner.Right + gap;
+        if (right + size.Width <= area.Right) return new PixelPoint(right, y);
+
+        var left = owner.X - gap - size.Width;
+        if (left >= area.X) return new PixelPoint(left, y);
+
+        var roomRight = area.Right - owner.Right;
+        var roomLeft = owner.X - area.X;
+        var x = roomRight >= roomLeft ? area.Right - size.Width : area.X;
+
+        return new PixelPoint(Math.Max(area.X, x), y);
+    }
+
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        App.Settings.Current.SettingsWindow = new WindowGeometry
+        {
+            X = Position.X,
+            Y = Position.Y,
+            Width = Width,
+            Height = Height,
+        };
+        App.Settings.Touch();
+
+        base.OnClosing(e);
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         _viewModel?.Dispose();
@@ -73,26 +172,39 @@ public partial class SettingsWindow : Window
         base.OnKeyDown(e);
         if (e.Handled) return;
 
-        if (e.Key != Key.Escape) return;
+        if (e.Key == Key.Escape)
+        {
+            Close();
+            e.Handled = true;
+            return;
+        }
 
-        Close();
-        e.Handled = true;
+        // Klawisze, których nie zużyła kontrolka z fokusem, sterują odtwarzaniem jak w oknie głównym.
+        PlaybackShortcuts?.Invoke(e);
     }
 
     private void OnSectionClick(object? sender, RoutedEventArgs e)
     {
-        if (sender is not Button { DataContext: SettingsSection section }) return;
+        if (sender is Control { DataContext: SettingsSection section }) Select(section);
+    }
 
+    /// <summary>Pokazuje wskazaną sekcję, np. Dźwięk po poleceniu „Wybierz urządzenie”.</summary>
+    internal void ShowSection(Func<SettingsViewModel, SettingsSection> pick)
+    {
+        if (_viewModel is not null) Select(pick(_viewModel));
+    }
+
+    private void Select(SettingsSection section)
+    {
         _viewModel?.SelectSection(section);
 
-        // Przewiniecie nalezy do porzuconej zakladki; bez tego kolejna otwieralaby sie
-        // w polowie, w miejscu, ktorego uzytkownik nigdy nie wskazal.
+        // Przewinięcie należało do poprzedniej zakładki; następna ma się otworzyć od góry.
         ContentArea.Offset = default;
     }
 
     /// <summary>
-    /// Wybor jezyka ma postac listy, a nie paska segmentow: przy szesciu pozycjach segmenty
-    /// nie mieszcza sie w jednym wierszu. Grupa pod spodem pozostaje ta sama.
+    /// Wybór języka ma postać listy, bo tylu pozycji nie zmieści pasek segmentów. Grupa pod
+    /// spodem jest ta sama.
     /// </summary>
     private void OnLanguageClick(object? sender, RoutedEventArgs e)
     {
@@ -131,12 +243,12 @@ public partial class SettingsWindow : Window
 
     private void OnRemoveAssociations(object? sender, RoutedEventArgs e) => _viewModel?.RemoveAssociations();
 
-    // ================= Sterowanie oknem =================
+    // ================= Sterowanie oknem bez ramki systemowej =================
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
-        if (e.Handled) return;
+        if (e.Handled || _systemFrame) return;
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
 
         var position = e.GetPosition(this);
@@ -153,6 +265,7 @@ public partial class SettingsWindow : Window
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
+        if (_systemFrame) return;
 
         Cursor = TryGetResizeEdge(e.GetPosition(this)) switch
         {
@@ -166,7 +279,7 @@ public partial class SettingsWindow : Window
         };
     }
 
-    private WindowEdge? TryGetResizeEdge(Avalonia.Point position)
+    private WindowEdge? TryGetResizeEdge(Point position)
     {
         var left = position.X <= ResizeMargin;
         var right = position.X >= Bounds.Width - ResizeMargin;

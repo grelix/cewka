@@ -1,12 +1,8 @@
 namespace Cewka.Audio.Decoding;
 
 /// <summary>
-/// A source of interleaved 32-bit float samples, already converted to the channel count
-/// and sample rate the playback pipeline runs at.
-/// <para>
-/// Doing the conversion behind this interface rather than in front of it means the mixer
-/// never has to care whether a track was 44.1 kHz mono Vorbis or 192 kHz stereo FLAC.
-/// </para>
+/// Źródło przeplecionych próbek 32-bitowych, już w liczbie kanałów i częstotliwości toru
+/// odtwarzania.
 /// </summary>
 public interface IAudioDecoder : IDisposable
 {

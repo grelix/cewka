@@ -13,6 +13,94 @@ internal static unsafe partial class NativeAudio
 {
     internal const string Library = "cewka_audio";
 
+    /// <summary>Zmienna środowiskowa włączająca puste wyjście; wartość „1” je włącza.</summary>
+    internal const string NullOutputVariable = "CEWKA_NULL_AUDIO";
+
+    // ---------- zgodność ----------
+
+    /// <summary>
+    /// Wersja zestawu funkcji, której oczekuje ten kod; ta sama stała jest w
+    /// <c>native/cewka_audio.c</c>. Zmienia się przy każdej zmianie sygnatur lub znaczenia eksportów.
+    /// </summary>
+    internal const int AbiVersion = 2;
+
+    [LibraryImport(Library, EntryPoint = "cewka_abi_version")]
+    private static partial int NativeAbiVersion();
+
+    private static readonly Lazy<string?> AbiMismatch = new(DescribeAbiMismatch);
+
+    /// <summary>
+    /// Biblioteka natywna nie jest w repozytorium i bywa starsza od kodu. Wywołanie funkcji
+    /// o innej sygnaturze kończy się awarią procesu, więc niezgodność trzeba wykryć wcześniej.
+    /// </summary>
+    internal static void EnsureCompatible()
+    {
+        if (AbiMismatch.Value is { } message) throw new AudioException(message);
+    }
+
+    private static string? DescribeAbiMismatch()
+    {
+        int found;
+        try
+        {
+            found = NativeAbiVersion();
+        }
+        catch (EntryPointNotFoundException)
+        {
+            found = 0;
+        }
+
+        return found == AbiVersion
+            ? null
+            : $"Biblioteka {FileName} ma wersję interfejsu {found}, a program wymaga {AbiVersion}; trzeba ją przebudować.";
+    }
+
+    // ---------- zaplecze ----------
+
+    [LibraryImport(Library, EntryPoint = "cewka_use_null_backend")]
+    private static partial int UseNullBackend(int on);
+
+    private static readonly Lock BackendLock = new();
+    private static bool _nullBackend = Environment.GetEnvironmentVariable(NullOutputVariable) == "1";
+    private static bool _backendApplied;
+
+    internal static bool NullBackend
+    {
+        get { lock (BackendLock) return _nullBackend; }
+    }
+
+    /// <summary>
+    /// Przestawia zaplecze. Kontekst miniaudio powstaje przy pierwszym wyliczeniu urządzeń
+    /// albo otwarciu urządzenia i od tej chwili zaplecza zmienić się nie da.
+    /// </summary>
+    internal static void SetNullBackend(bool on)
+    {
+        EnsureCompatible();
+
+        lock (BackendLock)
+        {
+            if (UseNullBackend(on ? 1 : 0) != Success)
+                throw new InvalidOperationException("Wyjście puste trzeba wybrać przed pierwszym użyciem urządzeń dźwiękowych.");
+
+            _nullBackend = on;
+            _backendApplied = true;
+        }
+    }
+
+    /// <summary>Przekazuje wybór zaplecza do biblioteki przed pierwszym utworzeniem kontekstu.</summary>
+    internal static void EnsureBackend()
+    {
+        EnsureCompatible();
+
+        lock (BackendLock)
+        {
+            if (_backendApplied) return;
+
+            ThrowIfFailed(UseNullBackend(_nullBackend ? 1 : 0), "Wybór zaplecza dźwięku");
+            _backendApplied = true;
+        }
+    }
+
     // ---------- urządzenia ----------
 
     [LibraryImport(Library, EntryPoint = "cewka_devices_refresh")]
@@ -29,11 +117,24 @@ internal static unsafe partial class NativeAudio
         int deviceIndex, uint sampleRate, uint channels, uint periodSizeInFrames,
         delegate* unmanaged<void*, float*, uint, void> callback, void* user, out nint handle);
 
+    /// <summary>
+    /// Zdarzenie urządzenia zgłaszane przez <see cref="DeviceSetNotify"/>: urządzenie zatrzymało
+    /// się bez polecenia. Może to być utrata albo przekierowanie, po którym ruszy samo.
+    /// </summary>
+    internal const int DeviceStoppedUnrequestedEvent = 1;
+
+    [LibraryImport(Library, EntryPoint = "cewka_device_set_notify")]
+    internal static partial int DeviceSetNotify(nint handle, delegate* unmanaged<void*, int, void> notify);
+
     [LibraryImport(Library, EntryPoint = "cewka_device_start")]
     internal static partial int DeviceStart(nint handle);
 
     [LibraryImport(Library, EntryPoint = "cewka_device_stop")]
     internal static partial int DeviceStop(nint handle);
+
+    /// <summary>1, gdy urządzenie faktycznie pracuje.</summary>
+    [LibraryImport(Library, EntryPoint = "cewka_device_is_started")]
+    internal static partial int DeviceIsStarted(nint handle);
 
     [LibraryImport(Library, EntryPoint = "cewka_device_destroy")]
     internal static partial void DeviceDestroy(nint handle);
@@ -56,6 +157,7 @@ internal static unsafe partial class NativeAudio
     internal static partial int DecoderOpen(
         delegate* unmanaged<void*, void*, nuint, nuint> read,
         delegate* unmanaged<void*, long, int, int> seek,
+        delegate* unmanaged<void*, int, long> tell,
         void* user, uint outRate, uint outChannels, uint lpfOrder,
         out nint handle, out ulong lengthFrames, out uint sourceRate, out uint sourceChannels);
 
@@ -64,6 +166,9 @@ internal static unsafe partial class NativeAudio
 
     [LibraryImport(Library, EntryPoint = "cewka_decoder_seek")]
     internal static partial int DecoderSeek(nint handle, ulong frameIndex);
+
+    [LibraryImport(Library, EntryPoint = "cewka_decoder_cursor")]
+    internal static partial ulong DecoderCursor(nint handle);
 
     [LibraryImport(Library, EntryPoint = "cewka_decoder_close")]
     internal static partial void DecoderClose(nint handle);
@@ -151,11 +256,8 @@ internal static unsafe partial class NativeAudio
         yield return Path.Combine(baseDirectory, FileName);
         yield return Path.Combine(baseDirectory, "runtimes", Rid, "native", FileName);
 
-        // Uruchomienie z katalogu projektu podczas prac deweloperskich.
-        //
-        // W wydaniu jednoplikowym Assembly.Location zwraca pusty napis i analizator slusznie
-        // o tym uprzedza; ta sciezka jest tu wylacznie dla zwyklej kompilacji, a pusty wynik
-        // jest obslugiwany linijke nizej.
+        // Uruchomienie z katalogu projektu. W wydaniu jednoplikowym Assembly.Location zwraca
+        // pusty napis, obsłużony linijkę niżej.
 #pragma warning disable IL3000
         var assemblyDirectory = Path.GetDirectoryName(typeof(NativeAudio).Assembly.Location);
 #pragma warning restore IL3000

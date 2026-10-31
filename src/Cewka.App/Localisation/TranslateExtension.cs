@@ -4,11 +4,8 @@ using Avalonia.Markup.Xaml;
 namespace Cewka.App.Localisation;
 
 /// <summary>
-/// XAML shorthand for a translated string: <c>Text="{l:Translate Queue}"</c>.
-/// <para>
-/// It returns a binding rather than a plain string, so that switching language refreshes
-/// every piece of text already on screen instead of only the parts rebuilt afterwards.
-/// </para>
+/// Skrót XAML dla tłumaczonego tekstu: <c>Text="{l:Translate Queue}"</c>. Zwraca wiązanie,
+/// żeby zmiana języka odświeżała też teksty już widoczne na ekranie.
 /// </summary>
 public sealed class TranslateExtension : MarkupExtension
 {

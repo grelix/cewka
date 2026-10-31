@@ -5,26 +5,22 @@
         xmlns:vm="using:Cewka.App.ViewModels"
         x:Class="Cewka.App.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
-        Title="Cewka"
+        Title="{l:Translate SettingsWindowTitle}"
         Icon="avares://Cewka/Assets/cewka.png"
         Width="820" Height="640"
         MinWidth="700" MinHeight="520"
-        WindowStartupLocation="CenterOwner"
+        CanMaximize="False"
+        WindowStartupLocation="Manual"
         Background="Transparent"
         TransparencyLevelHint="Transparent"
         WindowDecorations="None"
         ExtendClientAreaToDecorationsHint="True">
 
-  <Border x:Name="Shell"
-          CornerRadius="15"
-          ClipToBounds="True"
-          BorderBrush="{DynamicResource StrokeBrush}"
-          BorderThickness="1"
-          Background="{DynamicResource DeskBrush}">
+  <Border x:Name="Shell" Classes="shell">
 
     <DockPanel>
 
-      <!-- Pasek tytulu -->
+      <!-- Pasek tytułu -->
       <Border x:Name="TitleBar"
               DockPanel.Dock="Top"
               Height="47"
@@ -36,7 +32,7 @@
                      LetterSpacing="0.13"
                      HorizontalAlignment="Center" VerticalAlignment="Center" />
 
-          <!-- Przyciski po obu stronach, widoczny ten zgodny z ustawieniem; obsluga w kodzie. -->
+          <!-- Przyciski po obu stronach, widoczny ten zgodny z ustawieniem; obsługa w kodzie. -->
           <DockPanel Margin="12,0,12,0">
             <c:WindowButtons x:Name="ControlsLeft" DockPanel.Dock="Left"
                              CloseOnly="True" IsVisible="False" VerticalAlignment="Center" />
@@ -49,7 +45,7 @@
 
       <Grid ColumnDefinitions="188,*">
 
-        <!-- Zakladki: lista pionowa, bo nazwy sekcji miesza sie w calosci w kazdym jezyku -->
+        <!-- Zakładki: lista pionowa, żeby nazwy sekcji mieściły się w całości w każdym języku -->
         <Border Grid.Column="0"
                 Background="{DynamicResource HeaderBarBrush}"
                 BorderBrush="{DynamicResource StrokeBrush}"
@@ -62,30 +58,31 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:SettingsSection">
-                <Button Classes="option wide" Classes.on="{Binding IsSelected}"
+                <c:OptionButton Classes="option wide" Classes.on="{Binding IsSelected}" IsSelected="{Binding IsSelected}"
+                                AutomationProperties.Name="{Binding Label}"
                         Click="OnSectionClick"
                         Height="32"
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
                   <TextBlock Text="{Binding Label}" FontSize="12"
                              TextTrimming="CharacterEllipsis"
                              Foreground="{Binding $parent[Button].Foreground}" />
-                </Button>
+                </c:OptionButton>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </Border>
 
-        <!-- Tresc; pasek przewijania jak w kolejce, zamiast domyslnego z motywu Fluent -->
+        <!-- Treść; pasek przewijania jak w kolejce, zamiast domyślnego z motywu Fluent -->
         <Panel Grid.Column="1">
           <ScrollViewer x:Name="ContentArea"
                         HorizontalScrollBarVisibility="Disabled"
                         VerticalScrollBarVisibility="Hidden">
             <Panel Margin="24,20,30,26">
 
-              <!-- ========== Wyglad ========== -->
+              <!-- ========== Wygląd ========== -->
               <StackPanel Spacing="18" IsVisible="{Binding Appearance.IsSelected}">
-                <!-- Bez tytulu karty: nazwe sekcji podaje zakladka po lewej, na tej samej
-                     wysokosci, wiec powtorzenie jej tutaj bylo echem, nie informacja -->
+                <!-- Bez tytułu karty: nazwę sekcji podaje zakładka po lewej, na tej samej
+                     wysokości -->
                 <Border Classes="section">
                   <StackPanel Spacing="16">
                     <StackPanel Spacing="8">
@@ -117,6 +114,7 @@
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding ShowFormatBadge, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingFormatBadge}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
@@ -124,8 +122,8 @@
                   </StackPanel>
                 </Border>
 
-                <!-- Barwa domyslnej okladki: wybor wzrokiem, wiec kazda pozycja pokazuje
-                     przejscie barw takie, jakie faktycznie wyjdzie w obecnym motywie -->
+                <!-- Barwa domyślnej okładki: każda pozycja pokazuje przejście barw takie,
+                     jakie wyjdzie w bieżącym motywie -->
                 <Border Classes="section">
                   <StackPanel Spacing="10">
                     <TextBlock Classes="section-title" Text="{l:Translate SettingPlaceholder}" />
@@ -138,7 +136,8 @@
                       </ItemsControl.ItemsPanel>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:PaletteOption">
-                          <Button Classes="option wide" Classes.on="{Binding IsSelected}"
+                          <c:OptionButton Classes="option wide" Classes.on="{Binding IsSelected}" IsSelected="{Binding IsSelected}"
+                                AutomationProperties.Name="{Binding Label}"
                                   Click="OnPaletteClick"
                                   Width="168" Height="34" Margin="0,0,8,6"
                                   HorizontalContentAlignment="Left">
@@ -150,7 +149,7 @@
                                          TextTrimming="CharacterEllipsis"
                                          Foreground="{Binding $parent[Button].Foreground}" />
                             </StackPanel>
-                          </Button>
+                          </c:OptionButton>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -159,13 +158,12 @@
 
               </StackPanel>
 
-              <!-- ========== Jezyk ========== -->
+              <!-- ========== Język ========== -->
               <StackPanel Spacing="18" IsVisible="{Binding LanguageSection.IsSelected}">
 
-                <!-- Wybor ma postac listy, nie paska segmentow: przy czternastu pozycjach pasek
-                     nie miesci sie w wierszu. Kafel ma 168 px, zeby przy szerokosci domyslnej
-                     okna w wierszu stawaly trzy pozycje; przy oknie scisnietym do minimum
-                     WrapPanel sam zwija je do dwoch. -->
+                <!-- Lista, bo przy kilkunastu pozycjach pasek segmentów nie mieści się w wierszu.
+                     Kafel ma 168 px, żeby przy domyślnej szerokości okna w wierszu stały trzy
+                     pozycje; w oknie ściśniętym do minimum WrapPanel zwija je do dwóch. -->
                 <Border Classes="section">
                   <StackPanel Spacing="10">
                     <TextBlock Classes="section-title" Text="{l:Translate SettingLanguage}" />
@@ -177,7 +175,8 @@
                       </ItemsControl.ItemsPanel>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:SegmentOption">
-                          <Button Classes="option wide" Classes.on="{Binding IsSelected}"
+                          <c:OptionButton Classes="option wide" Classes.on="{Binding IsSelected}" IsSelected="{Binding IsSelected}"
+                                AutomationProperties.Name="{Binding Label}"
                                   Click="OnLanguageClick"
                                   Width="168" Height="30" Margin="0,0,8,6"
                                   HorizontalContentAlignment="Left">
@@ -187,7 +186,7 @@
                                          TextTrimming="CharacterEllipsis"
                                          Foreground="{Binding $parent[Button].Foreground}" />
                             </StackPanel>
-                          </Button>
+                          </c:OptionButton>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -195,12 +194,10 @@
                 </Border>
 
                 <!--
-                  Skad wziely sie tlumaczenia. Stoi w tej zakladce, a nie w informacjach
-                  o programie, bo tutaj ktos wlasnie wybiera jezyk i tutaj ta wiedza jest mu
-                  potrzebna. Odsylacz do zgloszen na koncu: prosba o poprawke bez wskazania,
-                  gdzie ja zlozyc, jest prosba bez adresata.
+                  Skąd pochodzą tłumaczenia, przy wyborze języka, z odsyłaczem do zgłoszeń
+                  poprawek na końcu.
                 -->
-                <Border Classes="section">
+                <Border Classes="section" IsVisible="{Binding ShowTranslationNote}">
                   <StackPanel Spacing="8">
                     <TextBlock Classes="setting-hint" Text="{l:Translate HintMachineTranslation}" />
                     <Button Classes="link" Click="OnOpenIssues"
@@ -210,7 +207,7 @@
                 </Border>
               </StackPanel>
 
-              <!-- ========== Dzwiek ========== -->
+              <!-- ========== Dźwięk ========== -->
               <StackPanel Spacing="18" IsVisible="{Binding Audio.IsSelected}">
 
                 <Border Classes="section">
@@ -222,8 +219,7 @@
                               Content="{l:Translate DeviceRefresh}" />
                     </Grid>
 
-                    <!-- Lista zamiast listy rozwijanej: urządzeń jest zwykle kilka, a wybór
-                         bez dodatkowego kliknięcia pokazuje od razu, co jest do wyboru. -->
+                    <!-- Lista zamiast listy rozwijanej, bo urządzeń jest zwykle kilka. -->
                     <StackPanel Spacing="8">
                       <ItemsControl ItemsSource="{Binding Devices}">
                         <ItemsControl.ItemsPanel>
@@ -233,7 +229,8 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="vm:DeviceOption">
-                            <Button Classes="option wide" Classes.on="{Binding IsSelected}"
+                            <c:OptionButton Classes="option wide" Classes.on="{Binding IsSelected}" IsSelected="{Binding IsSelected}"
+                                AutomationProperties.Name="{Binding Label}"
                                     Click="OnDeviceClick"
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
                               <StackPanel Orientation="Horizontal" Spacing="9">
@@ -242,7 +239,7 @@
                                            TextTrimming="CharacterEllipsis"
                                            Foreground="{Binding $parent[Button].Foreground}" />
                               </StackPanel>
-                            </Button>
+                            </c:OptionButton>
                           </DataTemplate>
                         </ItemsControl.ItemTemplate>
                       </ItemsControl>
@@ -253,7 +250,7 @@
                       <TextBlock Classes="setting-label" Text="{l:Translate SettingLatency}" />
                       <c:SegmentBar Group="{Binding Latency}" />
                       <TextBlock Classes="setting-hint" Text="{l:Translate HintLatency}" />
-                      <TextBlock Classes="mono faint" FontSize="10.5" Text="{Binding LatencyDescription}" />
+                      <TextBlock Classes="faint" FontSize="10.5" Text="{Binding LatencyDescription}" />
                     </StackPanel>
                   </StackPanel>
                 </Border>
@@ -269,24 +266,26 @@
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding NormalisationEnabled, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate OptionNormalisation}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
                     </Grid>
 
-                    <StackPanel Spacing="8" IsEnabled="{Binding NormalisationEnabled}">
+                    <StackPanel Classes="setting" Spacing="8" IsEnabled="{Binding NormalisationEnabled}">
                       <TextBlock Classes="setting-label" Text="{l:Translate SettingLoudnessTarget}" />
                       <c:SegmentBar Group="{Binding Loudness}" />
                       <TextBlock Classes="setting-hint" Text="{l:Translate HintLoudnessTarget}" />
                     </StackPanel>
 
-                    <Grid ColumnDefinitions="*,Auto" IsEnabled="{Binding NormalisationEnabled}">
+                    <Grid Classes="setting" ColumnDefinitions="*,Auto" IsEnabled="{Binding NormalisationEnabled}">
                       <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
                         <TextBlock Classes="setting-label" Text="{l:Translate OptionAlwaysAnalyse}" />
                         <TextBlock Classes="setting-hint" Text="{l:Translate HintAlwaysAnalyse}" />
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding AlwaysAnalyse, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate OptionAlwaysAnalyse}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
@@ -299,6 +298,7 @@
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding LimiterEnabled, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate OptionLimiter}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
@@ -309,59 +309,9 @@
                       <c:SegmentBar Group="{Binding Quality}" />
                       <TextBlock Classes="setting-hint" Text="{l:Translate HintQuality}" />
                     </StackPanel>
-                  </StackPanel>
-                </Border>
-              </StackPanel>
 
-              <!-- ========== Efekty ========== -->
-              <StackPanel Spacing="18" IsVisible="{Binding EffectsSection.IsSelected}">
-
-                <Border Classes="section">
-                  <StackPanel Spacing="16">
-                    <TextBlock Classes="section-title" Text="{l:Translate Effects}" />
-                    <TextBlock Classes="setting-hint" Text="{l:Translate EffectsNote}"
-                               TextWrapping="Wrap" />
-
-                    <ItemsControl ItemsSource="{Binding SoundEffects}">
-                      <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                          <StackPanel Spacing="20" />
-                        </ItemsPanelTemplate>
-                      </ItemsControl.ItemsPanel>
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:EffectViewModel">
-                          <StackPanel Spacing="9">
-
-                            <Grid ColumnDefinitions="*,Auto">
-                              <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
-                                <TextBlock Classes="setting-label" Text="{Binding Label}" />
-                                <TextBlock Classes="setting-hint" Text="{Binding Description}"
-                                           TextWrapping="Wrap" />
-                              </StackPanel>
-                              <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
-                                             IsChecked="{Binding Enabled, Mode=TwoWay}"
-                                             OffBrush="{DynamicResource TrackBrush}"
-                                             OnBrush="{DynamicResource AccentBrush}"
-                                             BorderBrush="{DynamicResource StrokeBrush}" />
-                            </Grid>
-
-                            <!-- Ten sam suwak, co w oknie glownym: oba steruja tym samym
-                                 obiektem, wiec nie ma czego miedzy nimi uzgadniac. -->
-                            <Grid ColumnDefinitions="*,44" ColumnSpacing="12"
-                                  Opacity="{Binding RowOpacity}">
-                              <c:TrackSlider Grid.Column="0" Height="18" VerticalAlignment="Center"
-                                             Value="{Binding Strength, Mode=TwoWay}"
-                                             TrackThickness="4" ThumbDiameter="11"
-                                             TrackBrush="{DynamicResource TrackBrush}"
-                                             FillBrush="{DynamicResource AccentBrush}" />
-                              <TextBlock Grid.Column="1" Classes="mono faint"
-                                         Text="{Binding StrengthText}" FontSize="10.5"
-                                         VerticalAlignment="Center" HorizontalAlignment="Right" />
-                            </Grid>
-                          </StackPanel>
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <!-- Korektor i efekty mają jedno miejsce: pas w oknie głównym. -->
+                    <TextBlock Classes="setting-hint" Text="{l:Translate HintEqualiserInMainWindow}" />
                   </StackPanel>
                 </Border>
               </StackPanel>
@@ -377,6 +327,7 @@
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding RestoreSessionEnabled, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingRestoreSession}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
@@ -408,6 +359,7 @@
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding MediaKeysEnabled, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingMediaKeys}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
@@ -420,6 +372,7 @@
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding SingleInstanceEnabled, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingSingleInstance}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
@@ -453,8 +406,8 @@
                 <Border Classes="section">
                   <StackPanel Spacing="13">
                     <StackPanel Spacing="4">
-                      <TextBlock Classes="mono dim" Text="{Binding VersionText}" FontSize="11" />
-                      <TextBlock Classes="mono faint" Text="{Binding AudioEngineText}" FontSize="10.5" />
+                      <TextBlock Classes="tabular dim" Text="{Binding VersionText}" FontSize="11" />
+                      <TextBlock Classes="tabular faint" Text="{Binding AudioEngineText}" FontSize="10.5" />
                     </StackPanel>
 
                     <StackPanel Spacing="4">
@@ -475,13 +428,32 @@
                   </StackPanel>
                 </Border>
 
-                <!--
-                  Karta druga: sprawdzanie nowszego wydania. Jedyna rzecz w tej zakladce, ktora
-                  cokolwiek robi — przycisk i przelacznik. Karta pierwsza podaje fakty do
-                  przeczytania, ta wymaga decyzji, wiec stoi osobno.
+                <!-- Skróty klawiszowe okna głównego. -->
+                <Border Classes="section">
+                  <StackPanel Spacing="10">
+                    <TextBlock Classes="setting-label" Text="{l:Translate AboutShortcuts}" />
+                    <ItemsControl x:Name="ShortcutList" ItemsSource="{Binding Shortcuts}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Spacing="5" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ShortcutRow">
+                          <Grid ColumnDefinitions="150,*" ColumnSpacing="12">
+                            <TextBlock Grid.Column="0" Classes="dim" Text="{Binding Keys}" FontSize="11.5"
+                                       FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock Grid.Column="1" Classes="setting-hint" Text="{Binding Action}" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Border>
 
-                  Domyslnie nic sie nie dzieje samo: przycisk dziala na zadanie, a przelacznik
-                  dopiero wlacza sprawdzanie przy uruchomieniu.
+                <!--
+                  Karta druga: sprawdzanie nowszego wydania, osobno, bo wymaga decyzji.
+                  Przycisk działa na żądanie, a przełącznik włącza sprawdzanie przy uruchomieniu.
                 -->
                 <Border Classes="section" IsVisible="{Binding CanCheckForUpdates}">
                   <StackPanel Spacing="10">
@@ -504,6 +476,7 @@
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding CheckForUpdatesEnabled, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingUpdateCheck}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
@@ -512,8 +485,7 @@
                 </Border>
 
                 <!--
-                  Karta ostatnia: repozytorium. Dwa odsylacze wyprowadzajace poza program, wiec
-                  na samym koncu zakladki — po tym, co o programie mowi on sam.
+                  Karta ostatnia: repozytorium. Odsyłacze poza program na końcu zakładki.
                 -->
                 <Border Classes="section" IsVisible="{Binding HasRepository}">
                   <StackPanel Spacing="4">

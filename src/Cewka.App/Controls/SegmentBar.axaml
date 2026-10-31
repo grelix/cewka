@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Cewka.App.ViewModels"
+             xmlns:c="using:Cewka.App.Controls"
              x:Class="Cewka.App.Controls.SegmentBar">
 
   <Border Padding="3" CornerRadius="11"
@@ -18,10 +19,11 @@
 
       <ItemsControl.ItemTemplate>
         <DataTemplate x:DataType="vm:SegmentOption">
-          <Button Classes="option" Classes.on="{Binding IsSelected}" Click="OnOptionClick">
+          <c:OptionButton Classes="option" Classes.on="{Binding IsSelected}" IsSelected="{Binding IsSelected}"
+                                AutomationProperties.Name="{Binding Label}" Click="OnOptionClick">
             <TextBlock Text="{Binding Label}" FontSize="11" FontWeight="Bold"
                        Foreground="{Binding $parent[Button].Foreground}" />
-          </Button>
+          </c:OptionButton>
         </DataTemplate>
       </ItemsControl.ItemTemplate>
     </ItemsControl>

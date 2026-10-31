@@ -4,12 +4,8 @@ using Cewka.Audio.Playback;
 namespace Cewka.App.Models;
 
 /// <summary>
-/// The playback queue as it stood when the application last closed.
-/// <para>
-/// Kept apart from <see cref="AppSettings"/> because it changes far more often and can grow
-/// to thousands of entries; mixing the two would mean rewriting the whole settings file every
-/// time a folder is added.
-/// </para>
+/// Kolejka z chwili ostatniego zamknięcia. Osobno od <see cref="AppSettings"/>, bo zmienia się
+/// znacznie częściej i bywa długa na tysiące pozycji.
 /// </summary>
 public sealed class QueueState
 {
@@ -29,10 +25,17 @@ public sealed class QueueState
     public string? Repeat { get; set; }
 
     /// <summary>
-    /// The two-state form written by earlier versions. Read only for compatibility — a queue
-    /// saved before repeat-one existed should not lose its setting on the first run afterwards.
+    /// Dwustanowa postać ze starszych plików, czytana tylko dla zgodności, żeby kolejka zapisana
+    /// przed powtarzaniem jednego utworu nie straciła ustawienia.
     /// </summary>
     public bool RepeatQueue { get; set; }
+
+    /// <summary>
+    /// Otwarcia niedokończone przed zamknięciem okna, w kolejności przybycia; następne uruchomienie
+    /// je dokańcza. Pominięte w pliku, gdy ich nie ma; starsze wersje pomijają nieznane pole.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<PendingOpenState>? PendingOpens { get; set; }
 
     /// <summary>Resolves the mode from whichever form the file happens to carry.</summary>
     public RepeatMode ReadRepeat() => Repeat switch
@@ -42,6 +45,16 @@ public sealed class QueueState
         "None" => RepeatMode.None,
         _ => RepeatQueue ? RepeatMode.Queue : RepeatMode.None,
     };
+}
+
+/// <summary>Otwarcie plików przerwane zamknięciem okna.</summary>
+public sealed class PendingOpenState
+{
+    /// <summary>Ścieżki w postaci przysłanej: pliki i foldery.</summary>
+    public List<string> Paths { get; set; } = [];
+
+    /// <summary>Akcja otwierania: <c>Outside</c>, <c>Add</c>, <c>Replace</c> albo <c>Append</c>.</summary>
+    public string? Action { get; set; }
 }
 
 [JsonSourceGenerationOptions(WriteIndented = false, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]

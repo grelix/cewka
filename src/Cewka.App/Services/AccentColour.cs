@@ -3,17 +3,9 @@ using Avalonia.Media;
 namespace Cewka.App.Services;
 
 /// <summary>
-/// Barwa akcentu wyprowadzona z okładki — ta, którą świecą przełączniki, suwaki i wypełnienia.
-///
-/// <para><b>Dlaczego osobno od palety tła.</b> Plamy tła mają być tłem: ich nasycenie skaluje
-/// ustawienie intensywności barw, a jasność jest sprowadzana do pasma, na którym da się czytać
-/// tekst. Akcent służy do czego innego — ma być widoczny i ma mówić, że coś jest włączone.
-/// Dlatego bierze z okładki wyłącznie odcień i nasycenie, zawsze w pełnej sile, niezależnie od
-/// tego, jak ustawiono intensywność.</para>
-///
-/// <para><b>Jasność jest narzucana, i to celowo.</b> Okładka niemal czarna dałaby akcent niemal
-/// czarny, czyli przełączniki nie do odróżnienia od tła. Odcień i nasycenie pochodzą z okładki,
-/// jasność z motywu — inaczej barwa okładki bywałaby nie do zobaczenia.</para>
+/// Barwa akcentu z okładki dla przełączników, suwaków i wypełnień. Z okładki bierze tylko odcień
+/// i nasycenie, w pełnej sile bez względu na intensywność barw; jasność pochodzi z motywu, bo
+/// ciemna okładka dałaby akcent nie do odróżnienia od tła.
 /// </summary>
 public static class AccentColour
 {
@@ -31,9 +23,8 @@ public static class AccentColour
     private const double MinimumResultSaturation = 0.42;
 
     /// <summary>
-    /// Wartości domyślne z <c>Themes/Tokens.axaml</c>. Powielone tutaj świadomie: po nadpisaniu
-    /// zasobu nie da się już odczytać tego, co było pod spodem, a przy okładce bez barwy trzeba
-    /// mieć dokąd wrócić.
+    /// Wartości domyślne z <c>Themes/Tokens.axaml</c>. Powielone, bo po nadpisaniu zasobu nie da
+    /// się odczytać pierwotnej wartości, a okładka bez barwy musi mieć dokąd wrócić.
     /// </summary>
     public static Color Default(bool darkTheme) =>
         darkTheme ? Color.Parse("#FF7FB6EF") : Color.Parse("#FF2A75BA");

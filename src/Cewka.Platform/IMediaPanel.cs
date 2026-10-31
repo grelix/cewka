@@ -1,13 +1,8 @@
 namespace Cewka.Platform;
 
 /// <summary>
-/// What the desktop shows about the music: the overlay and volume flyout in Windows, the media
-/// panel of a Linux desktop through MPRIS.
-/// <para>
-/// The two are built on completely different foundations — one on the binary interface of
-/// WinRT, the other on the session bus — but the player has exactly the same thing to tell
-/// them, so it talks to both through this.
-/// </para>
+/// To, co pulpit pokazuje o muzyce: nakładka i panel głośności w Windows, panel multimediów
+/// pulpitu Linuksa przez MPRIS.
 /// </summary>
 public interface IMediaPanel : IDisposable
 {
@@ -23,6 +18,14 @@ public interface IMediaPanel : IDisposable
     /// timeline, so the default does nothing.
     /// </summary>
     void SetPosition(TimeSpan position)
+    {
+    }
+
+    /// <summary>
+    /// Reports the volume, between 0 and 1. Only MPRIS shows it; the Windows panel has none of
+    /// its own, so the default does nothing.
+    /// </summary>
+    void SetVolume(double volume)
     {
     }
 }

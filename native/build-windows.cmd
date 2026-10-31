@@ -42,12 +42,13 @@ pushd "%SCRIPT_DIR%"
 
 rem /O2   optymalizacja pod katem szybkosci
 rem /MT   statyczne dolinkowanie biblioteki uruchomieniowej - brak zaleznosci od redystrybutabli
-rem /GS-  wylaczenie kontroli bufora w kodzie krytycznym czasowo
-cl /nologo /O2 /MT /GS- /W3 /D_CRT_SECURE_NO_WARNINGS ^
+rem /GS i /guard:cf z /GUARD:CF  kontrola przepelnienia stosu i przeplywu sterowania;
+rem       biblioteka dekoduje pliki z niezaufanych zrodel
+cl /nologo /O2 /MT /GS /W3 /guard:cf /D_CRT_SECURE_NO_WARNINGS ^
    /LD cewka_audio.c ^
    /Fe:"%OUT_DIR%\cewka_audio.dll" ^
    /Fo:"%TEMP%\cewka_audio.obj" ^
-   /link /INCREMENTAL:NO
+   /link /INCREMENTAL:NO /GUARD:CF
 
 set "BUILD_RESULT=%ERRORLEVEL%"
 popd

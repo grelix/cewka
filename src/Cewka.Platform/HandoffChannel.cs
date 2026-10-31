@@ -11,38 +11,42 @@ internal interface IHandoffListener : IDisposable
     /// <c>null</c> once the channel is closing.
     /// </summary>
     Stream? Accept(CancellationToken token);
+
+    /// <summary>
+    /// Bez czekania zwraca połączenie nadawcy, który połączył się, zanim odbiorca go przyjął,
+    /// albo <c>null</c>. Wołane przy zamykaniu, więc nie przygotowuje miejsca dla następnych.
+    /// </summary>
+    Stream? TakePending();
+
+    /// <summary>
+    /// Nowy nadawca nie może się już połączyć i dostaje odmowę; połączeni wcześniej czekają
+    /// na <see cref="TakePending"/>.
+    /// </summary>
+    void StopAccepting();
 }
 
 /// <summary>
-/// Carries paths from a copy that is starting to the copy that is already running.
+/// Przenosi ścieżki z kopii, która startuje, do kopii już działającej.
+/// W Windows to potok nazwany; przestrzeń nazw potoków jest wspólna dla wszystkich zalogowanych,
+/// więc obie strony przyjmują tylko bieżącego użytkownika. Pod Linuksem potok .NET byłby gniazdem
+/// we wspólnym <c>TMPDIR</c>, dlatego gniazdo zakładane jest w katalogu jednego użytkownika.
 ///
-/// <para><b>Dlaczego dwa rozwiązania.</b> W Windows potok nazwany żyje w przestrzeni nazw
-/// jądra i nie zależy od żadnego katalogu — działa i zostaje. W Linuksie potok nazwany .NET-u
-/// jest w rzeczywistości gniazdem dziedziny Uniksa, którego ścieżkę wyznacza zmienna
-/// <c>TMPDIR</c>. To zawodzi na dwa sposoby: kopia uruchomiona z innym <c>TMPDIR</c> szuka
-/// gniazda w innym miejscu i nie znajduje go, a katalog <c>/tmp</c> jest wspólny dla wszystkich
-/// użytkowników maszyny — obca osoba może zająć nazwę i odbierać ścieżki otwieranych plików.
-/// Dlatego pod Linuksem gniazdo zakładamy sami, w katalogu należącym do jednego użytkownika.</para>
-///
-/// <para><b>Adres powstaje od razu przy zdobyciu roli</b>, a nie dopiero przy pierwszym
-/// nasłuchu. Zanim pierwsza kopia zbuduje okno, mija ułamek sekundy — a menedżer plików potrafi
-/// w tym czasie uruchomić kopię na każdy zaznaczony plik. Gniazdo otwarte wcześniej przyjmuje
-/// te połączenia do kolejki jądra i żadne nie przepada.</para>
+/// <para>Pułapka: potok nie ma kolejki połączeń jak gniazdo, więc następna instancja potoku
+/// powstaje zaraz po przyjęciu połączenia, jeszcze przed odczytem wiadomości.</para>
 /// </summary>
 internal static class HandoffChannel
 {
     /// <summary>
-    /// How long a sender keeps trying. Wystarczy na szparę między zdobyciem blokady a otwarciem
-    /// gniazda; dłuższe czekanie tylko opóźniałoby otwarcie własnego okna, gdy nikogo nie ma.
+    /// Jak długo nadawca próbuje się połączyć. Wystarcza na szparę między zdobyciem blokady
+    /// a otwarciem kanału; dłużej opóźniałoby własne okno, gdy nikt nie słucha.
     /// </summary>
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(1);
 
     /// <summary>Guards the accept loop against a sender that connects and then goes quiet.</summary>
-    private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(2);
+    internal static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(2);
 
     /// <summary>
-    /// Waiting connections the kernel holds. Zaznaczenie całego albumu uruchamia kopię na każdy
-    /// plik, więc kolejka musi pomieścić kilkadziesiąt naraz.
+    /// Kolejka połączeń w jądrze. Zaznaczenie całego albumu uruchamia kopię na każdy plik.
     /// </summary>
     private const int Backlog = 64;
 
@@ -63,7 +67,9 @@ internal static class HandoffChannel
 
     private static void SendThroughPipe(string name, byte[] payload)
     {
-        using var client = new NamedPipeClientStream(".", name, PipeDirection.Out);
+        // CurrentUserOnly sprawdza właściciela potoku przed wysłaniem: potok innego
+        // użytkownika kończy się wyjątkiem.
+        using var client = new NamedPipeClientStream(".", name, PipeDirection.Out, PipeOptions.CurrentUserOnly);
         client.Connect((int)ConnectTimeout.TotalMilliseconds);
 
         client.Write(BitConverter.GetBytes(payload.Length));
@@ -71,34 +77,106 @@ internal static class HandoffChannel
         client.Flush();
     }
 
-    private sealed class PipeListener(string name) : IHandoffListener
+    private sealed class PipeListener : IHandoffListener
     {
+        private readonly string _name;
+        private readonly object _gate = new();
+        private bool _disposed;
+
         /// <summary>
         /// Instancja potoku przygotowana z góry, żeby nadawca mógł się połączyć, zanim
         /// odbiorca stanie na przyjęciu połączenia.
         /// </summary>
-        private NamedPipeServerStream? _ready = Create(name);
+        private NamedPipeServerStream? _ready;
+
+        public PipeListener(string name)
+        {
+            _name = name;
+
+            // Pierwsza instancja nie może dołączyć do cudzego potoku o tej nazwie.
+            _ready = Create(name, PipeOptions.FirstPipeInstance);
+        }
 
         public Stream? Accept(CancellationToken token)
         {
-            var server = Interlocked.Exchange(ref _ready, null) ?? Create(name);
+            NamedPipeServerStream server;
+
+            lock (_gate)
+            {
+                if (_disposed) return null;
+                server = _ready ?? Create(_name, PipeOptions.None);
+                _ready = null;
+            }
 
             try
             {
                 server.WaitForConnectionAsync(token).GetAwaiter().GetResult();
-                return server;
             }
             catch
             {
                 server.Dispose();
                 throw;
             }
+
+            // Następny nadawca ma od razu gdzie się połączyć, choćby ten zwlekał z wiadomością.
+            lock (_gate)
+            {
+                if (!_disposed) _ready ??= Create(_name, PipeOptions.None);
+            }
+
+            return server;
         }
 
-        public void Dispose() => Interlocked.Exchange(ref _ready, null)?.Dispose();
+        public Stream? TakePending()
+        {
+            NamedPipeServerStream? server;
 
-        private static NamedPipeServerStream Create(string name) => new(
-            name, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+            lock (_gate)
+            {
+                server = _ready;
+                _ready = null;
+            }
+
+            if (server is null) return null;
+
+            // Połączony już nadawca kończy oczekiwanie od razu; inaczej oczekiwanie zostaje przerwane.
+            using var none = new CancellationTokenSource();
+            var connected = server.WaitForConnectionAsync(none.Token);
+            none.Cancel();
+
+            try
+            {
+                connected.GetAwaiter().GetResult();
+                return server;
+            }
+            catch
+            {
+                server.Dispose();
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Nic do zrobienia: ostatnią instancję potoku zabiera <see cref="TakePending"/>, a nowej
+        /// nikt już nie tworzy.
+        /// </summary>
+        public void StopAccepting()
+        {
+        }
+
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                _disposed = true;
+                _ready?.Dispose();
+                _ready = null;
+            }
+        }
+
+        private static NamedPipeServerStream Create(string name, PipeOptions extra) => new(
+            name, PipeDirection.In, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly | extra);
     }
 
     // ---------- Systemy uniksowe ----------
@@ -167,9 +245,8 @@ internal static class HandoffChannel
             _path = path;
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
-            // Po awarii zostaje plik gniazda i sam zablokowałby założenie nowego. Wolno go
-            // usunąć: o roli tej kopii rozstrzygnęła już blokada pliku, więc pod tym adresem
-            // na pewno nikt nie nasłuchuje.
+            // Plik gniazda po awarii blokowałby założenie nowego. Rolę rozstrzygnęła już
+            // blokada pliku, więc pod tym adresem nikt nie słucha.
             Usun(path);
 
             _socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
@@ -199,9 +276,19 @@ internal static class HandoffChannel
                 return null;
             }
 
-            accepted.ReceiveTimeout = (int)ReadTimeout.TotalMilliseconds;
             return new NetworkStream(accepted, ownsSocket: true);
         }
+
+        public Stream? TakePending() => _socket.Poll(0, SelectMode.SelectRead)
+            ? new NetworkStream(_socket.Accept(), ownsSocket: true)
+            : null;
+
+        /// <summary>
+        /// Bez pliku gniazda nowy nadawca dostaje ENOENT, a gniazdo nasłuchu z kolejką połączeń
+        /// działa dalej. Inaczej jądro przyjmowałoby nadawców aż do zamknięcia gniazda, a ich
+        /// wysłanie kończyłoby się sukcesem bez odbioru.
+        /// </summary>
+        public void StopAccepting() => Usun(_path);
 
         public void Dispose()
         {

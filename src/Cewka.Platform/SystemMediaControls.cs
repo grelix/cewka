@@ -16,24 +16,15 @@ public enum MediaPanelStatus
 }
 
 /// <summary>
-/// The Windows media panel: the overlay that appears on pressing a media key, and the entry in
-/// the volume flyout showing what is playing.
+/// Panel multimediów Windows: nakładka po naciśnięciu klawisza multimedialnego i wpis
+/// w wysuwanym panelu głośności. Wywołania idą wprost przez binarny interfejs WinRT, bez
+/// platformy docelowej <c>-windows</c> i pakietu Windows SDK.
 ///
-/// <para><b>Dlaczego interop pisany ręcznie.</b> Zwykłą drogą do tego interfejsu jest zmiana
-/// platformy docelowej na wariant z sufiksem <c>-windows</c>, co wciąga pakiet referencyjny
-/// Windows SDK — kilkadziesiąt megabajtów zależności dla jednej funkcji w programie, który poza
-/// nią jest w pełni wieloplatformowy. Tutaj wywołania idą wprost przez binarny interfejs WinRT,
-/// tak samo jak dekoder Media Foundation w warstwie dźwięku.</para>
-///
-/// <para><b>Skąd identyfikatory i kolejność metod.</b> Odczytane z metadanych systemowych
-/// (<c>C:\Windows\System32\WinMetadata\Windows.Media.winmd</c>), nie z pamięci ani z przykładów
-/// w sieci. Pomyłka w numerze pozycji w tablicy wirtualnej nie daje błędu kompilacji — wywołuje
-/// zupełnie inną funkcję, więc każda z nich jest tu wypisana razem z numerem, pod którym stoi.</para>
-///
-/// <para>Jedyną wartością, której nie ma w metadanych, jest identyfikator interfejsu pomostowego
-/// <c>ISystemMediaTransportControlsInterop</c> — istnieje wyłącznie w nagłówkach języka C. Jego
-/// poprawność sprawdza się sama: przy złym identyfikatorze zapytanie o interfejs zwraca błąd,
-/// panel po prostu nie powstaje, a program działa dalej bez niego.</para>
+/// <para>Pułapka: identyfikatory i pozycje metod pochodzą z
+/// <c>C:\Windows\System32\WinMetadata\Windows.Media.winmd</c>. Zły numer pozycji w tablicy
+/// wirtualnej kompiluje się i wywołuje inną funkcję, dlatego każda pozycja ma tu swoją stałą.
+/// Identyfikatora <c>ISystemMediaTransportControlsInterop</c> nie ma w metadanych, tylko
+/// w nagłówkach C; przy złym panel po prostu nie powstaje.</para>
 /// </summary>
 public sealed unsafe class SystemMediaControls : IMediaPanel
 {
@@ -41,12 +32,13 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
 
     private static readonly Guid IidUnknown = new("00000000-0000-0000-c000-000000000046");
 
-    /// <summary>Only value here not present in the metadata; see the class remarks.</summary>
+    /// <summary>Jedyny identyfikator spoza metadanych; patrz opis klasy.</summary>
     private static readonly Guid IidInterop = new("ddb0472d-c911-4a1f-86d9-dc3d71a95f5a");
 
     private static readonly Guid IidControls = new("99fa3ff4-1742-42a6-902e-087d41f965ec");
     private static readonly Guid IidDisplayUpdater = new("8abbc53e-fa55-4ecf-ad8e-c984e5dd1550");
     private static readonly Guid IidMusicProperties = new("6bbf0c59-d0a0-4d26-92a0-f978e1d18e7b");
+    private static readonly Guid IidMusicProperties2 = new("00368462-97d3-44b9-b00f-008afcefaf18");
     private static readonly Guid IidButtonArgs = new("b7f47116-a56f-4dc8-9e11-92031f4a87c2");
 
     // ---------- Pozycje w tablicach wirtualnych ----------
@@ -76,10 +68,12 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
     private const int SlotUpdate = Inspectable + 11;
 
     private const int SlotPutTitle = Inspectable + 1;
-    private const int SlotPutAlbumArtist = Inspectable + 3;
+    private const int SlotPutAlbumTitle = Inspectable + 1;
     private const int SlotPutArtist = Inspectable + 5;
 
     private const int SlotGetButton = Inspectable + 0;
+
+    private const int SlotQueryInterface = 0;
 
     /// <summary>Media type reported to the panel; 1 is Music.</summary>
     private const int MediaTypeMusic = 1;
@@ -89,6 +83,7 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
     private nint _controls;
     private nint _updater;
     private nint _musicProperties;
+    private nint _albumProperties;
     private nint _handler;
     private long _token;
     private bool _disposed;
@@ -98,6 +93,9 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
         _controls = controls;
         _updater = updater;
         _musicProperties = musicProperties;
+
+        // Tytuł albumu ma osobny interfejs; bez niego album po prostu się nie pokazuje.
+        _albumProperties = QueryInterface(musicProperties, IidMusicProperties2);
     }
 
     /// <summary>Raised when a button on the system panel is pressed. Fires on a system thread.</summary>
@@ -205,11 +203,8 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
     // ---------- Zawartość panelu ----------
 
     /// <summary>
-    /// Reports what is playing. Empty values are simply left out of the panel.
-    /// <para>
-    /// Długość nagrania nie jest tu używana: panel systemu Windows przyjmuje ją osobnym
-    /// interfejsem opisującym oś czasu, a bez niego pokazuje sam opis utworu.
-    /// </para>
+    /// Podaje, co gra; puste wartości panel pomija. Długość nie jest przekazywana, bo panel
+    /// przyjmuje ją osobnym interfejsem osi czasu.
     /// </summary>
     public void SetTrack(string title, string? artist, string? album, TimeSpan length)
     {
@@ -217,7 +212,8 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
 
         Check(SetString(_musicProperties, SlotPutTitle, title), "tytuł");
         Check(SetString(_musicProperties, SlotPutArtist, artist ?? string.Empty), "wykonawca");
-        Check(SetString(_musicProperties, SlotPutAlbumArtist, album ?? string.Empty), "album");
+        if (_albumProperties != nint.Zero)
+            Check(SetString(_albumProperties, SlotPutAlbumTitle, album ?? string.Empty), "album");
 
         // Bez Update panel pokazuje poprzedni utwór: właściwości trafiają do bufora, a dopiero
         // to wywołanie przekazuje je systemowi.
@@ -331,6 +327,15 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
         }
     }
 
+    private static nint QueryInterface(nint instance, Guid iid)
+    {
+        nint value;
+        var result = ((delegate* unmanaged<nint, Guid*, nint*, int>)Vtable(instance)[SlotQueryInterface])(
+            instance, &iid, &value);
+
+        return result == Ok ? value : nint.Zero;
+    }
+
     private static nint GetInterface(nint instance, int slot)
     {
         nint value;
@@ -394,22 +399,21 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
 
         if (_controls != nint.Zero) SetBoolean(_controls, SlotPutIsEnabled, false);
 
+        Release(_albumProperties);
         Release(_musicProperties);
         Release(_updater);
         Release(_controls);
 
-        _musicProperties = _updater = _controls = nint.Zero;
+        _albumProperties = _musicProperties = _updater = _controls = nint.Zero;
     }
 
     /// <summary>
-    /// The object handed to the system as the button handler.
+    /// Obiekt przekazywany systemowi jako obsługa przycisków.
     ///
-    /// <para>WinRT expects a delegate of type
-    /// <c>TypedEventHandler&lt;SystemMediaTransportControls, …ButtonPressedEventArgs&gt;</c>. Such a
-    /// delegate has no fixed identifier: it is derived from the type arguments by the algorithm
-    /// described for parameterised types, which is what <see cref="ComputeHandlerIid"/> does.
-    /// A wrong result is harmless — the system asks the object for exactly that identifier,
-    /// gets a refusal, and registration fails visibly instead of silently doing nothing.</para>
+    /// <para>WinRT oczekuje delegata
+    /// <c>TypedEventHandler&lt;SystemMediaTransportControls, …ButtonPressedEventArgs&gt;</c>, który
+    /// nie ma stałego identyfikatora; wylicza go <see cref="ComputeHandlerIid"/> z argumentów typu.
+    /// Zły wynik kończy się widoczną porażką rejestracji.</para>
     /// </summary>
     private static class ButtonHandler
     {

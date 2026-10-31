@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
@@ -17,12 +17,8 @@ using Cewka.Platform;
 namespace Cewka.App.ViewModels;
 
 /// <summary>
-/// State behind the player window, driven by the real audio engine.
-/// <para>
-/// The engine reports position from the audio thread, so the interface polls it on a timer
-/// rather than being pushed to. Sixty milliseconds is far below what anyone perceives as
-/// lag on a progress bar and costs nothing.
-/// </para>
+/// Stan okna odtwarzacza, napędzany przez silnik dźwięku. Pozycję zgłasza wątek dźwiękowy,
+/// więc interfejs odpytuje ją zegarem co 60 ms.
 /// </summary>
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
@@ -35,6 +31,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly PlaybackEngine _engine;
     private readonly LoudnessService _loudness;
     private readonly DispatcherTimer _refresh;
+    private readonly string _queueFile;
+    private readonly QueueStateWriter _queueWriter;
 
     private QueueItemViewModel? _current;
     private TrackMetadata? _currentMetadata;
@@ -54,8 +52,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _formatBadge = string.Empty;
 
     public MainViewModel(SettingsStore settings)
+        : this(settings, new PlaybackEngine(), new LoudnessService(), AppPaths.QueueFile)
+    {
+    }
+
+    /// <summary>Dla testów: silnik, pomiar głośności i plik kolejki podane z zewnątrz.</summary>
+    internal MainViewModel(SettingsStore settings, PlaybackEngine engine, LoudnessService loudness, string queueFile)
     {
         _settings = settings;
+        _queueFile = queueFile;
+        _queueWriter = new QueueStateWriter(queueFile);
         var s = settings.Current;
 
         _panelOpen = s.PanelOpen;
@@ -65,30 +71,33 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // więc muszą stać na miejscu, zanim cokolwiek powstanie.
         AudioQuality.ResamplerFilterOrder = AudioPreferences.FilterOrder(s.ResamplerQuality);
 
-        _loudness = new LoudnessService
-        {
-            TargetLufs = AudioPreferences.Lufs(s.LoudnessTarget),
-            AlwaysAnalyse = s.AlwaysAnalyse,
-        };
+        _loudness = loudness;
+        _loudness.TargetLufs = AudioPreferences.Lufs(s.LoudnessTarget);
+        _loudness.AlwaysAnalyse = s.AlwaysAnalyse;
 
-        _engine = new PlaybackEngine { PreferredPeriodSize = AudioPreferences.PeriodFrames(s.OutputLatency) };
+        _engine = engine;
+        _engine.PreferredPeriodSize = AudioPreferences.PeriodFrames(s.OutputLatency);
         _engine.Graph.GainSource = _loudness;
         _engine.Graph.NormalisationEnabled = s.NormalisationEnabled;
         _engine.Graph.Limiter.Enabled = s.LimiterEnabled;
         _engine.Graph.Equaliser.Enabled = s.EqualiserEnabled;
         _engine.Graph.Equaliser.Preamp = s.Preamp;
-        _engine.Graph.Volume.Target = (float)s.Volume;
+        _volume = s.Volume;
+        _isMuted = s.IsMuted;
+        _engine.Graph.Volume.Target = _isMuted ? 0f : (float)VolumeCurve.ToGain(_volume);
 
         for (var band = 0; band < BandLabels.Length; band++)
             _engine.Graph.Equaliser.SetGain(band, s.EqualiserGains[band]);
 
-        Preamp = new EqBandViewModel("PREAMP", s.Preamp);
+        Preamp = new EqBandViewModel("Preamp", s.Preamp);
         Preamp.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName != nameof(EqBandViewModel.Gain)) return;
             _engine.Graph.Equaliser.Preamp = Preamp.Gain;
             _settings.Current.Preamp = Preamp.Gain;
             _settings.Touch();
+            Raise(nameof(CanResetEqualiser));
+            RaiseProcessing();
         };
 
         Bands = new ObservableCollection<EqBandViewModel>(
@@ -103,6 +112,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 _engine.Graph.Equaliser.SetGain(index, Bands[index].Gain);
                 _settings.Current.EqualiserGains[index] = Bands[index].Gain;
                 _settings.Touch();
+                Raise(nameof(CanResetEqualiser));
+                RaiseProcessing();
             };
         }
 
@@ -114,23 +125,34 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UpdateEffects();
 
         _engine.TrackChanged += index => Dispatcher.UIThread.Post(() => OnTrackChanged(index));
-        _engine.TrackFailed += (index, reason) => Dispatcher.UIThread.Post(() => OnTrackFailed(index, reason));
+        _engine.TrackFailed += (index, failure) => Dispatcher.UIThread.Post(() => OnTrackFailed(index, failure));
         _engine.QueueFinished += () => Dispatcher.UIThread.Post(() => IsPlaying = false);
+        _engine.DeviceLost += () => Dispatcher.UIThread.Post(OnDeviceLost);
 
         _title = Strings.Current["NoTrack"];
         _artistLine = string.Empty;
         _formatBadge = string.Empty;
 
         // Okładka domyślna od razu, żeby okno nigdy nie pokazało pustej płyty.
-        UpdateArtwork(null);
+        ShowCover(null);
 
-        App.Theme.Changed += (_, _) => Dispatcher.UIThread.Post(OnThemeChanged);
+        _themeWatcher = (_, _) => Dispatcher.UIThread.Post(OnThemeChanged);
+        App.Theme.Changed += _themeWatcher;
+
+        _themeModeWatcher = (_, _) => RaiseThemeMode();
+        App.Theme.ModeChanged += _themeModeWatcher;
 
         _refresh = new DispatcherTimer { Interval = RefreshInterval };
         _refresh.Tick += (_, _) => Refresh();
         _refresh.Start();
 
         _noticeTimer.Tick += (_, _) => ShowNotice(string.Empty);
+
+        _queueSave.Tick += (_, _) =>
+        {
+            _queueSave.Stop();
+            SaveQueueStateInBackground();
+        };
     }
 
     // ---------- Utwór ----------
@@ -138,7 +160,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public Bitmap? Cover { get => _cover; private set => Set(ref _cover, value); }
 
     /// <summary>Colours drawn from the cover, driving the animated background.</summary>
-    public IReadOnlyList<Color> Palette { get => _palette; private set => Set(ref _palette, value); }
+    public IReadOnlyList<Color> Palette
+    {
+        get => _palette;
+        private set
+        {
+            // Ta sama paleta nie może restartować przejścia barw w tle okna.
+            if (_palette.SequenceEqual(value)) return;
+            Set(ref _palette, value);
+        }
+    }
 
     public string Title { get => _title; private set => Set(ref _title, value); }
 
@@ -153,9 +184,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// False when the file carries no artist, album or year worth showing. The line is then
-    /// removed rather than filled with a placeholder — a stray dash or a stray "1" under the
-    /// title is noise, and it costs the title its descenders.
+    /// Fałsz, gdy plik nie ma wykonawcy, albumu ani roku do pokazania; wiersz znika wtedy
+    /// zamiast wypełniacza.
     /// </summary>
     public bool HasArtistLine => !string.IsNullOrWhiteSpace(_artistLine);
 
@@ -196,13 +226,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         private set
         {
             if (!Set(ref _isPlaying, value)) return;
+            if (value) WakeRefresh();
 
             Raise(nameof(IsPaused));
+            Raise(nameof(PlayPauseTooltip));
             _mediaPanel?.SetStatus(value ? MediaPanelStatus.Playing : MediaPanelStatus.Paused);
+            MediaKeys.Playing = value;
         }
     }
 
     public bool IsPaused => !_isPlaying;
+
+    /// <summary>Podpowiedź i nazwa przycisku odtwarzania: to, co zrobi jego naciśnięcie.</summary>
+    public string PlayPauseTooltip => Strings.Current[_isPlaying ? "TooltipPause" : "TooltipPlay"];
 
     /// <summary>Amplitude driving the waveform, taken from the live signal analysis.</summary>
     public float WaveLevel => _engine.Graph.Analyser.Level;
@@ -214,14 +250,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             if (!Set(ref _progress, value)) return;
 
-            // Ustawienie z kodu przy odswiezaniu nie moze przewijac odtwarzania.
+            // Ustawienie z kodu przy odświeżaniu nie może przewijać odtwarzania.
             if (_isSeeking) return;
 
-            // W trakcie przeciagania suwak tylko sie przesuwa; przewiniecie nastepuje po
+            // W trakcie przeciągania suwak tylko się przesuwa; przewinięcie następuje po
             // puszczeniu przycisku (CommitScrub).
             if (_scrubbing)
             {
-                Elapsed = FormatTime(_engine.Duration.TotalSeconds * Math.Clamp(value, 0, 1));
+                Elapsed = FormatTime(_engine.Duration.TotalSeconds * Math.Clamp(value, 0, 1), _engine.Duration.TotalHours >= 1);
                 return;
             }
 
@@ -232,15 +268,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _scrubbing;
 
     /// <summary>
-    /// Called while the user holds the progress bar.
-    /// <para>
-    /// Seeking on every pointer move would issue a full buffer handshake per pixel of travel:
-    /// the decoder parks, the audio thread fades out and discards, the file is repositioned.
-    /// Dragging across a long track would do that hundreds of times. The indicator follows the
-    /// pointer, the music waits for the button to be released.
-    /// </para>
+    /// Wołane w trakcie przeciągania paska postępu. Wskaźnik idzie za kursorem, a przewinięcie
+    /// czeka na puszczenie przycisku, bo każde przewinięcie wycisza i opróżnia bufor.
     /// </summary>
-    public void BeginScrub() => _scrubbing = true;
+    public void BeginScrub()
+    {
+        _scrubbing = true;
+        WakeRefresh();
+    }
 
     /// <summary>Called when the progress bar is released; this is where playback actually moves.</summary>
     public void CommitScrub(double value)
@@ -261,25 +296,79 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string Total { get => _total; private set => Set(ref _total, value); }
 
+    /// <summary>
+    /// Położenie suwaka głośności, 0–1. Wzmocnienie wynika z niego przez
+    /// <see cref="VolumeCurve"/>; przesunięcie suwaka przywraca dźwięk po wyciszeniu.
+    /// </summary>
     public double Volume
     {
-        get => _engine.Graph.Volume.Target;
+        get => _volume;
         set
         {
-            var clamped = (float)Math.Clamp(value, 0, 1);
-            if (Math.Abs(_engine.Graph.Volume.Target - clamped) < 1e-6f) return;
+            var clamped = Math.Clamp(value, 0, 1);
+            var unmute = _isMuted && clamped > 0;
+            if (Math.Abs(_volume - clamped) < 1e-9 && !unmute) return;
 
-            _engine.Graph.Volume.Target = clamped;
+            _volume = clamped;
             _settings.Current.Volume = clamped;
+            if (unmute) SetMuted(false);
+
+            ApplyVolume();
             _settings.Touch();
             Raise();
+            Raise(nameof(VolumeLevelText));
         }
     }
+
+    private double _volume;
+    private bool _isMuted;
+
+    /// <summary>Wyciszenie niezależne od położenia suwaka.</summary>
+    public bool IsMuted
+    {
+        get => _isMuted;
+        set
+        {
+            if (_isMuted == value) return;
+
+            SetMuted(value);
+            ApplyVolume();
+            _settings.Touch();
+        }
+    }
+
+    private void SetMuted(bool muted)
+    {
+        _isMuted = muted;
+        _settings.Current.IsMuted = muted;
+        Raise(nameof(IsMuted));
+        Raise(nameof(MuteTooltip));
+        Raise(nameof(VolumeOpacity));
+    }
+
+    /// <summary>Suwak wyciszonej głośności przygasa, ale zostaje w swoim położeniu.</summary>
+    public double VolumeOpacity => _isMuted ? 0.45 : 1.0;
+
+    /// <summary>Podpowiedź i nazwa przycisku głośnika.</summary>
+    public string MuteTooltip => Strings.Current[_isMuted ? "TooltipUnmute" : "TooltipMute"];
+
+    /// <summary>Poziom w procentach, do nazwy dostępności suwaka.</summary>
+    public string VolumeLevelText =>
+        string.Format(Strings.Current["VolumeLevel"], (int)Math.Round(_volume * 100));
+
+    /// <summary>Wzmocnienie dla toru i poziom dla panelu systemowego, który zna tylko jedną liczbę.</summary>
+    private void ApplyVolume()
+    {
+        _engine.Graph.Volume.Target = _isMuted ? 0f : (float)VolumeCurve.ToGain(_volume);
+        _mediaPanel?.SetVolume(PanelVolume);
+    }
+
+    private double PanelVolume => _isMuted ? 0 : _volume;
 
     public bool ShuffleEnabled
     {
         get => _engine.Shuffle;
-        set { _engine.Shuffle = value; Raise(); }
+        set { _engine.Shuffle = value; Raise(); TouchQueue(); }
     }
 
     /// <summary>True for either repeat mode; drives the accent colour on the button.</summary>
@@ -310,6 +399,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _ => RepeatMode.None,
         };
 
+        RaiseRepeat();
+        TouchQueue();
+    }
+
+    private void RaiseRepeat()
+    {
         Raise(nameof(RepeatEnabled));
         Raise(nameof(RepeatTrack));
         Raise(nameof(RepeatQueue));
@@ -319,11 +414,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     // ---------- Obszary okna ----------
 
     /// <summary>
-    /// Pas dolny: korektor i efekty. Od wersji 0.8.0 niezależny od kolejki.
-    ///
-    /// <para>Wcześniej jeden stan rządził oboma, bo dzieliły jeden panel u dołu okna. Odkąd
-    /// kolejka stoi we własnej kolumnie, są to dwa obszary w dwóch różnych miejscach i wiązanie
-    /// ich razem kazało pokazywać korektor komuś, kto chciał tylko zobaczyć, co dalej zagra.</para>
+    /// Pas dolny: korektor i efekty, rozwijany niezależnie od kolumny kolejki.
     /// </summary>
     public bool PanelOpen
     {
@@ -333,6 +424,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (!Set(ref _panelOpen, value)) return;
             _settings.Current.PanelOpen = value;
             _settings.Touch();
+            Raise(nameof(ShowProcessingDot));
         }
     }
 
@@ -340,15 +432,66 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public bool QueueOpen
     {
         get => _queueOpen;
-        set
-        {
-            if (!Set(ref _queueOpen, value)) return;
-            _settings.Current.QueueOpen = value;
-            _settings.Touch();
-        }
+        set => SetQueueOpen(value, remember: true);
     }
 
-    /// <summary>Where the window buttons sit; changed from the settings window in stage 6.</summary>
+    /// <summary>
+    /// Pokazuje albo chowa kolejkę. Bez <paramref name="remember"/> ustawienia zachowują zamiar
+    /// użytkownika: kolejka schowana przez zbyt wąskie okno wraca przy następnym starcie.
+    /// </summary>
+    public void SetQueueOpen(bool value, bool remember)
+    {
+        if (!Set(ref _queueOpen, value, nameof(QueueOpen))) return;
+        if (!remember) return;
+
+        _settings.Current.QueueOpen = value;
+        _settings.Touch();
+    }
+
+    /// <summary>
+    /// Dźwięk zmienia korektor z niepłaską krzywą albo włączony efekt. Limiter i normalizacja są
+    /// włączone domyślnie i pilnują tylko poziomu, więc z nimi kropka świeciłaby zawsze.
+    /// </summary>
+    public bool ProcessingActive =>
+        (EqualiserEnabled && CanResetEqualiser) || SoundEffects.Any(effect => effect.Enabled);
+
+    /// <summary>Kropka na przycisku pasa: przetwarzanie działa, a pasa nie widać.</summary>
+    public bool ShowProcessingDot => !PanelOpen && ProcessingActive;
+
+    private void RaiseProcessing()
+    {
+        Raise(nameof(ProcessingActive));
+        Raise(nameof(ShowProcessingDot));
+    }
+
+    // ---------- Motyw ----------
+
+    public ThemeMode ThemeMode => App.Theme.Mode;
+
+    public bool ThemeIsSystem => ThemeMode == ThemeMode.System;
+
+    public bool ThemeIsDark => ThemeMode == ThemeMode.Dark;
+
+    public bool ThemeIsLight => ThemeMode == ThemeMode.Light;
+
+    /// <summary>Podpowiedź i nazwa przycisku motywu z bieżącym trybem i skrótem.</summary>
+    public string ThemeTooltip => Strings.Current[ThemeMode switch
+    {
+        ThemeMode.Dark => "TooltipThemeDark",
+        ThemeMode.Light => "TooltipThemeLight",
+        _ => "TooltipThemeSystem",
+    }];
+
+    private void RaiseThemeMode()
+    {
+        Raise(nameof(ThemeMode));
+        Raise(nameof(ThemeIsSystem));
+        Raise(nameof(ThemeIsDark));
+        Raise(nameof(ThemeIsLight));
+        Raise(nameof(ThemeTooltip));
+    }
+
+    /// <summary>Where the window buttons sit; changed from the settings window.</summary>
     public WindowControlsPosition WindowControls => _settings.Current.WindowControls;
 
     public bool ControlsOnRight => WindowControls == WindowControlsPosition.Right;
@@ -382,14 +525,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Re-reads the pieces of text the view model built itself. Bindings written as
-    /// <c>{l:Translate}</c> refresh on their own, but a title or a queue row assembled in code
-    /// keeps whatever language it was assembled in until it is rebuilt.
+    /// Odczytuje od nowa teksty złożone w kodzie (tytuł, wiersze kolejki); wiązania
+    /// <c>{l:Translate}</c> odświeżają się same.
     /// </summary>
     private void RefreshTextForLanguage()
     {
-        if (_current is null) Title = Strings.Current["NoTrack"];
         RebuildQueue();
+        if (_current is null) Title = IdleTitle;
+        RaiseRepeat();
+        Raise(nameof(AudioFailure));
+        Raise(nameof(UpdateNotice));
+        Raise(nameof(LatencyDescription));
+        Raise(nameof(VolumeLevelText));
+        Raise(nameof(ThemeTooltip));
+        Raise(nameof(PlayPauseTooltip));
+        Raise(nameof(MuteTooltip));
+        Raise(nameof(UndoQueueLabel));
+        Preamp.RefreshText();
+        foreach (var band in Bands) band.RefreshText();
 
         foreach (var effect in SoundEffects) effect.RefreshLabels();
     }
@@ -418,14 +571,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             ApplyEffect(effect);
 
             var captured = effect;
+            var stored = (effect.Enabled, effect.Strength);
             captured.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName != nameof(EffectViewModel.Enabled)
                     && e.PropertyName != nameof(EffectViewModel.Strength)) return;
 
+                // Suwak wracający na stopień zgłasza zmianę bez zmiany wartości.
+                if ((captured.Enabled, captured.Strength) == stored) return;
+                stored = (captured.Enabled, captured.Strength);
+
                 ApplyEffect(captured);
                 StoreEffect(captured);
                 _settings.Touch();
+                RaiseProcessing();
             };
         }
 
@@ -433,9 +592,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Przenosi stan jednego efektu do łańcucha. Siła podawana jest stopniom w procentach,
-    /// a interfejs trzyma ją w zakresie 0–1, bo tego wymaga suwak — stąd mnożenie w jednym
-    /// miejscu zamiast dwóch różnych jednostek krążących po całym programie.
+    /// Przenosi stan jednego efektu do toru. Tor przyjmuje siłę w procentach, interfejs trzyma
+    /// ją w zakresie 0–1.
     /// </summary>
     private void ApplyEffect(EffectViewModel effect)
     {
@@ -514,6 +672,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         if (_mediaPanel is null) return;
 
+        _mediaPanel.SetVolume(PanelVolume);
+
         if (_current is null)
         {
             _mediaPanel.Clear();
@@ -547,9 +707,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _reducedEffects;
 
     /// <summary>
-    /// True while the decorative animation runs in its cheaper form. Bound by the window rather
-    /// than read from the settings directly, because in the automatic mode it also depends on
-    /// whether the machine is on battery.
+    /// Czy animacje działają w tańszej postaci. W trybie automatycznym zależy też od zasilania
+    /// z baterii, dlatego okno wiąże to, a nie samo ustawienie.
     /// </summary>
     public bool ReducedEffects => _reducedEffects;
 
@@ -562,13 +721,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UpdateEffects();
     }
 
-    private void UpdateEffects()
+    /// <summary>
+    /// Czy tryb automatyczny ma ograniczyć ruch: praca na baterii albo animacje wyłączone
+    /// w systemie. Testy podstawiają własną odpowiedź.
+    /// </summary>
+    internal Func<bool> AutomaticReduction { get; set; } =
+        () => PowerStatus.IsOnBattery || !SystemAnimations.Enabled;
+
+    internal void UpdateEffects()
     {
         var reduced = _settings.Current.Effects switch
         {
             EffectsMode.Reduced => true,
             EffectsMode.Full => false,
-            _ => PowerStatus.IsOnBattery,
+            _ => AutomaticReduction(),
         };
 
         if (reduced == _reducedEffects) return;
@@ -597,35 +763,40 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         ApplyOutputDevice();
         Raise(nameof(OutputDevice));
-        Raise(nameof(ActiveDeviceName));
+        RaiseOutputState();
     }
 
     /// <summary>
-    /// Points the engine at the chosen device. A name that no longer matches anything — the
-    /// headset was unplugged since it was chosen — falls back to the system default rather than
-    /// leaving the application silent.
+    /// Kieruje silnik na wybrane urządzenie. Nazwa, która już niczego nie wskazuje, przechodzi
+    /// na urządzenie domyślne.
+    ///
+    /// <para>Urządzenie z listy może mimo to odmówić otwarcia (rozłączone słuchawki, wyłączność
+    /// innego programu). Grający utwór przechodzi wtedy na domyślne, a komunikat zostaje, dopóki
+    /// tak gra. Wstrzymany zostaje przy wybranym, żeby następne odtworzenie spróbowało znowu.</para>
     /// </summary>
     private void ApplyOutputDevice()
     {
-        var index = -1;
-        var name = _settings.Current.OutputDevice;
+        var chosen = ChosenDevice;
+        var wasPlaying = _isPlaying;
 
-        if (!string.IsNullOrEmpty(name))
-        {
-            try
-            {
-                var match = AudioDeviceList.Enumerate()
-                    .FirstOrDefault(device => device.Name == name);
+        if (TryPlayback(() => _engine.SwitchDevice(chosen)) || chosen is null || !wasPlaying) return;
 
-                if (match is not null) index = match.Index;
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[cewka] odczyt listy urządzeń: {ex.Message}");
-            }
-        }
+        _engine.SwitchDevice(null);
+        if (TryPlayback(_engine.Play)) SyncPlaying();
+    }
 
-        _engine.SwitchDevice(index);
+    private string? ChosenDevice =>
+        string.IsNullOrEmpty(_settings.Current.OutputDevice) ? null : _settings.Current.OutputDevice;
+
+    /// <summary>Gra urządzenie domyślne, bo wybrane odmówiło otwarcia.</summary>
+    private bool OnFallbackDevice => _engine.IsDeviceOpen && _engine.PreferredDeviceName != ChosenDevice;
+
+    /// <summary>Stan wyjścia mógł się zmienić: otwarcie, zamknięcie albo inne urządzenie.</summary>
+    private void RaiseOutputState()
+    {
+        Raise(nameof(IsOutputOpen));
+        Raise(nameof(ActiveDeviceName));
+        Raise(nameof(LatencyDescription));
     }
 
     // ---------- Jakość przetwarzania ----------
@@ -652,8 +823,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _engine.PreferredPeriodSize = AudioPreferences.PeriodFrames(latency);
 
         // Rozmiar okresu ustala się przy otwarciu urządzenia, więc trzeba je otworzyć na nowo.
-        _engine.Reopen();
-        Raise(nameof(LatencyDescription));
+        TryPlayback(_engine.Reopen);
+        RaiseOutputState();
     }
 
     /// <summary>
@@ -668,7 +839,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (frames <= 0) return Strings.Current["LatencyUnknown"];
 
             var milliseconds = frames * 1000.0 / Math.Max(1, _engine.SampleRate);
-            return string.Format(Strings.Current["LatencyMeasured"], frames, milliseconds);
+            return string.Format(Strings.Current.Numbers, Strings.Current["LatencyMeasured"], frames, milliseconds);
         }
     }
 
@@ -747,10 +918,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _settings.Touch();
             Raise();
             Raise(nameof(EqualiserOpacity));
+            RaiseProcessing();
         }
     }
 
     public double EqualiserOpacity => EqualiserEnabled ? 1.0 : 0.4;
+
+    /// <summary>Polecenie zerowania ma sens tylko wtedy, gdy któreś pasmo albo przedwzmacniacz odbiega od zera.</summary>
+    public bool CanResetEqualiser => Preamp.Gain != 0 || Bands.Any(band => band.Gain != 0);
+
+    /// <summary>Ustawia wszystkie pasma i przedwzmacniacz na 0 dB.</summary>
+    public void ResetEqualiser()
+    {
+        foreach (var band in Bands) band.Gain = 0;
+        Preamp.Gain = 0;
+    }
 
     public bool LimiterEnabled
     {
@@ -763,6 +945,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _settings.Current.LimiterEnabled = value;
             _settings.Touch();
             Raise();
+            RaiseProcessing();
         }
     }
 
@@ -781,6 +964,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             // po to, żeby usłyszeć różnicę w tym.
             _engine.RefreshTrackGain();
             Raise();
+            RaiseProcessing();
         }
     }
 
@@ -803,21 +987,235 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>Loads files or folders into the queue and starts playing.</summary>
-    public void OpenPaths(IEnumerable<string> paths, bool replace = true)
-    {
-        var files = ExpandToAudioFiles(paths).ToList();
-        if (files.Count == 0) return;
+    public Task OpenPaths(IEnumerable<string> paths, bool replace = true) =>
+        Open(paths, replace ? ReplaceOpen : AppendOpen);
 
+    /// <summary>
+    /// Dokłada pliki do kolejki, a pustą wypełnia nimi i zaczyna grać. O tym, czy kolejka jest
+    /// pusta, rozstrzyga chwila dołożenia: folder przeglądany w tle mógł ją w międzyczasie wypełnić.
+    /// </summary>
+    public Task AddPaths(IEnumerable<string> paths) => Open(paths, AddOpen);
+
+    // Akcje otwierania; nazwy trafiają do zapisu otwarć niedokończonych przy zamknięciu.
+    private const string ReplaceOpen = "Replace";
+    private const string AppendOpen = "Append";
+    private const string AddOpen = "Add";
+    private const string OutsideOpen = "Outside";
+
+    private Action<List<string>> ApplyFor(string action) => action switch
+    {
+        ReplaceOpen => files => Load(files, replace: true),
+        AppendOpen => files => Load(files, replace: false),
+        OutsideOpen => ApplyFromOutside,
+        _ => files => Load(files, replace: IsQueueEmpty),
+    };
+
+    private void Load(List<string> files, bool replace)
+    {
         if (replace)
         {
-            if (TryPlayback(() => _engine.SetQueue(files))) IsPlaying = true;
+            ReplaceQueue(files);
         }
         else
         {
             _engine.Enqueue(files);
+            AppendRows();
+        }
+    }
+
+    /// <summary>
+    /// Wstawia pliki na miejsce kolejki i gra pierwszy. Przy zamykaniu okna pierwszy tylko czeka
+    /// jak wznowienie i tak trafia do zapisu, bo odtwarzanie otworzyłoby urządzenie do końca zamykania;
+    /// tak samo przy otwarciu z poprzedniego uruchomienia, bo start programu ma być cichy.
+    /// </summary>
+    private void ReplaceQueue(List<string> files)
+    {
+        _resume.Discard();
+
+        if (HoldsPlayback)
+        {
+            _engine.ClearQueue();
+            _engine.Enqueue(files);
+            RebuildQueue();
+            if (!IsClosing) ResetNowPlaying();
+            _resume.Arm(0, 0, Queue.Count);
+            return;
         }
 
+        if (TryPlayback(() => _engine.SetQueue(files))) SyncPlaying();
         RebuildQueue();
+    }
+
+    /// <summary>Termin dokańczania otwarć przy zamykaniu okna; brak, dopóki okno się nie zamyka.</summary>
+    private long? _closingDeadline;
+
+    private bool IsClosing => _closingDeadline is not null;
+
+    /// <summary>Dokładane właśnie otwarcie z poprzedniego uruchomienia nie uruchamia odtwarzania.</summary>
+    private bool _resumingOpen;
+
+    /// <summary>Dokładane pliki tylko czekają jak wznowienie, zamiast grać.</summary>
+    private bool HoldsPlayback => IsClosing || _resumingOpen;
+
+    /// <summary>
+    /// Okno zaczyna się zamykać. Od tej chwili biegnie jeden termin
+    /// <see cref="SingleInstance.ClosingGrace"/> na dokończenie wszystkich otwarć, bo zamykanie
+    /// trzyma rolę działającej kopii, a dokładane pliki nie uruchamiają już odtwarzania.
+    /// </summary>
+    public void BeginClosing() =>
+        _closingDeadline ??= Environment.TickCount64 + (long)SingleInstance.ClosingGrace.TotalMilliseconds;
+
+    private Task _openChain = Task.CompletedTask;
+
+    /// <summary>Otwarcia przeglądane w tle i jeszcze niedołożone, w kolejności przybycia.</summary>
+    private readonly List<PendingOpen> _pendingOpens = [];
+
+    /// <summary>
+    /// Otwarcia niedokończone w terminie zamykania, w kolejności przybycia. Trafiają do zapisu
+    /// kolejki, a następne uruchomienie je dokańcza (<see cref="RestoreQueueState"/>).
+    /// </summary>
+    private readonly List<PendingOpenState> _unfinishedOpens = [];
+
+    private sealed class PendingOpen(
+        Task<(List<string> Files, string? Unreadable)> expansion, PendingOpenState request, Action<List<string>> apply)
+    {
+        public Task<(List<string> Files, string? Unreadable)> Expansion { get; } = expansion;
+
+        /// <summary>Surowe ścieżki i akcja, do zapisu, gdyby otwarcie nie zdążyło.</summary>
+        public PendingOpenState Request { get; } = request;
+
+        public Action<List<string>> Apply { get; } = apply;
+    }
+
+    /// <summary>
+    /// Zamienia ścieżki na pliki dźwiękowe i przekazuje je dalej. Same pliki idą od razu;
+    /// foldery są przeglądane poza wątkiem interfejsu, bo duży katalog na wolnym dysku
+    /// zamroziłby okno. Dokładanie czeka na wcześniejsze otwarcia, więc dwa szybkie upuszczenia
+    /// nie zamienią się kolejnością.
+    /// </summary>
+    /// <param name="now">
+    /// Przy zamykaniu okna: kolejka zapisuje się zaraz potem, więc dokłada się przed powrotem,
+    /// po wcześniejszych otwarciach. Folder przegląda się w tle i czeka na niego najwyżej do
+    /// wspólnego terminu zamykania (<see cref="FinishPendingOpens"/>).
+    /// </param>
+    /// <param name="resumed">Otwarcie z poprzedniego uruchomienia: dokłada bez uruchamiania odtwarzania.</param>
+    private Task Open(IEnumerable<string> paths, string action, bool now = false, bool resumed = false)
+    {
+        var list = paths.ToList();
+        var request = new PendingOpenState { Paths = list, Action = action };
+        var apply = ApplyFor(action);
+
+        if (resumed)
+        {
+            var inner = apply;
+            apply = files =>
+            {
+                _resumingOpen = true;
+                try { inner(files); }
+                finally { _resumingOpen = false; }
+            };
+        }
+
+        if (now)
+        {
+            var folders = list.Any(Directory.Exists);
+            if (folders) _pendingOpens.Add(new PendingOpen(ExpandInBackground(list), request, apply));
+
+            FinishPendingOpens();
+            if (folders) return Task.CompletedTask;
+
+            // Plik nie wyprzedza w kolejce otwarcia odłożonego do następnego uruchomienia.
+            if (_unfinishedOpens.Count > 0) _unfinishedOpens.Add(request);
+            else ApplyNow(list, apply);
+
+            return Task.CompletedTask;
+        }
+
+        if (_pendingOpens.Count == 0 && !list.Any(Directory.Exists))
+        {
+            ApplyNow(list, apply);
+            return Task.CompletedTask;
+        }
+
+        var pending = new PendingOpen(ExpandInBackground(list), request, apply);
+
+        _pendingOpens.Add(pending);
+        return _openChain = OpenAfterAsync(_openChain, pending);
+    }
+
+    private static Task<(List<string> Files, string? Unreadable)> ExpandInBackground(List<string> paths) =>
+        Task.Run(() => (ExpandToAudioFiles(paths, out var unreadable), unreadable));
+
+    private static void ApplyNow(List<string> paths, Action<List<string>> apply)
+    {
+        var files = ExpandToAudioFiles(paths, out _);
+        if (files.Count > 0) apply(files);
+    }
+
+    private async Task OpenAfterAsync(Task previous, PendingOpen pending)
+    {
+        await previous;
+
+        try
+        {
+            var (files, unreadable) = await pending.Expansion;
+
+            // Zamykane okno mogło już dołożyć te pliki albo z nich zrezygnować.
+            if (_disposed || !_pendingOpens.Remove(pending)) return;
+
+            if (files.Count > 0) pending.Apply(files);
+            if (unreadable is not null)
+                ShowNotice(string.Format(Strings.Current["FolderReadFailed"], FolderName(unreadable)));
+        }
+        catch (Exception ex)
+        {
+            _pendingOpens.Remove(pending);
+            Console.Error.WriteLine($"[cewka] nie udało się dodać plików: {ex}");
+        }
+    }
+
+    /// <summary>
+    /// Dokłada przed zapisem kolejki pliki z otwarć przeglądanych jeszcze w tle, w kolejności
+    /// przybycia. Ich nadawcy — inna kopia programu albo upuszczenie — uznali je za przyjęte.
+    /// Czeka najwyżej do terminu liczonego od początku zamykania (<see cref="BeginClosing"/>),
+    /// wspólnego dla wszystkich wywołań, bo zamykanie trzyma rolę działającej kopii, na którą
+    /// czeka następna. Czego nie zdążono przejrzeć — razem z otwarciami po nim, żeby zachować
+    /// kolejność — to trafia do zapisu kolejki i dokańcza się przy następnym uruchomieniu.
+    /// </summary>
+    public void FinishPendingOpens()
+    {
+        BeginClosing();
+        var deadline = _closingDeadline!.Value;
+
+        // Przeglądanie w tle nie potrzebuje wątku interfejsu, więc czekanie tutaj go nie zakleszczy.
+        foreach (var pending in _pendingOpens.ToList())
+        {
+            _pendingOpens.Remove(pending);
+
+            try
+            {
+                var left = Math.Max(0, deadline - Environment.TickCount64);
+                if (_unfinishedOpens.Count > 0 || !pending.Expansion.Wait(TimeSpan.FromMilliseconds(left)))
+                {
+                    Console.Error.WriteLine("[cewka] otwarcie nie skończyło się przed zamknięciem okna; dokończy się przy następnym uruchomieniu");
+                    _unfinishedOpens.Add(pending.Request);
+                    continue;
+                }
+
+                var files = pending.Expansion.Result.Files;
+                if (files.Count > 0) pending.Apply(files);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[cewka] nie udało się dodać plików: {ex}");
+            }
+        }
+    }
+
+    private static string FolderName(string path)
+    {
+        var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
+        return name.Length > 0 ? name : path;
     }
 
     /// <summary>
@@ -825,18 +1223,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// od drugiej kopii programu albo upuszczone na okno — i postępuje z nimi tak, jak wybrano
     /// w ustawieniach.
     ///
-    /// <para>Wybór plików wewnątrz programu (<c>Ctrl+O</c>) tą drogą nie idzie: tam użytkownik
-    /// właśnie nacisnął „dodaj", więc pytanie, czy dodać, byłoby już rozstrzygnięte.</para>
+    /// <para>Wybór plików w programie (<c>Ctrl+O</c>) idzie inną drogą, bo tam dodanie jest już
+    /// rozstrzygnięte.</para>
     /// </summary>
-    public void OpenFromOutside(IEnumerable<string> paths)
-    {
-        var files = ExpandToAudioFiles(paths).ToList();
-        if (files.Count == 0) return;
+    /// <param name="now">Przy zamykaniu okna: bez przeglądania w tle, zob. <see cref="Open"/>.</param>
+    public Task OpenFromOutside(IEnumerable<string> paths, bool now = false) => Open(paths, OutsideOpen, now);
 
+    private void ApplyFromOutside(List<string> files)
+    {
         switch (_settings.Current.FileOpenAction)
         {
             case FileOpenAction.ReplaceAndPlay:
-                if (TryPlayback(() => _engine.SetQueue(files))) IsPlaying = true;
+                ReplaceQueue(files);
                 break;
 
             case FileOpenAction.AppendAndPlay:
@@ -845,8 +1243,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 // długość kolejki obejmuje już nowe pozycje i nie wiadomo, gdzie się zaczynają.
                 var first = Queue.Count;
                 _engine.Enqueue(files);
+                AppendRows();
                 _resume.Discard();
-                if (TryPlayback(() => _engine.PlayIndex(first))) IsPlaying = true;
+
+                // Przy zamykaniu i przy otwarciu z poprzedniego uruchomienia pierwszy dołożony plik
+                // tylko czeka jak wznowienie, zob. ReplaceQueue.
+                if (HoldsPlayback) _resume.Arm(first, 0, Queue.Count);
+                else if (TryPlayback(() => _engine.PlayIndex(first))) SyncPlaying();
+
+                RestoreCurrentMarker();
                 break;
             }
 
@@ -855,164 +1260,313 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 // po otwarciu pliku milczy, wygląda na zepsuty.
                 if (IsQueueEmpty)
                 {
-                    if (TryPlayback(() => _engine.SetQueue(files))) IsPlaying = true;
+                    ReplaceQueue(files);
                 }
                 else
                 {
                     _engine.Enqueue(files);
+                    AppendRows();
                 }
 
                 break;
         }
-
-        RebuildQueue();
     }
 
     // ---------- Awaria wyjścia dźwięku ----------
 
-    private string _audioFailure = string.Empty;
+    /// <summary>Klucz słownika z opisem awarii; pusty, gdy wszystko działa.</summary>
+    private string _audioFailureKey = string.Empty;
 
     /// <summary>
-    /// Why playback is impossible, or empty when all is well.
-    /// <para>
-    /// Opening the output device can fail for reasons that have nothing to do with the
-    /// application: no sound card, a device taken exclusively by something else, a missing
-    /// native library in a hand-assembled build. None of them is a reason to take the window
-    /// down — the queue, the settings and the reason itself are all still worth showing.
-    /// </para>
+    /// Dlaczego odtwarzanie jest niemożliwe; puste, gdy wszystko działa. Brak wyjścia dźwięku
+    /// nie zamyka okna. Tekst wyjątku trafia wyłącznie do dziennika.
     /// </summary>
-    public string AudioFailure
+    public string AudioFailure => _audioFailureKey.Length == 0 ? string.Empty : Strings.Current[_audioFailureKey];
+
+    public bool HasAudioFailure => _audioFailureKey.Length > 0;
+
+    private void SetAudioFailure(string key)
     {
-        get => _audioFailure;
-        private set
-        {
-            if (!Set(ref _audioFailure, value)) return;
-            Raise(nameof(HasAudioFailure));
-        }
+        if (_audioFailureKey == key) return;
+
+        _audioFailureKey = key;
+        Raise(nameof(AudioFailure));
+        Raise(nameof(HasAudioFailure));
     }
 
-    public bool HasAudioFailure => !string.IsNullOrEmpty(_audioFailure);
+    /// <summary>
+    /// Polecenie „Spróbuj ponownie” przy komunikacie o awarii: otwiera wyjście od nowa
+    /// i wznawia to, co miało grać.
+    /// </summary>
+    public void RetryAudio()
+    {
+        if (_engine.PreferredDeviceName != ChosenDevice)
+        {
+            ApplyOutputDevice();
+            if (_isPlaying || HasAudioFailure) return;
+        }
+
+        if (ResumeRestoredTrack()) return;
+
+        if (Queue.Count == 0)
+        {
+            SetAudioFailure(string.Empty);
+            return;
+        }
+
+        if (TryPlayback(_engine.Play)) SyncPlaying();
+    }
+
+    /// <summary>Polecenie „Wybierz urządzenie”: okno otwiera Ustawienia na sekcji dźwięku.</summary>
+    public event Action? DeviceSelectionRequested;
+
+    public void RequestDeviceSelection() => DeviceSelectionRequested?.Invoke();
 
     /// <summary>Runs an engine operation, turning a failure into a message instead of a crash.</summary>
     private bool TryPlayback(Action operation)
     {
+        var wasOpen = _engine.IsDeviceOpen;
+
         try
         {
             operation();
-            AudioFailure = string.Empty;
+            SetAudioFailure(OnFallbackDevice ? "AudioFailureFallback" : string.Empty);
+
+            if (wasOpen != _engine.IsDeviceOpen)
+            {
+                RaiseOutputState();
+                if (_engine.UsingFallbackDevice) ShowNotice(Strings.Current["DeviceFallbackNotice"]);
+            }
+
             return true;
         }
         catch (Exception ex)
         {
-            AudioFailure = $"{Strings.Current["AudioFailure"]} {ex.Message}";
+            SetAudioFailure(FailureText.AudioFailureKey(ex));
             Console.Error.WriteLine($"[cewka] wyjście dźwięku: {ex}");
 
             IsPlaying = false;
+            RaiseOutputState();
             return false;
         }
     }
 
-    /// <summary>Folders are walked recursively; anything unrecognised is left out.</summary>
-    private static IEnumerable<string> ExpandToAudioFiles(IEnumerable<string> paths)
+    /// <summary>Urządzenie przestało pracować samo, na przykład odłączono słuchawki.</summary>
+    private void OnDeviceLost()
     {
+        IsPlaying = false;
+        RaiseOutputState();
+        ShowNotice(Strings.Current["DeviceLostNotice"]);
+    }
+
+    /// <summary>Wyłącznie dla testów: wołane przed przejrzeniem folderu, np. żeby je spowolnić.</summary>
+    internal static Action<string>? FolderExpanding;
+
+    /// <summary>
+    /// Foldery przeglądane są rekurencyjnie, z pominięciem plików nierozpoznanych. W każdym katalogu
+    /// najpierw pliki, potem podkatalogi, jedne i drugie w porządku naturalnym: „2 - y” przed
+    /// „10 - x”, tak jak w menedżerze plików.
+    ///
+    /// <para>Folder, którego nie da się przejrzeć, jest pomijany, a pierwszy taki trafia do
+    /// <paramref name="unreadable"/>. Nieczytelny podkatalog pomija się po cichu.</para>
+    /// </summary>
+    private static List<string> ExpandToAudioFiles(IEnumerable<string> paths, out string? unreadable)
+    {
+        unreadable = null;
+        var result = new List<string>();
+        var visited = new HashSet<string>(OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+
         foreach (var path in paths)
         {
             if (Directory.Exists(path))
             {
-                var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
-                foreach (var file in Directory.EnumerateFiles(path, "*", options).Order())
+                try
                 {
-                    if (IsAudio(file)) yield return file;
+                    FolderExpanding?.Invoke(path);
+
+                    var folder = new DirectoryInfo(path);
+                    var real = IsLink(folder) ? folder.ResolveLinkTarget(returnFinalTarget: true)?.FullName : null;
+                    WalkFolder(folder, real ?? folder.FullName, visited, result, root: true);
+                }
+                catch (Exception ex) when (IsFolderError(ex))
+                {
+                    Console.Error.WriteLine($"[cewka] folder „{path}”: {ex.Message}");
+                    unreadable ??= path;
                 }
             }
             else if (File.Exists(path) && IsAudio(path))
             {
-                yield return path;
+                result.Add(path);
             }
         }
+
+        return result;
     }
+
+    private static readonly EnumerationOptions FolderOptions = new() { IgnoreInaccessible = true };
+
+    /// <summary>
+    /// Dowiązania do katalogów są przeglądane, ale każdy katalog tylko raz, rozpoznany po
+    /// ścieżce docelowej <paramref name="real"/>. Dowiązanie do katalogu nadrzędnego dałoby
+    /// inaczej rekurencję bez końca, a do innej części biblioteki — powtórzone pliki.
+    /// </summary>
+    private static void WalkFolder(DirectoryInfo folder, string real, HashSet<string> visited, List<string> result, bool root)
+    {
+        if (!visited.Add(Path.TrimEndingDirectorySeparator(real))) return;
+
+        List<string> files;
+        List<DirectoryInfo> folders;
+
+        try
+        {
+            files = folder.EnumerateFiles("*", FolderOptions).Select(file => file.FullName).Where(IsAudio).ToList();
+            folders = folder.EnumerateDirectories("*", FolderOptions).ToList();
+        }
+        catch (Exception ex) when (!root && IsFolderError(ex))
+        {
+            Console.Error.WriteLine($"[cewka] pominięto podkatalog „{folder.FullName}”: {ex.Message}");
+            return;
+        }
+
+        files.Sort(NaturalOrder.Instance);
+        result.AddRange(files);
+
+        folders.Sort((a, b) => NaturalOrder.Instance.Compare(a.FullName, b.FullName));
+        foreach (var child in folders)
+        {
+            string? childReal;
+
+            try
+            {
+                childReal = IsLink(child)
+                    ? child.ResolveLinkTarget(returnFinalTarget: true)?.FullName
+                    : Path.Combine(real, child.Name);
+            }
+            catch (Exception ex) when (IsFolderError(ex))
+            {
+                childReal = null;
+            }
+
+            if (childReal is not null) WalkFolder(child, childReal, visited, result, root: false);
+        }
+    }
+
+    /// <summary>Dowiązanie symboliczne albo punkt połączenia; pliki chmurowe OneDrive nim nie są.</summary>
+    private static bool IsLink(DirectoryInfo folder) =>
+        (folder.Attributes & FileAttributes.ReparsePoint) != 0 && folder.LinkTarget is not null;
+
+    private static bool IsFolderError(Exception ex) => ex is IOException or UnauthorizedAccessException;
 
     private static bool IsAudio(string path) =>
         AudioFileFormatDetector.SupportedExtensions
             .Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Wiersze od nowa dla całej kolejki. Potrzebne przy jej zastąpieniu i zmianie języka;
+    /// przesunięcie, usunięcie i dołożenie zmieniają tylko dotknięte wiersze.
+    /// </summary>
     private void RebuildQueue()
     {
+        Interlocked.Increment(ref _metadataGeneration);
+        _current = null;
         Queue.Clear();
 
         var entries = _engine.Queue;
-        for (var i = 0; i < entries.Count; i++)
-        {
-            var entry = entries[i];
-            Queue.Add(new QueueItemViewModel
-            {
-                Number = i + 1,
-                Title = entry.Title,
-                Artist = entry.Artist ?? Strings.Current["UnknownArtist"],
-                AlbumLine = BuildAlbumLine(entry),
-                Duration = FormatTime(entry.Duration.TotalSeconds),
-                DurationSeconds = entry.Duration.TotalSeconds,
-                Format = entry.Metadata?.FormatBadge ?? Strings.Current["NoFormat"],
-                Path = entry.Path,
-            });
-        }
+        for (var i = 0; i < entries.Count; i++) Queue.Add(CreateRow(entries[i], i + 1));
 
         RestoreCurrentMarker();
+        QueueChanged();
+        _ = FillMetadataInBackgroundAsync(entries);
+    }
 
+    /// <summary>Dokłada wiersze dla wpisów dodanych na końcu kolejki silnika.</summary>
+    private void AppendRows()
+    {
+        var entries = _engine.Queue;
+        var added = new List<QueueEntry>();
+
+        for (var i = Queue.Count; i < entries.Count; i++)
+        {
+            Queue.Add(CreateRow(entries[i], i + 1));
+            added.Add(entries[i]);
+        }
+
+        QueueChanged();
+        _ = FillMetadataInBackgroundAsync(added);
+    }
+
+    private void QueueChanged()
+    {
+        SetUndo(null);
         Raise(nameof(QueueSummary));
         Raise(nameof(IsQueueEmpty));
-        _ = FillMetadataInBackgroundAsync();
+        if (_current is null) Title = IdleTitle;
+        TouchQueue();
+    }
+
+    /// <summary>Numery od <paramref name="from"/> do końca, po przesunięciu albo usunięciu.</summary>
+    private void Renumber(int from)
+    {
+        for (var i = Math.Max(0, from); i < Queue.Count; i++) Queue[i].Number = i + 1;
+    }
+
+    private static QueueItemViewModel CreateRow(QueueEntry entry, int number)
+    {
+        var row = new QueueItemViewModel
+        {
+            Number = number,
+            Entry = entry,
+            Title = entry.Title,
+            Artist = Strings.Current["UnknownArtist"],
+            Duration = FormatTime(entry.Duration.TotalSeconds),
+            Path = entry.Path,
+        };
+
+        ApplyMetadataToRow(row, entry);
+        return row;
     }
 
     /// <summary>
-    /// Re-attaches the „now playing" marker after the rows were rebuilt.
-    /// <para>
-    /// The rows are throwaway objects, so anything that rebuilds them — reordering, removing an
-    /// entry, changing language — leaves <see cref="_current"/> pointing at a row that is no
-    /// longer in the list. The engine still knows which entry is playing, so the marker is
-    /// re-derived from it rather than remembered.
-    /// </para>
+    /// Przywraca znacznik grającego wiersza po zmianie wierszy, na podstawie wpisu z silnika.
     /// </summary>
     private void RestoreCurrentMarker()
     {
         var index = _engine.CurrentIndex;
+        var row = index >= 0 && index < Queue.Count ? Queue[index] : null;
 
-        _current = index >= 0 && index < Queue.Count ? Queue[index] : null;
+        if (!ReferenceEquals(row, _current) && _current is not null) _current.IsCurrent = false;
+
+        _current = row;
         if (_current is not null) _current.IsCurrent = true;
 
         Raise(nameof(CurrentIndex));
     }
 
     /// <summary>
-    /// Reads tags for the whole queue away from the interface thread.
-    /// <para>
-    /// Adding a folder has to feel instant, so entries appear straight away with nothing but
-    /// their file names. The durations and titles then fill in as the tags are read. Reading
-    /// two thousand files takes a few seconds; doing it up front would freeze the window for
-    /// exactly that long.
-    /// </para>
+    /// Czyta tagi poza wątkiem interfejsu, tylko dla wpisów jeszcze nieprzeczytanych; wiersze
+    /// pojawiają się od razu z nazwą pliku. Wynik trafia do wiersza tego samego wpisu, bo wiersz
+    /// mógł się w międzyczasie przesunąć.
     /// </summary>
-    private async Task FillMetadataInBackgroundAsync()
+    private async Task FillMetadataInBackgroundAsync(IReadOnlyList<QueueEntry> entries)
     {
-        var token = ++_metadataGeneration;
-        var entries = _engine.Queue;
+        var pending = entries.Where(entry => entry.Metadata is null).ToList();
+        if (pending.Count == 0) return;
+
+        var token = Volatile.Read(ref _metadataGeneration);
 
         await Task.Run(() =>
         {
-            for (var i = 0; i < entries.Count; i++)
+            foreach (var entry in pending)
             {
-                if (token != _metadataGeneration) return;
-
-                var index = i;
-                var entry = entries[index];
+                if (token != Volatile.Read(ref _metadataGeneration)) return;
 
                 try { entry.EnsureMetadata(); }
                 catch { continue; }
 
                 Dispatcher.UIThread.Post(() =>
                 {
-                    if (token != _metadataGeneration || index >= Queue.Count) return;
-                    ApplyMetadataToRow(Queue[index], entry);
+                    if (token != _metadataGeneration || RowFor(entry) is not { } row) return;
+                    ApplyMetadataToRow(row, entry);
                 }, DispatcherPriority.Background);
             }
 
@@ -1023,6 +1577,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         });
     }
 
+    private QueueItemViewModel? RowFor(QueueEntry entry)
+    {
+        foreach (var row in Queue)
+            if (ReferenceEquals(row.Entry, entry)) return row;
+
+        return null;
+    }
+
+    /// <summary>Jedna reguła dla wiersza nowego i uzupełnianego: wykonawca albo wykonawca albumu.</summary>
     private static void ApplyMetadataToRow(QueueItemViewModel row, QueueEntry entry)
     {
         if (entry.Metadata is { } metadata)
@@ -1036,7 +1599,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (!entry.IsUnsupported) return;
 
         row.IsUnsupported = true;
-        row.UnsupportedReason = entry.UnsupportedReason;
+        row.UnsupportedReason = FailureText.ForTrack(TrackFailureReason.UnsupportedFormat, entry.Format);
     }
 
     /// <summary>
@@ -1067,28 +1630,34 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (index < 0) return;
 
         _resume.Discard();
-        if (TryPlayback(() => _engine.PlayIndex(index))) IsPlaying = true;
+        if (TryPlayback(() => _engine.PlayIndex(index))) SyncPlaying();
     }
 
     public void Next()
     {
         _resume.Discard();
-        if (TryPlayback(_engine.Next)) IsPlaying = true;
+        if (TryPlayback(_engine.Next)) SyncPlaying();
     }
 
     public void Previous()
     {
         _resume.Discard();
-        if (TryPlayback(_engine.Previous)) IsPlaying = true;
+        if (TryPlayback(_engine.Previous)) SyncPlaying();
     }
 
     public void TogglePlay()
     {
-        // Pierwsze nacisniecie po starcie wznawia utwor przywrocony z poprzedniej sesji.
+        // Pierwsze naciśnięcie po starcie wznawia utwór przywrócony z poprzedniej sesji.
         if (ResumeRestoredTrack()) return;
+
+        // Pusta kolejka: nie ma czego grać, więc nie ma też powodu zajmować karty dźwiękowej.
+        if (Queue.Count == 0) return;
 
         if (TryPlayback(_engine.TogglePlay)) IsPlaying = _engine.State == PlaybackState.Playing;
     }
+
+    /// <summary>Stan przycisku wprost z silnika: „Poprzedni” w pauzie tylko przewija i nie wznawia gry.</summary>
+    private void SyncPlaying() => IsPlaying = _engine.State == PlaybackState.Playing;
 
     public void Pause()
     {
@@ -1102,13 +1671,39 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     // ---------- Operacje na kolejce ----------
 
+    /// <summary>
+    /// Usuwa wpis z kolejki. Usunięcie grającego utworu zatrzymuje odtwarzanie i nie uruchamia
+    /// niczego samo; pierwsze naciśnięcie odtwarzania rusza od utworu, który zajął jego miejsce.
+    /// </summary>
     public void RemoveFromQueue(QueueItemViewModel item)
     {
         var index = Queue.IndexOf(item);
         if (index < 0) return;
 
+        var wasCurrent = _engine.CurrentIndex == index;
+        var waiting = _resume.IsArmed && _resume.Index == index;
+        var undo = new QueueUndo("QueueUndoRemove", [item.Path], index,
+            wasCurrent || waiting,
+            waiting ? _resume.Seconds : wasCurrent ? _engine.Position.TotalSeconds : 0);
+
         _engine.RemoveAt(index);
-        RebuildQueue();
+        _resume.OnRemoved(index);
+
+        Queue.RemoveAt(index);
+        Renumber(index);
+        QueueChanged();
+
+        if (!wasCurrent || _engine.CurrentIndex >= 0)
+        {
+            RestoreCurrentMarker();
+        }
+        else
+        {
+            ResetNowPlaying();
+            if (Queue.Count > 0) _resume.Arm(Math.Min(index, Queue.Count - 1), 0, Queue.Count);
+        }
+
+        SetUndo(undo);
     }
 
     public void MoveInQueue(int from, int to)
@@ -1117,25 +1712,117 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (from >= Queue.Count || to >= Queue.Count) return;
 
         _engine.Move(from, to);
-        RebuildQueue();
+        _resume.OnMoved(from, to);
+
+        Queue.Move(from, to);
+        Renumber(Math.Min(from, to));
+        RestoreCurrentMarker();
+        QueueChanged();
     }
 
     public void ClearQueue()
     {
+        var undo = Queue.Count > 0 ? SnapshotQueue("QueueUndoClear") : null;
+
         _engine.ClearQueue();
+        _resume.Discard();
+
+        RebuildQueue();
+        ResetNowPlaying();
+        SetUndo(undo);
+    }
+
+    // ---------- Cofanie zmian kolejki ----------
+
+    /// <summary>
+    /// Jeden krok wstecz: ostatnie usunięcie wiersza, wyczyszczenie kolejki albo zastąpienie jej
+    /// listą odtwarzania. Każda inna zmiana kolejki unieważnia go.
+    /// </summary>
+    /// <param name="Index">Wiersz usunięty albo wiersz, od którego wznawiać.</param>
+    /// <param name="Resume">Po cofnięciu wznowienie czeka na wierszu <paramref name="Index"/>.</param>
+    private sealed record QueueUndo(string LabelKey, IReadOnlyList<string> Paths, int Index, bool Resume, double Seconds);
+
+    private QueueUndo? _undo;
+
+    public bool CanUndoQueue => _undo is not null;
+
+    /// <summary>Nazwa polecenia cofnięcia, np. „Cofnij usunięcie”.</summary>
+    public string UndoQueueLabel => _undo is null ? string.Empty : Strings.Current[_undo.LabelKey];
+
+    private void SetUndo(QueueUndo? undo)
+    {
+        if (ReferenceEquals(_undo, undo)) return;
+
+        _undo = undo;
+        Raise(nameof(CanUndoQueue));
+        Raise(nameof(UndoQueueLabel));
+    }
+
+    /// <summary>Cała kolejka z miejscem, od którego wznowić, przed jej wyczyszczeniem albo zastąpieniem.</summary>
+    private QueueUndo SnapshotQueue(string labelKey)
+    {
+        var armed = _resume.IsArmed;
+        var index = armed ? _resume.Index : _engine.CurrentIndex;
+
+        return new QueueUndo(labelKey, _engine.QueuePaths.ToList(), index, index >= 0,
+            armed ? _resume.Seconds : _engine.Position.TotalSeconds);
+    }
+
+    /// <summary>
+    /// Cofa ostatnią zmianę kolejki. Przywrócona kolejka nie gra sama: utwór, który grał albo
+    /// czekał na wznowienie, czeka na naciśnięcie odtwarzania w tym samym miejscu.
+    /// </summary>
+    public void UndoQueue()
+    {
+        if (_undo is not { } undo) return;
+        SetUndo(null);
+
+        if (undo.LabelKey == "QueueUndoRemove")
+        {
+            _engine.Enqueue(undo.Paths);
+            AppendRows();
+            MoveInQueue(Queue.Count - 1, Math.Min(undo.Index, Queue.Count - 1));
+
+            if (undo.Resume && _engine.CurrentIndex < 0) _resume.Arm(undo.Index, undo.Seconds, Queue.Count);
+            return;
+        }
+
+        _engine.ClearQueue();
+        _resume.Discard();
+        _engine.Enqueue(undo.Paths);
+
+        RebuildQueue();
+        ResetNowPlaying();
+
+        if (undo.Resume) _resume.Arm(undo.Index, undo.Seconds, Queue.Count);
+    }
+
+    /// <summary>
+    /// Zdejmuje z okna i z panelu systemowego wszystko, co dotyczyło utworu, który przestał
+    /// być bieżący: tytuł, wykonawcę, plakietkę formatu i okładkę.
+    /// </summary>
+    private void ResetNowPlaying()
+    {
+        if (_current is not null) _current.IsCurrent = false;
+
         _current = null;
         _currentMetadata = null;
         _shownBitrate = 0;
 
-        Title = Strings.Current["NoTrack"];
+        Title = IdleTitle;
         ArtistLine = string.Empty;
         FormatBadge = string.Empty;
-        IsPlaying = false;
+        IsPlaying = _engine.State == PlaybackState.Playing;
 
-        RebuildQueue();
-        UpdateArtwork(null);
+        _shownEntry = null;
+        _covers.Cancel();
+        ShowCover(null);
         PublishToMediaPanel();
+        Raise(nameof(CurrentIndex));
     }
+
+    /// <summary>Tytuł, gdy nic nie jest wczytane: inny przy pustej kolejce, inny przy pełnej.</summary>
+    private string IdleTitle => Strings.Current[Queue.Count == 0 ? "NoTrack" : "NothingPlaying"];
 
     // ---------- Sterowanie z klawiatury ----------
 
@@ -1155,57 +1842,128 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void AdjustVolume(double delta) => Volume = Math.Clamp(Volume + delta, 0, 1);
 
     /// <summary>
-    /// Mutes and unmutes. The level before muting is remembered, so unmuting returns to it
-    /// rather than to some default.
+    /// Mutes and unmutes. The slider keeps its place while muted, so unmuting returns to it;
+    /// a slider left at zero comes back at half, because silence is not what unmuting asks for.
     /// </summary>
     public void ToggleMute()
     {
-        if (Volume > 0.0001)
+        if (_isMuted)
         {
-            _volumeBeforeMute = Volume;
-            Volume = 0;
+            IsMuted = false;
+            if (_volume <= 0) Volume = 0.5;
         }
         else
         {
-            Volume = _volumeBeforeMute > 0.01 ? _volumeBeforeMute : 0.5;
+            IsMuted = true;
         }
     }
 
-    private double _volumeBeforeMute = 0.5;
-
     // ---------- Trwałość kolejki ----------
 
-    /// <summary>Writes the queue and position so the next run resumes where this one stopped.</summary>
-    public void SaveQueueState()
-    {
-        var state = new QueueState
-        {
-            Paths = _engine.QueuePaths.ToList(),
-            CurrentIndex = _engine.CurrentIndex,
-            PositionSeconds = _engine.Position.TotalSeconds,
-            Shuffle = _engine.Shuffle,
-            Repeat = _engine.Repeat.ToString(),
-        };
+    /// <summary>
+    /// Odstęp zapisu po zmianie kolejki. Seria zmian (przeciąganie, usuwanie kilku wpisów)
+    /// daje jeden zapis, a awaria albo zabicie procesu nie gubi zmian z całej sesji.
+    /// </summary>
+    private readonly DispatcherTimer _queueSave = new() { Interval = TimeSpan.FromSeconds(2) };
 
-        QueueStateStore.Save(state);
+    /// <summary>Co tyle w trakcie gry zapisywana jest pozycja w utworze.</summary>
+    private static readonly TimeSpan PositionSaveInterval = TimeSpan.FromSeconds(30);
+
+    private DateTime _lastPositionSave = DateTime.UtcNow;
+
+    /// <summary>Zapis kolejki jest zamówiony i czeka na zegar.</summary>
+    internal bool QueueSavePending => _queueSave.IsEnabled;
+
+    /// <summary>Zamawia zapis kolejki za chwilę.</summary>
+    private void TouchQueue()
+    {
+        _queueSave.Stop();
+        _queueSave.Start();
     }
 
     /// <summary>
-    /// Restores the previous queue without starting playback. Coming back to a player that
-    /// immediately makes noise is rarely what anyone wants; the position is restored so that
-    /// pressing play carries on from where it stopped.
+    /// Zapisuje kolejkę i pozycję dla następnego uruchomienia. Wołane
+    /// przy zamykaniu, więc zapisuje od razu; zapisy w trakcie pracy idą przez
+    /// <see cref="SaveQueueStateInBackground"/>.
+    /// </summary>
+    public void SaveQueueState() => _queueWriter.SaveNow(CaptureQueueState());
+
+    internal Task SaveQueueStateInBackground() => _queueWriter.SaveInBackground(CaptureQueueState());
+
+    private QueueState CaptureQueueState()
+    {
+        _queueSave.Stop();
+        _lastPositionSave = DateTime.UtcNow;
+
+        // Dopóki nic nie zagrało, silnik nie zna pozycji z poprzedniej sesji; czeka ona
+        // w _resume i to ją trzeba zapisać, inaczej samo otwarcie i zamknięcie programu ją kasuje.
+        var armed = _resume.IsArmed;
+
+        // Otwarcia jeszcze niedołożone: odłożone przy zamykaniu i przeglądane w tle, żeby
+        // nie przepadły przy nagłym końcu programu.
+        var opens = _unfinishedOpens.Concat(_pendingOpens.Select(pending => pending.Request)).ToList();
+
+        return new QueueState
+        {
+            Paths = _engine.QueuePaths.ToList(),
+            CurrentIndex = armed ? _resume.Index : _engine.CurrentIndex,
+            PositionSeconds = armed ? _resume.Seconds : _engine.Position.TotalSeconds,
+            Shuffle = _engine.Shuffle,
+            Repeat = _engine.Repeat.ToString(),
+            PendingOpens = opens.Count > 0 ? opens : null,
+        };
+    }
+
+    /// <summary>
+    /// Przywraca poprzednią kolejkę bez uruchamiania odtwarzania; pozycja czeka na pierwsze
+    /// naciśnięcie odtwarzania. Potem dokańcza otwarcia niedokończone przy zamknięciu.
     /// </summary>
     public void RestoreQueueState()
     {
+        var state = QueueStateStore.Load(_queueFile);
+
         // Ustawienie wyłączone: program zaczyna od pustej kolejki. Zapis kolejki trwa mimo to,
         // żeby ponowne włączenie przywracania miało co przywrócić.
-        if (!_settings.Current.RestoreSession) return;
+        if (_settings.Current.RestoreSession) RestoreQueue(state);
 
-        var state = QueueStateStore.Load();
+        // Otwarcia to jawne żądania, a nie poprzednia sesja, więc dokańczają się zawsze.
+        ResumeOpens(state);
+    }
+
+    /// <summary>
+    /// Dokańcza otwarcia niedokończone przy poprzednim zamknięciu, bez przywracania kolejki.
+    /// Na start ze ścieżkami z wiersza poleceń, które dokładają się po nich.
+    /// </summary>
+    public void ResumeUnfinishedOpens() => ResumeOpens(QueueStateStore.Load(_queueFile));
+
+    /// <summary>
+    /// Otwiera zwykłą drogą, w tle i w kolejności przybycia, ale zawsze tylko dopisuje na koniec
+    /// kolejki: nie zastępuje jej, nie przestawia bieżącego utworu i nie uruchamia odtwarzania,
+    /// bo to, co gra po starcie, wybrał już użytkownik. Z zapisu kolejki znikają przy najbliższym
+    /// zapisie po dołożeniu.
+    /// </summary>
+    private void ResumeOpens(QueueState? state)
+    {
+        foreach (var open in state?.PendingOpens ?? [])
+            Open(open.Paths, AppendOpen, resumed: true);
+    }
+
+    private void RestoreQueue(QueueState? state)
+    {
         if (state is null || state.Paths.Count == 0) return;
 
-        // Pliki mogly zniknac miedzy uruchomieniami.
-        var existing = state.Paths.Where(File.Exists).ToList();
+        // Pliki mogły zniknąć między uruchomieniami. Numer bieżącego wpisu liczy się po
+        // odfiltrowaniu, żeby wskazywał ten sam plik; gdy zniknął on sam, wznowienia nie ma.
+        var existing = new List<string>(state.Paths.Count);
+        var resumeIndex = -1;
+
+        for (var i = 0; i < state.Paths.Count; i++)
+        {
+            if (!File.Exists(state.Paths[i])) continue;
+            if (i == state.CurrentIndex) resumeIndex = existing.Count;
+            existing.Add(state.Paths[i]);
+        }
+
         if (existing.Count == 0) return;
 
         _engine.Enqueue(existing);
@@ -1214,10 +1972,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         RebuildQueue();
         Raise(nameof(ShuffleEnabled));
-        Raise(nameof(RepeatEnabled));
-        Raise(nameof(RepeatTrack));
+        RaiseRepeat();
 
-        _resume.Arm(state.CurrentIndex, state.PositionSeconds, existing.Count);
+        if (_current is null) Title = IdleTitle;
+
+        _resume.Arm(resumeIndex, state.PositionSeconds, existing.Count);
     }
 
     // ---------- Komunikaty ----------
@@ -1232,9 +1991,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// Krótki komunikat o czynności, która się właśnie wykonała — zapisaniu listy, brakujących
     /// plikach. Znika sam po <see cref="NoticeDuration"/>.
     ///
-    /// <para>Osobno od <see cref="AudioFailure"/>, bo tamten opisuje stan trwały: dopóki nie ma
-    /// wyjścia dźwięku, informacja o tym musi zostać na ekranie. Ten opisuje zdarzenie i po
-    /// przeczytaniu nie jest już do niczego potrzebny.</para>
+    /// <para>Osobno od <see cref="AudioFailure"/>, który opisuje stan trwały.</para>
     /// </summary>
     public string Notice
     {
@@ -1250,6 +2007,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public void ShowNotice(string text)
     {
+        _skippedInNotice = 0;
         Notice = text;
 
         // Ponowne wywołanie odlicza czas od nowa, zamiast gasić komunikat w połowie czytania.
@@ -1259,23 +2017,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     // ---------- Nowsze wydanie ----------
 
-    private string _updateNotice = string.Empty;
+    private Version? _availableUpdate;
 
     /// <summary>
-    /// Informacja o dostępnym nowszym wydaniu. Trwała, nie gasnąca sama: opisuje stan, a nie
-    /// zdarzenie, i po zamknięciu okna ustawień ma nadal być widoczna.
+    /// Informacja o nowszym wydaniu. Opisuje stan, więc nie gaśnie sama; składana przy odczycie,
+    /// żeby obejmowała ją zmiana języka.
     /// </summary>
-    public string UpdateNotice
-    {
-        get => _updateNotice;
-        private set
-        {
-            if (!Set(ref _updateNotice, value)) return;
-            Raise(nameof(HasUpdateNotice));
-        }
-    }
+    public string UpdateNotice => _availableUpdate is null
+        ? string.Empty
+        : string.Format(Strings.Current["UpdateNotice"], _availableUpdate.ToString(3));
 
-    public bool HasUpdateNotice => _updateNotice.Length > 0;
+    public bool HasUpdateNotice => _availableUpdate is not null;
 
     /// <summary>Strona wydania, którą otwiera odsyłacz obok komunikatu.</summary>
     public string UpdateNoticeUrl { get; private set; } = string.Empty;
@@ -1284,9 +2036,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// Pyta o nowsze wydanie, jeśli użytkownik na to przystał i jeśli minęła doba od ostatniego
     /// sprawdzenia.
     ///
-    /// <para>Wywoływane przy otwarciu okna i celowo bez oczekiwania na wynik: uruchomienie
-    /// programu nie może zależeć od tego, czy sieć odpowiada. Gdy sprawdzanie jest wyłączone —
-    /// a tak jest domyślnie — ta metoda nie wykonuje żadnego połączenia i kończy się od razu.</para>
+    /// <para>Wołane przy otwarciu okna bez czekania na wynik, żeby start nie zależał od sieci.
+    /// Przy sprawdzaniu wyłączonym (domyślnie) nie łączy się z niczym.</para>
     /// </summary>
     public async Task CheckForUpdatesIfDueAsync()
     {
@@ -1297,16 +2048,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         var result = await UpdateCheck.LatestAsync(UpdateCheck.Repository, UpdateCheck.Current);
 
-        _settings.Current.LastUpdateCheck = DateTimeOffset.UtcNow;
-        _settings.Touch();
-
         if (!result.Succeeded)
         {
             // Brak połączenia nie jest wart pokazywania: użytkownik nie prosił o wynik teraz,
-            // więc informacja o nieudanej próbie byłaby zawracaniem uwagi.
+            // więc informacja o nieudanej próbie byłaby zawracaniem uwagi. Data sprawdzenia
+            // nie jest zapisywana, żeby laptop bez sieci tuż po wybudzeniu nie tracił próby na dobę.
             Console.Error.WriteLine($"[cewka] sprawdzanie wersji: {result.Failure}");
             return;
         }
+
+        _settings.Current.LastUpdateCheck = DateTimeOffset.UtcNow;
+        _settings.Touch();
 
         var latest = result.Latest!;
         if (latest <= UpdateCheck.Current) return;
@@ -1314,38 +2066,49 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UpdateNoticeUrl = result.ReleaseUrl ?? UpdateCheck.ReleasesUrl(UpdateCheck.Repository) ?? string.Empty;
         Raise(nameof(UpdateNoticeUrl));
 
-        UpdateNotice = string.Format(Strings.Current["UpdateNotice"], latest.ToString(3));
+        _availableUpdate = latest;
+        Raise(nameof(UpdateNotice));
+        Raise(nameof(HasUpdateNotice));
     }
 
     // ---------- Listy odtwarzania ----------
 
     /// <summary>Obecna kolejka w postaci gotowej do zapisania na listę.</summary>
-    public IReadOnlyList<PlaylistEntry> QueueAsPlaylist() => Queue
-        .Select(item => new PlaylistEntry(item.Path, item.Title, item.Artist, item.DurationSeconds))
+    /// <remarks>
+    /// Z wpisów silnika, bo wiersz zastępuje brak wykonawcy napisem w języku interfejsu,
+    /// który na liście udawałby prawdziwego wykonawcę.
+    /// </remarks>
+    public IReadOnlyList<PlaylistEntry> QueueAsPlaylist() => _engine.Queue
+        .Select(entry => new PlaylistEntry(
+            entry.Path,
+            entry.Title,
+            entry.Metadata?.Artist ?? entry.Metadata?.AlbumArtist,
+            entry.Duration.TotalSeconds))
         .ToList();
 
     /// <summary>
     /// Wstawia listę odtwarzania na miejsce obecnej kolejki. Zwraca wynik odczytu, żeby okno
     /// mogło powiedzieć, ilu plików z listy już nie ma.
     ///
-    /// <para>Odtwarzanie nie zaczyna się samo. Pierwszy utwór jest tylko uzbrojony tym samym
-    /// mechanizmem, którym wraca utwór z poprzedniej sesji, więc pierwsze naciśnięcie
-    /// odtwarzania rusza od początku listy. Wczytanie listy jest czynnością porządkową —
-    /// program, który po niej od razu zaczyna grać, przerywa to, czego nikt nie kazał przerywać.</para>
+    /// <para>Odtwarzanie nie zaczyna się samo: pierwszy utwór czeka tak jak wznowienie
+    /// z poprzedniej sesji, więc pierwsze naciśnięcie odtwarzania rusza od początku listy.</para>
     /// </summary>
     public PlaylistLoad LoadPlaylist(string path)
     {
         var load = PlaylistFile.Load(path);
         if (load.Paths.Count == 0) return load;
 
+        var undo = Queue.Count > 0 ? SnapshotQueue("QueueUndoReplace") : null;
+
         _resume.Discard();
         _engine.ClearQueue();
         _engine.Enqueue(load.Paths);
 
-        IsPlaying = false;
         RebuildQueue();
+        ResetNowPlaying();
 
         _resume.Arm(0, 0, load.Paths.Count);
+        SetUndo(undo);
 
         return load;
     }
@@ -1365,11 +2128,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // zostaje samo uruchomienie.
         if (!_resume.TryTake(_engine.CurrentIndex >= 0, out var index, out var seconds)) return false;
 
-        if (!TryPlayback(() => _engine.PlayIndex(index))) return true;
+        var saved = seconds;
 
-        if (seconds > 1) _engine.SeekTo(TimeSpan.FromSeconds(seconds));
+        // Pozycja za końcem utworu (plik podmieniono na krótszy) zaczyna go od początku,
+        // zamiast od razu przeskakiwać do następnego.
+        var duration = _engine.Queue.ElementAtOrDefault(index)?.Duration ?? TimeSpan.Zero;
+        if (seconds <= 1 || (duration > TimeSpan.Zero && seconds >= duration.TotalSeconds - 1)) seconds = 0;
 
-        IsPlaying = true;
+        if (TryPlayback(() => _engine.PlayIndex(index, TimeSpan.FromSeconds(seconds))))
+            IsPlaying = _engine.State == PlaybackState.Playing;
+        else
+            // Odtwarzanie nie ruszyło, więc pozycja czeka na ponowienie i trafia do zapisu sesji.
+            _resume.Arm(index, saved, Queue.Count);
+
         return true;
     }
 
@@ -1378,13 +2149,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Wykonuje odświeżenie od razu, zamiast czekać na zegar. Wyłącznie dla narzędzia zrzutów.
     ///
-    /// <para>Zegar odświeżania ma odstęp 60 ms i w zwykłej pracy programu tyka sam. Narzędzie
-    /// zrzutów pracuje jednak bez pętli komunikatów — pompuje dyspozytora wywołaniami
-    /// <c>RunJobs</c> w pętli — a wtedy zegar potrafi nie dojść do głosu wcale. Sprawdzian
-    /// odczytujący czas trwania utworu opierał się przez to na tym, czy pętla odpytująca
-    /// przypadkiem zostawi zegarowi dość miejsca: przy uśpieniu 50 ms zostawiała, przy 10 ms
-    /// już nie. Tutaj odczyt jest wymuszany wprost, więc czekanie dotyczy wyłącznie tego, aż
-    /// dekoder faktycznie otworzy plik.</para>
+    /// <para>Pułapka: narzędzie zrzutów pompuje dyspozytora wywołaniami <c>RunJobs</c> bez pętli
+    /// komunikatów i zegar odświeżania potrafi wtedy nie ruszyć wcale.</para>
     /// </summary>
     public void RefreshForCapture() => Refresh();
 
@@ -1394,16 +2160,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         var duration = _engine.Duration;
         var position = _engine.Position;
+        var hours = duration.TotalHours >= 1;
 
-        Total = duration > TimeSpan.Zero ? FormatTime(duration.TotalSeconds) : "0:00";
+        Total = duration > TimeSpan.Zero ? FormatTime(duration.TotalSeconds, hours) : "0:00";
 
-        // Podczas przeciagania suwak nalezy do wskaznika, nie do odtwarzania - inaczej
-        // odswiezanie wyrywaloby uchwyt spod kursora.
+        // Podczas przeciągania suwak należy do wskaźnika, inaczej odświeżanie wyrywałoby
+        // uchwyt spod kursora.
         if (!_scrubbing)
         {
-            Elapsed = FormatTime(position.TotalSeconds);
+            Elapsed = FormatTime(position.TotalSeconds, hours);
 
-            // Ustawienie przez pole omija setter, zeby odswiezanie nie wywolalo przewijania.
+            // Ustawienie przez pole omija setter, żeby odświeżanie nie wywołało przewijania.
             _isSeeking = true;
             var progress = duration > TimeSpan.Zero
                 ? Math.Clamp(position.TotalSeconds / duration.TotalSeconds, 0, 1)
@@ -1423,23 +2190,39 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var playing = _engine.State == PlaybackState.Playing;
         if (playing != _isPlaying) IsPlaying = playing;
 
+        if (playing && DateTime.UtcNow - _lastPositionSave > PositionSaveInterval) SaveQueueStateInBackground();
+
         RefreshBitrateBadge();
+
+        // Bez gry wartości stoją w miejscu: zegar zwalnia, a wraca do pełnego tempa przy
+        // wznowieniu i przy przeciąganiu suwaka.
+        _refresh.Interval = playing || _scrubbing ? RefreshInterval : IdleRefreshInterval;
 
         // Stan zasilania zmienia się rzadko, a odczyt jest wywołaniem systemowym; pięć sekund
         // wystarcza, żeby podłączenie zasilacza zauważyć, a nie kosztuje praktycznie nic.
-        if (++_ticksSincePowerCheck < PowerCheckTicks) return;
+        if (DateTime.UtcNow - _lastPowerCheck < PowerCheckInterval) return;
 
-        _ticksSincePowerCheck = 0;
+        _lastPowerCheck = DateTime.UtcNow;
         if (_settings.Current.Effects == EffectsMode.Auto) UpdateEffects();
     }
 
-    private static readonly int PowerCheckTicks = (int)(5000 / RefreshInterval.TotalMilliseconds);
-    private int _ticksSincePowerCheck;
+    private static readonly TimeSpan IdleRefreshInterval = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan PowerCheckInterval = TimeSpan.FromSeconds(5);
+    private DateTime _lastPowerCheck = DateTime.UtcNow;
+
+    /// <summary>Zegar odświeżania wraca do pełnego tempa od razu, bez czekania na tyknięcie bezczynne.</summary>
+    private void WakeRefresh()
+    {
+        if (_refresh.Interval == RefreshInterval) return;
+
+        _refresh.Interval = RefreshInterval;
+        _refresh.Stop();
+        _refresh.Start();
+    }
 
     /// <summary>
-    /// Keeps the badge in step with the live bitrate. Only variable-bitrate files are
-    /// touched: for everything else the value never changes, and a badge that redraws itself
-    /// for no reason is a distraction.
+    /// Odświeża plakietkę zgodnie z bieżącą przepływnością, tylko dla plików o zmiennej
+    /// przepływności.
     /// </summary>
     private void RefreshBitrateBadge()
     {
@@ -1448,7 +2231,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var live = _engine.InstantaneousBitrate;
         if (live <= 0) return;
 
-        // Kwantyzacja do 2 kbps: bez niej ostatnia cyfra migotalaby kilka razy na sekunde.
+        // Kwantyzacja do 2 kbps, bo inaczej ostatnia cyfra migotałaby kilka razy na sekundę.
         var quantised = (int)Math.Round(live / 2.0) * 2;
         if (quantised == _shownBitrate) return;
 
@@ -1458,99 +2241,179 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private int _shownBitrate;
 
+    /// <summary>
+    /// Silnik zgłasza zmianę także po przewinięciu i po każdej zmianie kolejki, nie tylko przy
+    /// nowym utworze. Znacznik grającego wiersza przenosi się zawsze; tytuł, okładka i panel
+    /// systemowy zmieniają się tylko wtedy, gdy zmienił się utwór albo doszły jego znaczniki.
+    /// </summary>
     private void OnTrackChanged(int index)
     {
+        // Numer ze zdarzenia powstał na innym wątku i mógł się zestarzeć; rozstrzyga stan silnika
+        // teraz. Gdy nic nie jest bieżące, zdarzenie dotyczy utworu, który już nie gra.
+        index = _engine.CurrentIndex;
+
         if (index < 0 || index >= Queue.Count) return;
+        if (_engine.Queue.ElementAtOrDefault(index) is not { } entry) return;
 
-        _shownBitrate = 0;
-
-        if (_current is not null) _current.IsCurrent = false;
-        _current = Queue[index];
-        _current.IsCurrent = true;
-
-        var entry = _engine.Queue.ElementAtOrDefault(index);
-        if (entry?.Metadata is { } metadata)
+        var row = Queue[index];
+        if (!ReferenceEquals(row, _current))
         {
-            _currentMetadata = metadata;
-            Title = metadata.Title;
-            ArtistLine = BuildAlbumLine(entry);
-            FormatBadge = metadata.BuildBadge(null);
-
-            // Duration read from the tags is usually more accurate than the decoder's estimate.
-            if (metadata.Duration > TimeSpan.Zero)
-            {
-                _current.Duration = FormatTime(metadata.Duration.TotalSeconds);
-                _current.DurationSeconds = metadata.Duration.TotalSeconds;
-            }
-
-            UpdateArtwork(metadata.CoverArt);
+            if (_current is not null) _current.IsCurrent = false;
+            _current = row;
+            row.IsCurrent = true;
         }
 
-        PublishToMediaPanel();
+        row.ClearTemporaryFailure();
+
+        var metadata = entry.Metadata;
+        var newTrack = !ReferenceEquals(entry, _shownEntry);
+
+        if (newTrack || (metadata is not null && !ReferenceEquals(metadata, _currentMetadata)))
+        {
+            _shownEntry = entry;
+            _currentMetadata = metadata;
+            _shownBitrate = 0;
+
+            Title = metadata?.Title ?? entry.Title;
+            ArtistLine = BuildAlbumLine(entry);
+            FormatBadge = metadata?.BuildBadge(null) ?? string.Empty;
+
+            // Duration read from the tags is usually more accurate than the decoder's estimate.
+            if (metadata?.Duration > TimeSpan.Zero)
+            {
+                row.Duration = FormatTime(metadata.Duration.TotalSeconds);
+                row.DurationSeconds = metadata.Duration.TotalSeconds;
+            }
+
+            PublishToMediaPanel();
+        }
+
+        if (newTrack)
+        {
+            LoadCover(entry.Path);
+            TouchQueue();
+        }
+
         Raise(nameof(CurrentIndex));
     }
 
+    /// <summary>Wpis, którego tytuł i okładka są na ekranie.</summary>
+    private QueueEntry? _shownEntry;
+
     public int CurrentIndex => _current is null ? -1 : Queue.IndexOf(_current);
 
-    private void OnTrackFailed(int index, string reason)
+    /// <summary>
+    /// Silnik pominął plik. Wiersz zostaje wyszarzony z przyczyną w podpowiedzi, a komunikat
+    /// mówi, co pominięto i dlaczego; seria porażek (folder plików bez kodeka) daje jedno
+    /// podsumowanie zamiast komunikatu za każdy plik. Szczegół techniczny zostaje w dzienniku.
+    /// </summary>
+    private void OnTrackFailed(int index, TrackFailure failure)
     {
         if (index < 0 || index >= Queue.Count) return;
 
-        Queue[index].IsUnsupported = true;
-        Queue[index].UnsupportedReason = reason;
+        var entry = _engine.Queue.ElementAtOrDefault(index);
+        var row = Queue[index];
+        var reason = FailureText.ForTrack(failure.Reason, entry?.Format ?? AudioFileFormat.Unknown);
+
+        row.ShowFailure(failure.Reason, reason, reason);
+
+        var count = _skippedInNotice + 1;
+        ShowNotice(count == 1
+            ? string.Format(Strings.Current["TrackSkipped"], Path.GetFileName(row.Path), reason)
+            : string.Format(Strings.Current["TracksSkipped"], count));
+        _skippedInNotice = count;
     }
 
-    private void UpdateArtwork(byte[]? bytes)
+    /// <summary>Ile pominiętych plików obejmuje komunikat, który jest teraz na ekranie.</summary>
+    private int _skippedInNotice;
+
+    // ---------- Okładka ----------
+
+    /// <summary>
+    /// Okładka bieżącego utworu: odczyt z pliku, zdekodowanie w zmniejszonej rozdzielczości
+    /// i próbka do palety, wszystko poza wątkiem interfejsu. Spóźniony wynik jest zwalniany.
+    /// </summary>
+    private readonly CoverLoader<DecodedCover> _covers =
+        new(path => DecodeCover(MetadataReader.ReadCover(path)), cover => cover.Display.Dispose());
+
+    /// <summary>Ostatni zamówiony odczyt okładki; testy czekają na jego koniec.</summary>
+    internal Task CoverTask { get; private set; } = Task.CompletedTask;
+
+    private void LoadCover(string path) => CoverTask = _covers.LoadAsync(path, ShowCover);
+
+    /// <summary>
+    /// Szerokość, do której dekodowana jest okładka. Płyta ma kilkaset pikseli średnicy także
+    /// przy skalowaniu ekranu 2×; okładki osadzone w plikach miewają 3000 px i więcej.
+    /// </summary>
+    private const int CoverDecodeWidth = 640;
+
+    /// <summary>Obraz do pokazania i próbka pikseli do palety; null, gdy okładki nie ma albo jest uszkodzona.</summary>
+    internal static DecodedCover? DecodeCover(byte[]? bytes)
     {
-        var previousCover = _cover;
+        if (bytes is not { Length: > 0 }) return null;
 
         try
         {
-            if (bytes is { Length: > 0 })
+            using var stream = new MemoryStream(bytes);
+            var display = Bitmap.DecodeToWidth(stream, CoverDecodeWidth, BitmapInterpolationMode.HighQuality);
+
+            byte[]? pixels = null;
+            try
             {
-                using var stream = new MemoryStream(bytes);
-                Cover = new Bitmap(stream);
-                _usingPlaceholderCover = false;
+                pixels = CoverPalette.Sample(bytes);
             }
-            else
+            catch (Exception ex)
             {
-                Cover = LoadPlaceholder();
-                _usingPlaceholderCover = true;
+                Console.Error.WriteLine($"[cewka] próbka okładki: {ex.Message}");
             }
 
-            Palette = ExtractPalette();
+            return new DecodedCover(display, pixels);
         }
-        catch
+        catch (Exception ex)
         {
             // Uszkodzona okładka nie może zatrzymać odtwarzania.
-            Cover = LoadPlaceholder();
-            _usingPlaceholderCover = true;
-            Palette = ExtractPalette();
-        }
-        finally
-        {
-            if (!ReferenceEquals(previousCover, _cover)) previousCover?.Dispose();
+            Console.Error.WriteLine($"[cewka] okładka nieczytelna: {ex.Message}");
+            return null;
         }
     }
 
+    /// <summary>Próbka pikseli bieżącej okładki; palety przy zmianie motywu i intensywności liczą się z niej.</summary>
+    private byte[]? _coverPixels;
+
+    private void ShowCover(DecodedCover? cover)
+    {
+        if (cover is not null)
+        {
+            _usingPlaceholderCover = false;
+            _coverPixels = cover.Pixels;
+            ReplaceCover(cover.Display);
+        }
+        else
+        {
+            _usingPlaceholderCover = true;
+            _coverPixels = null;
+            ReplaceCover(LoadPlaceholder());
+        }
+    }
+
+    /// <summary>Podmienia obraz na płycie, przelicza barwy i zwalnia poprzedni obraz.</summary>
+    private void ReplaceCover(Bitmap? next)
+    {
+        var previous = _cover;
+
+        Cover = next;
+        Palette = ExtractPalette();
+
+        if (!ReferenceEquals(previous, next)) previous?.Dispose();
+    }
+
     /// <summary>
-    /// Swaps the placeholder when the palette changes. Only relevant while the placeholder
-    /// is on screen: a real cover belongs to the record, not to the interface, and must not
-    /// change with the theme.
+    /// Podmienia okładkę domyślną po zmianie palety; prawdziwa okładka z motywem się nie zmienia.
     /// </summary>
     public void OnThemeChanged()
     {
-        if (!_usingPlaceholderCover)
-        {
-            Palette = ExtractPalette();
-            return;
-        }
-
-        var previous = _cover;
-        Cover = LoadPlaceholder();
-        Palette = ExtractPalette();
-
-        if (!ReferenceEquals(previous, _cover)) previous?.Dispose();
+        if (_usingPlaceholderCover) ReplaceCover(LoadPlaceholder());
+        else Palette = ExtractPalette();
     }
 
     /// <summary>
@@ -1560,39 +2423,32 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private Color[] ExtractPalette()
     {
         var dark = App.Theme.IsDark;
+        var saturation = ColourPreferences.Saturation(_settings.Current.ColourIntensity);
 
         // Akcent liczony jest z palety pobranej w pełnej sile, a nie z tej, którą przyciemniło
         // ustawienie intensywności. Intensywność dotyczy tła; przełączniki i suwaki mają
         // pokazywać barwę okładki zawsze i w całości.
+        if (_coverPixels is { } pixels)
+        {
+            ApplyAccent(CoverPalette.FromPixels(pixels, dark, 1.0), dark);
+            return CoverPalette.FromPixels(pixels, dark, saturation);
+        }
+
         ApplyAccent(CoverPalette.Extract(Cover, dark, 1.0), dark);
 
         // Przy okładce domyślnej barwy pary są znane dokładnie, więc nie ma po co odczytywać ich
         // z narysowanego obrazka.
         if (_usingPlaceholderCover) return PlaceholderBackdrop(dark);
 
-        return CoverPalette.Extract(
-            Cover, dark, ColourPreferences.Saturation(_settings.Current.ColourIntensity));
+        return CoverPalette.Extract(Cover, dark, saturation);
     }
 
     /// <summary>
-    /// Plamy tła dla okładki domyślnej, wzięte wprost ze skrajnych barw pary.
+    /// Plamy tła dla okładki domyślnej: obie skrajne barwy pary po dwa razy, z nasyceniem
+    /// skalowanym intensywnością barw.
     ///
-    /// <para><b>Dlaczego nie przez analizę obrazka.</b> Dla prawdziwej okładki nie ma innego
-    /// wyjścia: barwy trzeba z niej odczytać. Ale okładkę domyślną program rysuje sam i zna jej
-    /// parę co do składowej — a droga przez analizę te barwy psuje. <see cref="CoverPalette"/>
-    /// dzieli przestrzeń barw na kubełki i uśrednia zawartość każdego z nich, co samo w sobie
-    /// ciągnie wynik do szarości; do tego spirala to cienkie kreski na ciemnym podłożu, więc
-    /// w kubełkach przeważa tło, a nie barwa kreski. Skutek: para „turkus i róż" dawała na tle
-    /// dwa odcienie tego samego zamglonego fioletu.</para>
-    ///
-    /// <para><b>Skrajne, nie środkowa.</b> Spirala przechodzi od pierwszej barwy pary do drugiej,
-    /// więc to te dwie mówią, czym para jest. Barwa środkowa jest ich mieszaniną i na tle nie
-    /// wnosi nic poza rozmyciem różnicy. Cztery plamy dostają więc obie skrajne barwy po dwa
-    /// razy, dzięki czemu tło jest dwubarwne tak samo jak okładka.</para>
-    ///
-    /// <para>Ustawienie intensywności barw działa tu dalej — skaluje nasycenie, tak jak robi to
-    /// dla barw wyciąganych z prawdziwej okładki. Przełączniki i suwaki barwy nie stąd biorą:
-    /// akcent liczony jest osobno, z pełnej palety i bez tego skalowania.</para>
+    /// <para>Pułapka: analiza narysowanej spirali przez <see cref="CoverPalette"/> psuje barwy,
+    /// bo cienkie kreski giną w ciemnym tle przegródek, a uśrednianie ciągnie je ku szarości.</para>
     /// </summary>
     private Color[] PlaceholderBackdrop(bool darkTheme)
     {
@@ -1604,8 +2460,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (ramp.Length == 0) return [];
 
         var saturation = ColourPreferences.Saturation(_settings.Current.ColourIntensity);
-        var first = Saturate(ramp[0], saturation);
-        var last = Saturate(ramp[^1], saturation);
+        var first = Contrast.LimitForBackdrop(Saturate(ramp[0], saturation), darkTheme);
+        var last = Contrast.LimitForBackdrop(Saturate(ramp[^1], saturation), darkTheme);
 
         return [first, last, first, last];
     }
@@ -1630,8 +2486,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         var accent = AccentColour.From(vivid, darkTheme);
 
+        // Podmiana zasobu rozgłasza zmianę po drzewie obu okien; przy tej samej barwie szkoda zachodu.
+        if (resources.TryGetValue("AccentColor", out var shown) && shown is Color same && same == accent) return;
+
         resources["AccentColor"] = accent;
         resources["AccentBrush"] = new SolidColorBrush(accent);
+        resources["FocusRingBrush"] = new SolidColorBrush(Contrast.FocusRing(accent, darkTheme));
     }
 
     /// <summary>Progi siły plam tła; czytane przez tło okna, które waha się między nimi.</summary>
@@ -1656,9 +2516,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Applies a new default-cover colour pair. Only visible while a file without its own
-    /// cover is loaded, but the palette behind the window changes with it, so the whole
-    /// window takes on the new pair.
+    /// Stosuje nową parę barw okładki domyślnej; widać ją tylko przy pliku bez okładki, ale
+    /// razem z nią zmienia się tło okna.
     /// </summary>
     public void SetPlaceholderPalette(PlaceholderPalette palette)
     {
@@ -1670,24 +2529,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // Wybranie losowania ma dać skutek od razu, a nie dopiero przy następnym utworze.
         _placeholderDraw.Forget();
 
-        if (!_usingPlaceholderCover) return;
-
-        var previous = _cover;
-        Cover = LoadPlaceholder();
-        Palette = ExtractPalette();
-
-        if (!ReferenceEquals(previous, _cover)) previous?.Dispose();
+        if (_usingPlaceholderCover) ReplaceCover(LoadPlaceholder());
     }
 
     private readonly PlaceholderDraw _placeholderDraw = new();
 
     /// <summary>
-    /// The default sleeve: a coil, after the application's name. Drawn rather than loaded, so
-    /// the colour pair and the theme both take effect without a file for every combination.
+    /// Okładka domyślna: cewka.
     ///
-    /// <para>Para barw przechodzi przez <see cref="PlaceholderDraw"/>, a nie wprost z ustawień:
-    /// przy wyborze losowym barwy mają być wylosowane raz na utwór, a ta metoda wołana jest
-    /// także przy przewinięciu i przy zmianie motywu.</para>
+    /// <para>Pułapka: para barw idzie przez <see cref="PlaceholderDraw"/>, bo przy wyborze
+    /// losowym ma być losowana raz na utwór, a ta metoda działa też po przewinięciu i zmianie
+    /// motywu.</para>
     /// </summary>
     private Bitmap? LoadPlaceholder()
     {
@@ -1702,16 +2554,33 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private static string FormatTime(double seconds)
+    /// <summary>
+    /// m:ss, a od godziny h:mm:ss. Przy utworze dłuższym niż godzina także pozycja poniżej
+    /// godziny dostaje postać z godzinami, żeby szerokość pola nie skakała.
+    /// </summary>
+    internal static string FormatTime(double seconds, bool hours = false)
     {
         var whole = (int)Math.Max(0, Math.Floor(seconds));
-        return $"{whole / 60}:{whole % 60:00}";
+
+        return hours || whole >= 3600
+            ? $"{whole / 3600}:{whole / 60 % 60:00}:{whole % 60:00}"
+            : $"{whole / 60}:{whole % 60:00}";
     }
+
+    private readonly EventHandler _themeWatcher;
+    private readonly EventHandler _themeModeWatcher;
+
+    private bool _disposed;
 
     public void Dispose()
     {
+        _disposed = true;
+        App.Theme.Changed -= _themeWatcher;
+        App.Theme.ModeChanged -= _themeModeWatcher;
+        _queueSave.Stop();
         _refresh.Stop();
         _noticeTimer.Stop();
+        _covers.Cancel();
         _engine.Dispose();
         _loudness.Dispose();
         _cover?.Dispose();

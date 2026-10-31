@@ -4,8 +4,7 @@ using System.Runtime.CompilerServices;
 namespace Cewka.App.ViewModels;
 
 /// <summary>
-/// Minimal change notification. A full MVVM toolkit would be more machinery than this
-/// application needs, and the audio engine in later stages raises its own events anyway.
+/// Najprostsze powiadamianie o zmianach, bez biblioteki MVVM.
 /// </summary>
 public abstract class ObservableObject : INotifyPropertyChanged
 {

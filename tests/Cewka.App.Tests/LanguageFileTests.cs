@@ -7,15 +7,11 @@ namespace Cewka.App.Tests;
 /// <summary>
 /// Sprawdzenia plików językowych.
 ///
-/// <para>Brakujący klucz nie wywraca programu — wraca wtedy tekst polski — i właśnie dlatego
-/// wymaga testu. Luka w tłumaczeniu wygląda jak zdanie w obcym języku pośród reszty i można ją
-/// przeoczyć w każdym języku poza własnym.</para>
+/// <para>Brakujący klucz nie wywraca programu, tylko pokazuje tekst polski, więc łatwo go
+/// przeoczyć.</para>
 ///
-/// <para><b>Jedna lista języków.</b> Wcześniej każdy sprawdzian miał własny zestaw atrybutów
-/// <c>InlineData</c> i dołożenie języka znaczyło dopisanie go w sześciu miejscach. Teraz lista
-/// jest jedna, a wszystkie sprawdziany biorą ją stąd — zapomnieć o którymś nie ma jak.
-/// Zgodność listy z tym, co program faktycznie udostępnia, pilnuje narzędzie zrzutów: renderuje
-/// okno ustawień w każdym języku z tej listy, korzystając z prawdziwej klasy Strings.</para>
+/// <para>Wszystkie sprawdziany biorą języki z jednej listy. Jej zgodność z programem pilnuje
+/// narzędzie zrzutów, które renderuje okno ustawień w każdym języku z listy.</para>
 /// </summary>
 public sealed class LanguageFileTests
 {
@@ -42,8 +38,18 @@ public sealed class LanguageFileTests
         "ColoursSubtle", "ColoursRecommended", "ColoursIntense",
         "QualityOff", "QualityStandard", "QualityHigh",
         "LatencyLow", "LatencyBalanced", "LatencySafe",
-        "FileOpenAppend", "FileOpenAppendPlay", "FileOpenReplace",
     ];
+
+    /// <summary>
+    /// Opcje otwierania plików mają wspólny pasek, więc ich długości liczy się razem, a nie
+    /// każdą osobno: krótka pierwsza opcja zostawia miejsce dłuższym. Wartość z pomiaru
+    /// (<see cref="LocalisedLayoutTests"/>): trzy opcje po 61 znaków łącznie zajmują 412 z 420 px
+    /// w najwęższym oknie ustawień. Układ sprawdza ten test, a ten limit tylko wcześnie
+    /// ostrzega przed tłumaczeniem, które się nie zmieści.
+    /// </summary>
+    private static readonly string[] FileOpenLabels = ["FileOpenAppend", "FileOpenAppendPlay", "FileOpenReplace"];
+
+    private const int FileOpenTotalLimit = 61;
 
     /// <summary>
     /// Przekroczenie tej długości nie mieści się na przycisku segmentu przy najwęższym oknie.
@@ -52,13 +58,8 @@ public sealed class LanguageFileTests
     private const int ShortLabelLimit = 18;
 
     /// <summary>
-    /// Nazwy par barw domyślnej okładki. Stoją na przycisku szerokim na 168 px obok próbki
-    /// barwy szerokiej na 34 px, więc na sam tekst zostaje około 113 px — mniej niż na pasku
-    /// segmentowym, choć przycisk jest większy.
-    /// </summary>
-    /// <summary>
-    /// Klucze wyprowadzone z wyliczenia, a nie wypisane. Lista wypisana z ręki rozjechała się
-    /// już raz z rzeczywistością: doszło sześć par barw, a nazw dla nich nie dołożył nikt.
+    /// Nazwy par barw domyślnej okładki, wyprowadzone z wyliczenia, żeby nowa para nie została
+    /// bez nazwy. Stoją na przycisku 168 px obok próbki 34 px, więc na tekst zostaje około 113 px.
     /// </summary>
     private static readonly string[] PaletteLabels =
         Enum.GetValues<PlaceholderPalette>().Select(value => "Palette" + value).ToArray();
@@ -169,7 +170,7 @@ public sealed class LanguageFileTests
         var translated = Load(code);
 
         // Klucze, których wartość z założenia jest wspólna dla wszystkich języków.
-        string[] shared = ["_language", "_code", "AppName", "Preamp", "NoFormat", "ControlsMacOs"];
+        string[] shared = ["_language", "_code", "AppName", "NoFormat", "ControlsMacOs"];
 
         var copied = reference
             .Where(pair => !shared.Contains(pair.Key))
@@ -197,6 +198,18 @@ public sealed class LanguageFileTests
         Assert.True(
             toolong.Length == 0,
             $"{code}.json ma etykiety dłuższe niż {ShortLabelLimit} znaków: {string.Join(", ", toolong)}");
+    }
+
+    [Theory]
+    [MemberData(nameof(All))]
+    public void OpcjeOtwieraniaPlikowMieszczaSieNaWspolnymPasku(string code)
+    {
+        var strings = Load(code);
+        var total = FileOpenLabels.Sum(key => strings[key].Length);
+
+        Assert.True(
+            total <= FileOpenTotalLimit,
+            $"{code}.json ma opcje otwierania plików o łącznej długości {total} znaków (limit {FileOpenTotalLimit})");
     }
 
     [Theory]
@@ -251,10 +264,32 @@ public sealed class LanguageFileTests
     }
 
     /// <summary>
+    /// Polecenie otwierające okno wyboru kończy się wielokropkiem, a tytuł tego okna jest tą
+    /// samą nazwą bez niego. Dwa osobne klucze, bo jeden tekst nie może być jednocześnie
+    /// poleceniem i tytułem.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(All))]
+    public void PolecenieOtwarciaMaWielokropekATytulOknaNie(string code)
+    {
+        var strings = Load(code);
+
+        foreach (var key in new[] { "OpenFiles", "OpenFolder" })
+        {
+            Assert.True(strings.TryGetValue(key + "Title", out var title), $"{code}.json nie ma klucza {key}Title");
+            Assert.False(title.EndsWith('…'), $"{code}.json: {key}Title kończy się wielokropkiem");
+            Assert.Equal(title + "…", strings[key]);
+        }
+    }
+
+    /// <summary>
     /// Symbole zastępcze przechodzą przez <c>string.Format</c>. Tłumacz, który zamieni je na
     /// tekst albo przestawi specyfikator formatu, wywołałby wyjątek dopiero w czasie działania
     /// programu — i to wyłącznie w swoim języku.
     /// </summary>
+    /// <summary>Teksty z jednym symbolem zastępczym {0}.</summary>
+    private static readonly string[] OneArgumentKeys = ["PlaylistSaved", "PlaylistMissing", "VolumeLevel", "EffectStrength"];
+
     [Theory]
     [MemberData(nameof(All))]
     public void SymboleZastepczePrzetrwalyTlumaczenie(string code)
@@ -268,7 +303,7 @@ public sealed class LanguageFileTests
         // Sprawdzenie właściwe: tekst musi dać się sformatować bez wyjątku.
         Assert.Contains("1024", string.Format(measured, 1024, 21.3));
 
-        foreach (var key in (string[])["PlaylistSaved", "PlaylistMissing"])
+        foreach (var key in OneArgumentKeys)
         {
             Assert.True(strings.TryGetValue(key, out var text), $"{code}.json nie ma klucza {key}");
             Assert.Contains("{0}", text);
@@ -340,13 +375,8 @@ public sealed class LanguageFileTests
     /// <summary>
     /// Każdy znak w każdym tekście musi mieć glif w osadzonym foncie interfejsu.
     ///
-    /// <para><b>Dlaczego czytany jest sam font.</b> Wcześniej ten sprawdzian miał wpisaną na
-    /// sztywno granicę U+0250 i listę dopuszczonych znaków interpunkcyjnych — dobraną ręcznie do
-    /// tego, co zawierał osadzony wtedy Cantarell 1.004. Po wymianie fontu na wydanie 0.303,
-    /// które ma cyrylicę i grekę, taka lista opisywała już nie ten font i odrzucałaby teksty
-    /// rosyjskie oraz ukraińskie, choć font potrafi je narysować. Teraz sprawdzian pyta font,
-    /// a nie pamięć: znak, którego font nie ma, wyświetla się jako pusty prostokąt i wykryć to
-    /// można inaczej tylko patrząc na ekran w tym właśnie języku.</para>
+    /// <para>Zakres znaków odczytywany jest z samego fontu, bo znak bez glifu wyświetla się jako
+    /// pusty prostokąt, widoczny tylko na ekranie w danym języku.</para>
     /// </summary>
     [Theory]
     [MemberData(nameof(All))]

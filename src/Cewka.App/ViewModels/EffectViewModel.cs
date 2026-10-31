@@ -5,10 +5,7 @@ namespace Cewka.App.ViewModels;
 /// <summary>
 /// Jeden efekt dźwiękowy w interfejsie: przełącznik i suwak siły.
 ///
-/// <para>Wszystkie pięć różni się wyłącznie nazwą i tym, dokąd trafiają wartości, więc jeden
-/// model widoku obsługuje je wszystkie, a okno rysuje je z listy. Alternatywą byłoby piętnaście
-/// właściwości w <see cref="MainViewModel"/> — powielony kod, który przy szóstym efekcie trzeba
-/// by powielić znowu.</para>
+/// <para>Efekty różnią się tylko nazwą i celem wartości, więc okno rysuje je z listy.</para>
 /// </summary>
 public sealed class EffectViewModel : ObservableObject
 {
@@ -36,6 +33,9 @@ public sealed class EffectViewModel : ObservableObject
 
     public string Description => Strings.Current["EffectDescription" + Key];
 
+    /// <summary>Nazwa suwaka siły dla czytnika ekranu.</summary>
+    public string StrengthName => string.Format(Strings.Current["EffectStrength"], Label);
+
     public bool Enabled
     {
         get => _enabled;
@@ -49,11 +49,8 @@ public sealed class EffectViewModel : ObservableObject
     /// <summary>
     /// Siła działania w zakresie 0–1, czyli w postaci, jakiej oczekuje suwak.
     ///
-    /// <para>Suwak jest ciągły, ale siła ma jedenaście położeń: od zera do dziesięciu, gdzie
-    /// każdy punkt to dziesięć procent. Zaokrąglanie stoi tutaj, a nie w oknie, bo tę samą
-    /// wartość ustawiają dwa suwaki w dwóch miejscach i oba mają zachowywać się jednakowo.
-    /// Skala z punktami jest przy okazji łatwiejsza do odtworzenia: „sześć" da się powtórzyć,
-    /// „pięćdziesiąt siedem procent" nie.</para>
+    /// <para>Jedenaście położeń co dziesięć procent, jak <c>Step</c> suwaków; zaokrąglenie
+    /// pilnuje wartości z innych źródeł, na przykład z ręcznie poprawionych ustawień.</para>
     /// </summary>
     public double Strength
     {
@@ -61,8 +58,7 @@ public sealed class EffectViewModel : ObservableObject
         set
         {
             var snapped = Math.Round(Math.Clamp(value, 0, 1) * Steps) / Steps;
-            if (!Set(ref _strength, snapped)) return;
-            Raise(nameof(StrengthText));
+            if (Set(ref _strength, snapped)) Raise(nameof(StrengthText));
         }
     }
 
@@ -83,5 +79,6 @@ public sealed class EffectViewModel : ObservableObject
     {
         Raise(nameof(Label));
         Raise(nameof(Description));
+        Raise(nameof(StrengthName));
     }
 }

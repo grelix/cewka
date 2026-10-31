@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Avalonia.Platform;
@@ -14,16 +15,11 @@ public sealed record LanguageInfo(string Code, string Name);
 internal sealed partial class LanguageJsonContext : JsonSerializerContext;
 
 /// <summary>
-/// Every piece of text shown in the interface, looked up by key.
+/// Wszystkie teksty interfejsu, pobierane po kluczu. Wiązanie <c>{l:Translate Klucz}</c>
+/// obserwuje indeksator, więc zmiana języka odświeża okna bez ponownego otwierania.
 ///
-/// <para><b>Dlaczego indekser, a nie stałe.</b> Teksty pobierane są przez wiązanie
-/// <c>{l:Translate Klucz}</c>, które obserwuje zmianę indeksatora. Dzięki temu zmiana języka
-/// odświeża cały interfejs bez ponownego otwierania okna — a to jedyny sposób, żeby ustawienie
-/// języka w oknie ustawień działało tak, jak użytkownik oczekuje.</para>
-///
-/// <para>Dodanie kolejnego języka sprowadza się do dołożenia jednego pliku JSON obok
-/// <c>pl.json</c> i dopisania go do listy poniżej. Klucze nieprzetłumaczone wracają do
-/// polskiego, więc częściowe tłumaczenie nie psuje interfejsu.</para>
+/// <para>Nowy język to plik JSON obok <c>pl.json</c> i wpis na liście poniżej. Brakujące klucze
+/// wracają do polskiego.</para>
 /// </summary>
 public sealed class Strings : INotifyPropertyChanged
 {
@@ -48,6 +44,7 @@ public sealed class Strings : INotifyPropertyChanged
         _fallback = Load(FallbackCode);
         _active = _fallback;
         CurrentCode = FallbackCode;
+        Numbers = BuildNumbers();
     }
 
     /// <summary>The single instance bound to by the interface.</summary>
@@ -57,8 +54,19 @@ public sealed class Strings : INotifyPropertyChanged
 
     public string CurrentCode { get; private set; }
 
-    /// <summary>Languages available to choose from, for the settings window.</summary>
-    public static IReadOnlyList<LanguageInfo> Available { get; } = BuildAvailable();
+    /// <summary>
+    /// Languages available to choose from, for the settings window. Czytane dopiero przy
+    /// pierwszym otwarciu okna ustawień: wymaga to przejrzenia wszystkich plików języków.
+    /// </summary>
+    public static IReadOnlyList<LanguageInfo> Available => LazyAvailable.Value;
+
+    private static readonly Lazy<IReadOnlyList<LanguageInfo>> LazyAvailable = new(BuildAvailable);
+
+    /// <summary>
+    /// Zapis liczb w bieżącym języku. Program działa z niezmienną globalizacją, więc kultura
+    /// zawsze stawiałaby kropkę dziesiętną, także w polskim interfejsie.
+    /// </summary>
+    public NumberFormatInfo Numbers { get; private set; }
 
     /// <summary>Missing keys are returned in square brackets so a gap is obvious, never blank.</summary>
     public string this[string key] =>
@@ -77,6 +85,7 @@ public sealed class Strings : INotifyPropertyChanged
 
         _active = resolved == FallbackCode ? _fallback : Load(resolved);
         CurrentCode = resolved;
+        Numbers = BuildNumbers();
 
         // Pusta nazwa własności odświeża wszystkie wiązania, w tym indeksator.
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(null));
@@ -89,11 +98,19 @@ public sealed class Strings : INotifyPropertyChanged
 
         // Nie CultureInfo: przy InvariantGlobalization jest zawsze kulturą niezmienną, więc to
         // dopasowanie nie mogło się udać dla żadnego języka. Szczegóły w SystemLanguage.
-        var system = SystemLanguage.TwoLetterCode();
+        // Pierwszy z preferowanych języków systemu, który ma tłumaczenie.
+        foreach (var system in SystemLanguage.Candidates())
+            if (Codes.Contains(system, StringComparer.OrdinalIgnoreCase)) return system;
 
-        return system is not null && Codes.Contains(system, StringComparer.OrdinalIgnoreCase)
-            ? system
-            : FallbackCode;
+        return FallbackCode;
+    }
+
+    private NumberFormatInfo BuildNumbers()
+    {
+        var format = (NumberFormatInfo)NumberFormatInfo.InvariantInfo.Clone();
+        var separator = this["DecimalSeparator"];
+        if (separator.Length == 1) format.NumberDecimalSeparator = separator;
+        return format;
     }
 
     private static Dictionary<string, string> Load(string code)

@@ -36,16 +36,10 @@ public partial class App : Application
     /// <summary>
     /// Ustawienia fontów przekazywane Avalonii przy budowaniu aplikacji.
     ///
-    /// <para>Program niesie własny font i przypisuje go kontrolkom w arkuszu stylów, ale to nie
-    /// wystarcza: Avalonia osobno pyta system o <em>domyślną</em> rodzinę pisma i bez odpowiedzi
-    /// przerywa działanie komunikatem „Default font family name can't be null or empty".
-    /// Na pulpicie fonty są zawsze, więc nie wychodziło to nigdy — wyszło dopiero przy próbnej
-    /// instalacji w gołym kontenerze, gdzie nie ma żadnego. Skoro cała zawartość programu jest
-    /// w jednym pliku, to i pismo nie ma powodu pochodzić skądinąd.</para>
-    ///
-    /// <para>Ta sama wartość obowiązuje narzędzie zrzutów, które buduje aplikację samo. Inaczej
-    /// obrazy odniesienia powstawałyby przy innych ustawieniach niż te, z którymi program
-    /// naprawdę działa.</para>
+    /// <para>Pułapka: sam styl kontrolek nie wystarcza. Avalonia osobno pyta system o domyślną
+    /// rodzinę pisma i w systemie bez fontów (goły kontener) przerywa działanie komunikatem
+    /// „Default font family name can't be null or empty”. Narzędzie zrzutów używa tych samych
+    /// ustawień.</para>
     /// </summary>
     public static FontManagerOptions FontOptions => new()
     {
@@ -58,6 +52,8 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        Dispatcher.UIThread.UnhandledException += OnUnhandledException;
+
         Settings = new SettingsStore();
         Theme = new ThemeManager(this, Settings.Current.Theme);
 
@@ -88,20 +84,26 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
+    /// <summary>
+    /// Ostatnia siatka dla wyjątków z obsługi zdarzeń interfejsu. Każdy trafia do dziennika;
+    /// zatrzymywany jest tylko błąd warstwy dźwięku, bo nie narusza stanu programu, a reszta
+    /// kończy program, żeby nie zostawić go w stanie niespójnym.
+    /// </summary>
+    private static void OnUnhandledException(object? sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        Console.Error.WriteLine($"[cewka] nieobsłużony wyjątek: {e.Exception}");
+
+        if (e.Exception is Cewka.Audio.AudioException) e.Handled = true;
+    }
+
     // ---------- Zakończenie z zewnątrz ----------
 
     private static readonly List<IDisposable> SignalHandlers = [];
 
     /// <summary>
-    /// Closes the application in an orderly way when the system asks it to stop.
-    ///
-    /// <para>Wylogowanie albo zamknięcie sesji wysyła programowi sygnał zakończenia. Bez
-    /// obsługi proces ginie natychmiast, a że kolejka i geometria okna zapisywane są przy
-    /// zamykaniu okna, przepadałyby za każdym razem. Tutaj sygnał jest wstrzymywany, a okno
-    /// zamyka się normalną drogą — dokładnie tak, jakby użytkownik nacisnął krzyżyk.</para>
-    ///
-    /// <para>W systemie Windows sygnały te przychodzą tylko do programów konsolowych, więc
-    /// rejestracja pozostaje tam bez skutku i nic nie kosztuje.</para>
+    /// Zamyka program zwykłą drogą, gdy system każe mu skończyć (wylogowanie, koniec sesji).
+    /// Bez tego proces ginąłby od razu, a kolejka i geometria okna zapisują się przy zamknięciu
+    /// okna. W Windows te sygnały dostają tylko programy konsolowe.
     /// </summary>
     private static void AttachShutdownSignals(IClassicDesktopStyleApplicationLifetime desktop)
     {
@@ -125,27 +127,55 @@ public partial class App : Application
 
     // ---------- Przekazywanie ścieżek z kolejnych uruchomień ----------
 
+    private static readonly Queue<string[]> HandedOver = new();
+
     private void AttachSingleInstance()
     {
-        if (Instance is null) return;
+        // Ścieżki przysłane w trakcie budowania okna czekały w kanale; trafiają do kolejki
+        // dopiero po jego otwarciu, bo Post wykona się już w pętli komunikatów.
+        Instance?.Attach(paths =>
+        {
+            lock (HandedOver) HandedOver.Enqueue(paths);
+            Dispatcher.UIThread.Post(OnPathsHandedOver);
+        });
+    }
 
-        Instance.PathsReceived += paths => Dispatcher.UIThread.Post(() => OnPathsHandedOver(paths));
-        Instance.StartListening();
+    private static bool _closing;
+
+    /// <summary>
+    /// Przestaje przyjmować ścieżki od innych kopii, gdy okno zaczyna się zamykać. Kopia
+    /// uruchomiona w trakcie zapisu nie połączy się i ponawia próby przejęcia roli.
+    /// </summary>
+    internal static void BeginClosing()
+    {
+        _closing = true;
+        Instance?.StopListening();
+
+        // Ścieżki odebrane wcześniej czekają jeszcze w dyspozytorze, a ich nadawcy już
+        // zakończyli pracę, więc trafiają do kolejki przed jej zapisem.
+        TakeHandedOverPaths();
     }
 
     /// <summary>
-    /// Adds files sent by another copy to the queue and brings the window forward.
-    /// <para>
-    /// Appending rather than replacing is deliberate: selecting a dozen files in the file
-    /// manager starts a dozen copies, each handing over one path. Replacing the queue would
-    /// leave only whichever of them happened to arrive last.
-    /// </para>
+    /// Oddaje rolę działającej kopii dopiero po zapisaniu kolejki i ustawień, bo następna kopia
+    /// czyta je z dysku.
     /// </summary>
-    private static void OnPathsHandedOver(string[] paths)
+    internal static void ReleaseSingleInstance()
     {
-        if (_mainWindow is null) return;
+        _closing = true;
 
-        _mainWindow.ReceivePaths(paths);
+        var instance = Instance;
+        Instance = null;
+        instance?.Dispose();
+    }
+
+    /// <summary>
+    /// Dokłada pliki od innej kopii do kolejki i wysuwa okno. Dokłada, bo zaznaczenie kilkunastu
+    /// plików uruchamia kilkanaście kopii po jednej ścieżce.
+    /// </summary>
+    private static void OnPathsHandedOver()
+    {
+        if (_mainWindow is null || _closing || !TakeHandedOverPaths()) return;
 
         if (_mainWindow.WindowState == Avalonia.Controls.WindowState.Minimized)
             _mainWindow.WindowState = Avalonia.Controls.WindowState.Normal;
@@ -153,32 +183,49 @@ public partial class App : Application
         _mainWindow.Activate();
     }
 
+    /// <summary>Dokłada do kolejki wszystkie czekające wiadomości; fałsz, gdy nie było żadnej.</summary>
+    private static bool TakeHandedOverPaths()
+    {
+        string[][] messages;
+
+        lock (HandedOver)
+        {
+            messages = [.. HandedOver];
+            HandedOver.Clear();
+        }
+
+        if (_mainWindow is null) return false;
+
+        foreach (var paths in messages) _mainWindow.ReceivePaths(paths, closing: _closing);
+        return messages.Length > 0;
+    }
+
     // ---------- Klawisze multimedialne ----------
 
+    /// <summary>
+    /// Zaczep zakłada dopiero okno, po próbie podłączenia panelu systemowego: gdy panel działa,
+    /// zaczep nie jest potrzebny.
+    /// </summary>
     private void AttachMediaKeys()
     {
         MediaKeys.Pressed += key => Dispatcher.UIThread.Post(() => _mainWindow?.HandleMediaKey(key));
-        ApplyMediaKeysSetting();
     }
 
     /// <summary>
-    /// Installs or removes the keyboard hook to match the setting. Called from the settings
-    /// window, so the change takes effect on the spot rather than at the next start.
+    /// Installs or removes the keyboard hook to match the setting and the state of the system
+    /// media panel. Called from the settings window, so the change takes effect on the spot.
     /// </summary>
     public static void ApplyMediaKeysSetting()
     {
-        if (Settings.Current.MediaKeys) MediaKeys.Install();
+        if (MediaKeys.ShouldHook(Settings.Current.MediaKeys, MediaPanelActive)) MediaKeys.Install();
         else MediaKeys.Uninstall();
     }
 
     /// <summary>
-    /// Used by the snapshot tool, which sets up the application without a desktop
-    /// lifetime and therefore never reaches the branch above.
+    /// Dla narzędzia zrzutów, które buduje aplikację bez cyklu życia pulpitu.
     /// </summary>
     /// <param name="startupPaths">
-    /// Files the window should load, as if they had been named on the command line. The
-    /// snapshot tool uses it to photograph the interface with a real track in it rather than
-    /// with the empty queue — the same path a file opened from the file manager takes.
+    /// Pliki do wczytania, jak podane w wierszu polecenia.
     /// </param>
     public void InitialiseServicesForHeadless(SettingsStore settings, string[]? startupPaths = null)
     {

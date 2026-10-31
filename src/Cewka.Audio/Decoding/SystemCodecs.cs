@@ -5,16 +5,11 @@ using Cewka.Audio.Decoding.Windows;
 namespace Cewka.Audio.Decoding;
 
 /// <summary>
-/// Formats the managed decoders do not cover — AAC, M4A and ALAC — handled by whatever the
-/// operating system already provides.
+/// Formaty spoza dekoderów zarządzanych (AAC, M4A, ALAC) obsługiwane przez dekoder systemu:
+/// Media Foundation w Windows, GStreamer pod Linuksem. FFmpeg odpada z powodu licencji.
 ///
-/// <para><b>Dlaczego nie własny dekoder.</b> Napisanie dekodera AAC od zera to praca na
-/// miesiące i stałe źródło błędów, a dołączenie FFmpeg zostało odrzucone razem z jego
-/// licencją. Windows ma Media Foundation w każdej wspieranej wersji, więc pełny zadeklarowany
-/// zakres formatów działa tam bez instalowania czegokolwiek. W systemie Linux tę samą rolę
-/// pełni GStreamer — obecność jego bibliotek jest tu wykrywana, a dekodowaniem zajmuje się
-/// <see cref="Linux.GStreamerDecoder"/>. Sam dekoder AAC dostarcza tam osobny pakiet
-/// (<c>gstreamer1.0-libav</c>), którego brak jest zgłaszany razem z jego nazwą.</para>
+/// <para>Pod Linuksem dekoder AAC dostarcza osobny pakiet (<c>gstreamer1.0-libav</c>); jego brak
+/// zgłaszany jest z nazwą pakietu.</para>
 /// </summary>
 public static class SystemCodecs
 {
@@ -27,8 +22,7 @@ public static class SystemCodecs
     public static string Name => State.Value.Name;
 
     /// <summary>
-    /// Explains what is missing when <see cref="IsAvailable"/> is false, naming the package to
-    /// install. A file that simply refuses to play without saying why is the worst outcome.
+    /// Co brakuje, gdy <see cref="IsAvailable"/> jest fałszem, z nazwą pakietu do zainstalowania.
     /// </summary>
     public static string? UnavailableReason => State.Value.Reason;
 
@@ -38,7 +32,7 @@ public static class SystemCodecs
     public static IAudioDecoder Open(string path, int outputSampleRate, int outputChannels, BitrateMeter? meter)
     {
         if (!IsAvailable)
-            throw new AudioException(UnavailableReason ?? "Brak kodeków systemowych.");
+            throw DecoderFailures.Create(DecoderFailure.SystemCodecsUnavailable);
 
         if (OperatingSystem.IsWindows())
             return new MediaFoundationDecoder(path, outputSampleRate, outputChannels, meter);
@@ -46,7 +40,7 @@ public static class SystemCodecs
         if (OperatingSystem.IsLinux())
             return new GStreamerDecoder(path, outputSampleRate, outputChannels, meter);
 
-        throw new AudioException(UnavailableReason ?? "Brak kodeków systemowych.");
+        throw DecoderFailures.Create(DecoderFailure.SystemCodecsUnavailable);
     }
 
     private static Availability Detect()

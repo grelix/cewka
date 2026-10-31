@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Cewka.App.Models;
@@ -72,10 +73,8 @@ public enum LoudnessTarget
 /// <summary>
 /// Jak mocno barwa okładki przenosi się na wygląd okna.
 /// <para>
-/// Skaluje wszystko, co bierze barwę z okładki naraz — nasycenie wyciągniętych barw, krycie
-/// tła, poświatę pod płytą i barwę akcentu. Osobne pokrętła dla każdego z tych miejsc dałyby
-/// zestawy, w których tło jest intensywne, a akcent blady, czyli wynik wyglądający na
-/// niedokończony.
+/// Skaluje naraz wszystko, co bierze barwę z okładki: nasycenie barw, krycie tła, poświatę pod
+/// płytą i akcent, żeby te miejsca nie rozjeżdżały się ze sobą.
 /// </para>
 /// </summary>
 public enum ColourIntensity
@@ -96,7 +95,7 @@ public enum ColourIntensity
 /// </summary>
 public enum PlaceholderPalette
 {
-    /// <summary>Błękit i fiolet. Najbliższa wyglądowi z poprzednich wydań.</summary>
+    /// <summary>Błękit i fiolet.</summary>
     BlueViolet,
 
     Turquoise,
@@ -104,8 +103,8 @@ public enum PlaceholderPalette
     Lime,
     Graphite,
 
-    // Sześć par dołożonych w 0.8.0. Wybrane tak, żeby każda szła w innym kierunku niż
-    // poprzednie: ciepły zachód, zimna głębia, purpura, pastel, ziemia i czerwień.
+    // Każda z kolejnych idzie w innym kierunku: ciepły zachód, zimna głębia, purpura, pastel,
+    // ziemia i czerwień.
     Sunset,
     Ocean,
     Plum,
@@ -160,6 +159,8 @@ public sealed class WindowGeometry
     public double Width { get; set; }
     public double Height { get; set; }
     public bool Maximized { get; set; }
+
+    public WindowGeometry Clone() => new() { X = X, Y = Y, Width = Width, Height = Height, Maximized = Maximized };
 }
 
 /// <summary>
@@ -168,6 +169,18 @@ public sealed class WindowGeometry
 /// </summary>
 public sealed class AppSettings
 {
+    /// <summary>
+    /// Wersja układu pliku. Zmienia się, gdy znaczenie zapisanej wartości się zmienia, a nie
+    /// gdy dochodzi nowe pole: 1 — głośność jako położenie suwaka i osobne wyciszenie.
+    /// </summary>
+    public const int CurrentSchema = 1;
+
+    /// <summary>
+    /// Wersja, w której zapisano plik. Brak pola oznacza plik sprzed numerowania, czyli zero;
+    /// <see cref="Services.SettingsStore"/> przenosi taki plik do bieżącej wersji przy odczycie.
+    /// </summary>
+    public int SchemaVersion { get; set; }
+
     public ThemeMode Theme { get; set; } = ThemeMode.System;
 
     /// <summary>
@@ -179,27 +192,37 @@ public sealed class AppSettings
 
     public WindowGeometry? Window { get; set; }
 
+    /// <summary>Położenie okna ustawień; rozmiar i maksymalizacja nie są w nim używane.</summary>
+    public WindowGeometry? SettingsWindow { get; set; }
+
     /// <summary>
-    /// Whether the bottom strip — the equaliser and the effects — is expanded.
-    ///
-    /// <para>Od 0.8.0 dotyczy wyłącznie pasa dolnego. Kolejka ma własny stan
-    /// (<see cref="QueueOpen"/>), bo stoi we własnej kolumnie i jedno z drugim nie musi się
-    /// pojawiać razem. Plik ustawień sprzed tej wersji wnosi tu swoją wartość, a kolejka
-    /// przyjmuje domyślną — czyli widoczną, tak jak było.</para>
+    /// Czy pas dolny z korektorem i efektami jest rozwinięty. Kolejka ma własny stan
+    /// (<see cref="QueueOpen"/>); w starszym pliku ustawień ta wartość dotyczyła obu.
     /// </summary>
     public bool PanelOpen { get; set; } = true;
 
-    /// <summary>Whether the queue column on the right is shown.</summary>
+    /// <summary>Czy widać kolumnę kolejki po prawej.</summary>
     public bool QueueOpen { get; set; } = true;
 
-    public double Volume { get; set; } = 0.72;
+    /// <summary>
+    /// Położenie suwaka głośności od zera do jedności, w skali <see cref="VolumeCurve"/>.
+    /// Pliki zapisane przed <see cref="CurrentSchema"/> trzymały tu wzmocnienie liniowe.
+    /// </summary>
+    public double Volume { get; set; } = 0.95;
+
+    /// <summary>Wyciszenie, niezależne od położenia suwaka: przywrócenie dźwięku wraca do niego.</summary>
+    public bool IsMuted { get; set; }
 
     public bool EqualiserEnabled { get; set; } = true;
 
-    public double Preamp { get; set; } = 1.5;
+    /// <summary>
+    /// Korektor domyślnie płaski: program ma grać wiernie, dopóki nikt nie poprosi inaczej.
+    /// Płaski korektor jest przezroczysty, więc może pozostać włączony.
+    /// </summary>
+    public double Preamp { get; set; }
 
     /// <summary>Gain per band in decibels, ordered from 32 Hz to 16 kHz.</summary>
-    public double[] EqualiserGains { get; set; } = [2.5, 2, 0.5, 1, -1.5, -1, 0.5, 1.5, 2.5, 3];
+    public double[] EqualiserGains { get; set; } = new double[10];
 
     public bool LimiterEnabled { get; set; } = true;
 
@@ -209,10 +232,8 @@ public sealed class AppSettings
 
     // ---------- Efekty dźwiękowe ----------
     //
-    // Każdy z pięciu ma przełącznik i siłę zapisaną w zakresie od zera do jedności — tak samo,
-    // jak przekazuje ją suwak. Wszystkie są domyślnie wyłączone: program ma grać wiernie,
-    // dopóki nikt nie poprosi inaczej. Wartości siły są zapamiętane mimo to, żeby ponowne
-    // włączenie efektu wracało tam, gdzie użytkownik go zostawił.
+    // Każdy z pięciu ma przełącznik i siłę od zera do jedności, jak suwak. Domyślnie wyłączone;
+    // siła jest zapamiętana, żeby ponowne włączenie wracało do poprzedniego ustawienia.
 
     /// <summary>Domieszka kanału przeciwnego dla odsłuchu w słuchawkach.</summary>
     public bool CrossfeedEnabled { get; set; }
@@ -250,9 +271,8 @@ public sealed class AppSettings
     public FileOpenAction FileOpenAction { get; set; } = FileOpenAction.Append;
 
     /// <summary>
-    /// Name of the output device, exactly as the system reports it; <c>null</c> follows the
-    /// system default. Stored by name rather than by index because indices are only meaningful
-    /// while the same devices are plugged in.
+    /// Nazwa urządzenia wyjściowego, dokładnie jak podaje ją system; <c>null</c> to urządzenie
+    /// domyślne. Zapisywana nazwa, bo numery zmieniają się przy odłączaniu sprzętu.
     /// </summary>
     public string? OutputDevice { get; set; }
 
@@ -280,9 +300,8 @@ public sealed class AppSettings
     /// <summary>
     /// Czy program przy uruchomieniu pyta serwis GitHuba o najnowsze wydanie.
     ///
-    /// <para>Domyślnie wyłączone i to jest rozstrzygnięcie celowe: odtwarzacz plików z dysku nie
-    /// powinien łączyć się z niczym, dopóki nikt go o to nie poprosi. Przycisk sprawdzenia
-    /// na żądanie działa niezależnie od tego ustawienia.</para>
+    /// <para>Domyślnie wyłączone, żeby odtwarzacz plików nie łączył się z siecią bez prośby.
+    /// Sprawdzenie na żądanie działa niezależnie od tego ustawienia.</para>
     /// </summary>
     public bool CheckForUpdates { get; set; }
 
@@ -294,16 +313,16 @@ public sealed class AppSettings
 
     public AppSettings Clone() => new()
     {
+        SchemaVersion = SchemaVersion,
         Theme = Theme,
         Language = Language,
         WindowControls = WindowControls,
-        Window = Window is null ? null : new WindowGeometry
-        {
-            X = Window.X, Y = Window.Y, Width = Window.Width, Height = Window.Height, Maximized = Window.Maximized,
-        },
+        Window = Window?.Clone(),
+        SettingsWindow = SettingsWindow?.Clone(),
         PanelOpen = PanelOpen,
         QueueOpen = QueueOpen,
         Volume = Volume,
+        IsMuted = IsMuted,
         EqualiserEnabled = EqualiserEnabled,
         Preamp = Preamp,
         EqualiserGains = (double[])EqualiserGains.Clone(),
@@ -342,6 +361,8 @@ public sealed class AppSettings
 [JsonSourceGenerationOptions(
     WriteIndented = true,
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
-    UseStringEnumConverter = true)]
+    UseStringEnumConverter = true,
+    AllowTrailingCommas = true,
+    ReadCommentHandling = JsonCommentHandling.Skip)]
 [JsonSerializable(typeof(AppSettings))]
 internal sealed partial class SettingsJsonContext : JsonSerializerContext;

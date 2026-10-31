@@ -32,12 +32,26 @@
     #define CEWKA_API __attribute__((visibility("default")))
 #endif
 
+/*
+    Wersja zestawu funkcji. Ta sama stala jest w NativeAudio.AbiVersion; zmienia sie przy kazdej
+    zmianie sygnatur lub znaczenia eksportow. Biblioteka nie jest w repozytorium, wiec stara
+    kopia moze trafic do nowego programu, a wywolanie funkcji o innej sygnaturze konczy sie
+    awaria procesu zamiast bledu.
+*/
+#define CEWKA_ABI_VERSION 2
+
+CEWKA_API int cewka_abi_version(void)
+{
+    return CEWKA_ABI_VERSION;
+}
+
 /* ============================================================================
    Kontekst i wyliczanie urzadzen
    ============================================================================ */
 
 static ma_context      g_context;
 static int             g_contextReady = 0;
+static int             g_useNullBackend = 0;
 static ma_device_info* g_playbackInfos = NULL;
 static ma_uint32       g_playbackCount = 0;
 
@@ -47,13 +61,38 @@ static ma_result cewka__ensure_context(void)
         return MA_SUCCESS;
     }
 
-    ma_result result = ma_context_init(NULL, 0, NULL, &g_context);
+    ma_result result;
+    if (g_useNullBackend) {
+        ma_backend backends[] = { ma_backend_null };
+        result = ma_context_init(backends, 1, NULL, &g_context);
+    } else {
+        result = ma_context_init(NULL, 0, NULL, &g_context);
+    }
+
     if (result != MA_SUCCESS) {
         return result;
     }
 
     g_contextReady = 1;
     return MA_SUCCESS;
+}
+
+/*
+    Wybiera zaplecze puste: urzadzenie, ktore pobiera probki w tempie rzeczywistym
+    i niczego nie odtwarza. Dla testow i narzedzi, ktore nie moga grac przez glosniki.
+
+    Wybor obowiazuje od utworzenia kontekstu, wiec po nim zmiana jest bledem.
+*/
+CEWKA_API int cewka_use_null_backend(int on)
+{
+    int wanted = on ? 1 : 0;
+
+    if (g_contextReady && wanted != g_useNullBackend) {
+        return (int)MA_INVALID_OPERATION;
+    }
+
+    g_useNullBackend = wanted;
+    return (int)MA_SUCCESS;
 }
 
 /* Odswieza liste urzadzen odtwarzania i zwraca ich liczbe przez outCount. */
@@ -113,12 +152,19 @@ CEWKA_API int cewka_devices_is_default(int index)
 
 typedef void (*cewka_data_cb)(void* pUser, float* pFrames, ma_uint32 frameCount);
 
+/* Zdarzenia urzadzenia przekazywane do warstwy zarzadzanej. */
+#define CEWKA_DEVICE_STOPPED_UNREQUESTED 1
+
+typedef void (*cewka_notify_cb)(void* pUser, int event);
+
 typedef struct
 {
-    ma_device     device;
-    cewka_data_cb callback;
-    void*         user;
-    ma_uint32     channels;
+    ma_device       device;
+    cewka_data_cb   callback;
+    cewka_notify_cb notify;
+    void*           user;
+    ma_uint32       channels;
+    volatile int    stopRequested;
 } cewka_device;
 
 static void cewka__device_data(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
@@ -130,7 +176,33 @@ static void cewka__device_data(ma_device* pDevice, void* pOutput, const void* pI
         self->callback(self->user, (float*)pOutput, frameCount);
     } else {
         /* Cisza jest jedyna bezpieczna odpowiedzia, gdy nie ma kto wypelnic bufora. */
-        memset(pOutput, 0, (size_t)frameCount * self->channels * sizeof(float));
+        memset(pOutput, 0, (size_t)frameCount * pDevice->playback.channels * ma_get_bytes_per_sample(pDevice->playback.format));
+    }
+}
+
+/*
+    Zatrzymanie, ktorego nie zlecila aplikacja: odlaczenie sluchawek, uniewaznienie strumienia
+    przez sterownik albo przekierowanie strumienia na nowe urzadzenie domyslne, po ktorym
+    miniaudio samo uruchamia je ponownie. Rozroznia je warstwa zarzadzana, sprawdzajac po
+    chwili cewka_device_is_started. Zgloszenie moze tez nie przyjsc wcale (nieudane zatrzymanie
+    po odlaczeniu urzadzenia wybranego jawnie), dlatego warstwa zarzadzana sprawdza stan
+    rowniez okresowo.
+
+    Pulapka: wywolanie przychodzi z watku roboczego miniaudio, wiec odbiorca nie moze tu
+    zamykac ani zatrzymywac urzadzenia.
+*/
+static void cewka__device_notification(const ma_device_notification* pNotification)
+{
+    cewka_device* self = (cewka_device*)pNotification->pDevice->pUserData;
+    if (self == NULL) {
+        return;
+    }
+
+    if (pNotification->type == ma_device_notification_type_stopped && !self->stopRequested) {
+        cewka_notify_cb notify = self->notify;
+        if (notify != NULL) {
+            notify(self->user, CEWKA_DEVICE_STOPPED_UNREQUESTED);
+        }
     }
 }
 
@@ -173,8 +245,12 @@ CEWKA_API int cewka_device_create(int           deviceIndex,
     config.playback.format   = ma_format_f32;
     config.playback.channels = channels;
     config.sampleRate        = sampleRate;
-    config.dataCallback      = cewka__device_data;
-    config.pUserData         = self;
+    config.dataCallback         = cewka__device_data;
+    config.notificationCallback = cewka__device_notification;
+    config.pUserData            = self;
+
+    /* Urzadzenie stoi od utworzenia; jego zatrzymanie nie jest utrata. */
+    self->stopRequested = 1;
 
     if (periodSizeInFrames > 0) {
         config.periodSizeInFrames = periodSizeInFrames;
@@ -197,16 +273,43 @@ CEWKA_API int cewka_device_create(int           deviceIndex,
     return (int)MA_SUCCESS;
 }
 
+/* Ustawia odbiorce zdarzen urzadzenia; NULL wylacza powiadamianie. */
+CEWKA_API int cewka_device_set_notify(void* handle, cewka_notify_cb notify)
+{
+    if (handle == NULL) return (int)MA_INVALID_ARGS;
+    ((cewka_device*)handle)->notify = notify;
+    return (int)MA_SUCCESS;
+}
+
 CEWKA_API int cewka_device_start(void* handle)
 {
     if (handle == NULL) return (int)MA_INVALID_ARGS;
-    return (int)ma_device_start(&((cewka_device*)handle)->device);
+
+    cewka_device* self = (cewka_device*)handle;
+    self->stopRequested = 0;
+
+    ma_result result = ma_device_start(&self->device);
+    if (result != MA_SUCCESS) {
+        self->stopRequested = 1;
+    }
+
+    return (int)result;
 }
 
 CEWKA_API int cewka_device_stop(void* handle)
 {
     if (handle == NULL) return (int)MA_INVALID_ARGS;
-    return (int)ma_device_stop(&((cewka_device*)handle)->device);
+
+    cewka_device* self = (cewka_device*)handle;
+    self->stopRequested = 1;
+    return (int)ma_device_stop(&self->device);
+}
+
+/* 1, gdy urzadzenie faktycznie pracuje; po utracie urzadzenia zwraca 0. */
+CEWKA_API int cewka_device_is_started(void* handle)
+{
+    if (handle == NULL) return 0;
+    return ma_device_is_started(&((cewka_device*)handle)->device) ? 1 : 0;
 }
 
 CEWKA_API void cewka_device_destroy(void* handle)
@@ -214,6 +317,8 @@ CEWKA_API void cewka_device_destroy(void* handle)
     if (handle == NULL) return;
 
     cewka_device* self = (cewka_device*)handle;
+    self->stopRequested = 1;
+    self->notify = NULL;
     ma_device_uninit(&self->device);
     ma_free(self, NULL);
 }
@@ -267,34 +372,114 @@ CEWKA_API int cewka_device_name(void* handle, char* buffer, int bufferSize)
    sa obslugiwane poprawnie na obu systemach, a plik nie musi trafiac w calosci do pamieci.
    ============================================================================ */
 
-typedef size_t (*cewka_read_cb)(void* user, void* buffer, size_t bytesToRead);
-typedef int    (*cewka_seek_cb)(void* user, long long offset, int origin); /* 0 = poczatek, 1 = biezaca */
+typedef size_t    (*cewka_read_cb)(void* user, void* buffer, size_t bytesToRead);
+typedef int       (*cewka_seek_cb)(void* user, long long offset, int origin); /* 0 = poczatek, 1 = biezaca, 2 = koniec */
+typedef long long (*cewka_tell_cb)(void* user, int what);                    /* 0 = polozenie, 1 = dlugosc; -1 przy bledzie */
+
+/*
+    Strumien podawany jest dekoderowi jako wirtualny system plikow, a nie przez
+    ma_decoder_init. Tylko ta droga przekazuje funkcje "tell", bez ktorej dr_wav nie
+    przycina naglowka do faktycznej dlugosci pliku (przerwane nagranie pokazywaloby
+    dlugosc z naglowka), a dr_mp3 nie rozpoznaje znacznikow ID3v1 i APE na koncu.
+*/
+typedef struct
+{
+    ma_vfs_callbacks cb;
+    void*            owner;
+} cewka_stream_vfs;
 
 typedef struct
 {
-    ma_decoder    decoder;
-    cewka_read_cb read;
-    cewka_seek_cb seek;
-    void*         user;
+    ma_decoder       decoder;
+    cewka_stream_vfs vfs;
+    cewka_read_cb    read;
+    cewka_seek_cb    seek;
+    cewka_tell_cb    tell;
+    void*            user;
+    int              seekTableTried;
 } cewka_decoder;
 
-static ma_result cewka__decoder_read(ma_decoder* pDecoder, void* pBufferOut, size_t bytesToRead, size_t* pBytesRead)
+static cewka_decoder* cewka__vfs_owner(ma_vfs* pVFS)
 {
-    cewka_decoder* self = (cewka_decoder*)pDecoder->pUserData;
-    size_t read = self->read(self->user, pBufferOut, bytesToRead);
+    return (cewka_decoder*)((cewka_stream_vfs*)pVFS)->owner;
+}
+
+static ma_result cewka__vfs_open(ma_vfs* pVFS, const char* pFilePath, ma_uint32 openMode, ma_vfs_file* pFile)
+{
+    (void)pFilePath;
+
+    if ((openMode & MA_OPEN_MODE_WRITE) != 0) {
+        return MA_ACCESS_DENIED;
+    }
+
+    /* Plik jest juz otwarty po stronie C#; uchwytem jest sam dekoder. */
+    *pFile = (ma_vfs_file)cewka__vfs_owner(pVFS);
+    return MA_SUCCESS;
+}
+
+static ma_result cewka__vfs_close(ma_vfs* pVFS, ma_vfs_file file)
+{
+    (void)pVFS;
+    (void)file;
+    return MA_SUCCESS;
+}
+
+static ma_result cewka__vfs_read(ma_vfs* pVFS, ma_vfs_file file, void* pDst, size_t sizeInBytes, size_t* pBytesRead)
+{
+    cewka_decoder* self = cewka__vfs_owner(pVFS);
+    (void)file;
+
+    size_t read = self->read(self->user, pDst, sizeInBytes);
 
     if (pBytesRead != NULL) {
         *pBytesRead = read;
     }
 
-    return read == 0 ? MA_AT_END : MA_SUCCESS;
+    return (read == 0 && sizeInBytes > 0) ? MA_AT_END : MA_SUCCESS;
 }
 
-static ma_result cewka__decoder_seek(ma_decoder* pDecoder, ma_int64 byteOffset, ma_seek_origin origin)
+static ma_result cewka__vfs_seek(ma_vfs* pVFS, ma_vfs_file file, ma_int64 offset, ma_seek_origin origin)
 {
-    cewka_decoder* self = (cewka_decoder*)pDecoder->pUserData;
-    int ok = self->seek(self->user, (long long)byteOffset, origin == ma_seek_origin_start ? 0 : 1);
-    return ok ? MA_SUCCESS : MA_ERROR;
+    cewka_decoder* self = cewka__vfs_owner(pVFS);
+    (void)file;
+
+    int code;
+    switch (origin) {
+        case ma_seek_origin_start:   code = 0; break;
+        case ma_seek_origin_current: code = 1; break;
+        case ma_seek_origin_end:     code = 2; break;
+        default: return MA_INVALID_ARGS;
+    }
+
+    return self->seek(self->user, (long long)offset, code) ? MA_SUCCESS : MA_ERROR;
+}
+
+static ma_result cewka__vfs_tell(ma_vfs* pVFS, ma_vfs_file file, ma_int64* pCursor)
+{
+    cewka_decoder* self = cewka__vfs_owner(pVFS);
+    (void)file;
+
+    long long position = self->tell(self->user, 0);
+    if (position < 0) {
+        return MA_ERROR;
+    }
+
+    *pCursor = (ma_int64)position;
+    return MA_SUCCESS;
+}
+
+static ma_result cewka__vfs_info(ma_vfs* pVFS, ma_vfs_file file, ma_file_info* pInfo)
+{
+    cewka_decoder* self = cewka__vfs_owner(pVFS);
+    (void)file;
+
+    long long length = self->tell(self->user, 1);
+    if (length < 0) {
+        return MA_NOT_IMPLEMENTED;
+    }
+
+    pInfo->sizeInBytes = (ma_uint64)length;
+    return MA_SUCCESS;
 }
 
 /*
@@ -306,6 +491,7 @@ static ma_result cewka__decoder_seek(ma_decoder* pDecoder, ma_int64 byteOffset, 
 */
 CEWKA_API int cewka_decoder_open(cewka_read_cb read,
                                  cewka_seek_cb seek,
+                                 cewka_tell_cb tell,
                                  void*         user,
                                  ma_uint32     outRate,
                                  ma_uint32     outChannels,
@@ -315,7 +501,7 @@ CEWKA_API int cewka_decoder_open(cewka_read_cb read,
                                  ma_uint32*    outSourceRate,
                                  ma_uint32*    outSourceChannels)
 {
-    if (outHandle == NULL || read == NULL || seek == NULL) {
+    if (outHandle == NULL || read == NULL || seek == NULL || tell == NULL) {
         return (int)MA_INVALID_ARGS;
     }
     *outHandle = NULL;
@@ -328,7 +514,16 @@ CEWKA_API int cewka_decoder_open(cewka_read_cb read,
 
     self->read = read;
     self->seek = seek;
+    self->tell = tell;
     self->user = user;
+
+    self->vfs.cb.onOpen  = cewka__vfs_open;
+    self->vfs.cb.onClose = cewka__vfs_close;
+    self->vfs.cb.onRead  = cewka__vfs_read;
+    self->vfs.cb.onSeek  = cewka__vfs_seek;
+    self->vfs.cb.onTell  = cewka__vfs_tell;
+    self->vfs.cb.onInfo  = cewka__vfs_info;
+    self->vfs.owner      = self;
 
     ma_decoder_config config = ma_decoder_config_init(ma_format_f32, outChannels, outRate);
 
@@ -337,7 +532,8 @@ CEWKA_API int cewka_decoder_open(cewka_read_cb read,
     }
     config.resampling.linear.lpfOrder = lpfOrder;
 
-    ma_result result = ma_decoder_init(cewka__decoder_read, cewka__decoder_seek, self, &config, &self->decoder);
+    /* Sciezka bez rozszerzenia: format rozpoznaje sie po zawartosci, jak w ma_decoder_init. */
+    ma_result result = ma_decoder_init_vfs((ma_vfs*)&self->vfs, "strumien", &config, &self->decoder);
     if (result != MA_SUCCESS) {
         ma_free(self, NULL);
         return (int)result;
@@ -395,10 +591,103 @@ CEWKA_API ma_uint64 cewka_decoder_read(void* handle, float* output, ma_uint64 fr
     return read;
 }
 
+/*
+    Tablica punktow przewijania MP3, budowana przy pierwszym przewinieciu. Bez niej dr_mp3
+    przewija, dekodujac wszystko od poczatku pliku, co przy dlugim nagraniu daje sekundy
+    ciszy. Budowa przy otwarciu przeczytalaby caly plik w chwili przejscia miedzy utworami,
+    gdy bufor ma zapas tylko pol sekundy, wiec odklada sie ja do pierwszej potrzeby.
+
+    Pulapka: ma_dr_mp3_calculate_seek_points wraca na koniec na pozycje sprzed wyliczenia,
+    przewijajac bez tablicy. Cofniecie strumienia na poczatek przed wyliczeniem czyni ten
+    powrot darmowym; i tak zaraz nastepuje wlasciwe przewiniecie.
+*/
+static void cewka__ensure_mp3_seek_table(cewka_decoder* self)
+{
+    if (self->seekTableTried) {
+        return;
+    }
+    self->seekTableTried = 1;
+
+    if (self->decoder.pBackend == NULL || self->decoder.pBackendVTable != &g_ma_decoding_backend_vtable_mp3) {
+        return;
+    }
+
+    ma_mp3* mp3 = (ma_mp3*)self->decoder.pBackend;
+    if (mp3->seekPointCount > 0) {
+        return;
+    }
+
+    ma_uint32 count = 1024;
+    ma_dr_mp3_seek_point* points = (ma_dr_mp3_seek_point*)ma_malloc(sizeof(*points) * count, NULL);
+    if (points == NULL) {
+        return;
+    }
+
+    if (!ma_dr_mp3_seek_to_start_of_stream(&mp3->dr) ||
+        !ma_dr_mp3_calculate_seek_points(&mp3->dr, &count, points) ||
+        !ma_dr_mp3_bind_seek_table(&mp3->dr, count, points)) {
+        ma_free(points, NULL);
+        return;
+    }
+
+    /* ma_mp3_uninit zwalnia tablice razem z dekoderem. */
+    mp3->seekPointCount = count;
+    mp3->pSeekPoints    = points;
+}
+
+/*
+    Pulapka: ma_decoder_seek_to_pcm_frame aktualizuje kursor dekodera tylko przy powodzeniu,
+    a zaplecze (dr_mp3, dr_flac) moglo sie w tym czasie przesunac. Po porazce kursor bierze sie
+    wiec z zaplecza, przeliczony na ramki wyjsciowe.
+*/
+static void cewka__sync_cursor_with_backend(cewka_decoder* self)
+{
+    ma_uint64 backendCursor = 0;
+    ma_uint32 backendRate = 0;
+
+    if (self->decoder.pBackend == NULL) {
+        return;
+    }
+
+    if (ma_data_source_get_cursor_in_pcm_frames(self->decoder.pBackend, &backendCursor) != MA_SUCCESS ||
+        ma_data_source_get_data_format(self->decoder.pBackend, NULL, NULL, &backendRate, NULL, 0) != MA_SUCCESS) {
+        return;
+    }
+
+    if (backendRate == 0 || backendRate == self->decoder.outputSampleRate) {
+        self->decoder.readPointerInPCMFrames = backendCursor;
+    } else {
+        self->decoder.readPointerInPCMFrames =
+            ma_calculate_frame_count_after_resampling(self->decoder.outputSampleRate, backendRate, backendCursor);
+    }
+}
+
 CEWKA_API int cewka_decoder_seek(void* handle, ma_uint64 frameIndex)
 {
     if (handle == NULL) return (int)MA_INVALID_ARGS;
-    return (int)ma_decoder_seek_to_pcm_frame(&((cewka_decoder*)handle)->decoder, frameIndex);
+
+    cewka_decoder* self = (cewka_decoder*)handle;
+    cewka__ensure_mp3_seek_table(self);
+
+    ma_result result = ma_decoder_seek_to_pcm_frame(&self->decoder, frameIndex);
+    if (result != MA_SUCCESS) {
+        cewka__sync_cursor_with_backend(self);
+    }
+
+    return (int)result;
+}
+
+/* Polozenie dekodera w ramkach wyjsciowych; po nieudanym przewinieciu mowi, gdzie naprawde stoi. */
+CEWKA_API ma_uint64 cewka_decoder_cursor(void* handle)
+{
+    if (handle == NULL) return 0;
+
+    ma_uint64 cursor = 0;
+    if (ma_decoder_get_cursor_in_pcm_frames(&((cewka_decoder*)handle)->decoder, &cursor) != MA_SUCCESS) {
+        return 0;
+    }
+
+    return cursor;
 }
 
 CEWKA_API void cewka_decoder_close(void* handle)

@@ -4,12 +4,11 @@ using Cewka.Audio.Interop;
 namespace Cewka.Audio.Decoding;
 
 /// <summary>
-/// MP3, FLAC and WAV, decoded by the dr_libs decoders bundled inside miniaudio, with its
-/// channel conversion and resampler doing the format matching.
+/// MP3, FLAC i WAV przez dekodery dr_libs z miniaudio, razem z jego konwersją kanałów
+/// i resamplerem.
 /// <para>
-/// The file itself is read through a managed <see cref="Stream"/> rather than by path.
-/// That keeps Unicode paths working identically on both systems — miniaudio's own file
-/// helpers take a narrow <c>char*</c> — and avoids loading whole albums into memory.
+/// Plik czytany jest przez zarządzany <see cref="Stream"/>, bo funkcje plikowe miniaudio
+/// przyjmują wąskie <c>char*</c> i psułyby ścieżki z Unicode.
 /// </para>
 /// </summary>
 internal sealed unsafe class MiniaudioDecoder : IAudioDecoder
@@ -30,10 +29,20 @@ internal sealed unsafe class MiniaudioDecoder : IAudioDecoder
         _ownsStream = ownsStream;
         _meter = meter;
 
+        try
+        {
+            NativeAudio.EnsureCompatible();
+        }
+        catch
+        {
+            if (_ownsStream) _stream.Dispose();
+            throw;
+        }
+
         _self = GCHandle.Alloc(this);
 
         var result = NativeAudio.DecoderOpen(
-            &OnRead, &OnSeek, (void*)GCHandle.ToIntPtr(_self),
+            &OnRead, &OnSeek, &OnTell, (void*)GCHandle.ToIntPtr(_self),
             (uint)outputSampleRate, (uint)outputChannels, (uint)AudioQuality.ResamplerFilterOrder,
             out _handle, out var lengthFrames, out var sourceRate, out var sourceChannels);
 
@@ -51,8 +60,8 @@ internal sealed unsafe class MiniaudioDecoder : IAudioDecoder
 
         _meter?.Configure(outputSampleRate);
 
-        // Dlugosc przychodzi juz w ramkach wyjsciowych - miniaudio uwzglednia wlasna
-        // konwersje czestotliwosci - wiec nie wolno jej przeliczac po raz drugi.
+        // Długość przychodzi już w ramkach wyjściowych, bo miniaudio uwzględnia własną
+        // konwersję częstotliwości; nie wolno jej przeliczać drugi raz.
         TotalFrames = (long)lengthFrames;
     }
 
@@ -86,13 +95,13 @@ internal sealed unsafe class MiniaudioDecoder : IAudioDecoder
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!CanSeek) return;
 
-        // Przewijanie liczone jest w ramkach wyjsciowych, tak samo jak zwracana dlugosc:
-        // miniaudio uwzglednia wlasna konwersje czestotliwosci po swojej stronie. Przeliczanie
-        // na ramki zrodlowe wysylaloby plik 96 kHz odtwarzany przez urzadzenie 48 kHz
-        // dwukrotnie za daleko, czyli zwykle poza koniec nagrania.
-        if (NativeAudio.DecoderSeek(_handle, (ulong)Math.Max(0, frame)) != NativeAudio.Success) return;
-
-        _position = frame;
+        // Pułapka: przewijanie liczone jest w ramkach wyjściowych, jak długość, bo miniaudio
+        // samo uwzględnia konwersję częstotliwości. Ramki źródłowe wysłałyby plik 96 kHz na
+        // urządzeniu 48 kHz dwa razy za daleko. Po nieudanym przewinięciu podawana jest pozycja,
+        // na której dekoder faktycznie stoi.
+        _position = NativeAudio.DecoderSeek(_handle, (ulong)Math.Max(0, frame)) == NativeAudio.Success
+            ? frame
+            : (long)NativeAudio.DecoderCursor(_handle);
 
         // Po przewinięciu związek między pobranymi bajtami a czasem dźwięku przestaje
         // obowiązywać, więc pomiar zaczyna się od nowa.
@@ -127,12 +136,38 @@ internal sealed unsafe class MiniaudioDecoder : IAudioDecoder
             var self = (MiniaudioDecoder?)GCHandle.FromIntPtr((nint)user).Target;
             if (self is null || !self._stream.CanSeek) return 0;
 
-            self._stream.Seek(offset, origin == 0 ? SeekOrigin.Begin : SeekOrigin.Current);
+            var seekOrigin = origin switch
+            {
+                0 => SeekOrigin.Begin,
+                1 => SeekOrigin.Current,
+                2 => SeekOrigin.End,
+                _ => (SeekOrigin?)null,
+            };
+            if (seekOrigin is null) return 0;
+
+            self._stream.Seek(offset, seekOrigin.Value);
             return 1;
         }
         catch
         {
             return 0;
+        }
+    }
+
+    /// <summary>Położenie (<paramref name="what"/> = 0) albo długość strumienia (1); −1, gdy nieznane.</summary>
+    [UnmanagedCallersOnly]
+    private static long OnTell(void* user, int what)
+    {
+        try
+        {
+            var self = (MiniaudioDecoder?)GCHandle.FromIntPtr((nint)user).Target;
+            if (self is null || !self._stream.CanSeek) return -1;
+
+            return what == 0 ? self._stream.Position : self._stream.Length;
+        }
+        catch
+        {
+            return -1;
         }
     }
 

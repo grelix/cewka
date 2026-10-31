@@ -4,12 +4,11 @@ using Avalonia.Controls;
 namespace Cewka.App.Controls;
 
 /// <summary>
-/// A per-frame callback driven by the compositor.
+/// Wywołanie na każdą klatkę kompozytora, bo <c>Animation</c> z Avalonii nie da się wstrzymać
+/// i wznowić w tym samym miejscu. <see cref="TopLevel.RequestAnimationFrame"/> działa raz, więc
+/// pętla zamawia kolejną klatkę sama.
 /// <para>
-/// Avalonia's <c>Animation</c> cannot be paused and resumed at the same position through
-/// public API, and the decorative pieces here (the spinning disc, the waveform) need exactly
-/// that. <see cref="TopLevel.RequestAnimationFrame"/> is a one-shot, so the loop re-arms
-/// itself until stopped.
+/// Przy zminimalizowanym oknie pętla czeka na zmianę stanu okna i rusza sama po powrocie.
 /// </para>
 /// </summary>
 public sealed class RenderLoop
@@ -18,6 +17,7 @@ public sealed class RenderLoop
     private readonly Action<TimeSpan> _tick;
     private bool _running;
     private bool _armed;
+    private Window? _parkedOn;
 
     public RenderLoop(Visual owner, Action<TimeSpan> tick)
     {
@@ -27,6 +27,9 @@ public sealed class RenderLoop
 
     public bool IsRunning => _running;
 
+    /// <summary>Pętla działa, ale czeka na przywrócenie zminimalizowanego okna.</summary>
+    public bool IsParked => _parkedOn is not null;
+
     public void Start()
     {
         if (_running) return;
@@ -34,11 +37,15 @@ public sealed class RenderLoop
         Arm();
     }
 
-    public void Stop() => _running = false;
+    public void Stop()
+    {
+        _running = false;
+        Unpark();
+    }
 
     private void Arm()
     {
-        if (!_running || _armed) return;
+        if (!_running || _armed || _parkedOn is not null) return;
 
         var topLevel = TopLevel.GetTopLevel(_owner);
         if (topLevel is null)
@@ -48,8 +55,32 @@ public sealed class RenderLoop
             return;
         }
 
+        if (topLevel is Window { WindowState: WindowState.Minimized } window)
+        {
+            _parkedOn = window;
+            window.PropertyChanged += OnWindowPropertyChanged;
+            return;
+        }
+
         _armed = true;
         topLevel.RequestAnimationFrame(OnFrame);
+    }
+
+    private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property != Window.WindowStateProperty) return;
+        if (_parkedOn is not { } window || window.WindowState == WindowState.Minimized) return;
+
+        Unpark();
+        Arm();
+    }
+
+    private void Unpark()
+    {
+        if (_parkedOn is null) return;
+
+        _parkedOn.PropertyChanged -= OnWindowPropertyChanged;
+        _parkedOn = null;
     }
 
     private void OnFrame(TimeSpan timestamp)

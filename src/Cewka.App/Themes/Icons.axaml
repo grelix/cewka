@@ -1,29 +1,34 @@
-﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
   <!--
-    Ikony przeniesione z projektu wizualnego. Wszystkie w ukladzie 16x16.
-    Ikony konturowe (sufiks Stroke) rysowane sa pedzlem obrysu, wypelnione - pedzlem wypelnienia.
+    Ikony z projektu wizualnego, wszystkie w układzie 16x16. Konturowe (sufiks Stroke)
+    rysowane są pędzlem obrysu, wypełnione pędzlem wypełnienia.
   -->
 
-  <!-- Nagłówek -->
-  <StreamGeometry x:Key="IconMenu">M1,3 H15 V4.6 H1 Z M1,7.2 H15 V8.8 H1 Z M1,11.4 H10 V13 H1 Z</StreamGeometry>
+  <!-- Nagłówek. Wszystkie konturowe, żeby pasek tytułu miał jeden styl rysunku. -->
 
-  <!--
-    Suwaki: ikona pasa dolnego, odkąd mieści korektor i efekty. Wcześniej stała tam ta sama
-    ikona listy, co przy kolejce — a odkąd oba obszary włącza się osobno, dwa przyciski
-    z jednakowym znakiem nie mówiłyby, który jest który.
-  -->
+  <!-- Kolejka: lista z trójkątem odtwarzania, wyraźnie inna niż koło zębate ustawień. -->
+  <StreamGeometry x:Key="IconQueueStroke">M1.8 3.5h12.4 M1.8 7.5h12.4 M1.8 11.5h6.2 M10.6 9.8v4.4l3.6-2.2z</StreamGeometry>
+
+  <!-- Suwaki: pas dolny z korektorem i efektami. -->
   <StreamGeometry x:Key="IconFadersStroke">M3.5 2.5v11 M8 2.5v11 M12.5 2.5v11 M1.5 5.5h4 M6 9.5h4 M10.5 7h4</StreamGeometry>
-  <StreamGeometry x:Key="IconSettings">M2,3.6 H14 V5.1 H2 Z M2,7.25 H14 V8.75 H2 Z M2,10.9 H14 V12.4 H2 Z</StreamGeometry>
+
+  <StreamGeometry x:Key="IconGearStroke">M6.74,2.95 L7.04,1.17 L8.96,1.17 L9.26,2.95 A5.2,5.2 0 0 1 10.68,3.54 L12.15,2.49 L13.51,3.85 L12.46,5.32 A5.2,5.2 0 0 1 13.05,6.74 L14.83,7.04 L14.83,8.96 L13.05,9.26 A5.2,5.2 0 0 1 12.46,10.68 L13.51,12.15 L12.15,13.51 L10.68,12.46 A5.2,5.2 0 0 1 9.26,13.05 L8.96,14.83 L7.04,14.83 L6.74,13.05 A5.2,5.2 0 0 1 5.32,12.46 L3.85,13.51 L2.49,12.15 L3.54,10.68 A5.2,5.2 0 0 1 2.95,9.26 L1.17,8.96 L1.17,7.04 L2.95,6.74 A5.2,5.2 0 0 1 3.54,5.32 L2.49,3.85 L3.85,2.49 L5.32,3.54 A5.2,5.2 0 0 1 6.74,2.95 Z M10.3,8 A2.3,2.3 0 1 1 5.7,8 A2.3,2.3 0 1 1 10.3,8 Z</StreamGeometry>
+
+  <!-- Motyw: słońce (jasny), księżyc (ciemny), koło w połowie wypełnione (systemowy). -->
   <StreamGeometry x:Key="IconThemeStroke">M8,4.9 A3.1,3.1 0 1 1 8,11.1 A3.1,3.1 0 1 1 8,4.9 Z M8 1.2v1.6M8 13.2v1.6M1.2 8h1.6M13.2 8h1.6M3.3 3.3l1.1 1.1M11.6 11.6l1.1 1.1M12.7 3.3l-1.1 1.1M4.4 11.6l-1.1 1.1</StreamGeometry>
+  <StreamGeometry x:Key="IconMoonStroke">M13.4,9.9 A5.8,5.8 0 1 1 6.1,2.6 A4.6,4.6 0 0 0 13.4,9.9 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconThemeAutoStroke">M13.8,8 A5.8,5.8 0 1 1 2.2,8 A5.8,5.8 0 1 1 13.8,8 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconThemeAutoHalf">M8,2.2 A5.8,5.8 0 0 0 8,13.8 Z</StreamGeometry>
 
   <!-- Przyciski okna -->
   <StreamGeometry x:Key="IconMinimise">M0,4.3 H10 V5.7 H0 Z</StreamGeometry>
   <StreamGeometry x:Key="IconMaximiseStroke">M1,2.6 A1.6,1.6 0 0 1 2.6,1 H7.4 A1.6,1.6 0 0 1 9,2.6 V7.4 A1.6,1.6 0 0 1 7.4,9 H2.6 A1.6,1.6 0 0 1 1,7.4 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconRestoreStroke">M3.4,2.6 V2.4 A1.4,1.4 0 0 1 4.8,1 H7.6 A1.4,1.4 0 0 1 9,2.4 V5.2 A1.4,1.4 0 0 1 7.6,6.6 H7.4 M1,4.8 A1.4,1.4 0 0 1 2.4,3.4 H5.2 A1.4,1.4 0 0 1 6.6,4.8 V7.6 A1.4,1.4 0 0 1 5.2,9 H2.4 A1.4,1.4 0 0 1 1,7.6 Z</StreamGeometry>
   <StreamGeometry x:Key="IconCloseStroke">M1.5 1.5l7 7M8.5 1.5l-7 7</StreamGeometry>
 
-  <!-- Znaki na krazkach w wariancie macOS; widoczne dopiero pod kursorem -->
+  <!-- Znaki na krążkach w wariancie macOS; widoczne dopiero pod kursorem -->
   <StreamGeometry x:Key="IconTrafficMinimiseStroke">M2,5 H8</StreamGeometry>
   <StreamGeometry x:Key="IconTrafficZoomStroke">M2.6,7.4 L7.4,2.6 M2.6,4.8 V2.6 H4.8 M7.4,5.2 V7.4 H5.2</StreamGeometry>
 
@@ -34,7 +39,7 @@
   <StreamGeometry x:Key="IconPause">M3.6,2.4 H7 V13.6 H3.6 Z M9,2.4 H12.4 V13.6 H9 Z</StreamGeometry>
   <StreamGeometry x:Key="IconRepeatStroke">M3.4 5.2A2.6 2.6 0 0 1 6 3.4h6.4M10.6 1.6 12.8 3.4 10.6 5.2M12.6 10.8a2.6 2.6 0 0 1-2.6 1.8H3.6M5.4 10.8 3.2 12.6l2.2 1.8</StreamGeometry>
 
-  <!-- Ta sama petla z cyfra jeden w wolnym pasie miedzy strzalkami: powtarzanie jednego utworu -->
+  <!-- Ta sama pętla z cyfrą jeden między strzałkami: powtarzanie jednego utworu -->
   <StreamGeometry x:Key="IconRepeatOneStroke">M3.4 5.2A2.6 2.6 0 0 1 6 3.4h6.4M10.6 1.6 12.8 3.4 10.6 5.2M12.6 10.8a2.6 2.6 0 0 1-2.6 1.8H3.6M5.4 10.8 3.2 12.6l2.2 1.8M6.9 7.4 8.2 6.6V9.9M7.1 9.9H9.3</StreamGeometry>
 
   <!-- Dodawanie plików -->
@@ -43,17 +48,17 @@
   <!--
     Otwarcie i zapis listy odtwarzania, w obszarze kolejki.
 
-    Folder konturowy, a nie ten sam wypelniony co przy dodawaniu plikow: dwa jednakowe znaki
-    na dwie rozne czynnosci w jednym oknie sa gorsze niz brak znaku. Metafora zostaje ta sama,
-    o ktora prosil uzytkownik, a rysunek jest wyraznie inny.
+    Folder konturowy, żeby różnił się od wypełnionego przy dodawaniu plików.
   -->
   <StreamGeometry x:Key="IconFolderStroke">M2.6,3.9 H6.1 L7.5,5.7 H13.4 A1.1,1.1 0 0 1 14.5,6.8 V11.9 A1.1,1.1 0 0 1 13.4,13 H2.6 A1.1,1.1 0 0 1 1.5,11.9 V5 A1.1,1.1 0 0 1 2.6,3.9 Z</StreamGeometry>
 
-  <!-- Dyskietka: korpus ze scietym naroznikiem, przesuwka u gory, etykieta u dolu. -->
+  <!-- Dyskietka: korpus ze ściętym narożnikiem, przesuwka u góry, etykieta u dołu. -->
   <StreamGeometry x:Key="IconSave">M2,3.4 A1.4,1.4 0 0 1 3.4,2 H10.2 L14,5.8 V12.6 A1.4,1.4 0 0 1 12.6,14 H3.4 A1.4,1.4 0 0 1 2,12.6 Z M6,2.9 H9.6 V5.9 H6 Z M5,9 H11 V13.1 H5 Z</StreamGeometry>
 
   <!-- Głośność -->
   <StreamGeometry x:Key="IconSpeaker">M2.4 6h2.4L8.4 3v10L4.8 10H2.4z</StreamGeometry>
   <StreamGeometry x:Key="IconSpeakerWavesStroke">M10.8 5.6a3.6 3.6 0 0 1 0 4.8M12.8 3.8a6 6 0 0 1 0 8.4</StreamGeometry>
+  <StreamGeometry x:Key="IconSpeakerMutedStroke">M10.8 6 14.4 9.8M14.4 6 10.8 9.8</StreamGeometry>
+  <StreamGeometry x:Key="IconResetStroke">M3.1 8.4A4.9 4.9 0 1 0 4.5 4.5M4.4 1.7V4.6H7.3</StreamGeometry>
 
 </ResourceDictionary>

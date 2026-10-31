@@ -1,3 +1,6 @@
+using Cewka.App.Localisation;
+using Cewka.Audio.Playback;
+
 namespace Cewka.App.ViewModels;
 
 /// <summary>One row of the playback queue.</summary>
@@ -11,27 +14,28 @@ public sealed class QueueItemViewModel : ObservableObject
     private string _title = string.Empty;
     private string _artist = string.Empty;
 
-    public required int Number { get; init; }
+    private int _number;
+
+    /// <summary>Pozycja w kolejce, od jedynki; zmienia się przy przesuwaniu i usuwaniu wierszy.</summary>
+    public required int Number { get => _number; set => Set(ref _number, value); }
+
+    /// <summary>Wpis silnika, któremu odpowiada wiersz; po nim przychodzą odczytane znaczniki.</summary>
+    public QueueEntry? Entry { get; init; }
 
     /// <summary>Starts as the file name and is replaced once the tags have been read.</summary>
     public required string Title
     {
         get => _title;
-        set => Set(ref _title, value);
+        set { if (Set(ref _title, value)) Raise(nameof(AccessibleName)); }
     }
 
     /// <summary>Performer alone, shown under the title in the queue row.</summary>
     public required string Artist
     {
         get => _artist;
-        set => Set(ref _artist, value);
+        set { if (Set(ref _artist, value)) Raise(nameof(AccessibleName)); }
     }
 
-    /// <summary>Full "performer — album · year" line shown beside the record.</summary>
-    public required string AlbumLine { get; init; }
-
-    /// <summary>Technical description shown on the badge once the track starts playing.</summary>
-    public required string Format { get; init; }
 
     /// <summary>Full path, used for the tooltip and by the engine.</summary>
     public required string Path { get; init; }
@@ -40,7 +44,20 @@ public sealed class QueueItemViewModel : ObservableObject
     public required string Duration
     {
         get => _duration;
-        set => Set(ref _duration, value);
+        set { if (Set(ref _duration, value)) Raise(nameof(AccessibleName)); }
+    }
+
+    /// <summary>
+    /// Nazwa wiersza dla czytnika ekranu: tytuł, wykonawca i czas trwania, a przy granym utworze
+    /// także to, że gra, bo kropka i pogrubienie są tylko na ekranie.
+    /// </summary>
+    public string AccessibleName
+    {
+        get
+        {
+            var name = $"{_title}, {_artist}, {_duration}";
+            return _isCurrent ? string.Format(Strings.Current["QueueNowPlaying"], name) : name;
+        }
     }
 
     public double DurationSeconds { get; set; }
@@ -54,6 +71,7 @@ public sealed class QueueItemViewModel : ObservableObject
             if (!Set(ref _isCurrent, value)) return;
             Raise(nameof(NumberOpacity));
             Raise(nameof(MarkerOpacity));
+            Raise(nameof(AccessibleName));
         }
     }
 
@@ -79,6 +97,32 @@ public sealed class QueueItemViewModel : ObservableObject
             if (!Set(ref _unsupportedReason, value)) return;
             Raise(nameof(Tooltip));
         }
+    }
+
+    /// <summary>Wiersz jest wyszarzony z powodu chwilowego błędu, a nie formatu pliku.</summary>
+    private bool _failureIsTemporary;
+
+    /// <summary>
+    /// Oznacza wiersz po nieudanym otwarciu albo odtworzeniu. Format nieobsługiwany zostaje
+    /// oznaczony na stałe; inne przyczyny (brak dysku, plik zajęty) znikają po udanym odtworzeniu.
+    /// </summary>
+    /// <param name="formatDescription">Opis z wykrywania formatu; używany tylko przy formacie nieobsługiwanym.</param>
+    /// <param name="otherwise">Tekst dla pozostałych przyczyn.</param>
+    public void ShowFailure(TrackFailureReason reason, string? formatDescription, string otherwise)
+    {
+        _failureIsTemporary = reason != TrackFailureReason.UnsupportedFormat;
+        UnsupportedReason = _failureIsTemporary ? otherwise : formatDescription ?? otherwise;
+        IsUnsupported = true;
+    }
+
+    /// <summary>Utwór zagrał: oznaczenie chwilowego błędu przestaje obowiązywać.</summary>
+    public void ClearTemporaryFailure()
+    {
+        if (!_failureIsTemporary) return;
+
+        _failureIsTemporary = false;
+        IsUnsupported = false;
+        UnsupportedReason = null;
     }
 
     /// <summary>Path normally; the reason instead when the file cannot be played.</summary>

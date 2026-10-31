@@ -5,35 +5,22 @@ using Avalonia.Media;
 namespace Cewka.App.Controls;
 
 /// <summary>
-/// The moving colour field behind the whole interface.
-///
-/// <para><b>Skąd taki kształt.</b> Pierwotnie tłem była okładka powiększona do 1900 pikseli,
-/// rozmyta i powoli obracana. Wyglądało to dobrze, ale nie zmieniało się w trakcie utworu —
-/// obracająca się plama rozmyta na 100 pikseli jest praktycznie nieruchoma — a rozmycie
-/// obrazu tej wielkości trzeba było wypalać do bitmapy przy każdej zmianie utworu.</para>
-///
-/// <para>Tutaj to samo wrażenie powstaje z czterech barw wyciągniętych z okładki. Każda
-/// z nich jest wielką miękką plamą dryfującą po własnym torze, a jej jasność delikatnie
-/// oddycha razem z muzyką. Kosztuje to cztery gradienty na klatkę zamiast skalowania
-/// wielkiej bitmapy, tło faktycznie żyje, a barwy nadal pochodzą z okładki, więc każdy
-/// album ma własny nastrój.</para>
+/// Ruchome tło całego interfejsu: cztery barwy z okładki jako miękkie plamy, każda dryfuje po
+/// własnym torze i lekko jaśnieje z muzyką. Cztery gradienty na klatkę są tańsze niż rozmyta
+/// bitmapa okładki.
 /// </summary>
 public sealed class LiveBackdrop : Control
 {
-    /// <summary>Half the display rate: the motion is slow, so nobody can tell.</summary>
+    /// <summary>Połowa częstotliwości ekranu; przy tak wolnym ruchu różnicy nie widać.</summary>
     private const double UpdateInterval = 1.0 / 30;
 
-    /// <summary>Seconds taken to cross-fade to a new track's colours.</summary>
+    /// <summary>Czas przenikania do barw nowego utworu, w sekundach.</summary>
     private const double PaletteFadeSeconds = 1.4;
 
     /// <summary>
-    /// Per-blob path speeds, phases and radii. The speeds are deliberately incommensurable, so
-    /// the arrangement never visibly repeats.
-    ///
-    /// <para>Promienie podane są jako ułamek dłuższego boku okna. Trzymane są wyraźnie poniżej
-    /// jedności: plama o promieniu porównywalnym z oknem barwi je w całości i przestaje być
-    /// plamą — zostaje jednolity nalot, który nigdzie nie płynie, bo nie ma go z czym
-    /// porównać. Mniejsze plamy widać jako osobne rozlewiska wędrujące po tle.</para>
+    /// Prędkości, fazy i promienie torów plam. Prędkości są niewspółmierne, żeby układ się nie
+    /// powtarzał. Promień to ułamek krótszego boku okna, wyraźnie poniżej jedności, bo plama
+    /// wielkości okna zamienia się w jednolity nalot.
     /// </summary>
     private static readonly (double SpeedX, double SpeedY, double PhaseX, double PhaseY, double Radius)[] Paths =
     [
@@ -44,15 +31,9 @@ public sealed class LiveBackdrop : Control
     ];
 
     /// <summary>
-    /// Okres i faza rozjaśniania każdej plamy, w sekundach i radianach.
-    ///
-    /// <para>Okresy są liczbami pierwszymi i wzajemnie niewspółmierne, tak samo jak prędkości
-    /// w <see cref="Paths"/>. Gdyby dwie plamy jaśniały w tym samym rytmie, tło pulsowałoby jako
-    /// całość — a to wygląda jak migotanie, nie jak cztery światła o własnym życiu. Przy takich
-    /// okresach ten sam układ jasności nie wraca w rozsądnym czasie.</para>
-    ///
-    /// <para>Rytm liczony jest z tego samego zegara co dryf, więc przy pauzie zwalnia razem z nim
-    /// do jednej czwartej, a w trybie ograniczonych efektów jeszcze dwa i pół raza bardziej.</para>
+    /// Okres i faza rozjaśniania każdej plamy, w sekundach i radianach. Okresy są liczbami
+    /// pierwszymi, żeby tło nie pulsowało jako całość. Rytm idzie z zegara dryfu, więc w pauzie
+    /// zamiera razem z nim.
     /// </summary>
     private static readonly (double Period, double Phase)[] Pulses =
     [
@@ -62,7 +43,7 @@ public sealed class LiveBackdrop : Control
         (19.0, 5.1),
     ];
 
-    /// <summary>How far from the centre a blob travels, as a fraction of the window.</summary>
+    /// <summary>Jak daleko od środka odchodzi plama, jako ułamek okna.</summary>
     private const double DriftX = 0.40;
     private const double DriftY = 0.36;
 
@@ -75,7 +56,7 @@ public sealed class LiveBackdrop : Control
     public static readonly StyledProperty<bool> IsActiveProperty =
         AvaloniaProperty.Register<LiveBackdrop, bool>(nameof(IsActive), true);
 
-    /// <summary>Reduced mode: fewer blobs, no breathing, much slower drift.</summary>
+    /// <summary>Tryb ograniczony: dwie plamy, nieruchome, bez oddychania.</summary>
     public static readonly StyledProperty<bool> IsReducedProperty =
         AvaloniaProperty.Register<LiveBackdrop, bool>(nameof(IsReduced));
 
@@ -83,8 +64,8 @@ public sealed class LiveBackdrop : Control
         AvaloniaProperty.Register<LiveBackdrop, IBrush?>(nameof(BaseBrush));
 
     /// <summary>
-    /// Dolny i górny próg siły plam, z ustawienia intensywności barw. Każda plama waha się
-    /// między nimi własnym rytmem; jedność to siła, z jaką tło było projektowane.
+    /// Dolny i górny próg siły plam z ustawienia intensywności barw; każda plama waha się między
+    /// nimi własnym rytmem.
     /// </summary>
     public static readonly StyledProperty<double> MinimumStrengthProperty =
         AvaloniaProperty.Register<LiveBackdrop, double>(nameof(MinimumStrength), 0.88);
@@ -99,12 +80,20 @@ public sealed class LiveBackdrop : Control
 
     private const int CoverPaletteSize = 4;
 
+    /// <summary>Tempo, z jakim dryf zwalnia do zatrzymania po pauzie, na sekundę.</summary>
+    private const double SpeedEasing = 1.6;
+
+    /// <summary>Poniżej tego ruch jest niewidoczny, więc pętla może stanąć.</summary>
+    private const double Settled = 0.002;
+
     private double _time;
     private double _sinceUpdate;
     private double _fade = 1;
     private double _breathing;
+    private double _speed;
     private TimeSpan _lastFrame;
     private bool _hasPalette;
+    private bool _frozen;
 
     static LiveBackdrop()
     {
@@ -118,24 +107,24 @@ public sealed class LiveBackdrop : Control
         _loop = new RenderLoop(this, OnFrame);
     }
 
-    /// <summary>Colours taken from the current cover.</summary>
+    /// <summary>Barwy z bieżącej okładki.</summary>
     public IReadOnlyList<Color>? Palette
     {
         get => GetValue(PaletteProperty);
         set => SetValue(PaletteProperty, value);
     }
 
-    /// <summary>Signal envelope, 0 to 1. Drives a gentle brightening on the beat.</summary>
+    /// <summary>Obwiednia sygnału, 0–1; lekko rozjaśnia plamy w rytm muzyki.</summary>
     public double Level { get => GetValue(LevelProperty); set => SetValue(LevelProperty, value); }
 
     public bool IsActive { get => GetValue(IsActiveProperty); set => SetValue(IsActiveProperty, value); }
 
     public bool IsReduced { get => GetValue(IsReducedProperty); set => SetValue(IsReducedProperty, value); }
 
-    /// <summary>Colour painted underneath the blobs.</summary>
+    /// <summary>Barwa pod plamami.</summary>
     public IBrush? BaseBrush { get => GetValue(BaseBrushProperty); set => SetValue(BaseBrushProperty, value); }
 
-    /// <summary>Najsłabszy moment cyklu jasności plamy; 1 to siła, z jaką tło było projektowane.</summary>
+    /// <summary>Najsłabszy moment cyklu jasności plamy; 1 to siła nominalna.</summary>
     public double MinimumStrength
     {
         get => GetValue(MinimumStrengthProperty);
@@ -152,7 +141,20 @@ public sealed class LiveBackdrop : Control
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+
         if (change.Property == PaletteProperty) AdoptPalette(Palette);
+        else if (change.Property == IsActiveProperty || change.Property == IsReducedProperty) Wake();
+    }
+
+    /// <summary>Pętla działa tylko wtedy, gdy coś na tle się porusza.</summary>
+    public bool IsLooping => _loop.IsRunning;
+
+    private void Wake()
+    {
+        if (_frozen || _loop.IsRunning || VisualRoot is null) return;
+
+        _lastFrame = TimeSpan.Zero;
+        _loop.Start();
     }
 
     private void AdoptPalette(IReadOnlyList<Color>? palette)
@@ -163,7 +165,7 @@ public sealed class LiveBackdrop : Control
         {
             var colour = palette[Math.Min(i, palette.Count - 1)];
 
-            // Pierwsza paleta pojawia sie od razu; kazda kolejna jest przenikana.
+            // Pierwsza paleta pojawia się od razu, każda następna przez przenikanie.
             _from[i] = _hasPalette ? _shown[i] : colour;
             _to[i] = colour;
             if (!_hasPalette) _shown[i] = colour;
@@ -172,12 +174,13 @@ public sealed class LiveBackdrop : Control
         _fade = _hasPalette ? 0 : 1;
         _hasPalette = true;
         InvalidateVisual();
+        Wake();
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
-        _loop.Start();
+        Wake();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -192,10 +195,10 @@ public sealed class LiveBackdrop : Control
         _lastFrame = timestamp;
         delta = Math.Clamp(delta, 0, 0.25);
 
-        // Ruch nie zatrzymuje sie przy pauzie, tylko zwalnia - okno ma zyc, ale spokojniej.
-        var speed = IsActive ? 1.0 : 0.25;
-        if (IsReduced) speed *= 0.4;
-        _time += delta * speed;
+        // W pauzie dryf zwalnia do zatrzymania, a w trybie ograniczonym tło stoi od razu.
+        var targetSpeed = IsActive && !IsReduced ? 1.0 : 0.0;
+        _speed = IsReduced ? 0 : _speed + (targetSpeed - _speed) * Math.Min(1, delta * SpeedEasing);
+        _time += delta * _speed;
 
         if (_fade < 1)
         {
@@ -206,6 +209,15 @@ public sealed class LiveBackdrop : Control
         var target = IsReduced || !IsActive ? 0 : Math.Clamp(Level, 0, 1);
         _breathing += (target - _breathing) * Math.Min(1, delta * 4);
 
+        if (targetSpeed == 0 && _fade >= 1 && _speed < Settled && _breathing < Settled)
+        {
+            _speed = 0;
+            _breathing = 0;
+            _loop.Stop();
+            InvalidateVisual();
+            return;
+        }
+
         _sinceUpdate += delta;
         if (_sinceUpdate < UpdateInterval) return;
 
@@ -214,24 +226,17 @@ public sealed class LiveBackdrop : Control
     }
 
     /// <summary>
-    /// Stops the drift and puts it at a fixed point on its path, for the snapshot tool.
-    /// <para>
-    /// The blobs travel on wall-clock time, so two runs of the same code photographed the
-    /// background in two different arrangements. Zero is the arrangement the phase constants in
-    /// <see cref="Paths"/> were chosen to give, which makes it the one defensible choice.
-    /// </para>
-    /// <para>
-    /// Any pending cross-fade is completed rather than interrupted: freezing mid-fade would
-    /// photograph a blend of the previous track's colours and this one's.
-    /// </para>
+    /// Zatrzymuje dryf w ustalonym punkcie toru, dla narzędzia zrzutów; bez tego każdy zrzut
+    /// miałby inny układ plam. Trwające przenikanie jest kończone, żeby zrzut nie mieszał barw
+    /// dwóch utworów.
     /// </summary>
     /// <param name="atSeconds">
-    /// Moment na osi czasu tła. Zero to układ, jaki dają same stałe fazowe. Inne wartości służą
-    /// do sfotografowania kilku chwil jednego cyklu — bez tego nie da się na nieruchomym obrazie
-    /// pokazać, że plamy jaśnieją niezależnie od siebie.
+    /// Moment na osi czasu tła. Zero to układ z samych stałych fazowych; inne wartości pokazują
+    /// kilka chwil jednego cyklu.
     /// </param>
     public void FreezeForCapture(double atSeconds = 0)
     {
+        _frozen = true;
         _loop.Stop();
 
         _time = atSeconds;
@@ -260,9 +265,8 @@ public sealed class LiveBackdrop : Control
         if (BaseBrush is { } baseBrush) context.DrawRectangle(baseBrush, null, area);
         if (!_hasPalette) return;
 
-        // Promien odnosi sie do krotszego boku okna, nie do dluzszego. Przy skalowaniu do
-        // dluzszego plama o promieniu 0,46 zakrywala na szerokim oknie cala jego wysokosc
-        // i barwa znow rozlewala sie na wszystko, zamiast plywac po tle.
+        // Pułapka: promień liczony od krótszego boku. Od dłuższego plama zakrywałaby na szerokim
+        // oknie całą wysokość.
         var span = Math.Min(width, height);
         var blobs = IsReduced ? 2 : CoverPaletteSize;
 
@@ -274,12 +278,9 @@ public sealed class LiveBackdrop : Control
             var centreY = height * (0.5 + DriftY * Math.Cos(_time * path.SpeedY * 2 * Math.PI + path.PhaseY));
             var radius = span * path.Radius * (1 + 0.06 * _breathing);
 
-            // Kazda plama nieco slabsza od poprzedniej, zeby nie zlewaly sie w jedna plaszczyzne.
-            //
-            // Do tego wlasny cykl jasnienia: sinus o okresie i fazie wzietych z Pulses, przelozony
-            // na zakres miedzy progami z ustawienia intensywnosci. Mnoznik intensywnosci wchodzi
-            // tutaj, a nie w barwe — to samo pokretlo ma zmieniac sile calego tla, nie odcien
-            // poszczegolnej plamy.
+            // Każda plama nieco słabsza od poprzedniej, żeby nie zlewały się w jedną płaszczyznę,
+            // i z własnym cyklem jaśnienia między progami intensywności. Intensywność zmienia siłę
+            // tła, a nie odcień plamy.
             var pulse = Pulses[i];
             var cycle = 0.5 + 0.5 * Math.Sin(_time * 2 * Math.PI / pulse.Period + pulse.Phase);
             var level = MinimumStrength + (MaximumStrength - MinimumStrength) * cycle;
@@ -287,9 +288,8 @@ public sealed class LiveBackdrop : Control
             var strength = (0.86 - i * 0.11) * (1 + 0.18 * _breathing) * level;
             var colour = _shown[i];
 
-            // Barwa trzyma sie dluzej przy srodku i opada szybciej przy brzegu, zamiast gasnac
-            // rownomiernie. Rownomierne przejscie na calej szerokosci daje mgle bez ksztaltu;
-            // takie ma wyrazny rdzen i czytelna krawedz, po ktorej widac, ze plama sie przesuwa.
+            // Barwa trzyma się przy środku i opada szybciej przy brzegu; równomierne przejście
+            // dałoby mgłę bez kształtu, na której nie widać ruchu.
             var brush = new RadialGradientBrush
             {
                 Center = new RelativePoint(centreX, centreY, RelativeUnit.Absolute),

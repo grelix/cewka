@@ -15,17 +15,12 @@ public enum MediaCommand
 }
 
 /// <summary>
-/// The player as seen by a Linux desktop: <c>org.mpris.MediaPlayer2</c> on the session bus.
+/// Odtwarzacz widziany przez pulpit Linuksa: <c>org.mpris.MediaPlayer2</c> na szynie sesji.
+/// Przez MPRIS pulpit przekazuje też klawisze multimedialne, więc własne przechwytywanie
+/// klawiszy, jak w Windows, byłoby tu szkodliwe.
 ///
-/// <para>MPRIS jest w Linuksie odpowiednikiem panelu multimediów systemu Windows, a przy okazji
-/// jedyną drogą, którą środowiska graficzne przekazują klawisze multimedialne. Klawiatura trafia
-/// najpierw do pulpitu, a ten woła po szynie odtwarzacz, który akurat gra — dlatego osobne
-/// przechwytywanie klawiszy, jak w systemie Windows, jest tu niepotrzebne i byłoby szkodliwe.</para>
-///
-/// <para><b>Wątek i stan.</b> Połączenie należy w całości do jednego wątku utworzonego tutaj.
-/// Interfejs nie sięga do niego wprost: podmienia niezmienne zdjęcie stanu, które wątek szyny
-/// odczytuje, odpowiadając na pytania o właściwości. Dzięki temu nie ma ani jednej blokady
-/// dzielonej między wątkiem interfejsu a szyną.</para>
+/// <para>Połączenie należy do jednego wątku utworzonego tutaj. Interfejs podmienia tylko
+/// niezmienne zdjęcie stanu, które ten wątek odczytuje, więc obie strony obywają się bez blokad.</para>
 /// </summary>
 [SupportedOSPlatform("linux")]
 public sealed unsafe class MprisService : IMediaPanel
@@ -36,28 +31,31 @@ public sealed unsafe class MprisService : IMediaPanel
     private const string PropertiesInterface = "org.freedesktop.DBus.Properties";
     private const string IntrospectableInterface = "org.freedesktop.DBus.Introspectable";
 
-    /// <summary>Immutable picture of what is playing, swapped whole rather than edited in place.</summary>
+    private const string NoTrack = MprisRules.NoTrack;
+
+    /// <summary>Niezmienne zdjęcie tego, co gra; podmieniane w całości.</summary>
     private sealed record Snapshot(
         string Title,
         string Artist,
         string Album,
         long LengthMicroseconds,
         string TrackId,
-        MediaPanelStatus Status);
-
-    private static readonly Snapshot Empty =
-        new(string.Empty, string.Empty, string.Empty, 0, "/org/mpris/MediaPlayer2/TrackList/NoTrack",
-            MediaPanelStatus.Stopped);
+        MediaPanelStatus Status,
+        double Volume);
 
     private readonly nint _connection;
     private readonly string _identity;
     private readonly string _desktopEntry;
     private readonly GCHandle _self;
     private readonly Thread _thread;
+    private readonly SeekDetector _seekDetector = new();
 
-    private volatile Snapshot _state = Empty;
+    private volatile Snapshot _state = new(
+        string.Empty, string.Empty, string.Empty, 0, NoTrack, MediaPanelStatus.Stopped, 1.0);
+
     private volatile bool _running = true;
     private volatile bool _changed;
+    private volatile bool _seeked;
     private long _positionMicroseconds;
     private int _trackCounter;
 
@@ -83,8 +81,14 @@ public sealed unsafe class MprisService : IMediaPanel
     /// <summary>Relative seek requested by a panel, positive or negative.</summary>
     public event Action<TimeSpan>? SeekRequested;
 
-    /// <summary>Absolute position requested by a panel.</summary>
+    /// <summary>Absolute position requested by a panel, already checked against the current track.</summary>
     public event Action<TimeSpan>? PositionRequested;
+
+    /// <summary>Volume between 0 and 1 requested by a panel.</summary>
+    public event Action<double>? VolumeRequested;
+
+    /// <summary>Local file a desktop asked the player to open.</summary>
+    public event Action<string>? OpenRequested;
 
     public static bool IsSupported => OperatingSystem.IsLinux();
 
@@ -114,7 +118,7 @@ public sealed unsafe class MprisService : IMediaPanel
         DBus.Error error;
         DBus.dbus_error_init(&error);
 
-        var connection = DBus.dbus_bus_get(DBus.BusSession, &error);
+        var connection = DBus.dbus_bus_get_private(DBus.BusSession, &error);
         if (connection == nint.Zero)
         {
             Console.Error.WriteLine($"[cewka] brak szyny sesji D-Bus: {DBus.TakeMessage(&error)}.");
@@ -128,12 +132,23 @@ public sealed unsafe class MprisService : IMediaPanel
 
         if (!service.ClaimName() || !service.RegisterObject())
         {
-            DBus.dbus_connection_unref(connection);
+            // Zamknięcie zwalnia też zajętą już nazwę, żeby panel nie pokazywał odtwarzacza,
+            // który na nic nie odpowiada.
+            service.Close();
             return null;
         }
 
         service._thread.Start();
         return service;
+    }
+
+    [SupportedOSPlatform("linux")]
+    private void Close()
+    {
+        DBus.dbus_connection_close(_connection);
+        DBus.dbus_connection_unref(_connection);
+
+        if (_self.IsAllocated) _self.Free();
     }
 
     [SupportedOSPlatform("linux")]
@@ -185,7 +200,7 @@ public sealed unsafe class MprisService : IMediaPanel
 
     public void SetTrack(string title, string? artist, string? album, TimeSpan length)
     {
-        var id = $"/org/mpris/MediaPlayer2/Track/{Interlocked.Increment(ref _trackCounter)}";
+        var id = MprisRules.TrackIdPrefix + Interlocked.Increment(ref _trackCounter);
 
         _state = _state with
         {
@@ -196,6 +211,8 @@ public sealed unsafe class MprisService : IMediaPanel
             TrackId = id,
         };
 
+        // Panel dowie się o nowym utworze z metadanych, więc pozycja liczy się od nowa.
+        _seekDetector.Reset();
         _changed = true;
     }
 
@@ -207,17 +224,45 @@ public sealed unsafe class MprisService : IMediaPanel
         _changed = true;
     }
 
+    public void SetVolume(double volume)
+    {
+        volume = Math.Clamp(volume, 0, 1);
+        if (Math.Abs(_state.Volume - volume) < 1e-4) return;
+
+        _state = _state with { Volume = volume };
+        _changed = true;
+    }
+
     /// <summary>
     /// Reports the playing position. Not announced as a change: MPRIS deliberately leaves
     /// <c>Position</c> out of the change signal, because a value moving forty times a second
-    /// would flood the bus. Panels read it when they need it.
+    /// would flood the bus. Panels extrapolate it instead, so a jump that normal playback would
+    /// not explain is announced with the <c>Seeked</c> signal.
     /// </summary>
-    public void SetPosition(TimeSpan position) =>
+    public void SetPosition(TimeSpan position)
+    {
         Interlocked.Exchange(ref _positionMicroseconds, (long)Math.Max(0, position.TotalMilliseconds * 1000));
+
+        var state = _state;
+        var length = TimeSpan.FromMilliseconds(state.LengthMicroseconds / 1000.0);
+
+        if (_seekDetector.Report(position, state.Status == MediaPanelStatus.Playing, Environment.TickCount64, length))
+            _seeked = true;
+    }
 
     public void Clear()
     {
-        _state = Empty;
+        _state = _state with
+        {
+            Title = string.Empty,
+            Artist = string.Empty,
+            Album = string.Empty,
+            LengthMicroseconds = 0,
+            TrackId = NoTrack,
+            Status = MediaPanelStatus.Stopped,
+        };
+
+        _seekDetector.Reset();
         _changed = true;
     }
 
@@ -230,10 +275,44 @@ public sealed unsafe class MprisService : IMediaPanel
             // Zwraca zero po rozłączeniu z szyną; wtedy nie ma po co dalej pytać.
             if (DBus.dbus_connection_read_write_dispatch(_connection, 200) == 0) break;
 
-            if (!_changed) continue;
+            if (_changed)
+            {
+                _changed = false;
+                EmitPropertiesChanged();
+            }
 
-            _changed = false;
-            EmitPropertiesChanged();
+            if (_seeked)
+            {
+                _seeked = false;
+                EmitSeeked();
+            }
+        }
+    }
+
+    private void EmitSeeked()
+    {
+        using var path = new DBus.Utf8(ObjectPath);
+        using var iface = new DBus.Utf8(PlayerInterface);
+        using var member = new DBus.Utf8("Seeked");
+
+        var signal = DBus.dbus_message_new_signal(path.Pointer, iface.Pointer, member.Pointer);
+        if (signal == nint.Zero) return;
+
+        try
+        {
+            DBus.MessageIter iter;
+            DBus.dbus_message_iter_init_append(signal, &iter);
+
+            var position = Interlocked.Read(ref _positionMicroseconds);
+            DBus.dbus_message_iter_append_basic(&iter, DBus.TypeInt64, &position);
+
+            uint serial;
+            DBus.dbus_connection_send(_connection, signal, &serial);
+            DBus.dbus_connection_flush(_connection);
+        }
+        finally
+        {
+            DBus.dbus_message_unref(signal);
         }
     }
 
@@ -260,6 +339,7 @@ public sealed unsafe class MprisService : IMediaPanel
             var state = _state;
             AppendEntry(&changed, "PlaybackStatus", PlayerInterface, state);
             AppendEntry(&changed, "Metadata", PlayerInterface, state);
+            AppendEntry(&changed, "Volume", PlayerInterface, state);
 
             DBus.dbus_message_iter_close_container(&iter, &changed);
 
@@ -340,11 +420,19 @@ public sealed unsafe class MprisService : IMediaPanel
                     SeekRequested?.Invoke(TimeSpan.FromMilliseconds(offset / 1000.0));
                 break;
 
-            // Pierwszym argumentem jest ścieżka utworu, którego dotyczy żądanie; pomijamy ją,
-            // bo kolejka wystawia na szynie tylko utwór odtwarzany.
+            // Żądanie dotyczy utworu wskazanego pierwszym argumentem. Po zmianie utworu w trakcie
+            // przeciągania suwaka w panelu przewinęłoby już następny, więc wtedy jest pomijane.
             case "SetPosition":
-                if (TryReadInt64(message, 1, out var position))
+                if (TryReadString(message, 0, out var track) && TryReadInt64(message, 1, out var position)
+                    && IsPositionRequestValid(track, position, _state))
                     PositionRequested?.Invoke(TimeSpan.FromMilliseconds(position / 1000.0));
+                break;
+
+            case "OpenUri":
+                if (!TryReadString(message, 0, out var uri) || !MprisRules.TryGetLocalPath(uri, out var file))
+                    return ReplyError(message, DBus.ErrorInvalidArgs, "Obsługiwane są wyłącznie pliki lokalne.");
+
+                OpenRequested?.Invoke(file);
                 break;
 
             default: return DBus.NotHandled;
@@ -353,6 +441,9 @@ public sealed unsafe class MprisService : IMediaPanel
         return ReplyEmpty(message);
     }
 
+    private static bool IsPositionRequestValid(string track, long position, Snapshot state) =>
+        MprisRules.IsPositionRequestValid(track, position, state.TrackId, state.LengthMicroseconds);
+
     private int DispatchProperties(nint message, string member)
     {
         switch (member)
@@ -360,7 +451,7 @@ public sealed unsafe class MprisService : IMediaPanel
             case "Get":
             {
                 if (!TryReadString(message, 0, out var iface) || !TryReadString(message, 1, out var property))
-                    return ReplyEmpty(message);
+                    return ReplyError(message, DBus.ErrorInvalidArgs, "Oczekiwano interfejsu i nazwy właściwości.");
 
                 return ReplyProperty(message, iface, property);
             }
@@ -368,18 +459,48 @@ public sealed unsafe class MprisService : IMediaPanel
             case "GetAll":
                 return TryReadString(message, 0, out var target)
                     ? ReplyAllProperties(message, target)
-                    : ReplyEmpty(message);
+                    : ReplyError(message, DBus.ErrorInvalidArgs, "Oczekiwano nazwy interfejsu.");
 
-            // Zapis właściwości nie jest obsługiwany; wszystkie wystawione są tylko do odczytu.
             case "Set":
-                return ReplyEmpty(message);
+                return SetProperty(message);
 
             default:
                 return DBus.NotHandled;
         }
     }
 
+    /// <summary>Only <c>Volume</c> can be written; the rest of what is exposed is read-only.</summary>
+    private int SetProperty(nint message)
+    {
+        if (!TryReadString(message, 0, out var iface) || !TryReadString(message, 1, out var property))
+            return ReplyError(message, DBus.ErrorInvalidArgs, "Oczekiwano interfejsu i nazwy właściwości.");
+
+        if (!NamesOf(iface).Contains(property))
+            return ReplyError(message, DBus.ErrorUnknownProperty, $"Nieznana właściwość {iface}.{property}.");
+
+        if (iface != PlayerInterface || property != "Volume")
+            return ReplyError(message, DBus.ErrorPropertyReadOnly, $"Właściwość {property} jest tylko do odczytu.");
+
+        if (!TryReadVariantDouble(message, 2, out var volume) || double.IsNaN(volume))
+            return ReplyError(message, DBus.ErrorInvalidArgs, "Głośność musi być liczbą.");
+
+        VolumeRequested?.Invoke(Math.Clamp(volume, 0, 1));
+        return ReplyEmpty(message);
+    }
+
     // ---------- Odpowiedzi ----------
+
+    private int ReplyError(nint message, string name, string text)
+    {
+        using var errorName = new DBus.Utf8(name);
+        using var errorText = new DBus.Utf8(text);
+
+        var reply = DBus.dbus_message_new_error(message, errorName.Pointer, errorText.Pointer);
+        if (reply == nint.Zero) return DBus.Handled;
+
+        Send(reply);
+        return DBus.Handled;
+    }
 
     private int ReplyEmpty(nint message)
     {
@@ -410,7 +531,12 @@ public sealed unsafe class MprisService : IMediaPanel
 
         DBus.MessageIter iter;
         DBus.dbus_message_iter_init_append(reply, &iter);
-        WriteProperty(&iter, iface, property, _state);
+
+        if (!WriteProperty(&iter, iface, property, _state))
+        {
+            DBus.dbus_message_unref(reply);
+            return ReplyError(message, DBus.ErrorUnknownProperty, $"Nieznana właściwość {iface}.{property}.");
+        }
 
         Send(reply);
         return DBus.Handled;
@@ -474,19 +600,20 @@ public sealed unsafe class MprisService : IMediaPanel
         DBus.dbus_message_iter_close_container(array, &entry);
     }
 
-    private void WriteProperty(DBus.MessageIter* iter, string iface, string name, Snapshot state)
+    /// <summary>Writes one property; returns false, writing nothing, for a name not exposed here.</summary>
+    private bool WriteProperty(DBus.MessageIter* iter, string iface, string name, Snapshot state)
     {
         if (iface == RootInterface)
         {
             switch (name)
             {
-                case "CanQuit": AppendVariantBoolean(iter, true); return;
-                case "CanRaise": AppendVariantBoolean(iter, true); return;
-                case "HasTrackList": AppendVariantBoolean(iter, false); return;
-                case "Identity": AppendVariantString(iter, DBus.TypeString, _identity); return;
-                case "DesktopEntry": AppendVariantString(iter, DBus.TypeString, _desktopEntry); return;
-                case "SupportedUriSchemes": AppendVariantStringArray(iter, ["file"]); return;
-                case "SupportedMimeTypes": AppendVariantStringArray(iter, SupportedMimeTypes); return;
+                case "CanQuit": AppendVariantBoolean(iter, true); return true;
+                case "CanRaise": AppendVariantBoolean(iter, true); return true;
+                case "HasTrackList": AppendVariantBoolean(iter, false); return true;
+                case "Identity": AppendVariantString(iter, DBus.TypeString, _identity); return true;
+                case "DesktopEntry": AppendVariantString(iter, DBus.TypeString, _desktopEntry); return true;
+                case "SupportedUriSchemes": AppendVariantStringArray(iter, ["file"]); return true;
+                case "SupportedMimeTypes": AppendVariantStringArray(iter, SupportedMimeTypes); return true;
             }
         }
 
@@ -494,15 +621,15 @@ public sealed unsafe class MprisService : IMediaPanel
         {
             switch (name)
             {
-                case "PlaybackStatus": AppendVariantString(iter, DBus.TypeString, StatusName(state.Status)); return;
-                case "LoopStatus": AppendVariantString(iter, DBus.TypeString, "None"); return;
-                case "Rate": AppendVariantDouble(iter, 1.0); return;
-                case "MinimumRate": AppendVariantDouble(iter, 1.0); return;
-                case "MaximumRate": AppendVariantDouble(iter, 1.0); return;
-                case "Shuffle": AppendVariantBoolean(iter, false); return;
-                case "Volume": AppendVariantDouble(iter, 1.0); return;
-                case "Position": AppendVariantInt64(iter, Interlocked.Read(ref _positionMicroseconds)); return;
-                case "Metadata": AppendMetadata(iter, state); return;
+                case "PlaybackStatus": AppendVariantString(iter, DBus.TypeString, StatusName(state.Status)); return true;
+                case "LoopStatus": AppendVariantString(iter, DBus.TypeString, "None"); return true;
+                case "Rate": AppendVariantDouble(iter, 1.0); return true;
+                case "MinimumRate": AppendVariantDouble(iter, 1.0); return true;
+                case "MaximumRate": AppendVariantDouble(iter, 1.0); return true;
+                case "Shuffle": AppendVariantBoolean(iter, false); return true;
+                case "Volume": AppendVariantDouble(iter, state.Volume); return true;
+                case "Position": AppendVariantInt64(iter, Interlocked.Read(ref _positionMicroseconds)); return true;
+                case "Metadata": AppendMetadata(iter, state); return true;
 
                 case "CanGoNext":
                 case "CanGoPrevious":
@@ -511,13 +638,11 @@ public sealed unsafe class MprisService : IMediaPanel
                 case "CanSeek":
                 case "CanControl":
                     AppendVariantBoolean(iter, true);
-                    return;
+                    return true;
             }
         }
 
-        // Nieznana właściwość: pusty napis zamiast błędu. Panele pytają czasem o rzeczy spoza
-        // tego, co wystawiamy, a odmowa bywa u nich traktowana jak awaria całego odtwarzacza.
-        AppendVariantString(iter, DBus.TypeString, string.Empty);
+        return false;
     }
 
     private static string StatusName(MediaPanelStatus status) => status switch
@@ -701,6 +826,28 @@ public sealed unsafe class MprisService : IMediaPanel
         return true;
     }
 
+    private static bool TryReadVariantDouble(nint message, int index, out double value)
+    {
+        value = 0;
+
+        DBus.MessageIter iter;
+        if (DBus.dbus_message_iter_init(message, &iter) == 0) return false;
+
+        for (var i = 0; i < index; i++)
+            if (DBus.dbus_message_iter_next(&iter) == 0) return false;
+
+        if (DBus.dbus_message_iter_get_arg_type(&iter) != DBus.TypeVariant) return false;
+
+        DBus.MessageIter variant;
+        DBus.dbus_message_iter_recurse(&iter, &variant);
+        if (DBus.dbus_message_iter_get_arg_type(&variant) != DBus.TypeDouble) return false;
+
+        double raw;
+        DBus.dbus_message_iter_get_basic(&variant, &raw);
+        value = raw;
+        return true;
+    }
+
     // ---------- Opis obiektu ----------
 
     /// <summary>
@@ -758,12 +905,14 @@ public sealed unsafe class MprisService : IMediaPanel
               <arg name="track" type="o" direction="in"/>
               <arg name="position" type="x" direction="in"/>
             </method>
+            <method name="OpenUri"><arg name="uri" type="s" direction="in"/></method>
+            <signal name="Seeked"><arg name="position" type="x"/></signal>
             <property name="PlaybackStatus" type="s" access="read"/>
             <property name="LoopStatus" type="s" access="read"/>
             <property name="Rate" type="d" access="read"/>
             <property name="Shuffle" type="b" access="read"/>
             <property name="Metadata" type="a{sv}" access="read"/>
-            <property name="Volume" type="d" access="read"/>
+            <property name="Volume" type="d" access="readwrite"/>
             <property name="Position" type="x" access="read"/>
             <property name="MinimumRate" type="d" access="read"/>
             <property name="MaximumRate" type="d" access="read"/>
@@ -784,13 +933,11 @@ public sealed unsafe class MprisService : IMediaPanel
 
         _thread.Join(1000);
 
-        if (OperatingSystem.IsLinux())
-        {
-            using var path = new DBus.Utf8(ObjectPath);
-            DBus.dbus_connection_unregister_object_path(_connection, path.Pointer);
-            DBus.dbus_connection_unref(_connection);
-        }
+        if (!OperatingSystem.IsLinux()) return;
 
-        if (_self.IsAllocated) _self.Free();
+        using (var path = new DBus.Utf8(ObjectPath))
+            DBus.dbus_connection_unregister_object_path(_connection, path.Pointer);
+
+        Close();
     }
 }

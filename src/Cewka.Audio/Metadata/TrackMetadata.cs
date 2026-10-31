@@ -27,9 +27,6 @@ public sealed class TrackMetadata
     /// <summary>Codec name as reported by the tag reader, for example <c>FLAC</c>.</summary>
     public string? Codec { get; init; }
 
-    /// <summary>Embedded cover art, in whatever format the file stored it.</summary>
-    public byte[]? CoverArt { get; init; }
-
     /// <summary>Track gain from ReplayGain tags, in decibels.</summary>
     public double? ReplayGainTrack { get; init; }
 
@@ -45,13 +42,8 @@ public sealed class TrackMetadata
     public string FormatBadge => BuildBadge(null);
 
     /// <summary>
-    /// The badge, optionally with a live bitrate reading.
-    /// <para>
-    /// For a variable-bitrate file the figure in the tags is an average over the whole track:
-    /// a quiet passage and a dense one are described by the same number. When a live reading
-    /// is available it replaces that average and is marked <c>VBR</c>, so it is clear the
-    /// value is meant to move.
-    /// </para>
+    /// Plakietka formatu, opcjonalnie z bieżącym pomiarem przepływności. Pomiar zastępuje
+    /// średnią z tagów i dostaje oznaczenie <c>VBR</c>.
     /// </summary>
     public string BuildBadge(int? liveBitrate)
     {
@@ -65,11 +57,8 @@ public sealed class TrackMetadata
         if (IsVariableBitrate && liveBitrate is > 0 && rate is not null)
             return $"{codec} VBR {liveBitrate} kbps / {rate}";
 
-        // Formaty bezstratne opisuje glebia bitowa razem z przeplywnoscia. Sama glebia nie mowi,
-        // ile miejsca zajmuje material — 16 bitow przy 44,1 kHz to i 1411 kbps bez kompresji,
-        // i okolo 900 kbps po niej — a sama przeplywnosc nie mowi, z jakiej rozdzielczosci
-        // powstal. Przy stratnych glebia bitowa nie istnieje: zapisuja wspolczynniki
-        // przeksztalcenia, nie probki, i dlatego tam zostaje tylko przeplywnosc.
+        // Format bezstratny opisuje głębia bitowa razem z przepływnością. Stratne nie mają
+        // głębi bitowej, bo zapisują współczynniki przekształcenia, więc zostaje sama przepływność.
         if (BitDepth > 0 && rate is not null)
         {
             return Bitrate > 0

@@ -1,17 +1,17 @@
 #!/bin/bash
-# Probna instalacja pakietow w kontenerach trzech rodzin dystrybucji.
+# Próbna instalacja pakietów w kontenerach trzech rodzin dystrybucji.
 #
 #   .deb          ubuntu:24.04
-#   .rpm          fedora:41
+#   .rpm          fedora:latest
 #   .pkg.tar.zst  archlinux:latest
 #
-# Kazdy kontener: instalacja, sprawdzenie plikow i wpisu w menu, sprawdzenie zaleznosci,
-# uruchomienie programu pod serwerem X bez ekranu, odinstalowanie bez pozostalosci.
+# W każdym kontenerze: instalacja, sprawdzenie plików, wpisu w menu i zależności,
+# uruchomienie programu pod serwerem X bez ekranu, odinstalowanie bez pozostałości.
 #
 # Wymaga: docker
-# Uzycie:  ./tools/test-packages.sh [katalog-pakietow] [katalog-materialu]
+# Użycie:  ./tools/test-packages.sh [katalog-pakietów] [katalog-materiału]
 #
-# Pakiety musza juz istniec — najpierw ./tools/publish-linux.sh i ./tools/build-packages.sh
+# Pakiety muszą już istnieć; najpierw ./tools/publish-linux.sh i ./tools/build-packages.sh
 
 set -euo pipefail
 
@@ -24,10 +24,22 @@ if ! command -v docker >/dev/null 2>&1; then
     exit 1
 fi
 
-if [ -z "$(ls "$PAKIETY"/cewka* 2>/dev/null)" ]; then
-    echo "W katalogu $PAKIETY nie ma pakietow — uruchom najpierw ./tools/build-packages.sh" >&2
+WERSJA="$(grep -oP '(?<=<Version>)[^<]+' "$REPO/Directory.Build.props" | head -1)"
+if [ -z "$WERSJA" ]; then
+    echo "Nie udalo sie odczytac wersji z Directory.Build.props" >&2
     exit 1
 fi
+
+# Pakiety bieżącej wersji po pełnej nazwie; wzorzec z gwiazdką objąłby też starsze.
+DEB="cewka_${WERSJA}_amd64.deb"
+RPM="cewka-${WERSJA}-1.x86_64.rpm"
+PACMAN="cewka-${WERSJA}-1-x86_64.pkg.tar.zst"
+for PLIK in "$DEB" "$RPM" "$PACMAN"; do
+    if [ ! -f "$PAKIETY/$PLIK" ]; then
+        echo "Brak $PAKIETY/$PLIK — uruchom najpierw ./tools/build-packages.sh" >&2
+        exit 1
+    fi
+done
 
 UTWOR="$MATERIAL/probka-dluga.wav"
 if [ ! -f "$UTWOR" ]; then
@@ -37,8 +49,7 @@ if [ ! -f "$UTWOR" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Czesc wspolna, identyczna dla wszystkich trzech dystrybucji. Rozni je wylacznie
-# menedzer pakietow, wiec tylko on jest wstrzykiwany z zewnatrz.
+# Część wspólna dla trzech dystrybucji; z zewnątrz przychodzi tylko menedżer pakietów.
 # ---------------------------------------------------------------------------
 WSPOLNE='
 echo "--- pliki ---"
@@ -59,11 +70,12 @@ if ldd /usr/bin/cewka 2>/dev/null | grep -q "not found"; then
     ldd /usr/bin/cewka | grep "not found"
     exit 1
 fi
-echo "wszystkie biblioteki odnalezione"
+echo "zaleznosci pliku uruchomieniowego odnalezione (biblioteki z pakunku sprawdza uruchomienie)"
 
 echo "--- uruchomienie ---"
+# Kontener nie ma karty dźwiękowej, więc CEWKA_NULL_AUDIO=1 włącza puste wyjście silnika.
 set +e
-timeout 20 xvfb-run -a /usr/bin/cewka /material/probka-dluga.wav >/tmp/dziennik.txt 2>&1
+CEWKA_NULL_AUDIO=1 timeout 20 xvfb-run -a /usr/bin/cewka /material/probka-dluga.wav >/tmp/dziennik.txt 2>&1
 KOD=$?
 set -e
 echo "kod wyjscia: ${KOD} (124 znaczy: dzialal az do konca limitu czasu)"
@@ -74,6 +86,14 @@ if [ "${KOD}" != "124" ]; then
     echo "BLAD: program nie dotrwal do konca limitu czasu"
     exit 1
 fi
+
+# Pułapka: program przechwytuje błędy wyjścia dźwięku, więc sam czas życia procesu nie dowodzi,
+# że biblioteki się załadowały. Te wpisy w dzienniku oznaczają wadę pakietu.
+if grep -E "DllNotFoundException|BadImageFormatException|EntryPointNotFoundException|Unhandled exception|GLIBC_[0-9.]+. not found" /tmp/dziennik.txt; then
+    echo "BLAD: dziennik zdradza brakujaca lub niezgodna biblioteke"
+    exit 1
+fi
+echo "dziennik bez bledow ladowania bibliotek"
 '
 
 POZOSTALOSCI='
@@ -113,20 +133,19 @@ echo 'WYNIK: $nazwa przeszla'
 
 sprawdz "Debian i Ubuntu" "ubuntu:24.04" \
     'apt-get update -qq >/dev/null && apt-get install -y -qq desktop-file-utils xvfb >/dev/null' \
-    'apt-get install -y -qq /pakiety/cewka_*_amd64.deb' \
+    "apt-get install -y -qq /pakiety/$DEB" \
     'apt-get remove -y -qq cewka >/dev/null'
 
-# Obraz Fedory bez numeru wydania. Przypiety numer bylby czytelniejszy, ale wydania Fedory
-# zyja okolo trzynastu miesiecy i po wycofaniu ich repozytoria wedruja do archiwum — proba
-# zaczelaby sie wtedy wywracac na instalacji zaleznosci, a nie na tym, co ma sprawdzac.
+# Obraz Fedory bez numeru wydania, bo repozytoria wycofanego wydania trafiają do archiwum
+# i instalacja zależności przestałaby działać.
 sprawdz "Fedora" "fedora:latest" \
     'dnf install -y -q desktop-file-utils xorg-x11-server-Xvfb >/dev/null' \
-    'dnf install -y -q /pakiety/cewka-*.x86_64.rpm' \
+    "dnf install -y -q /pakiety/$RPM" \
     'dnf remove -y -q cewka >/dev/null'
 
 sprawdz "Arch" "archlinux:latest" \
     'pacman -Syu --noconfirm --needed desktop-file-utils xorg-server-xvfb >/dev/null' \
-    'pacman -U --noconfirm /pakiety/cewka-*-x86_64.pkg.tar.zst' \
+    "pacman -U --noconfirm /pakiety/$PACMAN" \
     'pacman -R --noconfirm cewka >/dev/null'
 
 echo

@@ -8,15 +8,12 @@ namespace Cewka.Snapshots;
 /// <summary>
 /// Zestawia świeżo wyrenderowane zrzuty z obrazami odniesienia i mówi, czy wygląd się zmienił.
 ///
-/// <para>Zrzuty są powtarzalne — obrót płyty, dryf plam tła i faza fali są przy fotografowaniu
-/// zatrzymywane — ale powtarzalne nie znaczy identyczne co do bajtu. Dlatego porównanie liczy
-/// piksele różniące się bardziej niż o próg i podaje, jak duży obszar zajmują: przesunięcie
-/// układu daje różnicę rozlaną po całym obrazie, a resztkowy ruch pojedynczego elementu mieści
-/// się w małym prostokącie.</para>
+/// <para>Zrzuty są powtarzalne, ale nie identyczne co do bajtu, więc porównanie liczy piksele
+/// różniące się ponad próg i podaje obszar, jaki zajmują: przesunięty układ rozlewa różnicę po
+/// całym obrazie, a drobny ruch mieści się w małym prostokącie.</para>
 ///
-/// <para>Porównywane są wybrane zrzuty, nie wszystkie. Komplet odniesienia dla kilkudziesięciu
-/// obrazów rósłby w historii repozytorium przy każdej zmianie wyglądu, a te pięć pokrywa
-/// układ okna głównego w obu motywach, stan zwinięty oraz dwie najbogatsze zakładki ustawień.</para>
+/// <para>Porównywane są wybrane zrzuty: okno główne w obu motywach, stan zwinięty i dwie
+/// najbogatsze zakładki ustawień. Komplet puchłby w historii repozytorium.</para>
 /// </summary>
 internal static class Odniesienie
 {
@@ -38,26 +35,23 @@ internal static class Odniesienie
     /// <summary>
     /// Ile pikseli może się różnić, zanim przebieg zostanie uznany za zmianę wyglądu.
     ///
-    /// <para>Dwa przebiegi na tym samym kodzie dają dziś obrazy identyczne co do piksela, więc
-    /// zapas nie jest tu potrzebny do niczego, co widać. Jest natomiast potrzebny na maszynę
-    /// w chmurze, której obraz systemu bywa podmieniany: drobna zmiana w rasteryzacji nie
-    /// powinna zatrzymywać budowy. Zanim wymuszono odświeżanie modelu widoku, wędrował uchwyt
-    /// suwaka postępu i różnice sięgały 42 pikseli w prostokącie 14 na 14 — stąd rząd wielkości
-    /// obu progów.</para>
+    /// <para>Zapas na maszynę w chmurze, której obraz systemu bywa podmieniany; drobna zmiana
+    /// rasteryzacji nie powinna zatrzymywać budowy.</para>
     /// </summary>
     private const int BudzetPikseli = 200;
 
     /// <summary>
-    /// Największy dopuszczalny bok prostokąta obejmującego wszystkie różnice. Osobne kryterium
-    /// obok budżetu, bo dwieście pikseli rozsypanych po całym oknie znaczy co innego niż
-    /// dwieście pikseli skupionych w jednym miejscu — pierwsze to przesunięty układ.
+    /// Największy dopuszczalny bok prostokąta obejmującego wszystkie różnice; różnice rozsypane
+    /// po całym oknie oznaczają przesunięty układ.
     /// </summary>
     private const int MaksymalnyBok = 24;
 
     /// <summary>
     /// Zwraca <c>true</c>, gdy wygląd zgadza się z odniesieniem. Brak pliku odniesienia nie jest
-    /// błędem: obraz zostaje zapisany, a przebieg mówi wprost, że powstało nowe odniesienie —
-    /// inaczej pierwsze uruchomienie zawsze kończyłoby się porażką.
+    /// tu błędem: obraz zostaje zapisany jako nowy wzorzec do przejrzenia i dodania do repozytorium.
+    /// Pułapka: w potoku CI checkout jest ulotny, więc taki wzorzec powstawałby co przebieg od nowa
+    /// i niczego nie pilnował. Dlatego tests.yml kończy przebieg błędem, gdy katalog odniesienia
+    /// się zmienił.
     /// </summary>
     public static bool Porownaj(string katalogZrzutow, string katalogOdniesienia, string katalogRoznic)
     {

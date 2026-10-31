@@ -3,50 +3,77 @@
              xmlns:l="using:Cewka.App.Localisation"
              x:Class="Cewka.App.Controls.WindowButtons">
 
-  <Panel VerticalAlignment="Center">
+  <!--
+    Kreska oddziela przyciski okna od poleceń paska tytułu po stronie wewnętrznej: przy układzie
+    po prawej stoi przed nimi, przy układzie po lewej za nimi.
+  -->
+  <StackPanel x:Name="Root" Orientation="Horizontal" VerticalAlignment="Center">
 
-    <!-- Wariant kwadratowy: krazki w stylu reszty interfejsu -->
-    <StackPanel x:Name="SquareGroup" Orientation="Horizontal" Spacing="6">
-      <Button x:Name="SquareMinimise" Classes="window" Click="OnMinimise"
-              ToolTip.Tip="{l:Translate TooltipMinimise}">
-        <Viewbox Width="9" Height="9">
-          <Path Classes="fill" Data="{StaticResource IconMinimise}" Width="10" Height="10" />
-        </Viewbox>
-      </Button>
-      <Button x:Name="SquareMaximise" Classes="window" Click="OnToggleMaximise"
-              ToolTip.Tip="{l:Translate TooltipMaximise}">
-        <Viewbox Width="9" Height="9">
-          <Path Classes="stroke" Data="{StaticResource IconMaximiseStroke}" Width="10" Height="10" />
-        </Viewbox>
-      </Button>
-      <Button Classes="window close" Click="OnClose" ToolTip.Tip="{l:Translate TooltipClose}">
-        <Viewbox Width="9" Height="9">
-          <Path Classes="stroke" Data="{StaticResource IconCloseStroke}" Width="10" Height="10"
-                StrokeThickness="1.4" />
-        </Viewbox>
-      </Button>
-    </StackPanel>
+    <Rectangle x:Name="SeparatorBefore" Width="1" Height="18" Margin="6,0,12,0"
+               Fill="{DynamicResource StrokeBrush}" VerticalAlignment="Center" />
 
-    <!-- Wariant macOS: trzy kolorowe krazki, znaki dopiero pod kursorem -->
-    <StackPanel x:Name="TrafficGroup" Orientation="Horizontal" Spacing="8" IsVisible="False">
-      <Button Classes="traffic close" Click="OnClose" ToolTip.Tip="{l:Translate TooltipClose}">
-        <Viewbox Width="7" Height="7">
-          <Path Classes="traffic-glyph" Data="{StaticResource IconCloseStroke}" Width="10" Height="10" />
-        </Viewbox>
-      </Button>
-      <Button x:Name="TrafficMinimise" Classes="traffic minimise" Click="OnMinimise"
-              ToolTip.Tip="{l:Translate TooltipMinimise}">
-        <Viewbox Width="7" Height="7">
-          <Path Classes="traffic-glyph" Data="{StaticResource IconTrafficMinimiseStroke}" Width="10" Height="10" />
-        </Viewbox>
-      </Button>
-      <Button x:Name="TrafficZoom" Classes="traffic zoom" Click="OnToggleMaximise"
-              ToolTip.Tip="{l:Translate TooltipMaximise}">
-        <Viewbox Width="7" Height="7">
-          <Path Classes="traffic-glyph" Data="{StaticResource IconTrafficZoomStroke}" Width="10" Height="10" />
-        </Viewbox>
-      </Button>
-    </StackPanel>
+    <Panel VerticalAlignment="Center">
 
-  </Panel>
+      <!-- Wariant kwadratowy w stylu reszty interfejsu. Kolejność ustala kod. -->
+      <StackPanel x:Name="SquareGroup" Orientation="Horizontal" Spacing="6">
+        <Button x:Name="SquareMinimise" Classes="window" Click="OnMinimise"
+                ToolTip.Tip="{l:Translate TooltipMinimise}"
+                AutomationProperties.Name="{l:Translate TooltipMinimise}">
+          <Viewbox Width="9" Height="9">
+            <Path Classes="fill" Data="{StaticResource IconMinimise}" Width="10" Height="10" />
+          </Viewbox>
+        </Button>
+        <Button x:Name="SquareMaximise" Classes="window" Click="OnToggleMaximise">
+          <Viewbox Width="9" Height="9">
+            <Path x:Name="MaximiseGlyph" Classes="stroke" Data="{StaticResource IconMaximiseStroke}"
+                  Width="10" Height="10" />
+          </Viewbox>
+        </Button>
+        <Button x:Name="SquareClose" Classes="window close" Click="OnClose"
+                ToolTip.Tip="{l:Translate TooltipClose}"
+                AutomationProperties.Name="{l:Translate TooltipClose}">
+          <Viewbox Width="9" Height="9">
+            <Path Classes="stroke" Data="{StaticResource IconCloseStroke}" Width="10" Height="10"
+                  StrokeThickness="1.4" />
+          </Viewbox>
+        </Button>
+      </StackPanel>
+
+      <!--
+        Wariant macOS: trzy kolorowe krążki po 12 px, ale każdy przycisk ma 24 × 24 px pola
+        trafienia. Znaki pojawiają się pod kursorem nad grupą i przy fokusie z klawiatury.
+      -->
+      <StackPanel x:Name="TrafficGroup" Orientation="Horizontal" IsVisible="False" Background="Transparent">
+        <Button Classes="traffic close" Click="OnClose"
+                ToolTip.Tip="{l:Translate TooltipClose}"
+                AutomationProperties.Name="{l:Translate TooltipClose}">
+          <Border Classes="dot">
+            <Viewbox Width="7" Height="7">
+              <Path Classes="traffic-glyph" Data="{StaticResource IconCloseStroke}" Width="10" Height="10" />
+            </Viewbox>
+          </Border>
+        </Button>
+        <Button x:Name="TrafficMinimise" Classes="traffic minimise" Click="OnMinimise"
+                ToolTip.Tip="{l:Translate TooltipMinimise}"
+                AutomationProperties.Name="{l:Translate TooltipMinimise}">
+          <Border Classes="dot">
+            <Viewbox Width="7" Height="7">
+              <Path Classes="traffic-glyph" Data="{StaticResource IconTrafficMinimiseStroke}" Width="10" Height="10" />
+            </Viewbox>
+          </Border>
+        </Button>
+        <Button x:Name="TrafficZoom" Classes="traffic zoom" Click="OnToggleMaximise">
+          <Border Classes="dot">
+            <Viewbox Width="7" Height="7">
+              <Path Classes="traffic-glyph" Data="{StaticResource IconTrafficZoomStroke}" Width="10" Height="10" />
+            </Viewbox>
+          </Border>
+        </Button>
+      </StackPanel>
+
+    </Panel>
+
+    <Rectangle x:Name="SeparatorAfter" Width="1" Height="18" Margin="12,0,6,0"
+               Fill="{DynamicResource StrokeBrush}" VerticalAlignment="Center" />
+  </StackPanel>
 </UserControl>

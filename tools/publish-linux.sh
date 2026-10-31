@@ -1,18 +1,27 @@
 #!/bin/sh
-# Buduje wydanie dla systemu Linux: jeden plik wykonywalny, bez wymogu srodowiska .NET.
+# Buduje wydanie dla Linuksa: jeden plik wykonywalny, bez wymogu środowiska .NET.
 # Wynik trafia do artifacts/publish/linux-x64/Cewka
 #
-# Uzycie:  ./tools/publish-linux.sh
+# Użycie:  ./tools/publish-linux.sh
 
 set -e
 
 KATALOG="$(cd "$(dirname "$0")/.." && pwd)"
 
-# Biblioteka natywna musi powstac przed publikacja - to ona jest pakowana do wyniku.
-if [ ! -f "$KATALOG/src/Cewka.Audio/runtimes/linux-x64/native/libcewka_audio.so" ]; then
-    echo "Brak biblioteki natywnej, budowanie..."
+# Biblioteka natywna powstaje przed publikacją, bo trafia do wyniku. Pułapka: runtimes/ jest
+# poza gitem, więc biblioteka starsza od źródła albo skryptu budowy jest budowana od nowa.
+SO="$KATALOG/src/Cewka.Audio/runtimes/linux-x64/native/libcewka_audio.so"
+if [ ! -f "$SO" ] ||
+   [ "$KATALOG/native/cewka_audio.c" -nt "$SO" ] ||
+   [ "$KATALOG/native/build-linux.sh" -nt "$SO" ] ||
+   [ "$KATALOG/native/miniaudio/miniaudio.h" -nt "$SO" ]; then
+    echo "Biblioteka natywna nieaktualna lub brak, budowanie..."
     "$KATALOG/native/build-linux.sh"
 fi
+
+# Plik poprzedniej publikacji usuwany z góry, żeby po przerwanej publikacji pakowanie nie
+# wzięło go za wynik.
+rm -f "$KATALOG/artifacts/publish/linux-x64/Cewka"
 
 dotnet publish "$KATALOG/src/Cewka.App" \
     --configuration Release \

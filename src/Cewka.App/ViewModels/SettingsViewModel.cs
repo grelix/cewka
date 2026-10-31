@@ -71,13 +71,7 @@ public sealed class PaletteOption(string labelKey, PlaceholderPalette value) : O
 }
 
 /// <summary>
-/// State behind the settings window.
-///
-/// <para><b>Zmiany działają od razu.</b> Okno nie ma przycisków „Zastosuj" ani „Anuluj": każda
-/// zmiana jest widoczna lub słyszalna natychmiast i od razu zapisywana. Przy ustawieniach, które
-/// ocenia się zmysłami — motyw, urządzenie wyjściowe, siła efektów — porównanie „przed
-/// i po" jest jedynym sensownym sposobem wyboru, a okno z przyciskiem zatwierdzenia właśnie to
-/// uniemożliwia.</para>
+/// Stan okna ustawień. Każda zmiana działa i zapisuje się od razu, bez „Zastosuj” i „Anuluj”.
 /// </summary>
 public sealed class SettingsViewModel : ObservableObject, IDisposable
 {
@@ -100,20 +94,15 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         // wyboru języka w tej samej klasie.
         LanguageSection = new SettingsSection("SectionLanguage");
 
+        // Korektor i efekty dźwiękowe mają jedno miejsce: pas w oknie głównym. Zakładka dźwięku
+        // odsyła do niego jednym zdaniem.
         Audio = new SettingsSection("SectionAudio");
-
-        // Efekty osobno od dźwięku: w zakładce dźwięku stoją ustawienia urządzenia i wierności
-        // odtwarzania, a tu — rzeczy, które celowo zmieniają brzmienie. Mieszanie jednego
-        // z drugim kazałoby szukać wierności wśród upiększeń.
-        // Nazwa zakładki bierze się z tego samego klucza, co nagłówek pasa efektów w oknie
-        // głównym. Osobny klucz oznaczałby siedemnaście identycznych napisów do utrzymania.
-        EffectsSection = new SettingsSection("Effects");
 
         Playback = new SettingsSection("SectionPlayback");
         Integration = new SettingsSection("SectionSystem");
         About = new SettingsSection("SectionAbout");
 
-        Sections = [Appearance, LanguageSection, Audio, EffectsSection, Playback, Integration, About];
+        Sections = [Appearance, LanguageSection, Audio, Playback, Integration, About];
         Appearance.IsSelected = true;
 
         Theme = new SegmentGroup(
@@ -148,11 +137,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             ("ColoursRecommended", ColourIntensity.Recommended),
             ("ColoursIntense", ColourIntensity.Intense));
 
-        // Lista wyprowadzona wprost z CoilCover.Fixed, a nie wypisana drugi raz. Kiedy była
-        // wypisana, dołożenie sześciu par w 0.8.0 zmieniło rysowanie okładek, ale do tej listy
-        // nie dotarło — i nowe pary po prostu nie pojawiły się w ustawieniach. Klucz językowy
-        // składa się z nazwy pozycji wyliczenia; pilnuje tego test, który sprawdza, czy każdy
-        // taki klucz istnieje w każdym pliku językowym.
+        // Lista z CoilCover.Fixed, żeby nowa para nie ominęła ustawień. Klucz językowy to nazwa
+        // pozycji wyliczenia; test sprawdza, że jest w każdym pliku języka.
         Palettes =
         [
             ..CoilCover.Fixed.Select(value => new PaletteOption("Palette" + value, value)),
@@ -191,9 +177,9 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         Loudness = new SegmentGroup(
             value => _player.SetLoudnessTarget((LoudnessTarget)value),
             literalLabels: true,
-            ("-23 LUFS", LoudnessTarget.Broadcast),
-            ("-18 LUFS", LoudnessTarget.Reference),
-            ("-14 LUFS", LoudnessTarget.Streaming));
+            ("−23 LUFS", LoudnessTarget.Broadcast),
+            ("−18 LUFS", LoudnessTarget.Reference),
+            ("−14 LUFS", LoudnessTarget.Streaming));
 
         // Etykiety kroku przewijania są liczbami z jednostką, jednakową we wszystkich językach,
         // więc nie przechodzą przez tłumaczenie.
@@ -214,9 +200,35 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         // ustawienia wyżej. Bez tego próbki zostawałyby w barwach poprzedniego motywu.
         _themeWatcher = (_, _) => RefreshPalettePreviews();
         App.Theme.Changed += _themeWatcher;
+
+        // Motyw przełącza też przycisk w oknie głównym. Znacznik bierze tryb z menedżera motywu,
+        // bo zgłoszenie przychodzi, zanim okno zapisze nowy tryb w ustawieniach.
+        _modeWatcher = (_, _) => Theme.Mark(App.Theme.Mode);
+        App.Theme.ModeChanged += _modeWatcher;
+
+        // Okno ustawień jest niemodalne, a normalizację i limiter przełącza też nagłówek
+        // korektora w oknie głównym. Jedno źródło prawdy: tutaj tylko odbicie stanu odtwarzacza.
+        _playerWatcher = (_, e) =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(MainViewModel.NormalisationEnabled):
+                case nameof(MainViewModel.LimiterEnabled):
+                case nameof(MainViewModel.LatencyDescription):
+                    Raise(e.PropertyName);
+                    break;
+                case nameof(MainViewModel.IsOutputOpen):
+                case nameof(MainViewModel.ActiveDeviceName):
+                    Raise(nameof(ActiveDeviceName));
+                    break;
+            }
+        };
+        _player.PropertyChanged += _playerWatcher;
     }
 
     private readonly EventHandler _themeWatcher;
+    private readonly EventHandler _modeWatcher;
+    private readonly PropertyChangedEventHandler _playerWatcher;
 
     private void RefreshPalettePreviews()
     {
@@ -238,21 +250,12 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public SettingsSection Appearance { get; }
     public SettingsSection LanguageSection { get; }
     public SettingsSection Audio { get; }
-    public SettingsSection EffectsSection { get; }
     public SettingsSection Playback { get; }
-
-    /// <summary>
-    /// Te same obiekty, którymi steruje okno główne. Dzięki temu suwak przesunięty w jednym
-    /// miejscu widać od razu w drugim, bez żadnego uzgadniania między oknami.
-    /// </summary>
-    public IReadOnlyList<EffectViewModel> SoundEffects => _player.SoundEffects;
     public SettingsSection Integration { get; }
     public SettingsSection About { get; }
 
     /// <summary>
-    /// Przechodzi do wskazanej zakładki. Wybór nie jest zapamiętywany między uruchomieniami:
-    /// zapamiętywanie kosztowałoby kolejne pole w ustawieniach, a rozwiązywałoby problem,
-    /// którego nie ma — okno otwiera się po to, żeby czegoś poszukać, a nie żeby wrócić.
+    /// Przechodzi do wskazanej zakładki. Wybór nie jest zapamiętywany między uruchomieniami.
     /// </summary>
     public void SelectSection(SettingsSection section)
     {
@@ -450,11 +453,13 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     {
         try
         {
-            FileAssociations.Register(AudioFileFormatDetector.SupportedExtensions);
+            FileAssociations.Register(
+                AudioFileFormatDetector.SupportedExtensions,
+                new AssociationTexts(Strings.Current["AssociationFileType"], Strings.Current["AssociationDescription"]));
         }
         catch (Exception ex)
         {
-            AssociationStatus = $"{Strings.Current["AssociationsFailed"]} {ex.Message}";
+            ShowAssociationFailure(ex);
             return;
         }
 
@@ -469,11 +474,24 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            AssociationStatus = $"{Strings.Current["AssociationsFailed"]} {ex.Message}";
+            ShowAssociationFailure(ex);
             return;
         }
 
         RefreshAssociationStatus();
+    }
+
+    /// <summary>Przyczyna zwykłymi słowami; tekst wyjątku idzie do dziennika.</summary>
+    private void ShowAssociationFailure(Exception ex)
+    {
+        Console.Error.WriteLine($"[cewka] skojarzenia plików: {ex}");
+
+        AssociationStatus = Strings.Current[ex switch
+        {
+            AssociationException { Reason: AssociationFailure.ExecutableUnknown } => "AssociationsFailedExecutable",
+            AssociationException { Reason: AssociationFailure.RegistryWrite } => "AssociationsFailedRegistry",
+            _ => "AssociationsFailed",
+        }];
     }
 
     private void RefreshAssociationStatus()
@@ -524,6 +542,9 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     public bool HasRepository => WebLink.IsSafe(RepositoryUrl);
 
+    /// <summary>Uwaga o tłumaczeniu maszynowym dotyczy każdego języka poza polskim, w którym powstał interfejs.</summary>
+    public bool ShowTranslationNote => Strings.Current.CurrentCode != Strings.FallbackCode;
+
     /// <summary>Sprawdzanie ma sens tylko wtedy, gdy z adresu da się zbudować adres usługi.</summary>
     public bool CanCheckForUpdates => UpdateCheck.ApiUrl(RepositoryUrl) is not null;
 
@@ -566,10 +587,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Sprawdza dostępność nowszego wydania i opisuje wynik słowami.
     ///
-    /// <para>Wynik nie jest nigdzie zapisywany: zapisana zostaje wyłącznie data sprawdzenia,
-    /// żeby sprawdzanie automatyczne nie powtarzało żądania częściej niż raz na dobę. Powód
-    /// niepowodzenia trafia do dziennika, a w oknie staje jedno zdanie — użytkownikowi
-    /// niepotrzebny jest numer błędu HTTP.</para>
+    /// <para>Zapisywana jest tylko data sprawdzenia. Powód niepowodzenia trafia do dziennika,
+    /// a w oknie staje jedno zdanie.</para>
     /// </summary>
     public async Task CheckForUpdatesNowAsync()
     {
@@ -583,15 +602,15 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         {
             var result = await UpdateCheck.LatestAsync(RepositoryUrl, UpdateCheck.Current);
 
-            _settings.Current.LastUpdateCheck = DateTimeOffset.UtcNow;
-            _settings.Touch();
-
             if (!result.Succeeded)
             {
                 Console.Error.WriteLine($"[cewka] sprawdzanie wersji: {result.Failure}");
                 UpdateStatus = Strings.Current["UpdateFailed"];
                 return;
             }
+
+            _settings.Current.LastUpdateCheck = DateTimeOffset.UtcNow;
+            _settings.Touch();
 
             var latest = result.Latest!;
 
@@ -620,7 +639,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public string DecodersText => Strings.Current["DecodersSummary"];
 
     public string SystemCodecsText => SystemCodecs.IsAvailable
-        ? $"{SystemCodecs.Name} — {Strings.Current["CodecsAvailable"]}"
+        ? $"{SystemCodecs.Name}: {Strings.Current["CodecsAvailable"]}"
         : SystemCodecs.UnavailableReason ?? Strings.Current["CodecsMissing"];
 
     public bool SystemCodecsAvailable => SystemCodecs.IsAvailable;
@@ -662,13 +681,53 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         foreach (var palette in Palettes) palette.RefreshLabel();
 
         RefreshAssociationStatus();
+        RefreshDevices();
 
         Raise(nameof(VersionText));
         Raise(nameof(DecodersText));
         Raise(nameof(SystemCodecsText));
         Raise(nameof(LicenceText));
+        Raise(nameof(ShowTranslationNote));
         Raise(nameof(LatencyDescription));
         Raise(nameof(ActiveDeviceName));
+        Raise(nameof(Shortcuts));
+    }
+
+    /// <summary>
+    /// Skróty klawiszowe okna głównego dla zakładki „O programie”. Nazwy klawiszy pochodzą ze
+    /// słownika, tak samo jak w menu kolejki.
+    /// </summary>
+    public IReadOnlyList<ShortcutRow> Shortcuts
+    {
+        get
+        {
+            var s = Strings.Current;
+            var ctrl = KeyNames.Ctrl;
+            var alt = KeyNames.Alt;
+
+            return
+            [
+                new(KeyNames.Space, s["ShortcutPlayPause"]),
+                new("← →", s["ShortcutSeek"]),
+                new($"{KeyNames.Chord(ctrl, "←")} {KeyNames.Chord(ctrl, "→")}", s["ShortcutTrack"]),
+                new("↑ ↓", s["TooltipVolume"]),
+                new("M", s["ShortcutMute"]),
+                new("S", s["ShortcutShuffle"]),
+                new("R", s["ShortcutRepeat"]),
+                new("Q", s["ShortcutPanel"]),
+                new("L", s["Queue"]),
+                new("T", s["SettingTheme"]),
+                new("F11", s["ShortcutFullScreen"]),
+                new(KeyNames.Escape, s["ShortcutEscape"]),
+                new(KeyNames.Chord(ctrl, "O"), s["OpenFilesTitle"]),
+                new(KeyNames.Chord(ctrl, KeyNames.Shift, "O"), s["OpenFolderTitle"]),
+                new(KeyNames.Chord(ctrl, ","), s["Settings"]),
+                new(KeyNames.Enter, s["ShortcutQueuePlay"]),
+                new(KeyNames.Delete, s["ShortcutQueueRemove"]),
+                new($"{KeyNames.Chord(alt, "↑")} {KeyNames.Chord(alt, "↓")}", s["ShortcutQueueMove"]),
+                new(KeyNames.Chord(ctrl, "Z"), s["ShortcutUndo"]),
+            ];
+        }
     }
 
     private void MarkCurrentValues()
@@ -700,5 +759,10 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     {
         Strings.Current.PropertyChanged -= _languageWatcher;
         App.Theme.Changed -= _themeWatcher;
+        App.Theme.ModeChanged -= _modeWatcher;
+        _player.PropertyChanged -= _playerWatcher;
     }
 }
+
+/// <summary>Jeden wiersz listy skrótów: klawisze i to, co robią.</summary>
+public sealed record ShortcutRow(string Keys, string Action);

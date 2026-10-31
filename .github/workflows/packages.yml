@@ -1,8 +1,7 @@
 # Pakiety dla Linuksa wraz z próbną instalacją w kontenerach.
 #
-# Osobny plik, bo to samo potrzebne jest w dwóch miejscach: przy wydaniu ze znacznika oraz
-# na żądanie, gdy trzeba sprawdzić, czy pakiety nadal się instalują. Powielenie tych kroków
-# w dwóch workflow skończyłoby się tym, że jedno z nich zostaje w tyle.
+# Osobny plik, bo korzystają z niego budowa przy każdej zmianie, wydanie ze znacznika
+# i sprawdzenie na żądanie.
 
 name: Pakiety Linuksa
 
@@ -37,16 +36,12 @@ jobs:
       - name: Wersja i znacznik czasu
         id: dane
         run: |
-          WERSJA="$(grep -oP '(?<=<Version>)[^<]+' Directory.Build.props | head -1)"
-          if [ -z "$WERSJA" ]; then
-            echo "BLAD: nie udalo sie odczytac wersji z Directory.Build.props" >&2
-            exit 1
-          fi
-
+          WERSJA="$(./tools/sprawdz-wersje.sh)"
           echo "wersja=$WERSJA" >> "$GITHUB_OUTPUT"
 
-          # Znacznik czasu z zatwierdzenia, a nie z chwili budowy: pakiet pacmana zapisuje go
-          # w metadanych, więc bez tego dwie budowy tego samego materiału dawałyby różne pliki.
+          # Znacznik czasu z zatwierdzenia, a nie z chwili budowy: trafia do metadanych pakietu
+          # pacmana, czasów jego plików i daty w %changelog RPM, więc bez tego dwie budowy
+          # tego samego materiału dawałyby różne pliki.
           echo "epoka=$(git log -1 --format=%ct)" >> "$GITHUB_OUTPUT"
 
       - name: Pakiety
@@ -66,6 +61,7 @@ jobs:
 
           install -Dm755 artifacts/publish/linux-x64/Cewka "artifacts/archiwum/$KATALOG/cewka"
           install -Dm644 LICENSE "artifacts/archiwum/$KATALOG/LICENSE"
+          install -Dm644 THIRD-PARTY-NOTICES.txt "artifacts/archiwum/$KATALOG/THIRD-PARTY-NOTICES.txt"
           install -Dm644 README.md "artifacts/archiwum/$KATALOG/README.md"
           install -Dm644 packaging/linux/cewka.desktop "artifacts/archiwum/$KATALOG/cewka.desktop"
           cp -r packaging/linux/icons "artifacts/archiwum/$KATALOG/icons"
@@ -75,7 +71,40 @@ jobs:
               -czf "artifacts/packages/cewka-$WERSJA-linux-x64.tar.gz" \
               -C artifacts/archiwum "$KATALOG"
 
+      - name: Noty składników w pakietach
+        # Licencje składników pozwalają rozpowszechniać program tylko razem z ich notami.
+        # Sprawdzana jest zawartość plików pakietów, bo obraz Ubuntu w próbnej instalacji
+        # pomija przy instalacji dokumentację z /usr/share/doc poza plikami copyright.
+        env:
+          WERSJA: ${{ steps.dane.outputs.wersja }}
+        run: |
+          set -euo pipefail
+          cd artifacts/packages
+
+          # Spis plików trafia najpierw do zmiennej: grep -q w potoku kończy czytanie przed
+          # końcem spisu, a pipefail uznałby przerwany program wypisujący za błąd.
+          sprawdz() {
+            local pakiet="$1" plik="$2" spis="$3"
+            if ! grep -qxF "$plik" <<< "$spis"; then
+              echo "BLAD: w $pakiet brak $plik" >&2
+              exit 1
+            fi
+            echo "$pakiet: $plik"
+          }
+
+          DEB="cewka_${WERSJA}_amd64.deb"
+          RPM="cewka-${WERSJA}-1.x86_64.rpm"
+          PACMAN="cewka-${WERSJA}-1-x86_64.pkg.tar.zst"
+          ARCHIWUM="cewka-${WERSJA}-linux-x64.tar.gz"
+
+          sprawdz "$DEB" ./usr/share/doc/cewka/THIRD-PARTY-NOTICES.txt "$(dpkg-deb -c "$DEB" | awk '{ print $6 }')"
+          sprawdz "$RPM" /usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt "$(rpm -qlp "$RPM")"
+          sprawdz "$PACMAN" usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt "$(bsdtar -tf "$PACMAN")"
+          sprawdz "$ARCHIWUM" "cewka-${WERSJA}/THIRD-PARTY-NOTICES.txt" "$(tar -tzf "$ARCHIWUM")"
+
       - name: Materiał do prób
+        env:
+          CEWKA_NULL_AUDIO: '1'
         run: dotnet run --project tools/Cewka.Snapshots -c Release -- --material artifacts/material
 
       - name: Próbne instalacje w kontenerach

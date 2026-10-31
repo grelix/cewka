@@ -18,27 +18,22 @@
     <ProjectReference Include="..\Cewka.Platform\Cewka.Platform.csproj" />
   </ItemGroup>
 
+  <!-- Testy podstawiaja atrape wyjscia i dekodera przez skladowe wewnetrzne. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Cewka.Audio.Tests" />
+    <InternalsVisibleTo Include="Cewka.App.Tests" />
+  </ItemGroup>
+
   <!--
-    Biblioteka natywna budowana skryptami z katalogu native/. Zachowanie ukladu
-    runtimes/{rid}/native pozwala publikacji jednoplikowej spakowac wlasciwy wariant
-    dla kazdej platformy; kopia w katalogu wyjsciowym obsluguje zwykle uruchomienie.
+    Biblioteka natywna budowana skryptami z katalogu native/, w ukladzie runtimes/{rid}/native,
+    w ktorym szuka jej NativeAudio. Projekt nie zna platformy docelowej (przy publikacji SDK
+    usuwa RuntimeIdentifier z referencji do biblioteki), wiec kopiuje wszystkie warianty;
+    wariant obcej platformy odrzuca dopiero publikacja w Cewka.App.csproj.
   -->
   <ItemGroup>
     <None Include="runtimes\**\*" Condition="Exists('runtimes')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>runtimes\%(RecursiveDir)%(Filename)%(Extension)</Link>
-    </None>
-  </ItemGroup>
-
-  <!--
-    Publikacja pod konkretna platforme kladzie biblioteke takze w korzeniu wyniku.
-    Powod: przy publikacji jednoplikowej pakowana jest zawartosc korzenia, a uklad
-    runtimes/{rid}/native sluzy wylacznie zwyklemu uruchomieniu z katalogu projektu.
-  -->
-  <ItemGroup Condition="'$(RuntimeIdentifier)' != '' And Exists('runtimes\$(RuntimeIdentifier)\native')">
-    <None Include="runtimes\$(RuntimeIdentifier)\native\*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>%(Filename)%(Extension)</Link>
     </None>
   </ItemGroup>
 

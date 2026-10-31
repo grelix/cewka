@@ -1,4 +1,4 @@
-using System.Globalization;
+using Cewka.App.Localisation;
 
 namespace Cewka.App.ViewModels;
 
@@ -13,8 +13,11 @@ public sealed class EqBandViewModel : ObservableObject
         _gain = gain;
     }
 
-    /// <summary>Frequency caption such as <c>125</c> or <c>16k</c>, or <c>PREAMP</c>.</summary>
+    /// <summary>Frequency caption such as <c>125</c> or <c>16k</c>, or <c>Preamp</c>.</summary>
     public string Label { get; }
+
+    /// <summary>Nazwa pasma dla czytnika ekranu, z jednostką: „125 Hz”, „16 kHz”.</summary>
+    public string AccessibleName => Label.EndsWith('k') ? $"{Label[..^1]} kHz" : $"{Label} Hz";
 
     /// <summary>Gain in decibels.</summary>
     public double Gain
@@ -29,7 +32,7 @@ public sealed class EqBandViewModel : ObservableObject
 
     /// <summary>
     /// Signed value with a true minus sign (U+2212) rather than a hyphen, matching the
-    /// design and keeping the column visually aligned in the monospaced font.
+    /// design and keeping the column aligned: the minus is as wide as the plus.
     /// </summary>
     public string GainText
     {
@@ -37,7 +40,10 @@ public sealed class EqBandViewModel : ObservableObject
         {
             var rounded = Math.Round(_gain * 2, MidpointRounding.AwayFromZero) / 2;
             var sign = rounded > 0 ? "+" : rounded < 0 ? "−" : string.Empty;
-            return sign + Math.Abs(rounded).ToString("F1", CultureInfo.InvariantCulture);
+            return sign + Math.Abs(rounded).ToString("F1", Strings.Current.Numbers);
         }
     }
+
+    /// <summary>Po zmianie języka: separator dziesiętny mógł się zmienić.</summary>
+    public void RefreshText() => Raise(nameof(GainText));
 }

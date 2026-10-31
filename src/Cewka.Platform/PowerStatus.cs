@@ -4,11 +4,8 @@ using System.Runtime.Versioning;
 namespace Cewka.Platform;
 
 /// <summary>
-/// Whether the machine is running on its battery.
-///
-/// <para>Używane wyłącznie do trybu automatycznego efektów: animowane tło i obracająca się płyta
-/// odświeżają się trzydzieści razy na sekundę, co na zasilaniu bateryjnym jest kosztem
-/// odczuwalnym, a przy zamkniętej pokrywie lub w tle — bezcelowym.</para>
+/// Czy komputer pracuje na baterii. Dla trybu automatycznego efektów, bo tło i płyta
+/// odświeżają się trzydzieści razy na sekundę.
 /// </summary>
 public static class PowerStatus
 {
@@ -44,28 +41,44 @@ public static class PowerStatus
         return status.AcLineStatus == 0;
     }
 
-    private static bool LinuxOnBattery()
+    private static bool LinuxOnBattery() => LinuxOnBattery("/sys/class/power_supply");
+
+    /// <summary>
+    /// Na baterii jest komputer, którego bateria systemowa się rozładowuje, a żadne źródło
+    /// zasilania nie jest podłączone.
+    ///
+    /// <para>Pułapka: sam wpis zasilacza sieciowego nie wystarcza. Przy ładowaniu przez USB-C
+    /// bywa on wyłączony, a zasilanie płynie wpisem typu USB. Bateria myszy czy słuchawek ma
+    /// zakres „Device” i nie mówi nic o komputerze.</para>
+    /// </summary>
+    internal static bool LinuxOnBattery(string root)
     {
-        const string root = "/sys/class/power_supply";
         if (!Directory.Exists(root)) return false;
 
-        var mains = false;
+        var discharging = false;
 
         foreach (var supply in Directory.EnumerateDirectories(root))
         {
-            var typeFile = Path.Combine(supply, "type");
-            if (!File.Exists(typeFile)) continue;
+            var type = Read(supply, "type");
 
-            if (File.ReadAllText(typeFile).Trim() != "Mains") continue;
-
-            mains = true;
-
-            var onlineFile = Path.Combine(supply, "online");
-            if (File.Exists(onlineFile) && File.ReadAllText(onlineFile).Trim() == "1") return false;
+            if (type == "Battery")
+            {
+                if (Read(supply, "scope") != "Device" && Read(supply, "status") == "Discharging")
+                    discharging = true;
+            }
+            else if (type is not null && Read(supply, "online") == "1")
+            {
+                return false;
+            }
         }
 
-        // Brak jakiegokolwiek zasilacza w systemie plików to komputer stacjonarny.
-        return mains;
+        return discharging;
+    }
+
+    private static string? Read(string supply, string name)
+    {
+        var file = Path.Combine(supply, name);
+        return File.Exists(file) ? File.ReadAllText(file).Trim() : null;
     }
 
     [StructLayout(LayoutKind.Sequential)]

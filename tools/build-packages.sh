@@ -6,9 +6,9 @@
 #   .pkg.tar.zst  Arch, Manjaro, EndeavourOS
 #
 # Wymaga: dpkg-deb, rpmbuild, bsdtar, zstd
-# Uzycie:  ./tools/build-packages.sh
+# Użycie:  ./tools/build-packages.sh
 #
-# Plik wykonywalny musi juz istniec — najpierw ./tools/publish-linux.sh
+# Plik wykonywalny musi już istnieć; najpierw ./tools/publish-linux.sh
 
 set -euo pipefail
 
@@ -27,26 +27,39 @@ if [ -z "$WERSJA" ]; then
     exit 1
 fi
 
-# Czy plik wykonywalny jest z TEJ wersji.
+# Czy plik wykonywalny jest z bieżącej wersji; po przerwanej publikacji zostaje poprzedni.
 #
-# Sprawdzenie samego istnienia pliku nie wystarcza i kosztowalo juz raz trzy pakiety nazwane
-# nowa wersja, a zawierajace poprzednia: publikacja przerwala sie bledem, stary plik zostal
-# na dysku, a pakowanie poszlo dalej jak gdyby nigdy nic. Numer wersji jest wpisany
-# w metadane zestawu, wiec wystepuje w pliku doslownie; jego brak znaczy, ze plik pochodzi
-# z innej kompilacji.
-if ! grep -a -q "$WERSJA" "$BINARKA"; then
-    echo "Plik $BINARKA nie zawiera numeru wersji $WERSJA." >&2
+# Pułapka: pakunek jest skompresowany poza deps.json, gdzie leży klucz "Cewka/<wersja>"
+# w cudzysłowach. Szukany jest dosłownie (-F), bo kropki w wyrażeniu pasowałyby do dowolnego
+# bajtu, a w danych skompresowanych przypadkowe trafienie jest niemal pewne.
+if ! grep -a -q -F "\"Cewka/$WERSJA\"" "$BINARKA"; then
+    echo "Plik $BINARKA nie pochodzi z wersji $WERSJA." >&2
     echo "Pochodzi z innej kompilacji — uruchom najpierw ./tools/publish-linux.sh" >&2
+    exit 1
+fi
+
+# Najnowsza wersja glibc wymagana przez bibliotekę natywną musi zgadzać się z zależnościami
+# pakietu .deb, żeby nowszy obraz maszyny budującej nie podniósł wymagania po cichu.
+GLIBC_MIN="2.34"
+BIBLIOTEKA="$REPO/src/Cewka.Audio/runtimes/linux-x64/native/libcewka_audio.so"
+if [ ! -f "$BIBLIOTEKA" ]; then
+    echo "Brak $BIBLIOTEKA — uruchom najpierw ./tools/publish-linux.sh" >&2
+    exit 1
+fi
+GLIBC_WYMAGANE="$(grep -a -o 'GLIBC_[0-9.]*[0-9]' "$BIBLIOTEKA" | sed 's/^GLIBC_//' | sort -V | tail -1)"
+if [ -n "$GLIBC_WYMAGANE" ] &&
+   [ "$(printf '%s\n%s\n' "$GLIBC_WYMAGANE" "$GLIBC_MIN" | sort -V | tail -1)" != "$GLIBC_MIN" ]; then
+    echo "Biblioteka natywna wymaga glibc $GLIBC_WYMAGANE, a pakiet deklaruje $GLIBC_MIN." >&2
+    echo "Nalezy podniesc GLIBC_MIN w tools/build-packages.sh." >&2
     exit 1
 fi
 
 OPIEKUN="Maciej Grela <51171746+grelix@users.noreply.github.com>"
 STRONA="https://github.com/grelix/cewka"
-SKROT="Minimalistyczny odtwarzacz plikow lokalnych"
+SKROT="Odtwarzacz plików muzycznych z korektorem i wyrównaniem głośności"
 
-# Budowanie odbywa sie w systemie plikow Linuksa, a nie na /mnt/c. Na NTFS nie da sie ustawic
-# wlasciciela ani praw dostepu, a pakiet z plikami nalezacymi do przypadkowego uzytkownika
-# i z prawami 777 jest bledem, ktory wychodzi dopiero przy instalacji u kogos innego.
+# Pułapka: budowanie w systemie plików Linuksa, nie na /mnt/c, bo na NTFS nie da się ustawić
+# właściciela ani praw dostępu i pakiet dostałby prawa 777.
 PRACA="$(mktemp -d /tmp/cewka-pakiety.XXXXXX)"
 trap 'rm -rf "$PRACA"' EXIT
 
@@ -55,7 +68,7 @@ echo "  katalog roboczy: $PRACA"
 echo
 
 # ---------------------------------------------------------------------------
-# Wspolne drzewo plikow, zgodne z FHS. Te same sciezki we wszystkich pakietach.
+# Wspólne drzewo plików zgodne z FHS, te same ścieżki we wszystkich pakietach.
 # ---------------------------------------------------------------------------
 przygotuj_drzewo() {
     local root="$1"
@@ -63,8 +76,7 @@ przygotuj_drzewo() {
     install -Dm755 "$BINARKA" "$root/usr/bin/cewka"
     install -Dm644 "$REPO/packaging/linux/cewka.desktop" "$root/usr/share/applications/cewka.desktop"
 
-    # Kazdy rozmiar w swoim katalogu motywu — tego wymaga specyfikacja katalogu ikon
-    # freedesktop i tylko wtedy pulpit bierze wariant narysowany dla danej wielkosci.
+    # Każdy rozmiar we własnym katalogu motywu, jak wymaga specyfikacja ikon freedesktop.
     local rozmiar
     for rozmiar in 48 64 128 256; do
         install -Dm644 "$REPO/packaging/linux/icons/cewka-$rozmiar.png" \
@@ -72,8 +84,7 @@ przygotuj_drzewo() {
     done
 }
 
-# Odswiezenie baz pulpitu. Bez tego wpis w menu pojawia sie dopiero po przelogowaniu,
-# a ikona bywa zastapiona znakiem zapytania.
+# Odświeżenie baz pulpitu; bez tego wpis w menu pojawia się dopiero po przelogowaniu.
 SKRYPT_PO_INSTALACJI='
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database -q /usr/share/applications || true
@@ -81,12 +92,14 @@ fi
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
     gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
 fi
-if command -v update-mime-database >/dev/null 2>&1; then
-    update-mime-database /usr/share/mime >/dev/null 2>&1 || true
-fi
 '
 
+# Znacznik czasu z zewnątrz, żeby ten sam materiał dawał ten sam pakiet.
+CZAS="${SOURCE_DATE_EPOCH:-$(date +%s)}"
+
+# Pakiety poprzednich wersji są usuwane, bo próbna instalacja bierze pliki z tego katalogu.
 mkdir -p "$WYNIK"
+rm -f "$WYNIK"/cewka_*.deb "$WYNIK"/cewka-*.rpm "$WYNIK"/cewka-*.pkg.tar.zst
 
 # ---------------------------------------------------------------------------
 # 1. Pakiet .deb
@@ -96,6 +109,7 @@ DEB="$PRACA/deb"
 przygotuj_drzewo "$DEB"
 
 install -Dm644 "$REPO/LICENSE" "$DEB/usr/share/doc/cewka/copyright"
+install -Dm644 "$REPO/THIRD-PARTY-NOTICES.txt" "$DEB/usr/share/doc/cewka/THIRD-PARTY-NOTICES.txt"
 mkdir -p "$DEB/DEBIAN"
 
 ROZMIAR_KB="$(du -sk "$DEB/usr" | cut -f1)"
@@ -108,16 +122,19 @@ Priority: optional
 Architecture: amd64
 Maintainer: $OPIEKUN
 Installed-Size: $ROZMIAR_KB
-Depends: libc6 (>= 2.34), libgcc-s1, libstdc++6, zlib1g, libx11-6, libxrandr2, libxi6, libfontconfig1
-Recommends: gstreamer1.0-plugins-good, gstreamer1.0-libav
+Depends: libc6 (>= $GLIBC_MIN), libgcc-s1, libstdc++6, zlib1g, libx11-6, libxrandr2, libxi6, libfontconfig1
+Recommends: gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-libav, libssl3t64 | libssl3
 Homepage: $STRONA
 Description: $SKROT
- Odtwarzacz plikow lokalnych z korektorem dziesieciopasmowym, wyrownaniem
- glosnosci wedlug EBU R128 oraz tlem skladanym z barw okladki. Nie wymaga
- zainstalowanego srodowiska .NET — cala zawartosc jest w jednym pliku.
+ Odtwarza pliki muzyczne i całe foldery z dysku. Kolejkę można zapisać jako
+ listę M3U. Ma korektor dziesięciopasmowy, pięć efektów (crossfeed,
+ kompensacja głośności, bas wirtualny, kompresja dynamiki, szerokość stereo)
+ i wyrównanie głośności według tagów ReplayGain albo pomiaru EBU R128.
+ Współpracuje z panelem multimediów pulpitu przez MPRIS.
  .
- Formaty MP3, FLAC, WAV, Ogg Vorbis i Opus obsluguje samodzielnie. Do AAC,
- M4A i ALAC potrzebuje GStreamera z pakietu gstreamer1.0-libav.
+ MP3, FLAC, WAV, Ogg Vorbis i Opus dekoduje sam. AAC, M4A i ALAC dekoduje
+ GStreamer: potok daje gstreamer1.0-plugins-base, kontener M4A
+ gstreamer1.0-plugins-good, a dekoder gstreamer1.0-libav.
 KONIEC
 
 cat > "$DEB/DEBIAN/postinst" <<KONIEC
@@ -136,7 +153,7 @@ KONIEC
 
 chmod 755 "$DEB/DEBIAN/postinst" "$DEB/DEBIAN/postrm"
 
-# --root-owner-group: pliki w pakiecie naleza do root, niezaleznie od tego, kto buduje.
+# --root-owner-group: pliki w pakiecie należą do root bez względu na to, kto buduje.
 dpkg-deb --root-owner-group --build "$DEB" "$WYNIK/cewka_${WERSJA}_amd64.deb" >/dev/null
 echo "      $(basename "$WYNIK/cewka_${WERSJA}_amd64.deb")"
 
@@ -149,15 +166,17 @@ mkdir -p "$RPM_ROOT"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 DRZEWO_RPM="$PRACA/rpm-drzewo"
 przygotuj_drzewo "$DRZEWO_RPM"
 
+# Data wpisu w %changelog z tego samego znacznika czasu. Nazwy dni i miesięcy po angielsku,
+# bo tylko takie przyjmuje rpmbuild.
+DATA_ZMIANY="$(LC_ALL=C date -u -d "@$CZAS" '+%a %b %d %Y')"
+
 cat > "$RPM_ROOT/SPECS/cewka.spec" <<KONIEC
-# Plik wykonywalny jest gotowy i samodzielny: pakiet niczego nie kompiluje.
-# Wylaczenie debuginfo i skryptow poinstalacyjnych rpmbuilda jest tu konieczne —
-# domyslne "strip" naruszylo by strukture jednoplikowego pakietu .NET.
+# Pułapka: debuginfo i skrypty poinstalacyjne rpmbuilda muszą być wyłączone, bo domyślny
+# "strip" uszkodziłby jednoplikowy pakunek .NET.
 %global debug_package %{nil}
 %global __os_install_post %{nil}
 %global __strip /bin/true
-# Bez tego rpm dokłada dowiazania w /usr/lib/.build-id, wyprowadzone z identyfikatora
-# kompilacji. Przy pakiecie z gotowym binarium nie sluza niczemu poza zasmiecaniem listy plikow.
+# Bez tego rpm dokłada dowiązania w /usr/lib/.build-id, zbędne przy gotowym pliku wykonywalnym.
 %global _build_id_links none
 
 Name:           cewka
@@ -169,23 +188,32 @@ URL:            $STRONA
 Packager:       $OPIEKUN
 BuildArch:      x86_64
 
-Requires:       glibc, libgcc, libstdc++, zlib, libX11, libXrandr, libXi, fontconfig
+Requires:       glibc >= $GLIBC_MIN, libgcc, libstdc++, zlib, libX11, libXrandr, libXi, fontconfig
+Recommends:     gstreamer1-plugins-base
 Recommends:     gstreamer1-plugins-good
+# Dekoder libav nazywa się w Fedorze inaczej niż w RPM Fusion; wystarczy którykolwiek.
+Recommends:     (gstreamer1-plugin-libav or gstreamer1-libav)
+Recommends:     openssl-libs
 
 %description
-Odtwarzacz plikow lokalnych z korektorem dziesieciopasmowym, wyrownaniem
-glosnosci wedlug EBU R128 oraz tlem skladanym z barw okladki. Nie wymaga
-zainstalowanego srodowiska .NET — cala zawartosc jest w jednym pliku.
+Odtwarza pliki muzyczne i całe foldery z dysku. Kolejkę można zapisać jako
+listę M3U. Ma korektor dziesięciopasmowy, pięć efektów (crossfeed,
+kompensacja głośności, bas wirtualny, kompresja dynamiki, szerokość stereo)
+i wyrównanie głośności według tagów ReplayGain albo pomiaru EBU R128.
+Współpracuje z panelem multimediów pulpitu przez MPRIS.
 
-Formaty MP3, FLAC, WAV, Ogg Vorbis i Opus obsluguje samodzielnie. Do AAC,
-M4A i ALAC potrzebuje GStreamera z dekoderem libav.
+MP3, FLAC, WAV, Ogg Vorbis i Opus dekoduje sam. AAC, M4A i ALAC dekoduje
+GStreamer: potok daje gstreamer1-plugins-base, kontener M4A
+gstreamer1-plugins-good, a dekoder pakiet libav.
 
 %install
 cp -a $DRZEWO_RPM/. %{buildroot}/
 install -Dm644 $REPO/LICENSE %{buildroot}/usr/share/licenses/cewka/LICENSE
+install -Dm644 $REPO/THIRD-PARTY-NOTICES.txt %{buildroot}/usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt
 
 %files
 %license /usr/share/licenses/cewka/LICENSE
+%license /usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt
 /usr/bin/cewka
 /usr/share/applications/cewka.desktop
 /usr/share/icons/hicolor/*/apps/cewka.png
@@ -197,7 +225,7 @@ $SKRYPT_PO_INSTALACJI
 $SKRYPT_PO_INSTALACJI
 
 %changelog
-* Mon Aug 17 2026 $OPIEKUN - $WERSJA-1
+* $DATA_ZMIANY $OPIEKUN - $WERSJA-1
 - Wydanie $WERSJA
 KONIEC
 
@@ -217,10 +245,9 @@ echo "[3/3] .pkg.tar.zst"
 ARCH_ROOT="$PRACA/arch"
 przygotuj_drzewo "$ARCH_ROOT"
 install -Dm644 "$REPO/LICENSE" "$ARCH_ROOT/usr/share/licenses/cewka/LICENSE"
+install -Dm644 "$REPO/THIRD-PARTY-NOTICES.txt" "$ARCH_ROOT/usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt"
 
 ROZMIAR_B="$(du -sb "$ARCH_ROOT" | cut -f1)"
-# Znacznik czasu przekazany z zewnatrz, zeby ten sam material dawal ten sam pakiet.
-CZAS="${SOURCE_DATE_EPOCH:-$(date +%s)}"
 
 cat > "$ARCH_ROOT/.PKGINFO" <<KONIEC
 pkgname = cewka
@@ -240,11 +267,13 @@ depend = libx11
 depend = libxrandr
 depend = libxi
 depend = fontconfig
-optdepend = gst-plugins-good: obsluga AAC, M4A i ALAC
-optdepend = gst-libav: obsluga AAC, M4A i ALAC
+optdepend = gst-plugins-base: potok dekodowania AAC, M4A i ALAC
+optdepend = gst-plugins-good: rozpakowanie kontenera M4A
+optdepend = gst-libav: dekoder AAC i ALAC
+optdepend = openssl: sprawdzanie nowszej wersji przez HTTPS
 KONIEC
 
-# Skrypt instalacyjny pacmana odswieza bazy pulpitu tak samo jak w pozostalych pakietach.
+# Skrypt instalacyjny pacmana odświeża bazy pulpitu jak w pozostałych pakietach.
 cat > "$ARCH_ROOT/.INSTALL" <<KONIEC
 post_install() {
 $SKRYPT_PO_INSTALACJI
@@ -259,10 +288,14 @@ post_remove() {
 }
 KONIEC
 
-# Kolejnosc wpisow ma znaczenie: pacman czyta .PKGINFO jako pierwszy element archiwum.
+# Powtarzalność: jeden czas modyfikacji i posortowana lista wpisów. Pułapka: pacman czyta
+# .PKGINFO jako pierwszy element archiwum.
+find "$ARCH_ROOT" -exec touch -h -d "@$CZAS" {} +
 (
     cd "$ARCH_ROOT"
-    bsdtar --uid 0 --gid 0 --numeric-owner -cf - .PKGINFO .INSTALL usr |
+    { printf '%s\n' .PKGINFO .INSTALL; find usr | LC_ALL=C sort; } > "$PRACA/arch-lista.txt"
+    bsdtar --uid 0 --gid 0 --numeric-owner --no-recursion --no-fflags --no-xattrs --no-acls \
+        -cf - -T "$PRACA/arch-lista.txt" |
         zstd -19 -q -o "$WYNIK/cewka-${WERSJA}-1-x86_64.pkg.tar.zst" -f
 )
 echo "      cewka-${WERSJA}-1-x86_64.pkg.tar.zst"

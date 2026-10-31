@@ -1,12 +1,8 @@
 namespace Cewka.Audio.Dsp;
 
 /// <summary>
-/// A second-order section in transposed direct form II.
-/// <para>
-/// That form is the right choice here because it keeps its state in the same order of
-/// magnitude as the signal itself, whereas direct form I accumulates the sum of several
-/// terms and loses precision faster in 32-bit arithmetic.
-/// </para>
+/// Sekcja drugiego rzędu w transponowanej postaci bezpośredniej II, która trzyma stan w rzędzie
+/// wielkości sygnału i traci mniej precyzji w arytmetyce 32-bitowej.
 /// </summary>
 public struct Biquad
 {
@@ -43,8 +39,9 @@ public struct Biquad
             return;
         }
 
-        // Keep the centre away from Nyquist: at 44.1 kHz the 16 kHz band sits close enough
-        // that the bilinear transform would warp it badly.
+        // Środek trzymany z dala od Nyquista, bo dzwon RBJ ma tam wymuszone 0 dB. Ogranicza to
+        // częstotliwość dopiero przy próbkowaniu poniżej około 35 kHz; przy 44,1 kHz pasmo
+        // 16 kHz zostaje na miejscu, z górnym zboczem ściśniętym przez Nyquista.
         var nyquist = sampleRate / 2;
         frequency = Math.Min(frequency, nyquist * 0.92);
 
@@ -63,14 +60,11 @@ public struct Biquad
     }
 
     /// <summary>
-    /// First stage of the K-weighting filter from ITU-R BS.1770-4: a high shelf standing in
-    /// for the acoustic effect of the head.
+    /// Pierwszy stopień filtru K z ITU-R BS.1770-4: półka górna.
     /// <para>
-    /// Deliberately not expressed through <see cref="SetHighShelf"/>. The cookbook form
-    /// normalises the numerator differently, which leaves a constant offset of a few
-    /// hundredths of a decibel — harmless in an equaliser, wrong in a meter whose whole
-    /// purpose is to agree with other meters. This derivation reproduces the coefficient
-    /// table in the specification exactly, at any sample rate.
+    /// Pułapka: nie przez <see cref="SetHighShelf"/>, bo postać z Audio EQ Cookbook inaczej
+    /// normalizuje licznik i zostawia stałe przesunięcie o setne części decybela, a miernik ma się
+    /// zgadzać z innymi. To wyprowadzenie odtwarza tabelę współczynników ze specyfikacji.
     /// </para>
     /// </summary>
     public void SetKWeightingShelf(double sampleRate)
@@ -114,6 +108,14 @@ public struct Biquad
     /// <summary>High-shelf in the Audio EQ Cookbook form. Not used by the loudness meter.</summary>
     public void SetHighShelf(double frequency, double q, double gainDb, double sampleRate)
     {
+        // Półka blisko Nyquista nie ma sensu, a powyżej niego staje się niestabilna albo
+        // podbija całe pasmo. Przy niskim próbkowaniu zostaje więc przepustem.
+        if (Math.Abs(gainDb) < 1e-6 || frequency >= sampleRate * 0.45)
+        {
+            SetCoefficients(1, 0, 0, 1, 0, 0);
+            return;
+        }
+
         var a = Math.Pow(10, gainDb / 40);
         var w0 = 2 * Math.PI * frequency / sampleRate;
         var cosW0 = Math.Cos(w0);
@@ -130,8 +132,8 @@ public struct Biquad
     }
 
     /// <summary>
-    /// Low-shelf in the Audio EQ Cookbook form. Używany przez kompensację głośności, która
-    /// podnosi bas tym mocniej, im ciszej gra muzyka.
+    /// Półka dolna według Audio EQ Cookbook. Używa jej kompensacja głośności, która podnosi bas
+    /// tym mocniej, im ciszej gra muzyka.
     /// </summary>
     public void SetLowShelf(double frequency, double q, double gainDb, double sampleRate)
     {
@@ -140,6 +142,9 @@ public struct Biquad
             SetCoefficients(1, 0, 0, 1, 0, 0);
             return;
         }
+
+        var nyquist = sampleRate / 2;
+        frequency = Math.Min(frequency, nyquist * 0.92);
 
         var a = Math.Pow(10, gainDb / 40);
         var w0 = 2 * Math.PI * frequency / sampleRate;
@@ -203,6 +208,9 @@ public struct Biquad
     /// <summary>High-pass, used by the second stage of the K-weighting filter.</summary>
     public void SetHighPass(double frequency, double q, double sampleRate)
     {
+        var nyquist = sampleRate / 2;
+        frequency = Math.Min(frequency, nyquist * 0.92);
+
         var w0 = 2 * Math.PI * frequency / sampleRate;
         var cosW0 = Math.Cos(w0);
         var alpha = Math.Sin(w0) / (2 * q);
@@ -240,5 +248,22 @@ public struct Biquad
     {
         _s1 = 0;
         _s2 = 0;
+    }
+
+    /// <summary>
+    /// Wołane raz na bufor. Zeruje stan, który przestał być liczbą skończoną, bo jedno NaN
+    /// zostałoby w nim na zawsze, oraz stan wygasły do poziomu, na którym w ciszy cyfrowej
+    /// przeszedłby w liczby subnormalne, kosztowne w każdej operacji.
+    /// </summary>
+    public void Sanitise()
+    {
+        if (!double.IsFinite(_s1) || !double.IsFinite(_s2))
+        {
+            Reset();
+            return;
+        }
+
+        if (Math.Abs(_s1) < 1e-25) _s1 = 0;
+        if (Math.Abs(_s2) < 1e-25) _s2 = 0;
     }
 }

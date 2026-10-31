@@ -6,9 +6,8 @@ using Cewka.Platform;
 namespace Cewka.App.Services;
 
 /// <summary>
-/// Loads and saves <see cref="AppSettings"/>. Writes are debounced because the UI
-/// touches settings on every slider move, and they are atomic so that a crash
-/// mid-write cannot leave an unreadable file behind.
+/// Wczytuje i zapisuje <see cref="AppSettings"/>. Zapis jest odkładany, bo interfejs zmienia
+/// ustawienia przy każdym ruchu suwaka, i niepodzielny, żeby awaria nie zostawiła urwanego pliku.
 /// </summary>
 public sealed class SettingsStore
 {
@@ -38,12 +37,11 @@ public sealed class SettingsStore
     public AppSettings Current { get; private set; }
 
     /// <summary>
-    /// Reads the single-instance preference before the framework starts.
+    /// Odczytuje ustawienie jednej kopii przed startem Avalonii, bo kopia oddająca pliki nie może
+    /// budować okna.
     /// <para>
-    /// The decision has to be made in <c>Main</c>, before Avalonia is initialised, because a
-    /// copy that is handing its files over must never build a window. Constructing the whole
-    /// store there is not an option — it owns a dispatcher timer, and the dispatcher does not
-    /// exist yet.
+    /// Pułapka: pełnego magazynu nie da się tu utworzyć, bo ma zegar dyspozytora, a dyspozytora
+    /// jeszcze nie ma.
     /// </para>
     /// </summary>
     public static bool ReadSingleInstanceFlag()
@@ -72,23 +70,21 @@ public sealed class SettingsStore
         _debounce.Start();
     }
 
+    /// <summary>Zapis jest zamówiony i czeka na zegar.</summary>
+    internal bool SavePending => _debounce.IsEnabled;
+
     /// <summary>Writes immediately. Called on shutdown, where a debounce would be lost.</summary>
     public void SaveNow()
     {
         _debounce.Stop();
         _dirty = false;
 
+        if (_readFailed && !MayOverwrite()) return;
+
         try
         {
-            var directory = Path.GetDirectoryName(_path);
-            if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
-
-            var json = JsonSerializer.Serialize(Current, SettingsJsonContext.Default.AppSettings);
-
-            // Write beside the target then swap, so a partial write never replaces good data.
-            var temporary = _path + ".tmp";
-            File.WriteAllText(temporary, json);
-            File.Move(temporary, _path, overwrite: true);
+            Current.SchemaVersion = AppSettings.CurrentSchema;
+            AtomicFile.Write(_path, JsonSerializer.Serialize(Current, SettingsJsonContext.Default.AppSettings));
         }
         catch (Exception ex)
         {
@@ -97,26 +93,142 @@ public sealed class SettingsStore
         }
     }
 
-    private static AppSettings Load(string path)
+    /// <summary>Plik istniał, ale przy starcie nie dał się przeczytać, więc obowiązują domyślne.</summary>
+    private bool _readFailed;
+
+    /// <summary>Ponowny odczyt pokazał plik w całości; zostaje nietknięty do końca sesji.</summary>
+    private bool _keepFile;
+
+    /// <summary>
+    /// Plik zablokowany przy starcie przez program antywirusowy albo kopię zapasową ma zwykle
+    /// poprawną treść, a zapis domyślnych by ją zniszczył. Przed pierwszym zapisem plik jest
+    /// czytany jeszcze raz: poprawny zostaje bez zmian, nadal zablokowany czeka na następny
+    /// zapis, a uszkodzony trafia do kopii obok.
+    /// </summary>
+    private bool MayOverwrite()
     {
+        if (_keepFile) return false;
+
+        string json;
         try
         {
-            if (!File.Exists(path)) return new AppSettings();
+            json = File.ReadAllText(_path);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            _readFailed = false;
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"[cewka] ustawienia nadal niedostępne, zapis odłożony: {ex.Message}");
+            return false;
+        }
 
-            var json = File.ReadAllText(path);
+        try
+        {
+            JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings);
+            Console.Error.WriteLine("[cewka] plik ustawień jest poprawny; zmiany z tej sesji nie zostaną zapisane");
+            _keepFile = true;
+            return false;
+        }
+        catch (Exception)
+        {
+            KeepCopy(_path);
+            _readFailed = false;
+            return true;
+        }
+    }
+
+    private AppSettings Load(string path)
+    {
+        if (!File.Exists(path)) return Defaults();
+
+        string json;
+        try
+        {
+            json = ReadWithRetry(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"[cewka] nie udało się odczytać ustawień, użyto domyślnych: {ex.Message}");
+            _readFailed = true;
+            return Defaults();
+        }
+
+        try
+        {
             var loaded = JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings);
-            return Sanitise(loaded ?? new AppSettings());
+            return Sanitise(Migrate(loaded ?? Defaults()));
         }
         catch (Exception ex)
         {
+            // Nieznana wartość z nowszej wersji albo błąd ręcznej edycji. Domyślne ustawienia
+            // obowiązują tylko w tej sesji; oryginał zostaje obok pod osobną nazwą.
             Console.Error.WriteLine($"[cewka] ustawienia nieczytelne, użyto domyślnych: {ex.Message}");
-            return new AppSettings();
+            KeepCopy(path);
+            return Defaults();
         }
+    }
+
+    private static AppSettings Defaults() => new() { SchemaVersion = AppSettings.CurrentSchema };
+
+    /// <summary>Plik bywa chwilowo zablokowany przez program antywirusowy albo synchronizację.</summary>
+    private static string ReadWithRetry(string path)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return File.ReadAllText(path);
+            }
+            catch (IOException) when (attempt < 3)
+            {
+                Thread.Sleep(100);
+            }
+        }
+    }
+
+    private static void KeepCopy(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Copy(path, $"{path}.bad-{DateTime.Now:yyyyMMdd-HHmmss}", overwrite: false);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cewka] nie udało się zachować kopii ustawień: {ex.Message}");
+        }
+    }
+
+    /// <summary>Przenosi plik zapisany przez starszą wersję do bieżącego znaczenia pól.</summary>
+    private static AppSettings Migrate(AppSettings s)
+    {
+        if (s.SchemaVersion < 1)
+        {
+            // W schemacie 0 głośność jest wzmocnieniem liniowym, a wyciszenie zeruje ją samą.
+            if (s.Volume <= 0)
+            {
+                s.IsMuted = true;
+                s.Volume = 0.5;
+            }
+            else
+            {
+                s.Volume = VolumeCurve.FromGain(s.Volume);
+            }
+        }
+
+        s.SchemaVersion = AppSettings.CurrentSchema;
+        return s;
     }
 
     /// <summary>Repairs values that a hand-edited or older file could get wrong.</summary>
     private static AppSettings Sanitise(AppSettings s)
     {
+        s.EqualiserGains ??= new double[10];
+        s.Language ??= "auto";
+
         s.Volume = Math.Clamp(s.Volume, 0, 1);
         s.Preamp = Math.Clamp(s.Preamp, -12, 12);
 

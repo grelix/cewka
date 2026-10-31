@@ -1,107 +1,109 @@
 # Cewka
 
-A minimalist music player for Linux and Windows. A single file, no installer,
-no .NET runtime required.
+A minimalist music player for Linux and Windows. A single file, no installer and no separate
+.NET runtime.
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-0.8.1-brightgreen)
+![Version](https://img.shields.io/badge/version-0.9.0-brightgreen)
 
 *[Wersja polska](README.md)*
 
-![Cewka — dark theme](docs/obrazy/cewka-ciemny.png)
-
-![Cewka — light theme](docs/obrazy/cewka-jasny.png)
+![Cewka with the dark theme](docs/obrazy/cewka-ciemny.png)
 
 ## Why I built this
 
 I couldn't find a configurable, good-looking music player for my Fedora setup, so I wrote one
-myself. I wanted something that just plays files from disk, has an equalizer, and looks good —
-no library, no account, no service integrations.
+myself. I wanted something that just plays files from disk, has an equalizer and looks good,
+without a library, an account or service integrations.
 
-I wrote the code with help from Claude Code, which wrote automated tests and hunted for bugs.
+You open files or whole folders, it puts them in a queue and plays them. The window background
+takes its colors from the album cover.
 
-## What Cewka can do
+![Cewka with the light theme](docs/obrazy/cewka-jasny.png)
 
-- **Formats**: MP3, FLAC, WAV, Ogg Vorbis, Opus, and through system codecs also AAC, M4A, and ALAC
-- **Gapless playback** and click-free seeking
-- **Ten-band equalizer** with a preamp and a soft limiter on the output
-- **Five effects**: crossfeed for headphones, loudness compensation for quiet listening, virtual
-  bass, dynamic range limiting and stereo widening. Each has a strength slider from 0 to 10, and
-  each is off by default
-- **The equaliser and the queue show independently** — press `Q` and `L`, or use the buttons in
-  the title bar. The window then goes back to the size it had before
-- **Volume normalization** using ReplayGain tags or its own EBU R128 analysis, with a choice
-  of target level (−23, −18, or −14 LUFS)
-- **M3U playlists** — the queue can be saved and loaded, including in another player
-- **Background from cover art colors**, animated to the beat; the blobs breathe independently
-  of one another, and the colour intensity has three settings
-- **Light and dark theme**, following the system by default
-- **Seventeen languages**: Polish, English, Czech, German, Greek, Spanish, French, Hungarian,
-  Indonesian, Italian, Dutch, Portuguese, Romanian, Russian, Turkish, Ukrainian, and Vietnamese
-- **Desktop integration**: media panel (MPRIS on Linux, an overlay on Windows),
-  media keys, single instance with file handoff
-- **Update check** — on demand or at start-up, off by default. This is the only place the
-  application touches the network: one question to GitHub for the number of the latest
-  release, no more than once a day
-- **Settings**: output device, buffer size, sample rate conversion quality, seek step,
-  restoring the previous session, default cover colours (eleven pairs, or a fresh one for every
-  track), what happens to a file opened from the file manager
+## Features
 
-<img src="docs/obrazy/cewka-ustawienia.png" width="640" alt="Settings">
+- MP3, FLAC, WAV, Ogg Vorbis and Opus. AAC, M4A and ALAC through the system codecs: Media
+  Foundation on Windows, GStreamer on Linux.
+- Gapless playback.
+- Ten-band equalizer with a preamp and a limiter.
+- Five effects, all off by default: headphone crossfeed, loudness compensation for quiet
+  listening, virtual bass, dynamic range compression and stereo widening.
+- Volume leveling from ReplayGain tags or Cewka's own EBU R128 measurement, to −23, −18 or
+  −14 LUFS.
+- M3U playlists.
+- Light and dark themes, seventeen interface languages.
+- System media panel (MPRIS on Linux, the overlay on Windows) and media keys.
+- Keyboard and screen reader support.
+- Update check, off by default. It is the only time Cewka goes online: it asks GitHub for the
+  latest release number, at most once a day.
+
+The equalizer with effects and the queue are shown with the buttons in the top right corner or
+with the Q and L keys. The other shortcuts are listed in Settings, under About.
+
+![Cewka with the equalizer, effects and queue](docs/obrazy/cewka-pelny.png)
+
+<img src="docs/obrazy/cewka-ustawienia.png" width="640" alt="Settings window">
 
 ## Installation
 
-Packages are on the [releases page](https://github.com/grelix/cewka/releases). After installation
-the app shows up in the application menu.
+Packages are on the [releases page](https://github.com/grelix/cewka/releases). After installing,
+Cewka shows up in the application menu.
 
-**Fedora, RHEL, openSUSE**
+Fedora, RHEL, openSUSE:
 
 ```bash
-sudo dnf install ./cewka-0.8.1-1.x86_64.rpm
+sudo dnf install ./cewka-0.9.0-1.x86_64.rpm
 ```
 
-**Debian, Ubuntu, Linux Mint**
+Debian, Ubuntu, Linux Mint:
 
 ```bash
-sudo apt install ./cewka_0.8.1_amd64.deb
+sudo apt install ./cewka_0.9.0_amd64.deb
 ```
 
-**Arch, Manjaro**
+Arch, Manjaro:
 
 ```bash
-sudo pacman -U cewka-0.8.1-1-x86_64.pkg.tar.zst
+sudo pacman -U cewka-0.9.0-1-x86_64.pkg.tar.zst
 ```
 
-**Windows**
+On Windows, download `Cewka.exe` and run it. The file isn't signed, so SmartScreen will warn you
+the first time. You can check the download against `SHA256SUMS.txt` from the release, for
+example with `Get-FileHash Cewka.exe` in PowerShell.
 
-Just download `Cewka.exe` and run it. No installer needed.
+### AAC, M4A and ALAC on Linux
 
-The file is not signed with a certificate, so Windows will show a SmartScreen warning the first
-time it runs. You can confirm where the file came from with its checksum — every release ships
-a `SHA256SUMS.txt`, and `Get-FileHash Cewka.exe` in PowerShell gives you the hash to compare.
-
-### AAC, M4A, and ALAC on Linux
-
-These three formats are handled by GStreamer, and the AAC decoder comes from a separate package.
-Without it the other formats work fine.
+These formats need the libav decoder for GStreamer. Everything else works without it.
 
 ```bash
-sudo dnf install gstreamer1-libav        # Fedora (from RPM Fusion)
+sudo dnf install gstreamer1-libav        # Fedora, from RPM Fusion
 sudo apt install gstreamer1.0-libav      # Debian, Ubuntu
 sudo pacman -S gst-libav                 # Arch
 ```
 
-## How it's built
+## Building
 
-C# and [Avalonia UI](https://avaloniaui.net/), audio through [miniaudio](https://miniaud.io/)
-with a custom interop layer. Decoders: miniaudio for MP3, FLAC, and WAV,
-[NVorbis](https://github.com/NVorbis/NVorbis) for Ogg Vorbis,
-[Concentus](https://github.com/lostromb/concentus) for Opus, and for the remaining formats
-Media Foundation on Windows and GStreamer on Linux.
+You need the .NET 9 SDK and a C compiler: gcc on Linux, Visual Studio Build Tools on Windows.
+
+```bash
+./native/build-linux.sh
+dotnet run --project src/Cewka.App -- ~/Music/Album
+```
+
+`./tools/publish-linux.sh` and `./tools/build-packages.sh` build the single-file release and the
+packages. On Windows use `native\build-windows.cmd` and `tools\publish-windows.cmd`.
+
+## What it's made of
+
+C# and [Avalonia](https://avaloniaui.net/). Audio goes through [miniaudio](https://miniaud.io/),
+which also decodes MP3, FLAC and WAV. Ogg Vorbis is handled by [NVorbis](https://github.com/NVorbis/NVorbis),
+Opus by [Concentus](https://github.com/lostromb/concentus), and everything else by the system codecs.
 
 ## License
 
-MIT — full text in [LICENSE](LICENSE). The embedded Cantarell and JetBrains Mono fonts are
-licensed under the SIL Open Font License 1.1; details in [docs/licencje.md](docs/licencje.md)
-(in Polish).
+MIT, see [LICENSE](LICENSE). Third-party notices are in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt),
+with a list of components in [docs/licencje.md](docs/licencje.md) (in Polish). The screenshots show
+the 1924 recording of Rhapsody in Blue with the cover of the first sheet music edition, which is in
+the public domain.

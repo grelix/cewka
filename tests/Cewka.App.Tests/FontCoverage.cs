@@ -5,15 +5,8 @@ namespace Cewka.App.Tests;
 /// <summary>
 /// Odczytuje z pliku fontu zbiór znaków, które ten font potrafi narysować.
 ///
-/// <para><b>Dlaczego własny odczyt, a nie biblioteka.</b> Potrzebna jest jedna informacja:
-/// czy dany znak ma w foncie odpowiadający mu glif. Tablica <c>cmap</c>, która to opisuje, jest
-/// opisana w specyfikacji OpenType i jej odczyt zajmuje kilkadziesiąt linii — mniej niż
-/// dobranie i utrzymanie zależności, a przy tym bez ryzyka, że biblioteka zgłosi obecność glifu
-/// zastępczego jako obecność znaku.</para>
-///
-/// <para>Obsługiwane są podtablice w formacie 4 (znaki z podstawowej płaszczyzny) i 12 (pełny
-/// zakres). Inne formaty pochodzą z fontów sprzed dwudziestu lat i nie występują w tym, co
-/// program osadza.</para>
+/// <para>Wystarcza odczyt tablicy <c>cmap</c> z OpenType, w podtablicach formatu 4 (płaszczyzna
+/// podstawowa) i 12 (pełny zakres); innych osadzone fonty nie mają.</para>
 /// </summary>
 internal sealed class FontCoverage
 {

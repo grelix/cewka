@@ -1,14 +1,13 @@
 using Avalonia;
+using Avalonia.Animation;
 using Avalonia.Controls;
 using Avalonia.Media;
 
 namespace Cewka.App.Controls;
 
 /// <summary>
-/// A soft highlight that follows the pointer across the record, standing in for the
-/// mock's <c>mix-blend-mode: screen</c> layer. Avalonia has no blend modes for vector
-/// content, so this is a plain translucent white gradient — over the dark disc the
-/// difference is not visible, and over the light theme it stays subtle by design.
+/// Miękka poświata idąca za kursorem po płycie. Avalonia nie ma trybów mieszania dla grafiki
+/// wektorowej, więc to zwykły półprzezroczysty biały gradient.
 /// </summary>
 public sealed class DiscGlow : Control
 {
@@ -28,6 +27,12 @@ public sealed class DiscGlow : Control
     public DiscGlow()
     {
         IsHitTestVisible = false;
+
+        // Poświata gaśnie płynnie także wtedy, gdy kursor opuszcza obszar odtwarzacza jednym ruchem.
+        Transitions =
+        [
+            new DoubleTransition { Property = IntensityProperty, Duration = TimeSpan.FromMilliseconds(220) },
+        ];
     }
 
     /// <summary>Pointer position in this control's coordinates.</summary>

@@ -6,13 +6,13 @@ using Cewka.Audio.Devices;
 namespace Cewka.AudioProbe;
 
 /// <summary>
-/// Developer tool for checking the audio layer against real files.
+/// Narzędzie deweloperskie do sprawdzania warstwy dźwięku na prawdziwych plikach.
 ///
-/// Uzycie:
-///   dotnet run --project tools/Cewka.AudioProbe -- [katalog-z-muzyka]
+/// Użycie:
+///   dotnet run --project tools/Cewka.AudioProbe -- [katalog-z-muzyką]
 ///
-/// Sprawdza: warstwe natywna, liste urzadzen, otwarcie urzadzenia (na ciszy, bez dzwieku)
-/// oraz dekodowanie po jednym pliku z kazdego napotkanego formatu.
+/// Sprawdza warstwę natywną, listę urządzeń, otwarcie urządzenia (na ciszy, bez dźwięku)
+/// i dekodowanie po jednym pliku z każdego napotkanego formatu.
 /// </summary>
 internal static class Program
 {
@@ -112,8 +112,7 @@ internal static class Program
             if (!DecodeOne(format, path)) failures++;
         }
 
-        // Nie ma pliku Opus w bibliotece - trzeba go wytworzyc, zeby ta sciezka nie zostala
-        // niesprawdzona. Concentus potrafi kodowac, wiec wystarczy do siebie samego.
+        // Bez pliku Opus w katalogu plik powstaje na miejscu; Concentus potrafi też kodować.
         if (found.All(f => f.Format != AudioFileFormat.Opus))
         {
             Section("Opus (plik wygenerowany na potrzeby testu)");
@@ -137,9 +136,8 @@ internal static class Program
     private static IEnumerable<(AudioFileFormat Format, string Path)> PickOnePerFormat(string root)
     {
         var seen = new HashSet<AudioFileFormat>();
-        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
 
-        foreach (var path in Directory.EnumerateFiles(root, "*", options).Order())
+        foreach (var path in FilesInOrder(root))
         {
             var extension = Path.GetExtension(path).ToLowerInvariant();
             if (!AudioFileFormatDetector.SupportedExtensions.Contains(extension) &&
@@ -154,6 +152,29 @@ internal static class Program
 
             if (seen.Count >= 8) yield break;
         }
+    }
+
+    /// <summary>
+    /// Pliki w stałej kolejności, sortowane w obrębie każdego katalogu. Globalne sortowanie
+    /// całego drzewa musiałoby najpierw przejść całą bibliotekę, zanim zwróci pierwszy plik.
+    /// </summary>
+    private static IEnumerable<string> FilesInOrder(string directory)
+    {
+        var options = new EnumerationOptions { IgnoreInaccessible = true };
+
+        // Dowiązania do katalogów pomijane, żeby pętla dowiązań nie zapętliła rekurencji.
+        var directories = new EnumerationOptions
+        {
+            IgnoreInaccessible = true,
+            AttributesToSkip = FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint,
+        };
+
+        foreach (var file in Directory.EnumerateFiles(directory, "*", options).Order(StringComparer.Ordinal))
+            yield return file;
+
+        foreach (var subdirectory in Directory.EnumerateDirectories(directory, "*", directories).Order(StringComparer.Ordinal))
+        foreach (var file in FilesInOrder(subdirectory))
+            yield return file;
     }
 
     private static bool DecodeOne(AudioFileFormat format, string path)

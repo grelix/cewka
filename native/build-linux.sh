@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 # Buduje libcewka_audio.so dla linux-x64.
-# Wymaga wylacznie kompilatora C (gcc lub clang).
+# Wymaga wyłącznie kompilatora C (gcc lub clang).
 #
-# Naglowki ALSA, PulseAudio ani PipeWire nie sa potrzebne: miniaudio deklaruje ich symbole
-# samo i laduje biblioteki przez dlopen dopiero w czasie dzialania. Sprawdzone na czystej
-# instalacji Ubuntu 24.04 w WSL - kompilacja przechodzi bez zadnego pakietu deweloperskiego,
-# a wybor zaplecza (tam PulseAudio) nastepuje przy otwarciu urzadzenia.
+# Nagłówki ALSA i PulseAudio nie są potrzebne: miniaudio samo deklaruje ich symbole
+# i ładuje biblioteki przez dlopen w czasie działania, a zaplecze wybiera przy otwarciu urządzenia.
 
 set -euo pipefail
 
@@ -20,13 +18,19 @@ fi
 
 mkdir -p "${OUT_DIR}"
 
-# -fPIC          kod niezalezny od polozenia, wymagany dla bibliotek wspoldzielonych
+# -fPIC          kod niezależny od położenia, wymagany dla bibliotek współdzielonych
 # -O2            optymalizacja
-# -fvisibility   domyslnie ukryte symbole; eksportowane sa tylko oznaczone w kodzie
+# -fvisibility   domyślnie ukryte symbole; eksportowane są tylko oznaczone w kodzie
+# -fstack-protector-strong  kontrola przepełnienia stosu bez względu na domyślne ustawienia
+#                kompilatora w dystrybucji; biblioteka dekoduje niezaufane pliki
+# -z relro,now,noexecstack  tablice przemieszczeń tylko do odczytu, stos bez prawa wykonania
+# CFLAGS i LDFLAGS   flagi dystrybucji (makepkg, dpkg); _FORTIFY_SOURCE przychodzi z nich
 # -lpthread -lm -ldl  wymagane przez miniaudio
-"${CC}" -shared -fPIC -O2 -fvisibility=hidden \
+# shellcheck disable=SC2086
+"${CC}" ${CFLAGS:-} -shared -fPIC -O2 -fvisibility=hidden -fstack-protector-strong \
     -o "${OUT_DIR}/libcewka_audio.so" \
     "${SCRIPT_DIR}/cewka_audio.c" \
+    ${LDFLAGS:-} -Wl,-z,relro,-z,now,-z,noexecstack \
     -lpthread -lm -ldl
 
 echo "[ok] Zbudowano: ${OUT_DIR}/libcewka_audio.so"
