@@ -18,6 +18,11 @@
     <ProjectReference Include="..\Cewka.Platform\Cewka.Platform.csproj" />
   </ItemGroup>
 
+  <!-- Testy silnika podstawiaja atrape wyjscia i dekodera przez skladowe wewnetrzne. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Cewka.Audio.Tests" />
+  </ItemGroup>
+
   <!--
     Biblioteka natywna budowana skryptami z katalogu native/. Zachowanie ukladu
     runtimes/{rid}/native pozwala publikacji jednoplikowej spakowac wlasciwy wariant
