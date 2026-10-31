@@ -58,9 +58,8 @@ public class LoudnessAnalyserTests
     }
 
     /// <summary>
-    /// The relative gate must ignore long silences. A track that is loud for five seconds
-    /// and silent for twenty-five should measure the same as the loud part alone — this is
-    /// exactly what stops quiet intros from dragging a whole album down.
+    /// Długa cisza nie zaniża pomiaru. Ciszę cyfrową odrzuca bramka bezwzględna; bramkę
+    /// względną sprawdzają testy poniżej.
     /// </summary>
     [Fact]
     public void LongSilenceDoesNotDragTheMeasurementDown()
@@ -78,6 +77,42 @@ public class LoudnessAnalyserTests
         Assert.NotNull(reference);
         Assert.NotNull(gated);
         Assert.InRange(gated!.Value, reference!.Value - 0.5, reference.Value + 0.5);
+    }
+
+    /// <summary>
+    /// Przypadek 3 z EBU Tech 3341: 10 s przy −36 dBFS, 60 s przy −23 dBFS, 10 s przy −36 dBFS.
+    /// Ciche odcinki leżą ponad bramką bezwzględną, ale pod względną, więc wynik to −23,0 LUFS;
+    /// bez bramki względnej wyszłoby około −24,2.
+    /// </summary>
+    [Fact]
+    public void RelativeGateMatchesEbuTech3341Case3()
+    {
+        var analyser = new LoudnessAnalyser(SampleRate, Channels);
+        FeedSine(analyser, 1000, Math.Pow(10, -36.0 / 20), 10);
+        FeedSine(analyser, 1000, Math.Pow(10, -23.0 / 20), 60);
+        FeedSine(analyser, 1000, Math.Pow(10, -36.0 / 20), 10);
+
+        var measured = analyser.ComputeIntegratedLoudness();
+
+        Assert.NotNull(measured);
+        Assert.InRange(measured!.Value, -23.1, -22.9);
+    }
+
+    /// <summary>
+    /// Cichy fragment ponad bramką bezwzględną, a pod względną, nie zaniża pomiaru:
+    /// 10 s przy −20 dBFS i 30 s przy −45 dBFS mierzy −20 LUFS, a nie około −26.
+    /// </summary>
+    [Fact]
+    public void QuietPassageBelowTheRelativeGateIsIgnored()
+    {
+        var analyser = new LoudnessAnalyser(SampleRate, Channels);
+        FeedSine(analyser, 1000, Math.Pow(10, -20.0 / 20), 10);
+        FeedSine(analyser, 1000, Math.Pow(10, -45.0 / 20), 30);
+
+        var measured = analyser.ComputeIntegratedLoudness();
+
+        Assert.NotNull(measured);
+        Assert.InRange(measured!.Value, -20.3, -19.7);
     }
 
     /// <summary>ReplayGain 2.0 normalises to −18 LUFS.</summary>
