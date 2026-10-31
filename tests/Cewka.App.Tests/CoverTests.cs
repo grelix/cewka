@@ -54,6 +54,40 @@ public sealed class CoverTests
     });
 
     [Fact]
+    public void KilkaBarwnychPikseliNaSzarejOkladceNieBarwiPalety() => Ui.Run(() =>
+    {
+        var pixels = Grey(48 * 48);
+        for (var i = 0; i < 12; i++)
+            (pixels[i * 4], pixels[i * 4 + 1], pixels[i * 4 + 2]) = ((byte)0, (byte)0, (byte)255);
+
+        Assert.Equal(CoverPalette.Extract(null, darkTheme: true), CoverPalette.FromPixels(pixels, darkTheme: true));
+    });
+
+    [Fact]
+    public void SzumBarwnyNaSzarejOkladceNieBarwiPalety() => Ui.Run(() =>
+    {
+        var random = new Random(20261031);
+        var pixels = Grey(48 * 48);
+        for (var i = 0; i < pixels.Length; i += 4)
+        for (var channel = 0; channel < 3; channel++)
+            pixels[i + channel] = (byte)(128 + random.Next(-12, 13));
+
+        Assert.Equal(CoverPalette.Extract(null, darkTheme: false), CoverPalette.FromPixels(pixels, darkTheme: false));
+    });
+
+    private static byte[] Grey(int count)
+    {
+        var pixels = new byte[count * 4];
+        for (var i = 0; i < pixels.Length; i += 4)
+        {
+            pixels[i] = pixels[i + 1] = pixels[i + 2] = 128;
+            pixels[i + 3] = 255;
+        }
+
+        return pixels;
+    }
+
+    [Fact]
     public void PrzewiniecieNieRysujeOkladkiOdNowa() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();

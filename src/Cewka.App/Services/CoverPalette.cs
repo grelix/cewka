@@ -139,23 +139,29 @@ public static class CoverPalette
             sums[bucket] = (sums[bucket].R + r, sums[bucket].G + g, sums[bucket].B + b);
         }
 
-        var order = Enumerable.Range(0, counts.Length)
-            .Where(index => counts[index] > 0)
-            .OrderByDescending(index => counts[index])
-            .Take(Count)
-            .ToArray();
+        // Kilka barwnych pikseli na czarno-białej okładce (mały napis, szum JPEG) nie może
+        // zabarwić całego tła, więc kubełek musi mieć udział w całym obrazie, a jego średnia
+        // nie może być szara: szum wokół szarości uśrednia się z powrotem do szarości.
+        var least = Math.Max(1, pixels.Length / 4 * MinimumSharePercent / 100);
 
-        return order
-            .Select(index =>
-            {
-                var count = counts[index];
-                return Enrich(Color.FromRgb(
-                    (byte)(sums[index].R / count),
-                    (byte)(sums[index].G / count),
-                    (byte)(sums[index].B / count)), darkTheme, saturation);
-            })
+        return Enumerable.Range(0, counts.Length)
+            .Where(index => counts[index] >= least)
+            .Select(index => (Count: counts[index], Colour: Average(sums[index], counts[index])))
+            .Where(bucket => !IsGrey(bucket.Colour))
+            .OrderByDescending(bucket => bucket.Count)
+            .Take(Count)
+            .Select(bucket => Enrich(bucket.Colour, darkTheme, saturation))
             .ToArray();
     }
+
+    /// <summary>Najmniejszy udział kubełka w obrazie, w procentach.</summary>
+    private const int MinimumSharePercent = 1;
+
+    private static Color Average((long R, long G, long B) sum, int count) =>
+        Color.FromRgb((byte)(sum.R / count), (byte)(sum.G / count), (byte)(sum.B / count));
+
+    private static bool IsGrey(Color colour) =>
+        Math.Max(colour.R, Math.Max(colour.G, colour.B)) - Math.Min(colour.R, Math.Min(colour.G, colour.B)) < GreyChroma;
 
     /// <summary>
     /// Keeps the hue the cover gave and rewrites the rest.
