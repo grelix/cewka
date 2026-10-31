@@ -102,11 +102,25 @@ internal sealed class OpusDecoder : ManagedDecoderBase
             // Through the factory rather than the constructor: it can hand back a native
             // implementation where one is available, and the constructor is deprecated.
             var decoder = OpusCodecFactory.CreateDecoder(OpusSampleRate, _sourceChannels);
-            return new OpusOggReadStream(decoder, _stream);
+            var reader = new OpusOggReadStream(decoder, _stream);
+
+            // Czytnik nie rzuca wyjątku przy złym pliku, tylko zapisuje opis błędu.
+            if (!string.IsNullOrEmpty(reader.LastError))
+            {
+                DecoderFailures.Log($"Concentus nie otworzył pliku: {reader.LastError}");
+                throw DecoderFailures.Create(DecoderFailure.DamagedFile);
+            }
+
+            return reader;
+        }
+        catch (AudioException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            throw new AudioException($"Plik Opus jest uszkodzony lub nieczytelny — {ex.Message}", ex);
+            DecoderFailures.Log($"Concentus nie otworzył pliku: {ex.Message}");
+            throw DecoderFailures.Create(DecoderFailure.DamagedFile, ex);
         }
     }
 
