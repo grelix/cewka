@@ -58,14 +58,15 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:SettingsSection">
-                <Button Classes="option wide" Classes.on="{Binding IsSelected}"
+                <c:OptionButton Classes="option wide" Classes.on="{Binding IsSelected}" IsSelected="{Binding IsSelected}"
+                                AutomationProperties.Name="{Binding Label}"
                         Click="OnSectionClick"
                         Height="32"
                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
                   <TextBlock Text="{Binding Label}" FontSize="12"
                              TextTrimming="CharacterEllipsis"
                              Foreground="{Binding $parent[Button].Foreground}" />
-                </Button>
+                </c:OptionButton>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
@@ -113,6 +114,7 @@
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding ShowFormatBadge, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingFormatBadge}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
@@ -134,7 +136,8 @@
                       </ItemsControl.ItemsPanel>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:PaletteOption">
-                          <Button Classes="option wide" Classes.on="{Binding IsSelected}"
+                          <c:OptionButton Classes="option wide" Classes.on="{Binding IsSelected}" IsSelected="{Binding IsSelected}"
+                                AutomationProperties.Name="{Binding Label}"
                                   Click="OnPaletteClick"
                                   Width="168" Height="34" Margin="0,0,8,6"
                                   HorizontalContentAlignment="Left">
@@ -146,7 +149,7 @@
                                          TextTrimming="CharacterEllipsis"
                                          Foreground="{Binding $parent[Button].Foreground}" />
                             </StackPanel>
-                          </Button>
+                          </c:OptionButton>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -173,7 +176,8 @@
                       </ItemsControl.ItemsPanel>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:SegmentOption">
-                          <Button Classes="option wide" Classes.on="{Binding IsSelected}"
+                          <c:OptionButton Classes="option wide" Classes.on="{Binding IsSelected}" IsSelected="{Binding IsSelected}"
+                                AutomationProperties.Name="{Binding Label}"
                                   Click="OnLanguageClick"
                                   Width="168" Height="30" Margin="0,0,8,6"
                                   HorizontalContentAlignment="Left">
@@ -183,7 +187,7 @@
                                          TextTrimming="CharacterEllipsis"
                                          Foreground="{Binding $parent[Button].Foreground}" />
                             </StackPanel>
-                          </Button>
+                          </c:OptionButton>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -229,7 +233,8 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="vm:DeviceOption">
-                            <Button Classes="option wide" Classes.on="{Binding IsSelected}"
+                            <c:OptionButton Classes="option wide" Classes.on="{Binding IsSelected}" IsSelected="{Binding IsSelected}"
+                                AutomationProperties.Name="{Binding Label}"
                                     Click="OnDeviceClick"
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
                               <StackPanel Orientation="Horizontal" Spacing="9">
@@ -238,7 +243,7 @@
                                            TextTrimming="CharacterEllipsis"
                                            Foreground="{Binding $parent[Button].Foreground}" />
                               </StackPanel>
-                            </Button>
+                            </c:OptionButton>
                           </DataTemplate>
                         </ItemsControl.ItemTemplate>
                       </ItemsControl>
@@ -265,6 +270,7 @@
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding NormalisationEnabled, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate OptionNormalisation}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
@@ -283,6 +289,7 @@
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding AlwaysAnalyse, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate OptionAlwaysAnalyse}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
@@ -295,6 +302,7 @@
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding LimiterEnabled, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate OptionLimiter}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
@@ -323,6 +331,7 @@
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding RestoreSessionEnabled, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingRestoreSession}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
@@ -354,6 +363,7 @@
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding MediaKeysEnabled, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingMediaKeys}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
@@ -366,6 +376,7 @@
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding SingleInstanceEnabled, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingSingleInstance}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
@@ -421,6 +432,29 @@
                   </StackPanel>
                 </Border>
 
+                <!-- Skróty klawiszowe okna głównego. -->
+                <Border Classes="section">
+                  <StackPanel Spacing="10">
+                    <TextBlock Classes="setting-label" Text="{l:Translate AboutShortcuts}" />
+                    <ItemsControl x:Name="ShortcutList" ItemsSource="{Binding Shortcuts}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Spacing="5" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ShortcutRow">
+                          <Grid ColumnDefinitions="150,*" ColumnSpacing="12">
+                            <TextBlock Grid.Column="0" Classes="dim" Text="{Binding Keys}" FontSize="11.5"
+                                       FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock Grid.Column="1" Classes="setting-hint" Text="{Binding Action}" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Border>
+
                 <!--
                   Karta druga: sprawdzanie nowszego wydania. Jedyna rzecz w tej zakladce, ktora
                   cokolwiek robi — przycisk i przelacznik. Karta pierwsza podaje fakty do
@@ -450,6 +484,7 @@
                       </StackPanel>
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding CheckForUpdatesEnabled, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingUpdateCheck}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />

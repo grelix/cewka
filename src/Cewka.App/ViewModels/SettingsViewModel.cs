@@ -699,6 +699,43 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         Raise(nameof(LicenceText));
         Raise(nameof(LatencyDescription));
         Raise(nameof(ActiveDeviceName));
+        Raise(nameof(Shortcuts));
+    }
+
+    /// <summary>
+    /// Skróty klawiszowe okna głównego dla zakładki „O programie”. Nazwy klawiszy Spacja, Ctrl
+    /// i Delete pochodzą ze słownika, bo na klawiaturach w innych językach są podpisane inaczej.
+    /// </summary>
+    public IReadOnlyList<ShortcutRow> Shortcuts
+    {
+        get
+        {
+            var s = Strings.Current;
+            var ctrl = s["KeyCtrl"];
+
+            return
+            [
+                new(s["KeySpace"], s["ShortcutPlayPause"]),
+                new("← →", s["ShortcutSeek"]),
+                new($"{ctrl}+← {ctrl}+→", s["ShortcutTrack"]),
+                new("↑ ↓", s["TooltipVolume"]),
+                new("M", s["ShortcutMute"]),
+                new("S", s["ShortcutShuffle"]),
+                new("R", s["ShortcutRepeat"]),
+                new("Q", s["ShortcutPanel"]),
+                new("L", s["Queue"]),
+                new("T", s["SettingTheme"]),
+                new("F11", s["ShortcutFullScreen"]),
+                new("Esc", s["ShortcutEscape"]),
+                new($"{ctrl}+O", s["OpenFiles"]),
+                new($"{ctrl}+Shift+O", s["OpenFolder"]),
+                new($"{ctrl}+,", s["Settings"]),
+                new("Enter", s["ShortcutQueuePlay"]),
+                new(s["KeyDelete"], s["ShortcutQueueRemove"]),
+                new("Alt+↑ Alt+↓", s["ShortcutQueueMove"]),
+                new($"{ctrl}+Z", s["ShortcutUndo"]),
+            ];
+        }
     }
 
     private void MarkCurrentValues()
@@ -734,3 +771,6 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         _player.PropertyChanged -= _playerWatcher;
     }
 }
+
+/// <summary>Jeden wiersz listy skrótów: klawisze i to, co robią.</summary>
+public sealed record ShortcutRow(string Keys, string Action);
