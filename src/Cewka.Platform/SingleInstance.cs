@@ -55,6 +55,7 @@ public sealed class SingleInstance : IDisposable
     private readonly object _gate = new();
     private readonly List<string[]> _pending = [];
     private Action<string[]>? _receiver;
+    private bool _stopped;
     private bool _disposed;
 
     /// <summary>
@@ -325,16 +326,28 @@ public sealed class SingleInstance : IDisposable
         }
     }
 
-    public void Dispose()
+    /// <summary>
+    /// Przestaje przyjmować ścieżki, ale rolę zostawia do <see cref="Dispose"/>. Kopia uruchomiona
+    /// w tym czasie nie połączy się, więc czeka na zwolnienie blokady i sama otwiera swoje pliki.
+    /// </summary>
+    public void StopListening()
     {
-        if (_disposed) return;
-        _disposed = true;
+        if (_stopped) return;
+        _stopped = true;
 
         _stop.Cancel();
 
         // Zamknięcie kanału zdejmuje wątek stojący na przyjęciu połączenia.
         _channel.Dispose();
         _listener.Join(500);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        StopListening();
 
         // Po awarii procesu blokadę zwolni jądro.
         _lock.Dispose();

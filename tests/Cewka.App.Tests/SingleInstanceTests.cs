@@ -241,6 +241,39 @@ public sealed class SingleInstanceTests : IDisposable
         Assert.NotNull(next);
     }
 
+    /// <summary>
+    /// Zamykana kopia przestaje słuchać, zanim zapisze kolejkę, ale rolę oddaje dopiero po
+    /// zapisie. Kopia uruchomiona w tym czasie czeka na rolę i otwiera plik sama, zamiast oddać
+    /// go kopii, która już niczego nie przyjmie.
+    /// </summary>
+    [Fact]
+    public void KopiaUruchomionaWTrakcieZamykaniaPrzejmujeRole()
+    {
+        var address = Temporary();
+
+        var instance = SingleInstance.TryAcquire(address);
+        Assert.NotNull(instance);
+        instance.StopListening();
+
+        Assert.False(SingleInstance.TryHandOff(address, ["/muzyka/utwor.mp3"]));
+
+        // Zapis kończy się w trakcie startu następnej kopii, która dopiero wtedy dostaje rolę.
+        var release = new Thread(() =>
+        {
+            Thread.Sleep(300);
+            instance.Dispose();
+        });
+
+        release.Start();
+
+        var claim = SingleInstance.Start(address, ["/muzyka/utwor.mp3"]);
+        release.Join();
+
+        using var next = claim.Instance;
+        Assert.False(claim.HandedOver);
+        Assert.NotNull(next);
+    }
+
     [Fact]
     public void PrzekazanieDoNikogoSieNieUdaje()
     {

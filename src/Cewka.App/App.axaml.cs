@@ -136,12 +136,20 @@ public partial class App : Application
 
     private static bool _closing;
 
-    /// <summary>Stops taking paths from other copies once the window starts closing.</summary>
-    internal static void BeginClosing() => _closing = true;
+    /// <summary>
+    /// Przestaje przyjmować ścieżki od innych kopii, gdy okno zaczyna się zamykać. Kopia
+    /// uruchomiona w trakcie zapisu dostaje odmowę i czeka na rolę, zamiast oddać plik oknu,
+    /// które go już nie doda.
+    /// </summary>
+    internal static void BeginClosing()
+    {
+        _closing = true;
+        Instance?.StopListening();
+    }
 
     /// <summary>
     /// Oddaje rolę działającej kopii dopiero po zapisaniu kolejki i ustawień, bo następna kopia
-    /// czyta je z dysku. Ścieżki przysłane w trakcie zapisu przepadają.
+    /// czyta je z dysku.
     /// </summary>
     internal static void ReleaseSingleInstance()
     {
