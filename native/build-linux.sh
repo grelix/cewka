@@ -23,8 +23,12 @@ mkdir -p "${OUT_DIR}"
 # -fPIC          kod niezalezny od polozenia, wymagany dla bibliotek wspoldzielonych
 # -O2            optymalizacja
 # -fvisibility   domyslnie ukryte symbole; eksportowane sa tylko oznaczone w kodzie
+# -fstack-protector-strong  kontrola przepelnienia bufora na stosie, niezaleznie od domyslnych
+#                ustawien kompilatora w danej dystrybucji; biblioteka dekoduje niezaufane pliki
+# -z relro,now,noexecstack  tablice przemieszczen tylko do odczytu, stos bez prawa wykonania
 # -lpthread -lm -ldl  wymagane przez miniaudio
-"${CC}" -shared -fPIC -O2 -fvisibility=hidden \
+"${CC}" -shared -fPIC -O2 -fvisibility=hidden -fstack-protector-strong \
+    -Wl,-z,relro,-z,now,-z,noexecstack \
     -o "${OUT_DIR}/libcewka_audio.so" \
     "${SCRIPT_DIR}/cewka_audio.c" \
     -lpthread -lm -ldl

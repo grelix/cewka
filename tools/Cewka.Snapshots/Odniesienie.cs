@@ -56,8 +56,10 @@ internal static class Odniesienie
 
     /// <summary>
     /// Zwraca <c>true</c>, gdy wygląd zgadza się z odniesieniem. Brak pliku odniesienia nie jest
-    /// błędem: obraz zostaje zapisany, a przebieg mówi wprost, że powstało nowe odniesienie —
-    /// inaczej pierwsze uruchomienie zawsze kończyłoby się porażką.
+    /// tu błędem: obraz zostaje zapisany jako nowy wzorzec do przejrzenia i dodania do repozytorium.
+    /// Pułapka: w potoku CI checkout jest ulotny, więc taki wzorzec powstawałby co przebieg od nowa
+    /// i niczego nie pilnował. Dlatego tests.yml kończy przebieg błędem, gdy katalog odniesienia
+    /// się zmienił.
     /// </summary>
     public static bool Porownaj(string katalogZrzutow, string katalogOdniesienia, string katalogRoznic)
     {

@@ -137,9 +137,8 @@ internal static class Program
     private static IEnumerable<(AudioFileFormat Format, string Path)> PickOnePerFormat(string root)
     {
         var seen = new HashSet<AudioFileFormat>();
-        var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
 
-        foreach (var path in Directory.EnumerateFiles(root, "*", options).Order())
+        foreach (var path in FilesInOrder(root))
         {
             var extension = Path.GetExtension(path).ToLowerInvariant();
             if (!AudioFileFormatDetector.SupportedExtensions.Contains(extension) &&
@@ -154,6 +153,29 @@ internal static class Program
 
             if (seen.Count >= 8) yield break;
         }
+    }
+
+    /// <summary>
+    /// Pliki w stałej kolejności, sortowane w obrębie każdego katalogu. Globalne sortowanie
+    /// całego drzewa musiałoby najpierw przejść całą bibliotekę, zanim zwróci pierwszy plik.
+    /// </summary>
+    private static IEnumerable<string> FilesInOrder(string directory)
+    {
+        var options = new EnumerationOptions { IgnoreInaccessible = true };
+
+        // Dowiązania do katalogów pomijane, żeby pętla dowiązań nie zapętliła rekurencji.
+        var directories = new EnumerationOptions
+        {
+            IgnoreInaccessible = true,
+            AttributesToSkip = FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint,
+        };
+
+        foreach (var file in Directory.EnumerateFiles(directory, "*", options).Order(StringComparer.Ordinal))
+            yield return file;
+
+        foreach (var subdirectory in Directory.EnumerateDirectories(directory, "*", directories).Order(StringComparer.Ordinal))
+        foreach (var file in FilesInOrder(subdirectory))
+            yield return file;
     }
 
     private static bool DecodeOne(AudioFileFormat format, string path)
