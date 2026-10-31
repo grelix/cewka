@@ -89,14 +89,22 @@ internal static class Signals
 
     public static double Db(double ratio) => 20 * Math.Log10(ratio);
 
+    public delegate void BlockProcessor(Span<float> buffer, int frames);
+
     /// <summary>Przepuszcza sygnał przez stopień kawałkami o zadanej długości, jak wątek dźwięku.</summary>
-    public static void ProcessInBlocks(IAudioProcessor processor, float[] buffer, int blockFrames)
+    public static void ProcessInBlocks(IAudioProcessor processor, float[] buffer, int blockFrames) =>
+        ProcessInBlocks(processor.Process, buffer, blockFrames);
+
+    public static void ProcessInBlocks(AudioGraph graph, float[] buffer, int blockFrames) =>
+        ProcessInBlocks(graph.Process, buffer, blockFrames);
+
+    public static void ProcessInBlocks(BlockProcessor process, float[] buffer, int blockFrames)
     {
         var frames = buffer.Length / Channels;
         for (var start = 0; start < frames; start += blockFrames)
         {
             var count = Math.Min(blockFrames, frames - start);
-            processor.Process(buffer.AsSpan(start * Channels, count * Channels), count);
+            process(buffer.AsSpan(start * Channels, count * Channels), count);
         }
     }
 }

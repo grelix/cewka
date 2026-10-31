@@ -22,15 +22,13 @@ public interface ITrackGainSource
 }
 
 /// <summary>
-/// The signal chain, in order: loudness normalisation, equaliser with its preamp, limiter,
-/// analysis tap, master volume.
+/// The signal chain, in order: loudness normalisation, loudness compensation, equaliser with
+/// its preamp, effects, analysis tap, master volume, limiter.
 ///
-/// <para><b>Dlaczego taka kolejność.</b> Normalizacja idzie pierwsza, bo wyrównuje materiał
-/// przed jakąkolwiek korekcją — inaczej ten sam ruch suwaka dawałby inny efekt na cichym
-/// i na głośnym nagraniu. Limiter stoi za korektorem, bo to korektor wytwarza przesterowanie,
-/// przed którym limiter ma chronić. Analiza sygnału jest przed regulacją głośności, żeby
-/// fala na ekranie odpowiadała muzyce, a nie ustawieniu pokrętła. Głośność jest ostatnia,
-/// bo ma być zwykłym mnożnikiem, którego nic już nie modyfikuje.</para>
+/// <para>Normalizacja idzie pierwsza, bo wyrównuje materiał przed jakąkolwiek korekcją. Analiza
+/// sygnału jest przed głośnością, żeby fala na ekranie odpowiadała muzyce, a nie pokrętłu.
+/// Limiter stoi na samym końcu, za głośnością: chroni przed przesterowaniem rzeczywistego
+/// wyjścia, a po ściszeniu podbicia korektora i kompensacji zwykle mieszczą się w skali.</para>
 /// </summary>
 public sealed class AudioGraph
 {
@@ -102,9 +100,9 @@ public sealed class AudioGraph
         Crossfeed.Process(buffer, frames);
         DynamicRange.Process(buffer, frames);
 
-        Limiter.Process(buffer, frames);
         Analyser.Process(buffer, frames);
         Volume.Process(buffer, frames);
+        Limiter.Process(buffer, frames);
     }
 
     /// <summary>
