@@ -109,12 +109,64 @@ public class PlaybackEngineTests
     }
 
     /// <summary>
+    /// Nieobsługiwany ostatni wpis: dekoder zgłosił go i zapisał koniec kolejki. Usunięcie
+    /// innego wiersza nie przewija słyszanego utworu i nie próbuje otworzyć tego pliku ponownie.
+    /// </summary>
+    [Fact]
+    public void RemovingAnotherRowAfterAnUnsupportedLastEntryLeavesPlaybackAlone()
+    {
+        using var h = new EngineHarness();
+        var z = h.Track("z", 10, C);
+        var a = h.Track("a", 0.3, A);
+        var x = h.Unsupported("x");
+
+        StartLastTrackDecodedToTheEnd(h, [z, a, x], startIndex: 1);
+        EngineHarness.WaitUntil(() => h.Failures.Count == 1);
+
+        h.Engine.RemoveAt(0);
+        Assert.False(h.Engine.IsSeeking);
+
+        h.PumpUntil(() => h.Finished == 1);
+        h.PumpPeriods(20);
+
+        Assert.Equal(new[] { "a.wav" }, h.Opened.ToArray());
+        Assert.Single(h.Failures);
+    }
+
+    /// <summary>
+    /// Plik dodany za nieobsługiwanym ostatnim wpisem gra po słyszanym utworze bez przerwy,
+    /// a nieobsługiwany nie zostaje zgłoszony drugi raz.
+    /// </summary>
+    [Fact]
+    public void TrackAddedAfterAnUnsupportedLastEntryPlaysWithoutReportingItAgain()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var x = h.Unsupported("x");
+        var b = h.Track("b", 0.3, B);
+
+        StartLastTrackDecodedToTheEnd(h, [a, x]);
+        EngineHarness.WaitUntil(() => h.Failures.Count == 1);
+
+        h.Engine.Enqueue([b]);
+        h.PumpUntil(() => h.Finished == 1);
+        h.PumpPeriods(20);
+
+        Assert.True(EngineHarness.CountFrames(h.Output.Samples, B) > EngineHarness.Frames(0.25));
+        Assert.Equal(new[] { "a.wav", "b.wav" }, h.Opened.ToArray());
+        Assert.Single(h.Failures);
+    }
+
+    /// <summary>
     /// Utwór krótszy od bufora: dekoder dochodzi do końca pliku i zapisuje koniec kolejki,
     /// zanim cokolwiek zagra.
     /// </summary>
-    private static void StartLastTrackDecodedToTheEnd(EngineHarness h, string track)
+    private static void StartLastTrackDecodedToTheEnd(EngineHarness h, string track) =>
+        StartLastTrackDecodedToTheEnd(h, [track]);
+
+    private static void StartLastTrackDecodedToTheEnd(EngineHarness h, string[] queue, int startIndex = 0)
     {
-        h.Engine.SetQueue([track]);
+        h.Engine.SetQueue(queue, startIndex);
         h.PumpUntil(() => !h.Engine.IsSeeking);
         EngineHarness.WaitUntil(() => h.Engine.EndOfQueueBuffered);
         Assert.True(h.Engine.EndOfQueueBuffered);

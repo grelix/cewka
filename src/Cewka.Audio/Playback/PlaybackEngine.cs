@@ -504,18 +504,33 @@ public sealed class PlaybackEngine : IDisposable
     /// <summary>
     /// W ostatnim pół sekundy utworu dekoder ma już otwarty następny albo zapisał koniec
     /// kolejki. Gdy zmiana kolejki sprawia, że następnym jest inny wpis, bufor kończy się
-    /// niewłaściwie; przewinięcie słyszanego utworu w miejscu opróżnia go i każe dekoderowi
-    /// wybrać następny od nowa.
+    /// niewłaściwie. Gdy następny jest już otwarty, przewinięcie słyszanego utworu w miejscu
+    /// opróżnia bufor i każe dekoderowi wybrać następny od nowa; za zapisanym końcem kolejki
+    /// dekoder dopisuje nowy wpis bez przerwy.
     /// </summary>
     private void RevalidatePrefetchLocked()
     {
         var heard = _current.Entry;
-        var decoding = _session?.Entry;
+        var session = _session;
+        var decoding = session?.Entry;
 
         // W trakcie przewinięcia słyszany wpis jest nieaktualny, a dekoder otwiera właśnie cel.
-        if (IsSeeking || _ended || heard is null || ReferenceEquals(heard, decoding)) return;
+        if (IsSeeking || _ended || heard is null || session is null || ReferenceEquals(heard, decoding)) return;
 
         var expected = Repeat == RepeatMode.Track ? heard : FollowingEntryLocked(heard, userInitiated: false);
+
+        if (decoding is null)
+        {
+            // Koniec kolejki bywa zapisany po wpisach, których nie dało się otworzyć; dekoder
+            // już je zgłosił i pominął.
+            var left = _queue.Count;
+            while (expected is { IsUnsupported: true } or { OpenFailure: not null })
+                expected = left-- > 0 ? FollowingEntryLocked(expected, userInitiated: false) : null;
+
+            Volatile.Write(ref session.ContinueWith, expected);
+            return;
+        }
+
         if (ReferenceEquals(expected, decoding)) return;
 
         RequestSeekLocked(heard, FramesFrom(Position));
@@ -1008,7 +1023,11 @@ public sealed class PlaybackEngine : IDisposable
 
                     if (_seekPending) { HandleSeek(session); continue; }
 
-                    if (session.Decoder is null) { Thread.Sleep(10); continue; }
+                    if (session.Decoder is null)
+                    {
+                        if (!ContinueAfterEnd(session)) Thread.Sleep(10);
+                        continue;
+                    }
                     if (session.Ring.SpaceAvailable < DecodeChunkFrames) { Thread.Sleep(3); continue; }
 
                     PumpOneChunk(session);
@@ -1114,6 +1133,7 @@ public sealed class PlaybackEngine : IDisposable
             frame = Interlocked.Read(ref _seekTargetFrame);
             generation = _generation;
             _seekPending = false;
+            session.ContinueWith = null;
 
             if (entry is not null && !_queue.Contains(entry)) entry = null;
 
@@ -1321,6 +1341,29 @@ public sealed class PlaybackEngine : IDisposable
         ThreadPool.UnsafeQueueUserWorkItem(_ => FinishPlayback(generation), null);
     }
 
+    /// <summary>
+    /// Po zapisaniu końca kolejki pojawił się następny wpis. Dopóki odtwarzanie nie minęło
+    /// znacznika końca, znacznik się wycofuje, a nowy utwór dopisuje do bufora bez przerwy.
+    /// </summary>
+    private bool ContinueAfterEnd(FeederSession session)
+    {
+        var next = Interlocked.Exchange(ref session.ContinueWith, null);
+        if (next is null) return false;
+
+        lock (session.BoundaryLock)
+        {
+            // Znacznik końca jest ostatnią granicą, bo po nim dekoder niczego nie zapisał.
+            var boundaries = session.Boundaries;
+            if (boundaries.Count == 0 || !boundaries.Last().IsEnd) return true;
+
+            for (var kept = boundaries.Count - 1; kept > 0; kept--) boundaries.Enqueue(boundaries.Dequeue());
+            boundaries.Dequeue();
+        }
+
+        OpenFirstPlayable(session, next, gapless: true);
+        return true;
+    }
+
     private bool TryOpen(FeederSession session, QueueEntry entry, out TrackFailure failure)
     {
         try
@@ -1409,6 +1452,9 @@ public sealed class PlaybackEngine : IDisposable
 
         /// <summary>Wpis otwarty albo właśnie otwierany przez dekoder; zapisywany pod blokadą kolejki.</summary>
         public volatile QueueEntry? Entry;
+
+        /// <summary>Wpis, który ma zagrać za zapisanym już końcem kolejki; ustawiany pod blokadą kolejki.</summary>
+        public QueueEntry? ContinueWith;
 
         public float[] Buffer = [];
     }
