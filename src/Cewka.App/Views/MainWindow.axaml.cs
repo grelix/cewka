@@ -1178,32 +1178,60 @@ public partial class MainWindow : Window
 
         if (!dragged || source < 0) return;
 
-        var target = IndexAt(e.GetPosition(QueueList));
-        if (target < 0) target = _viewModel.Queue.Count - 1;
+        var target = DropIndexAt(e.GetPosition(QueueList));
 
-        if (target != source)
+        if (target >= 0 && target != source)
         {
             _viewModel.MoveInQueue(source, target);
 
-            // Przeciagniety wiersz zostaje zaznaczony, zeby nie zgubic go z oczu.
+            // Przeciągnięty wiersz zostaje zaznaczony, żeby nie zgubić go z oczu.
             QueueList.SelectedIndex = target;
         }
 
         e.Handled = true;
     }
 
-    /// <summary>Finds the queue row under a point, or −1 when the point is past the last one.</summary>
+    /// <summary>Wiersz kolejki pod punktem albo −1, gdy punkt nie trafia w żaden wiersz.</summary>
     private int IndexAt(Point position)
     {
         for (var i = 0; i < _viewModel.Queue.Count; i++)
         {
-            if (QueueList.ContainerFromIndex(i) is not Control container) continue;
-
-            var top = container.TranslatePoint(new Point(0, 0), QueueList)?.Y ?? container.Bounds.Y;
-            if (position.Y >= top && position.Y <= top + container.Bounds.Height) return i;
+            if (RowSpan(i) is not (var top, var bottom)) continue;
+            if (position.Y >= top && position.Y <= bottom) return i;
         }
 
         return -1;
+    }
+
+    /// <summary>
+    /// Miejsce upuszczenia przeciąganego wiersza: najbliższy wiersz, także w szczelinie między
+    /// wierszami i pod ostatnim. Poza listą −1, wtedy przeciąganie niczego nie przenosi.
+    /// </summary>
+    private int DropIndexAt(Point position)
+    {
+        if (!new Rect(QueueList.Bounds.Size).Contains(position)) return -1;
+
+        var nearest = -1;
+        var best = double.MaxValue;
+
+        for (var i = 0; i < _viewModel.Queue.Count; i++)
+        {
+            if (RowSpan(i) is not (var top, var bottom)) continue;
+
+            var distance = position.Y < top ? top - position.Y : Math.Max(0, position.Y - bottom);
+            if (distance < best) (nearest, best) = (i, distance);
+        }
+
+        return nearest;
+    }
+
+    /// <summary>Górna i dolna krawędź wiersza w układzie listy; nic dla wiersza bez kontenera.</summary>
+    private (double Top, double Bottom)? RowSpan(int index)
+    {
+        if (QueueList.ContainerFromIndex(index) is not Control container) return null;
+
+        var top = container.TranslatePoint(new Point(0, 0), QueueList)?.Y ?? container.Bounds.Y;
+        return (top, top + container.Bounds.Height);
     }
 
     // ================= Skroty klawiszowe =================

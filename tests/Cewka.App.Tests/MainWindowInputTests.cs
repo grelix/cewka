@@ -283,6 +283,66 @@ public sealed class MainWindowInputTests
         });
     }
 
+    private static void Drag(Window window, Point start, Point end)
+    {
+        window.MouseDown(start, MouseButton.Left);
+        window.MouseMove(start + new Point(0, 10), RawInputModifiers.LeftMouseButton);
+        window.MouseMove(end, RawInputModifiers.LeftMouseButton);
+        window.MouseUp(end, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    private static Point Bottom(Visual control, Window window) =>
+        control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height), window)!.Value;
+
+    [Fact]
+    public void UpuszczenieWSzczelinieTrafiaWNajblizszyWiersz()
+    {
+        Ui.Run(() =>
+        {
+            var (window, h) = Open(tracks: 4);
+
+            try
+            {
+                var order = h.Player.Queue.ToArray();
+
+                // Zaznaczony wiersz ma obramowanie i jest wyższy, więc położenie wierszy liczy się po zaznaczeniu.
+                Click(window, Centre(Row(window, 0), window));
+                Settle(window);
+
+                // Środek dwupikselowej szczeliny między wierszami 1 i 2; przy równej odległości wygrywa wyższy.
+                Drag(window, Centre(Row(window, 0), window), Bottom(Row(window, 1), window) + new Point(0, 1));
+                Assert.Equal([order[1], order[0], order[2], order[3]], h.Player.Queue);
+
+                // Pod ostatnim wierszem, wciąż w liście: na koniec.
+                Drag(window, Centre(Row(window, 0), window), Bottom(Row(window, 3), window) + new Point(0, 30));
+                Assert.Equal([order[0], order[2], order[3], order[1]], h.Player.Queue);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void UpuszczenieNadListaNiczegoNiePrzenosi()
+    {
+        Ui.Run(() =>
+        {
+            var (window, h) = Open(tracks: 3);
+
+            try
+            {
+                var order = h.Player.Queue.ToArray();
+                var list = Queue(window);
+                var above = list.TranslatePoint(new Point(list.Bounds.Width / 2, -6), window)!.Value;
+
+                Drag(window, Centre(Row(window, 1), window), above);
+
+                Assert.Equal(order, h.Player.Queue);
+            }
+            finally { window.Close(); }
+        });
+    }
+
     [Fact]
     public void TabPrzechodziOdBlokuOdtwarzaniaPrzezKolejkeDoPasa()
     {
