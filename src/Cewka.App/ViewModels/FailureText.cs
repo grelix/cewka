@@ -26,6 +26,8 @@ internal static class FailureText
     /// <summary>Klucz komunikatu o wyjściu dźwięku, dobrany po rodzaju wyjątku, nie po jego tekście.</summary>
     public static string AudioFailureKey(Exception ex) => ex switch
     {
+        // Brak biblioteki wychodzi zwykle opakowany w błąd inicjalizacji klasy, która ją wołała.
+        TypeInitializationException { InnerException: { } inner } => AudioFailureKey(inner),
         DllNotFoundException or EntryPointNotFoundException or BadImageFormatException => "AudioFailureLibrary",
         AudioException { Reason: DecoderFailure.Unspecified } => "AudioFailureDevice",
         _ => "AudioFailure",

@@ -53,6 +53,16 @@ public sealed class MessageTests
     });
 
     [Fact]
+    public void BrakBibliotekiRozpoznanyTakzeWOpakowaniu()
+    {
+        var wrapped = new TypeInitializationException("Cewka.Audio.Interop.NativeAudio", new DllNotFoundException("cewka_audio"));
+
+        Assert.Equal("AudioFailureLibrary", Cewka.App.ViewModels.FailureText.AudioFailureKey(wrapped));
+        Assert.Equal("AudioFailureDevice", Cewka.App.ViewModels.FailureText.AudioFailureKey(new Cewka.Audio.AudioException("x")));
+        Assert.Equal("AudioFailure", Cewka.App.ViewModels.FailureText.AudioFailureKey(new InvalidOperationException()));
+    }
+
+    [Fact]
     public void PonownaProbaPoAwariiUruchamiaOdtwarzanie() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
