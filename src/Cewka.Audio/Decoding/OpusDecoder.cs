@@ -34,7 +34,7 @@ internal sealed class OpusDecoder : ManagedDecoderBase
 
         _reader = CreateReader();
 
-        Configure(OpusSampleRate, _sourceChannels, outputSampleRate, outputChannels, meter);
+        Configure(OpusSampleRate, _sourceChannels, outputSampleRate, outputChannels, meter, ChannelLayouts.Vorbis(_sourceChannels));
 
         var totalSeconds = _reader.TotalTime.TotalSeconds;
         TotalFrames = totalSeconds > 0 ? (long)Math.Round(totalSeconds * outputSampleRate) : 0;

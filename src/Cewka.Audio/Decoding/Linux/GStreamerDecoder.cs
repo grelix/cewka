@@ -115,7 +115,9 @@ internal sealed class GStreamerDecoder : ManagedDecoderBase
         if (!TryReadFormat(_sample, out var sourceRate, out var sourceChannels))
             throw Fail("potok podał format bez częstotliwości lub liczby kanałów", DecoderFailure.DamagedFile);
 
-        Configure(sourceRate, sourceChannels, outputSampleRate, outputChannels, meter);
+        // audioconvert układa kanały według pozycji GStreamera, co dla 1-8 kanałów
+        // odpowiada kolejności WAVE.
+        Configure(sourceRate, sourceChannels, outputSampleRate, outputChannels, meter, ChannelLayouts.Wave(sourceChannels));
 
         // Pierwsza próbka zostaje pobrana, zanim znany jest format, więc liczbę ramek
         // trzeba policzyć ponownie, teraz gdy wiadomo, ile bajtów zajmuje jedna.

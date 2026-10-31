@@ -29,8 +29,13 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
     public abstract bool CanSeek { get; }
     public int InstantaneousBitrate => _meter?.Kilobits ?? 0;
 
-    /// <summary>Called by the subclass once the underlying reader knows the source format.</summary>
-    protected void Configure(int sourceRate, int sourceChannels, int targetRate, int targetChannels, BitrateMeter? meter = null)
+    /// <summary>
+    /// Called by the subclass once the underlying reader knows the source format.
+    /// <paramref name="layout"/> names the speaker of each source channel, which the downmix needs.
+    /// </summary>
+    protected void Configure(
+        int sourceRate, int sourceChannels, int targetRate, int targetChannels, BitrateMeter? meter,
+        IReadOnlyList<Speaker> layout)
     {
         _meter = meter;
         _meter?.Configure(targetRate);
@@ -41,7 +46,7 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
         Channels = targetChannels;
 
         _converter = new SampleConverter(
-            sourceChannels, sourceRate, targetChannels, targetRate, AudioQuality.ResamplerFilterOrder);
+            sourceChannels, sourceRate, targetChannels, targetRate, AudioQuality.ResamplerFilterOrder, layout);
     }
 
     /// <summary>

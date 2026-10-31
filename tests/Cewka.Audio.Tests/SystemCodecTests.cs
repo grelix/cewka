@@ -52,6 +52,23 @@ public sealed class SystemCodecTests : IDisposable
         Assert.InRange(right, 0.34, 0.37);
     }
 
+    [Fact]
+    public void SurroundCentreIsHeardOnBothSides()
+    {
+        if (!Available) return;
+
+        // WAVE 5.1: FL, FR, FC, LFE, BL, BR; ton tylko w kanale centralnym.
+        var source = TestAudioFiles.ToneInChannel(6, 2, 48000, 48000);
+        var path = Write("surround.wav", TestAudioFiles.Wav(source, 6, 48000));
+
+        using var decoder = SystemCodecs.Open(path, 48000, 2, null);
+        var (left, right) = Rms(decoder);
+
+        Assert.Equal(6, decoder.SourceChannels);
+        Assert.True(left > 0.05, $"lewy {left}");
+        Assert.Equal(left, right, 3);
+    }
+
     internal static (double Left, double Right) Rms(IAudioDecoder decoder)
     {
         var buffer = new float[4096 * 2];

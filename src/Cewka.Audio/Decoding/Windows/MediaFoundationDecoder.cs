@@ -48,10 +48,11 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
             if (result < 0) throw Failure("wybór ścieżki dźwiękowej", result);
 
             ConfigureOutput(reader);
-            if (!ReadOutputFormat(reader, out var sourceRate, out var sourceChannels))
+            if (!ReadOutputFormat(reader, out var sourceRate, out var sourceChannels, out var mask))
                 throw Failure("odczyt formatu wyjściowego", 0);
 
-            Configure(sourceRate, sourceChannels, outputSampleRate, outputChannels, meter);
+            Configure(sourceRate, sourceChannels, outputSampleRate, outputChannels, meter,
+                ChannelLayouts.FromWaveMask(mask, sourceChannels));
 
             TotalFrames = ReadDuration(reader) is { } duration && duration > TimeSpan.Zero
                 ? (long)Math.Round(duration.TotalSeconds * outputSampleRate)
@@ -95,11 +96,15 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
         }
     }
 
-    /// <summary>Reads the rate and channel count the reader currently delivers.</summary>
-    private static bool ReadOutputFormat(IMFSourceReader reader, out int sampleRate, out int channels)
+    /// <summary>
+    /// Reads the rate, channel count and channel mask the reader currently delivers.
+    /// The mask is zero when the type does not carry one.
+    /// </summary>
+    private static bool ReadOutputFormat(IMFSourceReader reader, out int sampleRate, out int channels, out uint mask)
     {
         sampleRate = 0;
         channels = 0;
+        mask = 0;
 
         if (reader.GetCurrentMediaType(MF_SOURCE_READER_FIRST_AUDIO_STREAM, out var actual) < 0) return false;
 
@@ -107,9 +112,11 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
         {
             var rateKey = MF_MT_AUDIO_SAMPLES_PER_SECOND;
             var channelsKey = MF_MT_AUDIO_NUM_CHANNELS;
+            var maskKey = MF_MT_AUDIO_CHANNEL_MASK;
 
             actual.GetUINT32(ref rateKey, out sampleRate);
             actual.GetUINT32(ref channelsKey, out channels);
+            if (actual.GetUINT32(ref maskKey, out var rawMask) >= 0) mask = unchecked((uint)rawMask);
         }
         finally
         {
@@ -187,7 +194,7 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
         // Konwerter jest ustawiony na format z otwarcia; bajty w innym formacie dałyby
         // dźwięk o złej wysokości albo pomieszane kanały, więc taki strumień się kończy.
         if ((flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) != 0 &&
-            (!ReadOutputFormat(_reader!, out var rate, out var channels) ||
+            (!ReadOutputFormat(_reader!, out var rate, out var channels, out _) ||
              rate != SourceSampleRate || channels != SourceChannels))
         {
             DecoderFailures.Log("Media Foundation: format próbek zmienił się w trakcie strumienia.");
