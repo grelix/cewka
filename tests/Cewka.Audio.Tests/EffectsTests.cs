@@ -33,12 +33,13 @@ public class EffectsTests
     }
 
     /// <summary>
-    /// Sedno crossfeedu: niskie tony przechodzą do drugiego ucha niemal w całości, wysokie
+    /// Sedno crossfeedu: niskie tony przechodzą do drugiego ucha w dużej części, wysokie
     /// prawie wcale. Gdyby przechodziły jednakowo, byłoby to zwykłe mieszanie kanałów
-    /// i obraz stereo zapadłby się do środka.
+    /// i obraz stereo zapadłby się do środka. Przy pełnej sile różnica w basie to 4,5 dB
+    /// z nastaw bs2b, czyli stosunek około 0,6.
     /// </summary>
     [Theory]
-    [InlineData(100.0, 0.20, 0.45)]     // niskie: przenikanie duże
+    [InlineData(100.0, 0.50, 0.65)]     // niskie: przenikanie duże
     [InlineData(10000.0, 0.0, 0.06)]    // wysokie: przenikanie znikome
     public void CrossfeedLeaksLowFrequenciesAndKeepsHighOnesSeparate(
         double frequency, double minimumRatio, double maximumRatio)

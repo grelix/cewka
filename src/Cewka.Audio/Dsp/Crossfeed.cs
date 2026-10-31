@@ -1,7 +1,7 @@
 namespace Cewka.Audio.Dsp;
 
 /// <summary>
-/// Crossfeed: domieszka sygnału z kanału przeciwnego, opóźniona i przytłumiona w górze pasma.
+/// Crossfeed: domieszka sygnału z kanału przeciwnego, przytłumiona w górze pasma.
 ///
 /// <para><b>Po co.</b> Nagrania stereo miksuje się z myślą o głośnikach, przy których każde ucho
 /// słyszy oba kanały — z opóźnieniem i przytłumieniem wysokich tonów, bo dźwięk musi obejść
@@ -9,49 +9,43 @@ namespace Cewka.Audio.Dsp;
 /// spanoramowane do skraju — częste w nagraniach z lat sześćdziesiątych i siedemdziesiątych —
 /// siedzą wtedy „w głowie" i po dłuższym słuchaniu męczą. Ten stopień przywraca brakującą drogę.</para>
 ///
-/// <para><b>Jak.</b> Do każdego kanału dodawany jest sygnał drugiego, opóźniony o czas obejścia
-/// głowy i przepuszczony przez filtr dolnoprzepustowy odpowiadający jej cieniowi akustycznemu.
-/// Wysokie tony pozostają więc rozdzielone, a niskie — w których i tak nie słyszymy kierunku —
-/// stają się niemal wspólne.</para>
+/// <para><b>Jak.</b> Do każdego kanału dodawana jest różnica kanałów przepuszczona przez filtr
+/// dolnoprzepustowy odpowiadający cieniowi akustycznemu głowy; opóźnienie fazowe tego filtru,
+/// około ćwierć milisekundy, odpowiada czasowi obejścia głowy. Niskie tony stają się więc
+/// w części wspólne, wysokie pozostają rozdzielone. Materiał wspólny obu kanałom nie ma różnicy,
+/// więc przechodzi bez zmiany: wokal na środku nie traci góry ani poziomu.</para>
 ///
-/// <para>Nastawy odpowiadają zakresowi używanemu przez bibliotekę bs2b Borisa Michajłowa
-/// (licencja MIT): częstotliwość graniczna 650–700 Hz przy domieszce od 4,5 do 9,5 dB.
-/// Sam kod jest napisany od nowa, bez zaciągania biblioteki natywnej.</para>
+/// <para>Nastawy odpowiadają bibliotece bs2b Borisa Michajłowa (licencja MIT): częstotliwość
+/// graniczna 650–700 Hz i różnica poziomów w basie między drogą bezpośrednią a skrośną od 15 dB
+/// przy słabym ustawieniu do 4,5 dB przy pełnym, najmocniejszej z nastaw bs2b. Sam kod jest
+/// napisany od nowa, bez zaciągania biblioteki natywnej.</para>
 /// </summary>
 public sealed class Crossfeed : IAudioProcessor
 {
-    /// <summary>
-    /// Czas obejścia głowy dla dźwięku padającego z boku. Odpowiada różnicy dróg do obu uszu
-    /// przy typowym obwodzie głowy — stąd wartość rzędu jednej trzeciej milisekundy.
-    /// </summary>
-    private const double DelaySeconds = 0.00031;
-
-    /// <summary>Siła w procentach: 0 wyłącza domieszkę, 100 daje najmocniejszą z nastaw.</summary>
-    private const double MinimumFeedDb = 4.5;
-    private const double MaximumFeedDb = 9.5;
+    /// <summary>Różnica poziomów w basie przy sile bliskiej zera i przy pełnej.</summary>
+    private const double WeakestFeedDb = 15;
+    private const double StrongestFeedDb = 4.5;
 
     /// <summary>Częstotliwość graniczna filtru na drodze skrośnej, przy skrajnych siłach.</summary>
     private const double MinimumCutoffHz = 700;
     private const double MaximumCutoffHz = 650;
 
-    private float[] _delayLeft = [];
-    private float[] _delayRight = [];
-    private int _delayFrames;
-    private int _cursor;
+    private const double SwitchSeconds = 0.020;
 
     private int _channels = 2;
     private int _sampleRate = 48000;
 
     private double _lowpassCoefficient;
-    private double _stateLeft;
-    private double _stateRight;
+    private double _difference;
 
-    private float _direct = 1;
-    private float _cross;
+    private double _switchCoefficient;
+    private double _targetFeed;
+    private double _feed;
+    private bool _running;
 
     private double _strength = 50;
 
-    /// <summary>Gdy wyłączony, sygnał przechodzi bez zmiany ani jednej próbki.</summary>
+    /// <summary>Po wyłączeniu domieszka wygasa płynnie, a potem sygnał przechodzi bez zmiany ani jednej próbki.</summary>
     public bool Enabled { get; set; }
 
     /// <summary>Siła działania w procentach, 0–100.</summary>
@@ -69,16 +63,12 @@ public sealed class Crossfeed : IAudioProcessor
     {
         _channels = channels;
         _sampleRate = sampleRate;
-
-        _delayFrames = Math.Max(1, (int)Math.Round(sampleRate * DelaySeconds));
-        _delayLeft = new float[_delayFrames];
-        _delayRight = new float[_delayFrames];
-        _cursor = 0;
-
-        _stateLeft = 0;
-        _stateRight = 0;
+        _difference = 0;
+        _switchCoefficient = 1 - Math.Exp(-1.0 / (SwitchSeconds * sampleRate));
 
         UpdateMix();
+        _feed = TargetFeed;
+        _running = _feed > 0;
     }
 
     private void UpdateMix()
@@ -91,20 +81,29 @@ public sealed class Crossfeed : IAudioProcessor
         var cutoff = MinimumCutoffHz + (MaximumCutoffHz - MinimumCutoffHz) * fraction;
         _lowpassCoefficient = 1 - Math.Exp(-2 * Math.PI * cutoff / _sampleRate);
 
-        var feedDb = MinimumFeedDb + (MaximumFeedDb - MinimumFeedDb) * fraction;
-        var cross = Math.Pow(10, -feedDb / 20) * fraction;
-
-        // Suma obu dróg utrzymana na jedności: bez tego włączenie crossfeedu podnosiłoby
-        // głośność, a różnicę słychać jako „lepiej", choć to tylko głośniej.
-        _cross = (float)(cross / (1 + cross));
-        _direct = (float)(1.0 / (1 + cross));
+        // Domieszka k daje w basie drogę bezpośrednią 1 − k i skrośną k; ich stosunek to
+        // różnica poziomów z nastaw bs2b.
+        var feedDb = WeakestFeedDb + (StrongestFeedDb - WeakestFeedDb) * fraction;
+        _targetFeed = _strength > 0 ? 1 / (1 + Math.Pow(10, feedDb / 20)) : 0;
     }
+
+    private double TargetFeed => Enabled && _channels == 2 ? _targetFeed : 0;
 
     public void Process(Span<float> buffer, int frames)
     {
         // Efekt ma sens wyłącznie dla dwóch kanałów. Przy monofonii nie ma czego mieszać,
         // przy większej liczbie kanałów pojęcie kanału przeciwnego przestaje być określone.
-        if (!Enabled || _channels != 2 || _strength <= 0) return;
+        var target = TargetFeed;
+        if (target == 0 && _feed == 0)
+        {
+            _running = false;
+            return;
+        }
+
+        if (!_running) Reset();
+        _running = true;
+
+        var coefficient = _lowpassCoefficient;
 
         for (var frame = 0; frame < frames; frame++)
         {
@@ -112,29 +111,17 @@ public sealed class Crossfeed : IAudioProcessor
             var left = buffer[index];
             var right = buffer[index + 1];
 
-            // Z linii wychodzi próbka sprzed czasu obejścia głowy; na jej miejsce wchodzi bieżąca.
-            var delayedLeft = _delayLeft[_cursor];
-            var delayedRight = _delayRight[_cursor];
-            _delayLeft[_cursor] = left;
-            _delayRight[_cursor] = right;
+            _difference += (right - left - _difference) * coefficient;
+            _feed += (target - _feed) * _switchCoefficient;
 
-            _cursor++;
-            if (_cursor >= _delayFrames) _cursor = 0;
-
-            _stateLeft += (delayedLeft - _stateLeft) * _lowpassCoefficient;
-            _stateRight += (delayedRight - _stateRight) * _lowpassCoefficient;
-
-            buffer[index] = left * _direct + (float)_stateRight * _cross;
-            buffer[index + 1] = right * _direct + (float)_stateLeft * _cross;
+            var shift = (float)(_feed * _difference);
+            buffer[index] = left + shift;
+            buffer[index + 1] = right - shift;
         }
+
+        if (Math.Abs(target - _feed) < 1e-5) _feed = target;
+        if (!double.IsFinite(_difference) || Math.Abs(_difference) < 1e-25) _difference = 0;
     }
 
-    public void Reset()
-    {
-        Array.Clear(_delayLeft);
-        Array.Clear(_delayRight);
-        _cursor = 0;
-        _stateLeft = 0;
-        _stateRight = 0;
-    }
+    public void Reset() => _difference = 0;
 }

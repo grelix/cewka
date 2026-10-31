@@ -121,6 +121,57 @@ public class ParameterSmoothingTests
         }
     }
 
+    // ================= crossfeed =================
+
+    /// <summary>
+    /// Materiał wspólny obu kanałom, jak wokal na środku, nie ma różnicy kanałów, więc
+    /// przechodzi przez crossfeed bez zmiany: nie traci ani góry, ani poziomu.
+    /// </summary>
+    [Fact]
+    public void CrossfeedLeavesCentredMaterialUntouched()
+    {
+        var crossfeed = new Crossfeed { Enabled = true, Strength = 100 };
+        crossfeed.Prepare(SampleRate, Channels);
+
+        var original = Sine(5000, 0.5, 9600, SampleRate);
+        var processed = (float[])original.Clone();
+        ProcessInBlocks(crossfeed, processed, Block);
+
+        for (var i = 0; i < original.Length; i++) Assert.Equal(original[i], processed[i], tolerance: 1e-6f);
+    }
+
+    /// <summary>
+    /// Pełna siła to najmocniejsza nastawa bs2b: różnica poziomów w basie między drogą
+    /// bezpośrednią a skrośną około 4,5 dB. Słabsze ustawienie daje większą różnicę.
+    /// </summary>
+    [Fact]
+    public void CrossfeedStrengthMapsOntoTheBs2bRange()
+    {
+        var strong = BassSeparationDb(100);
+        var medium = BassSeparationDb(50);
+        var weak = BassSeparationDb(10);
+
+        Assert.InRange(strong, 4.0, 5.2);
+        Assert.InRange(medium, 9.0, 10.8);
+        Assert.True(weak > medium + 3, $"10%: {weak:F2} dB, 50%: {medium:F2} dB");
+    }
+
+    [Fact]
+    public void CrossfeedSwitchesOnAndOffWithoutAStep()
+    {
+        var crossfeed = new Crossfeed { Enabled = false, Strength = 100 };
+        crossfeed.Prepare(SampleRate, Channels);
+
+        var signal = SideOnly(100, 0.5, 3 * SampleRate, SampleRate);
+        ProcessRange(crossfeed, signal, 0, SampleRate);
+        crossfeed.Enabled = true;
+        ProcessRange(crossfeed, signal, SampleRate, 2 * SampleRate);
+        crossfeed.Enabled = false;
+        ProcessRange(crossfeed, signal, 2 * SampleRate, 3 * SampleRate);
+
+        Assert.True(LargestStep(signal, 0) < NaturalStep(100, 0.5), $"skok {LargestStep(signal, 0):F4}");
+    }
+
     // ================= bas wirtualny =================
 
     /// <summary>
