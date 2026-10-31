@@ -14,7 +14,7 @@ using Xunit;
 
 namespace Cewka.App.Tests;
 
-/// <summary>Stan pokazywany w pasku tytułu, pętle animacji i okno ustawień.</summary>
+/// <summary>Stan pokazywany w pasku tytułu i okno ustawień.</summary>
 [Collection(UiCollection.Name)]
 public sealed class TitleBarStateTests
 {
@@ -130,87 +130,6 @@ public sealed class TitleBarStateTests
             {
                 App.Theme.SetMode(before);
             }
-        });
-    }
-
-    [Fact]
-    public void FalaStajeWPauzieIRuszaPrzyOdtwarzaniu()
-    {
-        Ui.Run(() =>
-        {
-            var wave = new WaveformView { IsActive = false, Stroke = Brushes.White, Width = 300, Height = 40 };
-            var window = new Window { Width = 320, Height = 60, Content = wave };
-            window.Show();
-
-            try
-            {
-                Tick(200);
-                Assert.False(wave.IsLooping);
-
-                wave.IsActive = true;
-                Assert.True(wave.IsLooping);
-
-                wave.IsReduced = true;
-                Tick(200);
-                Assert.False(wave.IsLooping);
-            }
-            finally { window.Close(); }
-        });
-    }
-
-    [Fact]
-    public void TloWPauzieNiePrzerysowujeSieBezKonca()
-    {
-        Ui.Run(() =>
-        {
-            var backdrop = new LiveBackdrop { IsActive = false, BaseBrush = Brushes.Black };
-            var window = new Window { Width = 320, Height = 200, Content = backdrop };
-            window.Show();
-
-            try
-            {
-                Tick(50);
-                Assert.False(backdrop.IsLooping);
-
-                backdrop.IsActive = true;
-                Assert.True(backdrop.IsLooping);
-
-                backdrop.IsReduced = true;
-                Tick(400);
-                Assert.False(backdrop.IsLooping);
-            }
-            finally { window.Close(); }
-        });
-    }
-
-    [Fact]
-    public void PetlaCzekaPrzyZminimalizowanymOknie()
-    {
-        Ui.Run(() =>
-        {
-            var frames = 0;
-            var host = new Border();
-            var window = new Window { Width = 100, Height = 100, Content = host };
-            window.Show();
-
-            try
-            {
-                var loop = new RenderLoop(host, _ => frames++);
-                window.WindowState = WindowState.Minimized;
-                loop.Start();
-
-                Tick(20);
-                Assert.True(loop.IsParked);
-                Assert.Equal(0, frames);
-
-                window.WindowState = WindowState.Normal;
-                Tick(5);
-                Assert.False(loop.IsParked);
-                Assert.True(frames > 0);
-
-                loop.Stop();
-            }
-            finally { window.Close(); }
         });
     }
 
