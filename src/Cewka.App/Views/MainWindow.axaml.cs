@@ -254,9 +254,12 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(WindowClosingEventArgs e)
     {
+        // Termin dokańczania otwarć biegnie od tej chwili, także dla ścieżek odebranych niżej.
+        _viewModel.BeginClosing();
         App.BeginClosing();
         _rotation.Stop();
         PersistGeometry();
+        _viewModel.FinishPendingOpens();
         _viewModel.SaveQueueState();
         App.Settings.SaveNow();
         App.ReleaseSingleInstance();
@@ -965,11 +968,14 @@ public partial class MainWindow : Window
 
     // ================= Wywolania z innych kopii i z klawiatury multimedialnej =================
 
-    /// <summary>Adds paths handed over by another copy of the application.</summary>
-    public void ReceivePaths(string[] paths)
+    /// <summary>
+    /// Dokłada ścieżki przekazane przez inną kopię programu. Przy zamykaniu okna
+    /// (<paramref name="closing"/>) foldery przegląda się od razu, przed zapisem kolejki.
+    /// </summary>
+    public void ReceivePaths(string[] paths, bool closing = false)
     {
         if (paths.Length == 0) return;
-        _viewModel.OpenFromOutside(paths);
+        _viewModel.OpenFromOutside(paths, now: closing);
     }
 
     /// <summary>

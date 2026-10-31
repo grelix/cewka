@@ -181,6 +181,223 @@ public class PlaybackEngineTests
     }
 
     /// <summary>
+    /// Krótki ostatni utwór zapisany w buforze w całości, zanim zagrał: plik dodany w tej chwili
+    /// gra po nim raz, zamiast powtarzać już zapisany utwór.
+    /// </summary>
+    [Fact]
+    public void TrackAddedAfterAShortBufferedLastTrackPlaysOnceAfterIt()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.1, B);
+        // Wartość, której nie da narastanie głośności A.
+        const float later = 0.75f;
+        var c = h.Track("c", 0.3, later);
+
+        StartLastTrackDecodedToTheEnd(h, [a, b]);
+        Assert.Equal(0, h.Engine.CurrentIndex);
+
+        h.Engine.Enqueue([c]);
+        h.PumpUntil(() => h.Finished == 1);
+
+        Assert.Equal(new[] { "a.wav", "b.wav", "c.wav" }, h.Opened.ToArray());
+        Assert.Equal(EngineHarness.Frames(0.1), EngineHarness.CountFrames(h.Output.Samples, B));
+        Assert.Equal(EngineHarness.Frames(0.3), EngineHarness.CountFrames(h.Output.Samples, later));
+    }
+
+    /// <summary>
+    /// Usunięcie krótkiego ostatniego wiersza, już zapisanego w buforze, nie każe grać słyszanego
+    /// utworu jeszcze raz: zapisany gra do końca i kolejka się kończy.
+    /// </summary>
+    [Fact]
+    public void RemovingAShortBufferedLastTrackDoesNotReplayTheHeardOne()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.1, B);
+
+        StartLastTrackDecodedToTheEnd(h, [a, b]);
+        h.Engine.RemoveAt(1);
+        h.PumpUntil(() => h.Finished == 1);
+        h.PumpPeriods(20);
+
+        Assert.Equal(new[] { "a.wav", "b.wav" }, h.Opened.ToArray());
+    }
+
+    /// <summary>
+    /// To samo z plikiem dodanym po usunięciu: gra po zapisanym utworze, bez powtórki słyszanego.
+    /// Przy losowaniu tak samo.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TrackAddedAfterRemovingAShortBufferedLastTrackPlaysNext(bool shuffle)
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.1, B);
+        var c = h.Track("c", 0.3, C);
+
+        StartLastTrackDecodedToTheEnd(h, [a, b]);
+        h.Engine.Shuffle = shuffle;
+        h.Engine.RemoveAt(1);
+        h.Engine.Enqueue([c]);
+        h.PumpUntil(() => h.Finished == 1);
+        h.PumpPeriods(20);
+
+        Assert.Equal(new[] { "a.wav", "b.wav", "c.wav" }, h.Opened.ToArray());
+    }
+
+    /// <summary>
+    /// Dekoder pominął nieobsługiwany wpis i otworzył następny. Dodanie pliku w ostatnim pół
+    /// sekundy słyszanego utworu nie przewija go, bo następny się nie zmienił.
+    /// </summary>
+    [Fact]
+    public void TrackAddedAfterASkippedUnsupportedEntryLeavesThePrefetchAlone()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var x = h.Unsupported("x");
+        var b = h.Track("b", 10, B);
+        var c = h.Track("c", 0.3, C);
+
+        h.Engine.SetQueue([a, x, b]);
+        h.PumpUntil(() => !h.Engine.IsSeeking);
+        EngineHarness.WaitUntil(() => h.Opened.Contains("b.wav"));
+        Assert.Equal(0, h.Engine.CurrentIndex);
+
+        h.Engine.Enqueue([c]);
+        Assert.False(h.Engine.IsSeeking);
+    }
+
+    /// <summary>
+    /// Wpis wstawiony między słyszany a krótki utwór zapisany już w buforze gra następny,
+    /// niezależnie od długości zapisanego. Taki ciąg wykonuje też cofnięcie usunięcia wiersza.
+    /// </summary>
+    [Theory]
+    [InlineData(0.1)]
+    [InlineData(2.0)]
+    public void EntryMovedBetweenHeardAndBufferedTrackPlaysNext(double bSeconds)
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", bSeconds, B);
+        var c = h.Track("c", 0.3, C);
+        const float later = 0.75f;
+        var d = h.Track("d", 0.3, later);
+
+        h.Engine.SetQueue([a, b, c]);
+        h.PumpUntil(() => !h.Engine.IsSeeking);
+        EngineHarness.WaitUntil(() => h.Opened.Contains(bSeconds < 0.5 ? "c.wav" : "b.wav"));
+        Assert.Equal(0, h.Engine.CurrentIndex);
+
+        h.Engine.Enqueue([d]);
+        h.Engine.Move(3, 1);
+        h.WaitForSeekToBeTaken();
+        h.PumpUntil(() => h.Finished == 1, 30000);
+
+        Assert.Equal(EngineHarness.Frames(0.3), EngineHarness.CountFrames(h.Output.Samples, later));
+        Assert.True(EngineHarness.CountFrames(h.Output.Samples, A) <= EngineHarness.Frames(0.3), $"A: {EngineHarness.CountFrames(h.Output.Samples, A)}, otwarte: {string.Join(",", h.Opened)}");
+    }
+
+    /// <summary>
+    /// Krótki zapisany utwór przesunięty przed słyszany przy zapisanym końcu kolejki: słyszany
+    /// gra do końca raz i kolejka się kończy, tak jak przy długim przesuniętym utworze.
+    /// </summary>
+    [Fact]
+    public void MovingABufferedShortTrackBeforeTheHeardOneDoesNotReplayIt()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.1, B);
+
+        StartLastTrackDecodedToTheEnd(h, [a, b]);
+        h.Engine.Move(1, 0);
+        h.WaitForSeekToBeTaken();
+        h.PumpUntil(() => h.Finished == 1);
+        h.PumpPeriods(20);
+
+        Assert.True(EngineHarness.CountFrames(h.Output.Samples, A) <= EngineHarness.Frames(0.3), $"A: {EngineHarness.CountFrames(h.Output.Samples, A)}, otwarte: {string.Join(",", h.Opened)}");
+        Assert.Equal(PlaybackState.Paused, h.Engine.State);
+    }
+
+    /// <summary>
+    /// Krótki wpis usunięty po zapisaniu w buforze gra jako słyszany. Plik dodany w tej chwili
+    /// gra po nim, zamiast pierwszego wpisu kolejki.
+    /// </summary>
+    [Fact]
+    public void TrackAddedWhileARemovedBufferedTrackIsHeardPlaysNext()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.1, B);
+        var c = h.Track("c", 0.3, C);
+
+        StartLastTrackDecodedToTheEnd(h, [a, b]);
+        h.Engine.RemoveAt(1);
+        h.PumpUntil(() => EngineHarness.CountFrames(h.Output.Samples, B) > 0);
+
+        h.Engine.Enqueue([c]);
+        h.PumpUntil(() => h.Finished == 1);
+        h.PumpPeriods(20);
+
+        Assert.Equal(new[] { "a.wav", "b.wav", "c.wav" }, h.Opened.ToArray());
+    }
+
+    /// <summary>
+    /// To samo przy otwartym dekoderze następnego: zmiana kolejki nie przewija usuniętego
+    /// słyszanego wpisu, więc odtwarzanie nie milknie w stanie odtwarzania.
+    /// </summary>
+    [Fact]
+    public void QueueChangeWhileARemovedBufferedTrackIsHeardKeepsPlaying()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.1, B);
+        // Wartości, których nie da narastanie głośności A.
+        const float third = 0.6f;
+        var c = h.Track("c", 0.6, third);
+        const float later = 0.75f;
+        var d = h.Track("d", 0.3, later);
+
+        h.Engine.SetQueue([a, b, c]);
+        h.PumpUntil(() => !h.Engine.IsSeeking);
+        EngineHarness.WaitUntil(() => h.Opened.Contains("c.wav"));
+
+        h.Engine.RemoveAt(1);
+        h.PumpUntil(() => EngineHarness.CountFrames(h.Output.Samples, B) > 0);
+
+        h.Engine.Enqueue([d]);
+        h.PumpUntil(() => h.Finished == 1);
+
+        Assert.Equal(EngineHarness.Frames(0.6), EngineHarness.CountFrames(h.Output.Samples, third));
+        Assert.Equal(EngineHarness.Frames(0.3), EngineHarness.CountFrames(h.Output.Samples, later));
+    }
+
+    /// <summary>
+    /// Powtarzanie kolejki z jednym utworem: dekoder otworzył go już na następne okrążenie.
+    /// Plik dodany w tej chwili gra zaraz po nim, bez dodatkowego okrążenia.
+    /// </summary>
+    [Fact]
+    public void RepeatedSingleTrackIsFollowedByATrackAddedAfterItsNextLapWasOpened()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 1.0, A);
+        var c = h.Track("c", 0.3, C);
+
+        h.Engine.Repeat = RepeatMode.Queue;
+        h.Engine.SetQueue([a]);
+        h.PumpUntil(() => h.Opened.Count(name => name == "a.wav") == 2);
+        Assert.Equal(0, h.Engine.CurrentIndex);
+
+        h.Engine.Enqueue([c]);
+        h.WaitForSeekToBeTaken();
+        h.PumpUntil(() => EngineHarness.CountFrames(h.Output.Samples, C) > 2000, 30000);
+
+        Assert.True(EngineHarness.CountFrames(h.Output.Samples, A) <= EngineHarness.Frames(1.0));
+    }
+
+    /// <summary>
     /// Utwór krótszy od bufora: dekoder dochodzi do końca pliku i zapisuje koniec kolejki,
     /// zanim cokolwiek zagra.
     /// </summary>
@@ -949,5 +1166,39 @@ public class PlaybackEngineTests
 
         gate.Set();
         EngineHarness.WaitUntil(() => stuck.DisposeCount == 1);
+    }
+
+    // ---------- znane ograniczenia ----------
+
+    /// <summary>
+    /// Słyszany wpis usunięty z kolejki, dekoder już na następnym, nowy wpis wstawiony przed
+    /// dekodowany: nowy wpis powinien zagrać, a zostaje pominięty. Opis w komentarzu
+    /// <c>PlaybackEngine.RestartAfterHeardLocked</c>.
+    /// </summary>
+    [Fact(Skip = "Znane ograniczenie: wpis wstawiony przed dekodowany, gdy słyszany usunięto z kolejki, zostaje pominięty (PlaybackEngine.RestartAfterHeardLocked).")]
+    public void RemovedHeardThenEntryInsertedBeforeDecodedIsSkipped()
+    {
+        const float decoded = 0.625f;
+        const float inserted = 0.75f;
+
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.1, B);
+        var c = h.Track("c", 0.6, decoded);
+        var d = h.Track("d", 0.3, inserted);
+
+        h.Engine.SetQueue([a, b, c]);
+        h.PumpUntil(() => !h.Engine.IsSeeking);
+        EngineHarness.WaitUntil(() => h.Opened.Contains("c.wav"));
+
+        // Krótki b jest już w buforze; po usunięciu gra dalej jako słyszany spoza kolejki.
+        h.Engine.RemoveAt(1);
+        h.PumpUntil(() => EngineHarness.CountFrames(h.Output.Samples, B) > 0);
+
+        h.Engine.Enqueue([d]);
+        h.Engine.Move(2, 1);
+        h.PumpUntil(() => h.Finished == 1, 30000);
+
+        Assert.Equal(EngineHarness.Frames(0.3), EngineHarness.CountFrames(h.Output.Samples, inserted));
     }
 }

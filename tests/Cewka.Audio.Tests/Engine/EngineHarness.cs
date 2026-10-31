@@ -148,6 +148,12 @@ internal sealed class EngineHarness : IDisposable
         return positions;
     }
 
+    /// <summary>
+    /// Czeka bez pompowania, aż wątek dekodujący odbierze zlecone przewinięcie. Pompowanie
+    /// szybsze od czasu rzeczywistego zdążyłoby inaczej odczytać cały bufor, zanim się wyciszy.
+    /// </summary>
+    public void WaitForSeekToBeTaken() => WaitUntil(() => !Engine.IsSeeking || Engine.FlushingForSeek);
+
     /// <summary>Pompuje przez zadaną liczbę okresów.</summary>
     public void PumpPeriods(int periods)
     {

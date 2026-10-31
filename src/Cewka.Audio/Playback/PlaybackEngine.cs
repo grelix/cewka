@@ -119,6 +119,9 @@ public sealed class PlaybackEngine : IDisposable
     /// <summary>True, dopóki zlecone przewinięcie nie zostało wykonane.</summary>
     internal bool IsSeeking => _seekPending || SeekInProgress;
 
+    /// <summary>Wątek dekodujący odebrał przewinięcie i czeka na wyciszenie bufora.</summary>
+    internal bool FlushingForSeek => _session?.FlushRequested ?? false;
+
     /// <summary>
     /// Wątek dekodujący odebrał przewinięcie, ale nowe położenie jeszcze nie obowiązuje.
     /// Otwarcie pliku z wolnego dysku trwa na tyle długo, że interfejs zdążyłby w tym czasie
@@ -503,37 +506,97 @@ public sealed class PlaybackEngine : IDisposable
 
     /// <summary>
     /// W ostatnim pół sekundy utworu dekoder ma już otwarty następny albo zapisał koniec
-    /// kolejki. Gdy zmiana kolejki sprawia, że następnym jest inny wpis, bufor kończy się
-    /// niewłaściwie. Gdy następny jest już otwarty, przewinięcie słyszanego utworu w miejscu
-    /// opróżnia bufor i każe dekoderowi wybrać następny od nowa; za zapisanym końcem kolejki
-    /// dekoder dopisuje nowy wpis bez przerwy.
+    /// kolejki, a krótkie utwory bywają zapisane w całości, zanim zagrają. Zmiana kolejki
+    /// sprawdza cały łańcuch od słyszanego wpisu przez zapisane do dekodowanego. Przy pierwszej
+    /// niezgodności przewinięcie słyszanego utworu w miejscu opróżnia bufor i każe dekoderowi
+    /// wybrać następny od nowa; za zapisanym końcem kolejki dekoder dopisuje nowy wpis bez przerwy.
     /// </summary>
     private void RevalidatePrefetchLocked()
     {
         var heard = _current.Entry;
         var session = _session;
-        var decoding = session?.Entry;
 
         // W trakcie przewinięcia słyszany wpis jest nieaktualny, a dekoder otwiera właśnie cel.
-        if (IsSeeking || _ended || heard is null || session is null || ReferenceEquals(heard, decoding)) return;
+        if (IsSeeking || _ended || heard is null || session is null) return;
 
-        var expected = Repeat == RepeatMode.Track ? heard : FollowingEntryLocked(heard, userInitiated: false);
+        var decoding = session.Entry;
+        var previousHeard = session.PreviousHeard;
+
+        // Wątek dźwięku czeka na tę blokadę, więc pod nią tylko kopia granic.
+        List<QueueEntry> written;
+        lock (session.BoundaryLock)
+            written = session.Boundaries.Where(boundary => !boundary.IsEnd).Select(boundary => boundary.Entry!).ToList();
+
+        // Granica dekodowanego jest ostatnia. Bez niej dekoder jest jeszcze w słyszanym utworze,
+        // chyba że właśnie otwiera następny.
+        if (decoding is not null)
+        {
+            if (written.Count > 0 && ReferenceEquals(written[^1], decoding)) written.RemoveAt(written.Count - 1);
+            else if (written.Count == 0 && ReferenceEquals(decoding, heard)) return;
+        }
+
+        // Krótki wpis usunięty po zapisaniu w buforze gra dalej; następnik liczy się wtedy od
+        // utworu przed nim. Gdy i tego nie ma w kolejce, następnik jest nieznany i bufor zostaje.
+        var anchor = _queue.Contains(heard) ? heard : previousHeard;
+        if (anchor is not null && !_queue.Contains(anchor)) anchor = null;
+
+        var previous = anchor;
+        foreach (var entry in written)
+        {
+            // Usunięte z kolejki grają z bufora, ale nie wyznaczają następnika.
+            if (!_queue.Contains(entry)) continue;
+
+            if (previous is not null && !ReferenceEquals(NextPlayableLocked(previous), entry))
+            {
+                RestartAfterHeardLocked(heard, session);
+                return;
+            }
+
+            previous = entry;
+        }
+
+        var expected = previous is null ? null : NextPlayableLocked(previous);
 
         if (decoding is null)
         {
-            // Koniec kolejki bywa zapisany po wpisach, których nie dało się otworzyć; dekoder
-            // już je zgłosił i pominął.
-            var left = _queue.Count;
-            while (expected is { IsUnsupported: true } or { OpenFailure: not null })
-                expected = left-- > 0 ? FollowingEntryLocked(expected, userInitiated: false) : null;
-
             Volatile.Write(ref session.ContinueWith, expected);
             return;
         }
 
-        if (ReferenceEquals(expected, decoding)) return;
+        if (previous is null || ReferenceEquals(expected, decoding)) return;
 
-        RequestSeekLocked(heard, FramesFrom(Position));
+        RestartAfterHeardLocked(heard, session);
+    }
+
+    /// <summary>
+    /// Wpis, który dekoder otworzy po <paramref name="from"/>. Wpisy, których nie dało się
+    /// otworzyć, dekoder już zgłosił i pominął.
+    /// </summary>
+    private QueueEntry? NextPlayableLocked(QueueEntry from)
+    {
+        var next = Repeat == RepeatMode.Track ? from : FollowingEntryLocked(from, userInitiated: false);
+
+        var left = _queue.Count;
+        while (next is { IsUnsupported: true } or { OpenFailure: not null })
+            next = left-- > 0 ? FollowingEntryLocked(next, userInitiated: false) : null;
+
+        return next;
+    }
+
+    /// <summary>
+    /// Przewija słyszany utwór w miejscu, żeby dekoder wybrał następny od nowa. Wpisu spoza
+    /// kolejki przewinąć się nie da, więc wtedy bufor zostaje bez zmian.
+    ///
+    /// <para>Znane ograniczenie: gdy słyszany wpis usunięto z kolejki, a dekoder ma już otwarty
+    /// następny, wpis wstawiony między kotwicę (<c>PreviousHeard</c>) a dekodowany zostaje
+    /// pominięty — kasuje się tylko <c>ContinueWith</c>, a dekodowanego nikt nie cofa. Okno
+    /// czasowe to czas grania krótkiego, usuniętego utworu zapisanego w buforze. Zachowanie
+    /// opisuje pominięty test <c>RemovedHeardThenEntryInsertedBeforeDecodedIsSkipped</c>.</para>
+    /// </summary>
+    private void RestartAfterHeardLocked(QueueEntry heard, FeederSession session)
+    {
+        if (_queue.Contains(heard)) RequestSeekLocked(heard, FramesFrom(Position));
+        else Volatile.Write(ref session.ContinueWith, null);
     }
 
     /// <summary>Po zmianie kolejki numer grającego wpisu mógł się zmienić; interfejs dostaje nowy.</summary>
@@ -990,6 +1053,7 @@ public sealed class PlaybackEngine : IDisposable
             return true;
         }
 
+        session.PreviousHeard = _current.Entry;
         _current = next;
         Graph.ApplyTrackGain(next.Gain, snap: false);
         Volatile.Write(ref session.TrackChangeSignal, 1);
@@ -1199,6 +1263,7 @@ public sealed class PlaybackEngine : IDisposable
         lock (_sync)
         {
             if (_session != session) return false;
+            session.PreviousHeard = null;
             _current = boundary;
             session.SeekInProgress = false;
             return true;
@@ -1452,6 +1517,9 @@ public sealed class PlaybackEngine : IDisposable
 
         /// <summary>Wpis otwarty albo właśnie otwierany przez dekoder; zapisywany pod blokadą kolejki.</summary>
         public volatile QueueEntry? Entry;
+
+        /// <summary>Wpis słyszany przed bieżącym; ustawia go wątek dźwiękowy przy przekroczeniu granicy.</summary>
+        public volatile QueueEntry? PreviousHeard;
 
         /// <summary>Wpis, który ma zagrać za zapisanym już końcem kolejki; ustawiany pod blokadą kolejki.</summary>
         public QueueEntry? ContinueWith;

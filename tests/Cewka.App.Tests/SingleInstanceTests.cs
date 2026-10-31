@@ -275,6 +275,37 @@ public sealed class SingleInstanceTests : IDisposable
     }
 
     /// <summary>
+    /// Zamknięcie nasłuchu z nadawcami zawieszonymi w połowie wiadomości trwa do dwóch limitów
+    /// odczytu, dokańczanie przeglądania folderów do <see cref="SingleInstance.ClosingGrace"/>,
+    /// a rola zwalnia się dopiero po zapisie. Kopia uruchomiona w tym czasie czeka na rolę
+    /// dłużej, niż trwa najdłuższe zamykanie, zamiast otworzyć drugie okno bez nasłuchu.
+    /// </summary>
+    [Fact]
+    public void KopiaUruchomionaWTrakcieNajdluzszegoZamykaniaPrzejmujeRole()
+    {
+        var address = Temporary();
+
+        var instance = SingleInstance.TryAcquire(address);
+        Assert.NotNull(instance);
+        instance.StopListening();
+
+        var release = new Thread(() =>
+        {
+            Thread.Sleep(2 * HandoffChannel.ReadTimeout + SingleInstance.ClosingGrace + TimeSpan.FromMilliseconds(500));
+            instance.Dispose();
+        });
+
+        release.Start();
+
+        var claim = SingleInstance.Start(address, ["/muzyka/utwor.mp3"]);
+        release.Join();
+
+        using var next = claim.Instance;
+        Assert.False(claim.HandedOver);
+        Assert.NotNull(next);
+    }
+
+    /// <summary>
     /// Pod Linuksem wysłanie kończy się, gdy dane leżą w buforze jądra, więc nadawca, który zaczął
     /// pisać przed zamknięciem nasłuchu, uznał już przekazanie za udane. Wiadomość musi dojść.
     /// </summary>
@@ -344,6 +375,173 @@ public sealed class SingleInstanceTests : IDisposable
         Assert.True(second.Join(Patience));
         Assert.True(handedOff);
         lock (all) Assert.Equal(["/muzyka/pierwszy.mp3", "/muzyka/drugi.mp3"], all);
+    }
+
+    /// <summary>
+    /// Nadawca, który łączy się, gdy zamykanie doczytuje połączonych wcześniej, dostaje odmowę
+    /// i może przejąć rolę. Pod Linuksem gniazdo przyjęłoby go do kolejki, wysłanie skończyłoby
+    /// się sukcesem, a ścieżki przepadłyby razem z kanałem. Nadawca, któremu przekazanie się
+    /// udało, ma ścieżki u odbiorcy przed powrotem StopListening.
+    /// </summary>
+    [Fact]
+    public void NadawcaPolaczonyWTrakcieZamykaniaNieGubiSciezek()
+    {
+        var address = Temporary();
+
+        using var instance = SingleInstance.TryAcquire(address);
+        Assert.NotNull(instance);
+
+        var all = new List<string>();
+        var late = new List<string>();
+        var returned = false;
+        using var firstArrived = new ManualResetEventSlim();
+
+        instance.Attach(paths =>
+        {
+            lock (all)
+            {
+                all.AddRange(paths);
+                if (returned) late.AddRange(paths);
+                if (paths.Contains("/muzyka/pierwszy.mp3")) firstArrived.Set();
+            }
+        });
+
+        // Pierwszy: czyta go pętla nasłuchu w chwili zamknięcia.
+        var first = Message("/muzyka/pierwszy.mp3");
+        using var a = ConnectRaw(address);
+        a.Write(first, 0, 6);
+        a.Flush();
+
+        // Drugi: połączony przed zamknięciem i zawieszony w połowie, więc zamykanie czeka na niego.
+        var second = Message("/muzyka/drugi.mp3");
+        using var connected = new ManualResetEventSlim();
+        using var resume = new ManualResetEventSlim();
+        var secondDone = false;
+
+        var b = new Thread(() =>
+        {
+            try
+            {
+                using var stream = ConnectRaw(address);
+                connected.Set();
+                stream.Write(second, 0, 6);
+                stream.Flush();
+
+                resume.Wait();
+                stream.Write(second, 6, second.Length - 6);
+                stream.Flush();
+                secondDone = true;
+            }
+            catch (Exception)
+            {
+                // Odbiorca zamknął połączenie: nadawca wie, że przekazanie się nie udało.
+            }
+        });
+
+        b.Start();
+        Assert.True(connected.Wait(Patience));
+
+        var stopping = new Thread(instance.StopListening);
+        stopping.Start();
+        Thread.Sleep(100);
+
+        a.Write(first, 6, first.Length - 6);
+        a.Flush();
+        Assert.True(firstArrived.Wait(Patience));
+        Thread.Sleep(100);
+
+        // Trzeci łączy się, gdy zamykanie czyta drugiego. Odmowa trwa sekundę prób połączenia,
+        // a sukces bez odbioru kończy się od razu; drugi nie może czekać dłużej niż limit odczytu.
+        var thirdDone = false;
+        var c = new Thread(() => thirdDone = SingleInstance.TryHandOff(address, ["/muzyka/trzeci.mp3"]));
+        c.Start();
+        c.Join(TimeSpan.FromMilliseconds(300));
+
+        resume.Set();
+        Assert.True(stopping.Join(Patience));
+        lock (all) returned = true;
+
+        Assert.True(b.Join(Patience));
+        Assert.True(c.Join(Patience));
+
+        lock (all)
+        {
+            Assert.Empty(late);
+            Assert.True(secondDone);
+            Assert.Contains("/muzyka/drugi.mp3", all);
+            if (thirdDone) Assert.Contains("/muzyka/trzeci.mp3", all);
+        }
+    }
+
+    /// <summary>
+    /// Pod Linuksem w kolejce gniazda czeka czasem kilku nadawców zawieszonych w połowie. Zamykanie
+    /// czyta ich naraz ze wspólnym terminem: nadawca, który wysłał całość za nimi, ma ścieżki
+    /// u odbiorcy przed powrotem, a zamykanie trwa jeden limit odczytu, nie po jednym na nadawcę.
+    /// W Windows czeka najwyżej jeden połączony nadawca, więc przypadek tam nie zachodzi.
+    /// </summary>
+    [LinuxFact]
+    public void ZamkniecieNasluchuCzytaZawieszonychNadawcowNaraz()
+    {
+        var address = Temporary();
+
+        using var instance = SingleInstance.TryAcquire(address);
+        Assert.NotNull(instance);
+
+        var all = new List<string>();
+        var late = new List<string>();
+        var returned = false;
+
+        instance.Attach(paths =>
+        {
+            lock (all)
+            {
+                all.AddRange(paths);
+                if (returned) late.AddRange(paths);
+            }
+        });
+
+        var first = Message("/muzyka/pierwszy.mp3");
+        using var a = ConnectRaw(address);
+        a.Write(first, 0, 6);
+        a.Flush();
+
+        // Połączenie gniazda kończy się, gdy nadawca jest już w kolejce jądra.
+        using var stuck1 = ConnectRaw(address);
+        stuck1.Write(Message("/muzyka/zawieszony1.mp3"), 0, 6);
+        stuck1.Flush();
+
+        using var stuck2 = ConnectRaw(address);
+        stuck2.Write(Message("/muzyka/zawieszony2.mp3"), 0, 6);
+        stuck2.Flush();
+
+        Assert.True(SingleInstance.TryHandOff(address, ["/muzyka/trzeci.mp3"]));
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var stopping = new Thread(instance.StopListening);
+        stopping.Start();
+
+        // Plik gniazda znika tuż przed przerwaniem czekania na połączenie. Pierwszy kończy się
+        // dopiero potem, więc pętla nasłuchu nie bierze już następnego.
+        Assert.True(SpinWait.SpinUntil(() => !File.Exists(address.SocketFile), Patience));
+        Thread.Sleep(20);
+
+        a.Write(first, 6, first.Length - 6);
+        a.Flush();
+
+        Assert.True(stopping.Join(Patience));
+        clock.Stop();
+        lock (all) returned = true;
+
+        // Jeden limit odczytu (2 s) z zapasem; odczyt po kolei trwałby co najmniej dwa.
+        Assert.True(
+            clock.Elapsed < HandoffChannel.ReadTimeout + TimeSpan.FromSeconds(1),
+            $"zamykanie trwało {clock.ElapsedMilliseconds} ms");
+
+        lock (all)
+        {
+            Assert.Empty(late);
+            Assert.Equal(["/muzyka/pierwszy.mp3", "/muzyka/trzeci.mp3"], all);
+        }
     }
 
     [Fact]

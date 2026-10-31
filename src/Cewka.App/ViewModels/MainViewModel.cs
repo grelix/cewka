@@ -1001,9 +1001,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         if (replace)
         {
-            _resume.Discard();
-            if (TryPlayback(() => _engine.SetQueue(files))) SyncPlaying();
-            RebuildQueue();
+            ReplaceQueue(files);
         }
         else
         {
@@ -1012,45 +1010,153 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Wstawia pliki na miejsce kolejki i gra pierwszy. Przy zamykaniu okna pierwszy tylko czeka
+    /// jak wznowienie i tak trafia do zapisu, bo odtwarzanie otworzyłoby urządzenie do końca zamykania.
+    /// </summary>
+    private void ReplaceQueue(List<string> files)
+    {
+        _resume.Discard();
+
+        if (IsClosing)
+        {
+            _engine.ClearQueue();
+            _engine.Enqueue(files);
+            RebuildQueue();
+            _resume.Arm(0, 0, Queue.Count);
+            return;
+        }
+
+        if (TryPlayback(() => _engine.SetQueue(files))) SyncPlaying();
+        RebuildQueue();
+    }
+
+    /// <summary>Termin dokańczania otwarć przy zamykaniu okna; brak, dopóki okno się nie zamyka.</summary>
+    private long? _closingDeadline;
+
+    private bool IsClosing => _closingDeadline is not null;
+
+    /// <summary>
+    /// Okno zaczyna się zamykać. Od tej chwili biegnie jeden termin
+    /// <see cref="SingleInstance.ClosingGrace"/> na dokończenie wszystkich otwarć, bo zamykanie
+    /// trzyma rolę działającej kopii, a dokładane pliki nie uruchamiają już odtwarzania.
+    /// </summary>
+    public void BeginClosing() =>
+        _closingDeadline ??= Environment.TickCount64 + (long)SingleInstance.ClosingGrace.TotalMilliseconds;
+
     private Task _openChain = Task.CompletedTask;
+
+    /// <summary>Otwarcia przeglądane w tle i jeszcze niedołożone, w kolejności przybycia.</summary>
+    private readonly List<PendingOpen> _pendingOpens = [];
+
+    private sealed class PendingOpen(Task<(List<string> Files, string? Unreadable)> expansion, Action<List<string>> apply)
+    {
+        public Task<(List<string> Files, string? Unreadable)> Expansion { get; } = expansion;
+        public Action<List<string>> Apply { get; } = apply;
+    }
 
     /// <summary>
     /// Zamienia ścieżki na pliki dźwiękowe i przekazuje je dalej. Same pliki idą od razu;
     /// foldery są przeglądane poza wątkiem interfejsu, bo duży katalog na wolnym dysku
-    /// zamroziłby okno. Kolejne otwarcia czekają na poprzednie, więc dwa szybkie upuszczenia
+    /// zamroziłby okno. Dokładanie czeka na wcześniejsze otwarcia, więc dwa szybkie upuszczenia
     /// nie zamienią się kolejnością.
     /// </summary>
-    private Task Open(IEnumerable<string> paths, Action<List<string>> apply)
+    /// <param name="now">
+    /// Przy zamykaniu okna: kolejka zapisuje się zaraz potem, więc dokłada się przed powrotem,
+    /// po wcześniejszych otwarciach. Folder przegląda się w tle i czeka na niego najwyżej do
+    /// wspólnego terminu zamykania (<see cref="FinishPendingOpens"/>).
+    /// </param>
+    private Task Open(IEnumerable<string> paths, Action<List<string>> apply, bool now = false)
     {
         var list = paths.ToList();
 
-        if (_openChain.IsCompleted && !list.Any(Directory.Exists))
+        if (now)
         {
-            var files = ExpandToAudioFiles(list, out _);
-            if (files.Count > 0) apply(files);
+            var folders = list.Any(Directory.Exists);
+            if (folders) _pendingOpens.Add(new PendingOpen(ExpandInBackground(list), apply));
+
+            FinishPendingOpens();
+
+            if (!folders) ApplyNow(list, apply);
             return Task.CompletedTask;
         }
 
-        return _openChain = OpenAfterAsync(_openChain, list, apply);
+        if (_pendingOpens.Count == 0 && !list.Any(Directory.Exists))
+        {
+            ApplyNow(list, apply);
+            return Task.CompletedTask;
+        }
+
+        var pending = new PendingOpen(ExpandInBackground(list), apply);
+
+        _pendingOpens.Add(pending);
+        return _openChain = OpenAfterAsync(_openChain, pending);
     }
 
-    private async Task OpenAfterAsync(Task previous, List<string> paths, Action<List<string>> apply)
+    private static Task<(List<string> Files, string? Unreadable)> ExpandInBackground(List<string> paths) =>
+        Task.Run(() => (ExpandToAudioFiles(paths, out var unreadable), unreadable));
+
+    private static void ApplyNow(List<string> paths, Action<List<string>> apply)
+    {
+        var files = ExpandToAudioFiles(paths, out _);
+        if (files.Count > 0) apply(files);
+    }
+
+    private async Task OpenAfterAsync(Task previous, PendingOpen pending)
     {
         await previous;
 
         try
         {
-            string? unreadable = null;
-            var files = await Task.Run(() => ExpandToAudioFiles(paths, out unreadable));
-            if (_disposed) return;
+            var (files, unreadable) = await pending.Expansion;
 
-            if (files.Count > 0) apply(files);
+            // Zamykane okno mogło już dołożyć te pliki albo z nich zrezygnować.
+            if (_disposed || !_pendingOpens.Remove(pending)) return;
+
+            if (files.Count > 0) pending.Apply(files);
             if (unreadable is not null)
                 ShowNotice(string.Format(Strings.Current["FolderReadFailed"], FolderName(unreadable)));
         }
         catch (Exception ex)
         {
+            _pendingOpens.Remove(pending);
             Console.Error.WriteLine($"[cewka] nie udało się dodać plików: {ex}");
+        }
+    }
+
+    /// <summary>
+    /// Dokłada przed zapisem kolejki pliki z otwarć przeglądanych jeszcze w tle, w kolejności
+    /// przybycia. Ich nadawcy — inna kopia programu albo upuszczenie — uznali je za przyjęte.
+    /// Czeka najwyżej do terminu liczonego od początku zamykania (<see cref="BeginClosing"/>),
+    /// wspólnego dla wszystkich wywołań, bo zamykanie trzyma rolę działającej kopii, na którą
+    /// czeka następna; czego nie zdążono przejrzeć, tego się nie dokłada.
+    /// </summary>
+    public void FinishPendingOpens()
+    {
+        BeginClosing();
+        var deadline = _closingDeadline!.Value;
+
+        // Przeglądanie w tle nie potrzebuje wątku interfejsu, więc czekanie tutaj go nie zakleszczy.
+        foreach (var pending in _pendingOpens.ToList())
+        {
+            _pendingOpens.Remove(pending);
+
+            try
+            {
+                var left = Math.Max(0, deadline - Environment.TickCount64);
+                if (!pending.Expansion.Wait(TimeSpan.FromMilliseconds(left)))
+                {
+                    Console.Error.WriteLine("[cewka] przeglądanie folderu nie skończyło się przed zamknięciem okna");
+                    continue;
+                }
+
+                var files = pending.Expansion.Result.Files;
+                if (files.Count > 0) pending.Apply(files);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[cewka] nie udało się dodać plików: {ex}");
+            }
         }
     }
 
@@ -1068,14 +1174,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <para>Wybór plików w programie (<c>Ctrl+O</c>) idzie inną drogą, bo tam dodanie jest już
     /// rozstrzygnięte.</para>
     /// </summary>
-    public Task OpenFromOutside(IEnumerable<string> paths) => Open(paths, files =>
+    /// <param name="now">Przy zamykaniu okna: bez przeglądania w tle, zob. <see cref="Open"/>.</param>
+    public Task OpenFromOutside(IEnumerable<string> paths, bool now = false) => Open(paths, files =>
     {
         switch (_settings.Current.FileOpenAction)
         {
             case FileOpenAction.ReplaceAndPlay:
-                _resume.Discard();
-                if (TryPlayback(() => _engine.SetQueue(files))) SyncPlaying();
-                RebuildQueue();
+                ReplaceQueue(files);
                 break;
 
             case FileOpenAction.AppendAndPlay:
@@ -1086,7 +1191,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 _engine.Enqueue(files);
                 AppendRows();
                 _resume.Discard();
-                if (TryPlayback(() => _engine.PlayIndex(first))) SyncPlaying();
+
+                // Przy zamykaniu pierwszy dołożony plik tylko czeka jak wznowienie, zob. ReplaceQueue.
+                if (IsClosing) _resume.Arm(first, 0, Queue.Count);
+                else if (TryPlayback(() => _engine.PlayIndex(first))) SyncPlaying();
+
                 RestoreCurrentMarker();
                 break;
             }
@@ -1096,8 +1205,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 // po otwarciu pliku milczy, wygląda na zepsuty.
                 if (IsQueueEmpty)
                 {
-                    if (TryPlayback(() => _engine.SetQueue(files))) SyncPlaying();
-                    RebuildQueue();
+                    ReplaceQueue(files);
                 }
                 else
                 {
@@ -1107,7 +1215,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
                 break;
         }
-    });
+    }, now);
 
     // ---------- Awaria wyjścia dźwięku ----------
 
@@ -1204,6 +1312,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <para>Folder, którego nie da się przejrzeć, jest pomijany, a pierwszy taki trafia do
     /// <paramref name="unreadable"/>. Nieczytelny podkatalog pomija się po cichu.</para>
     /// </summary>
+    /// <summary>Wyłącznie dla testów: wołane przed przejrzeniem folderu, np. żeby je spowolnić.</summary>
+    internal static Action<string>? FolderExpanding;
+
     private static List<string> ExpandToAudioFiles(IEnumerable<string> paths, out string? unreadable)
     {
         unreadable = null;
@@ -1216,6 +1327,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 try
                 {
+                    FolderExpanding?.Invoke(path);
+
                     var folder = new DirectoryInfo(path);
                     var real = IsLink(folder) ? folder.ResolveLinkTarget(returnFinalTarget: true)?.FullName : null;
                     WalkFolder(folder, real ?? folder.FullName, visited, result, root: true);
