@@ -42,8 +42,8 @@ public static class MetadataReader
                 Channels = track.ChannelsArrangement?.NbChannels ?? 0,
                 IsVariableBitrate = track.IsVBR,
                 Codec = DescribeCodec(track),
-                ReplayGainTrack = ReadGain(track, "REPLAYGAIN_TRACK_GAIN"),
-                ReplayGainAlbum = ReadGain(track, "REPLAYGAIN_ALBUM_GAIN"),
+                ReplayGainTrack = ReadGain(track, "REPLAYGAIN_TRACK_GAIN") ?? ReadR128Gain(track, "R128_TRACK_GAIN"),
+                ReplayGainAlbum = ReadGain(track, "REPLAYGAIN_ALBUM_GAIN") ?? ReadR128Gain(track, "R128_ALBUM_GAIN"),
                 ReplayGainTrackPeak = ReadPeak(track, "REPLAYGAIN_TRACK_PEAK"),
             };
         }
@@ -95,6 +95,9 @@ public static class MetadataReader
         var format = track.AudioFormat?.ShortName ?? track.AudioFormat?.Name;
         if (string.IsNullOrWhiteSpace(format)) return null;
 
+        // Krótka nazwa Opusa to nazwa kontenera („OGG”); kodek podaje dopiero pełna nazwa.
+        if (track.AudioFormat?.Name?.Contains("OPUS", StringComparison.OrdinalIgnoreCase) == true) return "OPUS";
+
         // ATL names some formats verbosely, and its short names are not the ones a listener
         // recognises — "MPEG" for an MP3, for one. The badge in the design is terse.
         var upper = format.ToUpperInvariant();
@@ -124,8 +127,25 @@ public static class MetadataReader
         if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
             return null;
 
-        // A gain beyond this range is certainly a malformed tag, not a quiet recording.
-        return value is >= -60 and <= 60 ? value : null;
+        return Plausible(value);
+    }
+
+    /// <summary>Gain beyond this range is certainly a malformed tag, not a quiet recording.</summary>
+    private static double? Plausible(double value) => value is >= -60 and <= 60 ? value : null;
+
+    /// <summary>
+    /// Opus (RFC 7845) zapisuje wzmocnienie jako liczbę całkowitą w formacie Q7.8 dB względem
+    /// −23 LUFS. ReplayGain odnosi się do −18 LUFS, stąd przesunięcie o 5 dB.
+    /// </summary>
+    private static double? ReadR128Gain(ATL.Track track, string key)
+    {
+        var raw = FindField(track, key);
+        if (raw is null) return null;
+
+        if (!int.TryParse(raw.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var q78))
+            return null;
+
+        return Plausible(q78 / 256.0 + 5.0);
     }
 
     private static double? ReadPeak(ATL.Track track, string key)
