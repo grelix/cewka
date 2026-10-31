@@ -22,7 +22,7 @@ Przegląd całego programu: dźwięk, okno, kolejka, obsługa z klawiatury i tek
 ### Okno
 
 - Pokazanie i schowanie kolejki albo korektora nie zmienia rozmiaru okna. W oknie węższym niż 1040 px kolejka wysuwa się nad treść.
-- W Windowsie działa przyciąganie do krawędzi, Win+strzałki i układy przyciągania.
+- W Windowsie działa przyciąganie okna do krawędzi ekranu i Win+strzałki.
 - Przełączniki kolejki i korektora w pasku tytułu pokazują, czy są włączone.
 - Drobny tekst jest czytelny na każdym tle z okładki.
 - Animacje stają w pauzie i wtedy, gdy są wyłączone w systemie.
