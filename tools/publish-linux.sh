@@ -10,10 +10,12 @@ KATALOG="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Biblioteka natywna musi powstac przed publikacja - to ona jest pakowana do wyniku.
 # Katalog runtimes/ jest poza gitem i przetrwa aktualizacje zrodel, wiec biblioteka starsza
-# od zrodla jest budowana od nowa; inaczej do wydania trafilaby poprzednia wersja.
+# od zrodla lub od skryptu budowy (flagi kompilacji) jest budowana od nowa; inaczej do wydania
+# trafilaby poprzednia wersja.
 SO="$KATALOG/src/Cewka.Audio/runtimes/linux-x64/native/libcewka_audio.so"
 if [ ! -f "$SO" ] ||
    [ "$KATALOG/native/cewka_audio.c" -nt "$SO" ] ||
+   [ "$KATALOG/native/build-linux.sh" -nt "$SO" ] ||
    [ "$KATALOG/native/miniaudio/miniaudio.h" -nt "$SO" ]; then
     echo "Biblioteka natywna nieaktualna lub brak, budowanie..."
     "$KATALOG/native/build-linux.sh"
