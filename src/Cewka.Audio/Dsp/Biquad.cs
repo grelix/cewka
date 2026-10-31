@@ -1,12 +1,8 @@
 namespace Cewka.Audio.Dsp;
 
 /// <summary>
-/// A second-order section in transposed direct form II.
-/// <para>
-/// That form is the right choice here because it keeps its state in the same order of
-/// magnitude as the signal itself, whereas direct form I accumulates the sum of several
-/// terms and loses precision faster in 32-bit arithmetic.
-/// </para>
+/// Sekcja drugiego rzędu w transponowanej postaci bezpośredniej II, która trzyma stan w rzędzie
+/// wielkości sygnału i traci mniej precyzji w arytmetyce 32-bitowej.
 /// </summary>
 public struct Biquad
 {
@@ -64,14 +60,11 @@ public struct Biquad
     }
 
     /// <summary>
-    /// First stage of the K-weighting filter from ITU-R BS.1770-4: a high shelf standing in
-    /// for the acoustic effect of the head.
+    /// Pierwszy stopień filtru K z ITU-R BS.1770-4: półka górna.
     /// <para>
-    /// Deliberately not expressed through <see cref="SetHighShelf"/>. The cookbook form
-    /// normalises the numerator differently, which leaves a constant offset of a few
-    /// hundredths of a decibel — harmless in an equaliser, wrong in a meter whose whole
-    /// purpose is to agree with other meters. This derivation reproduces the coefficient
-    /// table in the specification exactly, at any sample rate.
+    /// Pułapka: nie przez <see cref="SetHighShelf"/>, bo postać z Audio EQ Cookbook inaczej
+    /// normalizuje licznik i zostawia stałe przesunięcie o setne części decybela, a miernik ma się
+    /// zgadzać z innymi. To wyprowadzenie odtwarza tabelę współczynników ze specyfikacji.
     /// </para>
     /// </summary>
     public void SetKWeightingShelf(double sampleRate)

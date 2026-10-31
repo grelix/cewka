@@ -5,12 +5,11 @@ using Cewka.Audio.Interop;
 namespace Cewka.Audio.Devices;
 
 /// <summary>
-/// An open playback device. The <see cref="Render"/> delegate is invoked from the audio
-/// thread and must fill the buffer with interleaved samples.
+/// Otwarte urządzenie odtwarzania. <see cref="Render"/> woła wątek dźwiękowy, który ma wypełnić
+/// bufor przeplecionymi próbkami.
 /// <para>
-/// Everything that runs inside <see cref="Render"/> shares the constraints of any realtime
-/// audio callback: no allocation, no locks that another thread can hold for long, no
-/// blocking. Breaking those rules does not throw — it produces dropouts.
+/// Pułapka: w <see cref="Render"/> bez alokacji, długich blokad i czekania. Złamanie tych zasad
+/// nie rzuca wyjątku, tylko daje przerwy w dźwięku.
 /// </para>
 /// </summary>
 public sealed unsafe class AudioDevice : IAudioOutput
@@ -80,10 +79,8 @@ public sealed unsafe class AudioDevice : IAudioOutput
     /// <summary>
     /// Otwiera urządzenie o podanej nazwie, a gdy go nie ma albo nazwa jest pusta, domyślne.
     ///
-    /// <para>Pozycja na liście urządzeń nie jest trwała: odłączenie sprzętu przesuwa numery
-    /// pozostałych, a każde wyliczenie odświeża listę po stronie natywnej. Numer wyznaczony
-    /// przy wyborze w Ustawieniach mógłby więc wskazać inne urządzenie, dlatego wyznacza się
-    /// go z nazwy tuż przed otwarciem, w tym samym przebiegu co odświeżenie listy.</para>
+    /// <para>Pułapka: odłączenie sprzętu przesuwa numery na liście urządzeń, więc numer
+    /// wyznacza się z nazwy tuż przed otwarciem, w tym samym przebiegu co odświeżenie listy.</para>
     /// </summary>
     public static AudioDevice Open(string? deviceName, int sampleRate, int channels, int periodSizeInFrames = 0)
     {

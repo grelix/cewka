@@ -5,13 +5,11 @@ using Concentus.Oggfile;
 namespace Cewka.Audio.Decoding;
 
 /// <summary>
-/// Opus inside an Ogg container, decoded by Concentus.
+/// Opus w kontenerze Ogg, dekodowany przez Concentus.
 /// <para>
-/// Opus always runs at 48 kHz, so the only conversion this decoder ever needs is a channel
-/// map plus a resample down to whatever the device asked for. The Ogg reader of Concentus
-/// only unpacks the container; packets are decoded here, because the reader accepts nothing
-/// but a single-stream decoder and ignores the header fields RFC 7845 requires a player
-/// to honour: pre-skip, output gain and the channel mapping.
+/// Czytnik Ogg z Concentus tylko rozpakowuje kontener; pakiety dekodowane są tutaj, bo
+/// czytnik przyjmuje wyłącznie dekoder jednostrumieniowy i pomija pola nagłówka wymagane przez
+/// RFC 7845: pre-skip, wzmocnienie wyjściowe i mapowanie kanałów.
 /// </para>
 /// </summary>
 internal sealed class OpusDecoder : ManagedDecoderBase
@@ -134,10 +132,8 @@ internal sealed class OpusDecoder : ManagedDecoderBase
     }
 
     /// <summary>
-    /// Concentus's Ogg reader does not recover once it has run past the last packet — a
-    /// later <c>SeekTo</c> leaves it reporting no further packets. Building a fresh reader
-    /// sidesteps that entirely, and seeking is a rare, user-initiated action, so the cost
-    /// of re-reading the header does not matter.
+    /// Pułapka: czytnik Ogg z Concentus po minięciu ostatniego pakietu nie wraca do pracy
+    /// po <c>SeekTo</c>, więc przy przewinięciu powstaje nowy.
     /// </summary>
     protected override void SeekSource(long sourceFrame)
     {

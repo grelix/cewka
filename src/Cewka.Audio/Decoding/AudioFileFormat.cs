@@ -137,10 +137,9 @@ public static class AudioFileFormatDetector
     private const int MaxOggStreams = 16;
 
     /// <summary>
-    /// Vorbis, Opus and FLAC all travel inside Ogg. The codec identifier sits in the first
-    /// packet of each logical stream, and every stream opens with its own BOS page before any
-    /// data page. A file whose streams name no codec the player knows gives Unknown, so the
-    /// queue does not call the file damaged.
+    /// Vorbis, Opus i FLAC w kontenerze Ogg. Identyfikator kodeka stoi w pierwszym pakiecie
+    /// każdego strumienia logicznego, na jego stronie BOS. Plik bez znanego kodeka daje Unknown,
+    /// żeby kolejka nie nazwała go uszkodzonym.
     ///
     /// <para>Pułapka: pierwszy strumień nie musi być dźwiękiem. Pliki z ffmpeg2theora albo oggz
     /// zaczynają się od Skeletonu lub Theory, a Vorbis stoi dalej, więc przeglądane są wszystkie

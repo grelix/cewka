@@ -1,16 +1,9 @@
 namespace Cewka.Audio.Dsp;
 
 /// <summary>
-/// Integrated loudness according to ITU-R BS.1770-4, which is what EBU R128 and
-/// ReplayGain 2.0 are built on.
-///
-/// <para>Sygnał przechodzi przez dwustopniowy filtr K (półka górna
-/// plus filtr górnoprzepustowy), który przybliża sposób, w jaki ucho ocenia głośność.
-/// Następnie liczona jest średnia kwadratu w blokach 400 ms zachodzących na siebie w 75%.
-/// Bloki cichsze niż −70 LUFS są odrzucane bramką bezwzględną, a z pozostałych wyznaczana
-/// jest bramka względna 10 LU poniżej ich średniej. Dopiero bloki przechodzące obie bramki
-/// tworzą wynik. Dwustopniowe bramkowanie sprawia, że cisza między utworami i wyciszenia
-/// nie zaniżają wyniku.</para>
+/// Głośność zintegrowana według ITU-R BS.1770-4 (podstawa EBU R128 i ReplayGain 2.0): filtr K,
+/// średnia kwadratu w blokach 400 ms z zakładką 75%, bramka bezwzględna −70 LUFS i względna
+/// 10 LU poniżej średniej, żeby cisza i wyciszenia nie zaniżały wyniku.
 /// </summary>
 public sealed class LoudnessAnalyser
 {
@@ -124,7 +117,7 @@ public sealed class LoudnessAnalyser
     {
         if (_blockEnergies.Count == 0) return null;
 
-        // Bramka bezwzgledna.
+        // Bramka bezwzględna.
         var aboveAbsolute = new List<double>(_blockEnergies.Count);
         foreach (var energy in _blockEnergies)
         {
@@ -134,7 +127,7 @@ public sealed class LoudnessAnalyser
 
         if (aboveAbsolute.Count == 0) return null;
 
-        // Bramka wzgledna, wyznaczona ze sredniej bloków, ktore przeszly bramke bezwzgledna.
+        // Bramka względna, ze średniej bloków, które przeszły bramkę bezwzględną.
         var ungatedMean = aboveAbsolute.Sum() / aboveAbsolute.Count;
         var relativeThreshold = ScaleOffset + 10 * Math.Log10(ungatedMean) - RelativeGateLu;
 

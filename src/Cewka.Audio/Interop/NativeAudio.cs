@@ -256,11 +256,8 @@ internal static unsafe partial class NativeAudio
         yield return Path.Combine(baseDirectory, FileName);
         yield return Path.Combine(baseDirectory, "runtimes", Rid, "native", FileName);
 
-        // Uruchomienie z katalogu projektu podczas prac deweloperskich.
-        //
-        // W wydaniu jednoplikowym Assembly.Location zwraca pusty napis i analizator slusznie
-        // o tym uprzedza; ta sciezka jest tu wylacznie dla zwyklej kompilacji, a pusty wynik
-        // jest obslugiwany linijke nizej.
+        // Uruchomienie z katalogu projektu. W wydaniu jednoplikowym Assembly.Location zwraca
+        // pusty napis, obsłużony linijkę niżej.
 #pragma warning disable IL3000
         var assemblyDirectory = Path.GetDirectoryName(typeof(NativeAudio).Assembly.Location);
 #pragma warning restore IL3000

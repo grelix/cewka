@@ -1,19 +1,11 @@
 namespace Cewka.Audio.Dsp;
 
 /// <summary>
-/// Poszerzenie bazy stereo macierzą środek–boki.
+/// Poszerzenie bazy stereo macierzą środek–boki. Wzmacniane są tylko boki, więc suma
+/// monofoniczna zostaje bez zmian.
 ///
-/// <para>Sygnał rozkładany jest na środek — to, co wspólne obu kanałom — i boki,
-/// czyli ich różnicę. Wzmacniane są wyłącznie boki. Środek pozostaje nietknięty, a to znaczy,
-/// że suma monofoniczna nie zmienia się wcale: odsłuch na jednym głośniku brzmi tak samo
-/// przy każdym ustawieniu. Poszerzanie opóźnieniem, spotykane w prostszych rozwiązaniach, tej
-/// własności nie ma i potrafi wydrążyć nagranie odtworzone monofonicznie.</para>
-///
-/// <para>Boki wzmacnia półka górna, więc bas prawie nie zmienia szerokości: poszerzanie go
-/// rozjeżdża fazę między głośnikami i odbiera nagraniu podstawę, a kierunku najniższych tonów
-/// i tak nie słyszymy. Półka o dobroci 0,7071 przechodzi z jedności do pełnego wzmocnienia
-/// monotonicznie, bez garbu i bez dołka. Nie sprowadzam przy tym basu do monofonii — to, co
-/// nagrano, zostaje takie, jakie było.</para>
+/// <para>Boki wzmacnia półka górna o dobroci 0,7071 (przejście monotoniczne), żeby bas prawie
+/// nie zmieniał szerokości.</para>
 /// </summary>
 public sealed class StereoWidth : IAudioProcessor
 {
@@ -29,8 +21,8 @@ public sealed class StereoWidth : IAudioProcessor
     private const double SwitchSeconds = 0.020;
 
     /// <summary>
-    /// Jeden filtr, nie dwa: pracuje na sygnale boku, który jest już pojedynczym przebiegiem.
-    /// Ustawiony na pełną szerokość; słabsze ustawienia mieszają jego wynik z bokiem bez zmian.
+    /// Filtr sygnału boku ustawiony na pełną szerokość; słabsze ustawienia mieszają jego wynik
+    /// z bokiem bez zmian.
     /// </summary>
     private Biquad _sideShelf = Biquad.Identity();
 

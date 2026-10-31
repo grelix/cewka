@@ -4,16 +4,11 @@ using System.Runtime.Versioning;
 namespace Cewka.Audio.Decoding.Linux;
 
 /// <summary>
-/// The handful of GStreamer entry points the player needs.
+/// Kilkanaście funkcji GStreamera potrzebnych do zbudowania jednego potoku i odbioru próbek;
+/// gotowe wiązania .NET obejmują całą bibliotekę i wymagają generowania kodu z plików GIR.
 ///
-/// <para>Istniejące wiązania GStreamera
-/// dla platformy .NET obejmują całą bibliotekę i wymagają generowania kodu z plików GIR.
-/// Tutaj potrzeba kilkunastu funkcji do zbudowania jednego potoku i wyciągania z niego próbek —
-/// to samo rozstrzygnięcie, co przy Media Foundation w warstwie dla systemu Windows.</para>
-///
-/// <para>Funkcje takie jak <c>gst_sample_unref</c> są w nagłówkach funkcjami wplatanymi
-/// i nie istnieją jako symbole biblioteki; zwalnianie idzie więc przez
-/// <c>gst_mini_object_unref</c>, na które one się sprowadzają.</para>
+/// <para>Pułapka: <c>gst_sample_unref</c> i podobne są w nagłówkach funkcjami wplatanymi i nie
+/// istnieją w bibliotece, więc zwalnianie idzie przez <c>gst_mini_object_unref</c>.</para>
 /// </summary>
 [SupportedOSPlatform("linux")]
 internal static partial class Gst

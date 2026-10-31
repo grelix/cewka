@@ -4,12 +4,11 @@ using Cewka.Audio.Interop;
 namespace Cewka.Audio.Decoding;
 
 /// <summary>
-/// MP3, FLAC and WAV, decoded by the dr_libs decoders bundled inside miniaudio, with its
-/// channel conversion and resampler doing the format matching.
+/// MP3, FLAC i WAV przez dekodery dr_libs z miniaudio, razem z jego konwersją kanałów
+/// i resamplerem.
 /// <para>
-/// The file itself is read through a managed <see cref="Stream"/> rather than by path.
-/// That keeps Unicode paths working identically on both systems — miniaudio's own file
-/// helpers take a narrow <c>char*</c> — and avoids loading whole albums into memory.
+/// Plik czytany jest przez zarządzany <see cref="Stream"/>, bo funkcje plikowe miniaudio
+/// przyjmują wąskie <c>char*</c> i psułyby ścieżki z Unicode.
 /// </para>
 /// </summary>
 internal sealed unsafe class MiniaudioDecoder : IAudioDecoder
@@ -61,8 +60,8 @@ internal sealed unsafe class MiniaudioDecoder : IAudioDecoder
 
         _meter?.Configure(outputSampleRate);
 
-        // Dlugosc przychodzi juz w ramkach wyjsciowych - miniaudio uwzglednia wlasna
-        // konwersje czestotliwosci - wiec nie wolno jej przeliczac po raz drugi.
+        // Długość przychodzi już w ramkach wyjściowych, bo miniaudio uwzględnia własną
+        // konwersję częstotliwości; nie wolno jej przeliczać drugi raz.
         TotalFrames = (long)lengthFrames;
     }
 
@@ -96,12 +95,10 @@ internal sealed unsafe class MiniaudioDecoder : IAudioDecoder
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!CanSeek) return;
 
-        // Przewijanie liczone jest w ramkach wyjsciowych, tak samo jak zwracana dlugosc:
-        // miniaudio uwzglednia wlasna konwersje czestotliwosci po swojej stronie. Przeliczanie
-        // na ramki zrodlowe wysylaloby plik 96 kHz odtwarzany przez urzadzenie 48 kHz
-        // dwukrotnie za daleko, czyli zwykle poza koniec nagrania.
-        // Nieudane przewinięcie zostawia dekoder tam, gdzie faktycznie stoi, i tę pozycję
-        // trzeba podać dalej, inaczej wskaźnik pokazywałby cel, a dźwięk szedłby skądinąd.
+        // Pułapka: przewijanie liczone jest w ramkach wyjściowych, jak długość, bo miniaudio
+        // samo uwzględnia konwersję częstotliwości. Ramki źródłowe wysłałyby plik 96 kHz na
+        // urządzeniu 48 kHz dwa razy za daleko. Po nieudanym przewinięciu podawana jest pozycja,
+        // na której dekoder faktycznie stoi.
         _position = NativeAudio.DecoderSeek(_handle, (ulong)Math.Max(0, frame)) == NativeAudio.Success
             ? frame
             : (long)NativeAudio.DecoderCursor(_handle);

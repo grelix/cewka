@@ -5,14 +5,9 @@ using static Cewka.Audio.Decoding.Windows.MediaFoundation;
 namespace Cewka.Audio.Decoding.Windows;
 
 /// <summary>
-/// AAC, M4A and ALAC through Media Foundation, which every supported version of Windows
-/// already carries. This is what lets the player handle the whole declared range of formats
-/// without shipping a decoder of its own or asking anyone to install one.
-///
-/// <para>Dekoder prosi Media Foundation wyłącznie o zamianę na próbki zmiennoprzecinkowe
-/// w częstotliwości źródłowej. Dopasowanie do formatu urządzenia robi ta sama klasa bazowa,
-/// co dla Vorbisa i Opusa, dzięki czemu wszystkie ścieżki brzmią tak samo — zamiast polegać
-/// na resamplerze systemowym, którego jakość zależy od wersji Windows.</para>
+/// AAC, M4A i ALAC przez Media Foundation. Dekoder prosi tylko o próbki zmiennoprzecinkowe
+/// w częstotliwości źródła; dopasowanie do urządzenia robi wspólna klasa bazowa, bo jakość
+/// resamplera systemowego zależy od wydania Windows.
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class MediaFoundationDecoder : ManagedDecoderBase

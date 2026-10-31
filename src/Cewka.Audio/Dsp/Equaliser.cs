@@ -1,15 +1,12 @@
 namespace Cewka.Audio.Dsp;
 
 /// <summary>
-/// Ten-band graphic equaliser with a preamp, matching the bands in the design.
+/// Dziesięciopasmowy korektor graficzny ze wzmocnieniem wstępnym; pasmo to jeden filtr
+/// szczytowy na kanał.
 /// <para>
-/// Each band is one peaking section per channel. Gains are smoothed towards their targets
-/// once per buffer: moving a fader recomputes filter coefficients, and a step change in
-/// coefficients is audible as a click.
-/// </para>
-/// <para>
-/// Przedwzmacniacz zmienia się liniowo w obrębie bufora, a wyłączenie sprowadza wszystkie
-/// pasma płynnie do zera i dopiero wtedy omija korektor.
+/// Pułapka: skokową zmianę współczynników filtru słychać jako trzask, dlatego wzmocnienia
+/// pasm dochodzą do celu raz na bufor, wzmocnienie wstępne zmienia się liniowo w buforze,
+/// a wyłączenie najpierw sprowadza pasma płynnie do zera.
 /// </para>
 /// </summary>
 public sealed class Equaliser : IAudioProcessor

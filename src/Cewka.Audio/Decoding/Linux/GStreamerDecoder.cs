@@ -4,15 +4,12 @@ using System.Runtime.Versioning;
 namespace Cewka.Audio.Decoding.Linux;
 
 /// <summary>
-/// AAC, M4A and ALAC on Linux, decoded by whatever GStreamer has installed.
+/// AAC, M4A i ALAC pod Linuksem przez GStreamer. Potok <c>filesrc → decodebin → audioconvert →
+/// appsink</c> oddaje próbki zmiennoprzecinkowe w formacie pliku, a dopasowanie do urządzenia
+/// robi wspólna klasa bazowa.
 ///
-/// <para>Potok <c>filesrc → decodebin → audioconvert → appsink</c> zostawia dobór dekodera
-/// GStreamerowi, a program odbiera gotowe próbki zmiennoprzecinkowe w częstotliwości i liczbie
-/// kanałów pliku. Dopasowanie do urządzenia robi ta sama klasa bazowa co dla Vorbisa, Opusa
-/// i Media Foundation, więc wszystkie ścieżki brzmią tak samo.</para>
-///
-/// <para><c>sync=false</c> na odbiorniku jest istotne: bez tego GStreamer wydawałby próbki
-/// w tempie odtwarzania, a dekoder ma wyprzedzać odtwarzanie.</para>
+/// <para><c>sync=false</c> na odbiorniku jest konieczne, inaczej próbki przychodziłyby w tempie
+/// odtwarzania, a dekoder ma je wyprzedzać.</para>
 ///
 /// <para>Pułapka: błąd dekodera za kolejką w <c>decodebin</c> zatrzymuje potok bez EOS, więc
 /// blokujące <c>gst_app_sink_pull_sample</c> czekałoby bez końca. Próbki pobierane są z limitem
@@ -128,12 +125,9 @@ internal sealed class GStreamerDecoder : ManagedDecoderBase
     }
 
     /// <summary>
-    /// Asks the pipeline how long the track is.
-    ///
-    /// <para>Zapytanie potrafi zawieść tuż po uruchomieniu potoku: przy pliku MP3 o zmiennej
-    /// przepływności bez nagłówka Xing długość znana jest dopiero po przeskanowaniu materiału,
-    /// a przy strumieniu z kontenera — po odczytaniu jego nagłówków. Dlatego pytanie powtarzane
-    /// jest przy kolejnych porcjach próbek, dopóki nie przyniesie odpowiedzi.</para>
+    /// Pyta potok o długość utworu. Tuż po starcie zapytanie potrafi zawieść (MP3 o zmiennej
+    /// przepływności bez nagłówka Xing, kontener przed odczytem nagłówków), więc jest
+    /// powtarzane przy kolejnych porcjach próbek.
     /// </summary>
     private void TryReadDuration()
     {

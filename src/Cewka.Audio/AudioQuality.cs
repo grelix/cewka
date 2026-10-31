@@ -1,18 +1,11 @@
 namespace Cewka.Audio;
 
 /// <summary>
-/// Conversion quality, as chosen by the user in the settings window.
+/// Jakość konwersji wybrana w ustawieniach. Stan wspólny dla procesu, bo dekodery powstają
+/// w głębi <see cref="Decoding.DecoderFactory"/>, a gra jeden utwór na jednym urządzeniu.
 ///
-/// <para><b>Dlaczego stan wspólny dla całej biblioteki.</b> Wartość odczytywana jest w chwili
-/// tworzenia dekodera, a dekodery powstają w głębi <see cref="Decoding.DecoderFactory"/>.
-/// Przeprowadzenie jej parametrem oznaczałoby dopisanie preferencji użytkownika do sygnatury
-/// sześciu konstruktorów dekoderów i narzędzia diagnostycznego — czyli wpisanie ustawienia
-/// interfejsu w miejsca, które o interfejsie nic nie wiedzą. Odtwarzany jest jeden utwór na
-/// jednym urządzeniu, więc jedna wartość na proces opisuje stan rzeczy bez straty.</para>
-///
-/// <para><b>Kiedy zmiana zaczyna działać.</b> Od następnego otwarcia dekodera, czyli od
-/// następnego utworu. Resampler jest stanowy — ma historię filtru — i podmiana jego rzędu
-/// w trakcie utworu dałaby trzask dokładnie tam, gdzie zmiana miała poprawić brzmienie.</para>
+/// <para>Zmiana działa od następnego otwarcia dekodera: resampler ma historię filtru i podmiana
+/// rzędu w trakcie utworu dałaby trzask.</para>
 /// </summary>
 public static class AudioQuality
 {

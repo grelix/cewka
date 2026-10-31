@@ -14,21 +14,19 @@ public readonly record struct TrackGain(double GainDecibels, double ProgrammeLev
 public interface ITrackGainSource
 {
     /// <summary>
-    /// Returns the gain to apply, or null when it is not known yet. Called from the decode
-    /// thread as a track is opened, so it must return promptly — anything slow belongs in
-    /// the background.
+    /// Zwraca wzmocnienie albo null, gdy jeszcze nieznane. Wołane z wątku dekodującego przy
+    /// otwieraniu utworu, więc musi wrócić od razu; wszystko powolne idzie w tle.
     /// </summary>
     TrackGain? GetTrackGain(QueueEntry entry);
 }
 
 /// <summary>
-/// The signal chain, in order: loudness normalisation, loudness compensation, equaliser with
-/// its preamp, effects, analysis tap, master volume, limiter.
+/// Tor sygnału, w kolejności: wyrównanie głośności, kompensacja głośności, korektor ze
+/// wzmocnieniem wstępnym, efekty, analiza, głośność, limiter.
 ///
-/// <para>Normalizacja idzie pierwsza, bo wyrównuje materiał przed jakąkolwiek korekcją. Analiza
-/// sygnału jest przed głośnością, żeby fala na ekranie nie zależała od położenia suwaka.
-/// Limiter stoi na samym końcu, za głośnością: chroni przed przesterowaniem rzeczywistego
-/// wyjścia, a po ściszeniu podbicia korektora i kompensacji zwykle mieszczą się w skali.</para>
+/// <para>Pułapka: kolejność ma znaczenie. Wyrównanie idzie przed każdą korekcją, analiza przed
+/// głośnością, żeby fala na ekranie nie zależała od suwaka, a limiter za głośnością, bo chroni
+/// rzeczywiste wyjście.</para>
 /// </summary>
 public sealed class AudioGraph
 {
@@ -62,7 +60,7 @@ public sealed class AudioGraph
 
     public SpectrumAnalyser Analyser { get; } = new();
 
-    /// <summary>When false the normalisation stage is bypassed and the gain returns to unity.</summary>
+    /// <summary>Wyłączone sprowadza wzmocnienie wyrównania do jedności.</summary>
     public bool NormalisationEnabled { get; set; } = true;
 
     /// <summary>Set by the application; consulted whenever a track starts.</summary>
@@ -94,8 +92,7 @@ public sealed class AudioGraph
 
         Normalisation.Process(buffer, frames);
 
-        // Kompensacja potrzebuje wiedzieć, jak głośno naprawdę gra muzyka, a widok na obie
-        // składowe, suwak i poziom programu, ma tylko ten obiekt.
+        // Kompensacja zależy od suwaka i poziomu programu, a oba zna tylko ten obiekt.
         Loudness.SetListeningLevel(Volume.TargetDecibels, Volatile.Read(ref _programmeLevelDb));
         Loudness.Process(buffer, frames);
 
@@ -123,9 +120,9 @@ public sealed class AudioGraph
     public TrackGain? TrackGainFor(QueueEntry entry) => GainSource?.GetTrackGain(entry);
 
     /// <summary>
-    /// Ustawia wzmocnienie wyrównania i poziom programu w chwili, gdy utwór dociera do wyjścia.
-    /// Wątek dźwiękowy: bez alokacji. Ustawione przy otwarciu pliku objęłyby końcówkę
-    /// poprzedniego utworu, która w tej chwili jeszcze czeka w buforze.
+    /// Ustawia wzmocnienie wyrównania i poziom programu, gdy utwór dociera do wyjścia; przy
+    /// otwarciu pliku objęłyby końcówkę poprzedniego, która czeka jeszcze w buforze.
+    /// Wątek dźwiękowy, bez alokacji.
     /// </summary>
     /// <param name="gain">Wartość z <see cref="TrackGainFor"/>; null, gdy nieznana.</param>
     /// <param name="snap">True po opróżnieniu bufora: nowy utwór zaczyna się od właściwego poziomu, bez dochodzenia do niego.</param>

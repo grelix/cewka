@@ -3,13 +3,10 @@ using System.Runtime.InteropServices;
 namespace Cewka.Audio.Decoding.Windows;
 
 /// <summary>
-/// The slice of Media Foundation needed to decode AAC, M4A and ALAC on Windows.
+/// Część Media Foundation potrzebna do dekodowania AAC, M4A i ALAC.
 ///
-/// <para>Interfejsy COM Media Foundation są duże, a kolejność metod
-/// w tablicy wirtualnej ma znaczenie — pomyłka nie daje błędu kompilacji, tylko wywołanie
-/// zupełnie innej funkcji. Metody nieużywane są tu zadeklarowane jako puste miejsca
-/// o właściwej sygnaturze, żeby przesunięcia pozostałych się zgadzały. To standardowa
-/// technika przy ręcznym opisywaniu interfejsów COM.</para>
+/// <para>Pułapka: pomyłka w kolejności metod w tablicy wirtualnej kompiluje się i wywołuje inną
+/// funkcję, dlatego metody nieużywane stoją tu jako puste miejsca o właściwej sygnaturze.</para>
 /// </summary>
 internal static class MediaFoundation
 {
@@ -66,7 +63,7 @@ internal static class MediaFoundation
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     internal interface IMFAttributes
     {
-        // Kolejnosc metod odpowiada tablicy wirtualnej; nieuzywane sa miejscami rezerwowymi.
+        // Kolejność metod odpowiada tablicy wirtualnej; nieużywane są miejscami rezerwowymi.
         [PreserveSig] int GetItem(ref Guid key, IntPtr value);
         [PreserveSig] int GetItemType(ref Guid key, out int type);
         [PreserveSig] int CompareItem(ref Guid key, IntPtr value, out bool result);
@@ -104,7 +101,7 @@ internal static class MediaFoundation
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     internal interface IMFMediaType : IMFAttributes
     {
-        // Metody odziedziczone musza zostac powtorzone, zeby zachowac przesuniecia.
+        // Metody odziedziczone muszą zostać powtórzone, żeby zachować przesunięcia.
         [PreserveSig] new int GetItem(ref Guid key, IntPtr value);
         [PreserveSig] new int GetItemType(ref Guid key, out int type);
         [PreserveSig] new int CompareItem(ref Guid key, IntPtr value, out bool result);
@@ -166,7 +163,7 @@ internal static class MediaFoundation
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     internal interface IMFSample : IMFAttributes
     {
-        // Ponownie: wszystkie metody IMFAttributes, zeby przesuniecia sie zgadzaly.
+        // Wszystkie metody IMFAttributes, żeby przesunięcia się zgadzały.
         [PreserveSig] new int GetItem(ref Guid key, IntPtr value);
         [PreserveSig] new int GetItemType(ref Guid key, out int type);
         [PreserveSig] new int CompareItem(ref Guid key, IntPtr value, out bool result);

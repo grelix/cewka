@@ -6,13 +6,13 @@ using Cewka.Audio.Devices;
 namespace Cewka.AudioProbe;
 
 /// <summary>
-/// Developer tool for checking the audio layer against real files.
+/// Narzędzie deweloperskie do sprawdzania warstwy dźwięku na prawdziwych plikach.
 ///
-/// Uzycie:
-///   dotnet run --project tools/Cewka.AudioProbe -- [katalog-z-muzyka]
+/// Użycie:
+///   dotnet run --project tools/Cewka.AudioProbe -- [katalog-z-muzyką]
 ///
-/// Sprawdza: warstwe natywna, liste urzadzen, otwarcie urzadzenia (na ciszy, bez dzwieku)
-/// oraz dekodowanie po jednym pliku z kazdego napotkanego formatu.
+/// Sprawdza warstwę natywną, listę urządzeń, otwarcie urządzenia (na ciszy, bez dźwięku)
+/// i dekodowanie po jednym pliku z każdego napotkanego formatu.
 /// </summary>
 internal static class Program
 {
@@ -112,8 +112,7 @@ internal static class Program
             if (!DecodeOne(format, path)) failures++;
         }
 
-        // Nie ma pliku Opus w bibliotece - trzeba go wytworzyc, zeby ta sciezka nie zostala
-        // niesprawdzona. Concentus potrafi kodowac, wiec wystarczy do siebie samego.
+        // Bez pliku Opus w katalogu plik powstaje na miejscu; Concentus potrafi też kodować.
         if (found.All(f => f.Format != AudioFileFormat.Opus))
         {
             Section("Opus (plik wygenerowany na potrzeby testu)");

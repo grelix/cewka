@@ -27,22 +27,16 @@ public readonly record struct LoudnessMeasurement(double IntegratedLufs, double 
 internal sealed partial class LoudnessJsonContext : JsonSerializerContext;
 
 /// <summary>
-/// Supplies the normalisation gain for a track.
+/// Dostarcza wzmocnienie wyrównania dla utworu: z tagów ReplayGain, z pamięci podręcznej
+/// analiz albo, gdy obu brak, zleca analizę w tle. Przy pierwszym odsłuchu taki utwór gra więc
+/// bez wyrównania, żeby analiza nie opóźniła startu.
 ///
-/// <para>Kolejność źródeł: najpierw tagi ReplayGain, bo nic nie kosztują i zwykle pochodzą
-/// z porządnego pomiaru; potem pamięć podręczna wcześniejszych analiz; a gdy i tej nie ma,
-/// plik trafia do kolejki analizy w tle. Analiza pełnego utworu trwa ułamek sekundy, ale
-/// prowadzona jest poza wątkiem dekodującym, żeby nie opóźniła startu odtwarzania — przy
-/// pierwszym odsłuchu utwór zagra bez wyrównania, przy kolejnym już z nim.</para>
-///
-/// <para>Dodatnie wzmocnienie ograniczane jest szczytem utworu, tak żeby szczyt wypadł na
-/// progu limitera. Inaczej ciche, dynamiczne nagranie podbite o kilkanaście decybeli trafiałoby
-/// limiterem w każdy akcent. Szczyt pochodzi z tagu ReplayGain albo z własnej analizy; gdy nie
-/// ma żadnego, wzmocnienie z tagu zostaje bez zmian, a ochronę przejmuje limiter.</para>
+/// <para>Dodatnie wzmocnienie ograniczane jest szczytem utworu (z tagu albo z analizy) do progu
+/// limitera; inaczej podbite ciche nagranie trafiałoby limiterem w każdy akcent.</para>
 /// </summary>
 public sealed class LoudnessService : ITrackGainSource, IDisposable
 {
-    /// <summary>ReplayGain 2.0 reference level — poziom, do którego odnoszą się tagi.</summary>
+    /// <summary>Poziom odniesienia ReplayGain 2.0, do którego odnoszą się tagi.</summary>
     public const double ReferenceLufs = -18.0;
 
     /// <summary>Zapas pod pełną skalą przy ograniczaniu wzmocnienia szczytem; równy progowi limitera.</summary>
@@ -92,8 +86,7 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
         {
             IsBackground = true,
             Name = "Cewka.Loudness",
-            // Deliberately below normal: this is housekeeping and must never compete
-            // with decoding or with the interface.
+            // Praca porządkowa nie może konkurować z dekodowaniem ani z interfejsem.
             Priority = ThreadPriority.BelowNormal,
         };
         _worker.Start();
@@ -103,19 +96,14 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
     public event Action<string, double>? Measured;
 
     /// <summary>
-    /// Poziom, do którego wyrównywane są utwory. Domyślnie <see cref="ReferenceLufs"/>, czyli
-    /// poziom odniesienia ReplayGain 2.0.
-    ///
-    /// <para>Zmiana nie unieważnia pamięci podręcznej: przechowywana jest zmierzona głośność
-    /// utworu, a nie wyliczone wzmocnienie, więc nowy poziom wystarczy odjąć ponownie. Dlatego
-    /// przestawienie tego ustawienia nie każe niczego analizować po raz drugi.</para>
+    /// Poziom, do którego wyrównywane są utwory. Zmiana nie unieważnia pamięci podręcznej, bo
+    /// ta przechowuje zmierzoną głośność, a wzmocnienie liczone jest przy każdym odczycie.
     /// </summary>
     public double TargetLufs { get; set; } = ReferenceLufs;
 
     /// <summary>
-    /// Gdy prawda, tagi ReplayGain są pomijane i każdy utwór trafia do własnej analizy.
-    /// Do zbiorów, w których tagi pochodzą z nieznanego źródła albo z różnych narzędzi —
-    /// jednolity pomiar jest wtedy wart oczekiwania na pierwszy odsłuch.
+    /// Pomija tagi ReplayGain i mierzy każdy utwór samodzielnie, dla zbiorów z tagami
+    /// z różnych narzędzi.
     /// </summary>
     public bool AlwaysAnalyse { get; set; }
 
@@ -123,8 +111,8 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
     {
         entry.EnsureMetadata();
 
-        // 1. Tagi — najtańsze i zwykle najlepsze źródło. Wpisane w nich wzmocnienie odnosi się
-        //    do poziomu ReplayGain, więc inny poziom docelowy trzeba do niego doliczyć.
+        // 1. Tagi. Ich wzmocnienie odnosi się do poziomu ReplayGain, więc inny poziom docelowy
+        //    trzeba doliczyć.
         if (!AlwaysAnalyse)
         {
             var tagged = entry.Metadata?.ReplayGainTrack;

@@ -143,7 +143,7 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
         _endOfStream = false;
         PositionFrames = frame;
 
-        // Po przewinieciu zaleznosc bajtow od czasu przestaje obowiazywac.
+        // Po przewinięciu zależność bajtów od czasu przestaje obowiązywać.
         _meter?.Reset();
     }
 

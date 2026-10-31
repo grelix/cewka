@@ -42,14 +42,11 @@ public sealed class QueueEntry
     public string? Artist => Metadata?.Artist;
 
     /// <summary>
-    /// Reads tags on first use, so adding a large folder stays instant. Safe to call from a
-    /// background thread; the engine calls it as a track is opened, and the interface calls
-    /// it ahead of time to fill in the queue.
+    /// Czyta tagi przy pierwszym użyciu, żeby dodanie dużego folderu było natychmiastowe.
     ///
-    /// <para>Pułapka: wołają ją naraz wątek dekodujący i wątek wypełniający kolejkę. Metadane
-    /// publikuje się dlatego na końcu, po formacie i ocenie obsługi, a całość idzie pod
-    /// blokadą: drugi wątek czeka na wynik, zamiast czytać plik po raz drugi albo zobaczyć
-    /// metadane bez oznaczenia, że format jest nieobsługiwany.</para>
+    /// <para>Pułapka: wołają ją naraz wątek dekodujący i wątek wypełniający kolejkę. Całość idzie
+    /// pod blokadą, a metadane publikowane są na końcu, po formacie i ocenie obsługi, żeby drugi
+    /// wątek nie zobaczył ich bez oznaczenia formatu nieobsługiwanego.</para>
     /// </summary>
     public void EnsureMetadata()
     {
