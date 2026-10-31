@@ -517,26 +517,35 @@ public sealed class PlaybackEngine : IDisposable
         // W trakcie przewinięcia słyszany wpis jest nieaktualny, a dekoder otwiera właśnie cel.
         if (IsSeeking || _ended || heard is null || session is null || ReferenceEquals(heard, decoding)) return;
 
-        // Następnik liczy się od wpisu zapisanego w buforze tuż przed dekodowanym albo przed
-        // znacznikiem końca; krótki utwór bywa zapisany w całości, zanim zagra.
+        // Wątek dźwięku czeka na tę blokadę, więc pod nią tylko kopia granic.
+        TrackBoundary[] boundaries;
+        lock (session.BoundaryLock) boundaries = session.Boundaries.ToArray();
+
+        // Następnik liczy się od ostatniego wpisu zapisanego w buforze przed dekodowanym albo
+        // przed znacznikiem końca, który nadal jest w kolejce; krótki utwór bywa zapisany
+        // w całości, zanim zagra. Usunięty z kolejki nie ma następnika.
         var previous = heard;
-        lock (session.BoundaryLock)
+        var last = boundaries.Length - 1;
+        while (last >= 0 && boundaries[last].IsEnd) last--;
+        if (decoding is not null && last >= 0 && ReferenceEquals(boundaries[last].Entry, decoding)) last--;
+        for (; last >= 0; last--)
         {
-            var written = session.Boundaries.Where(boundary => !boundary.IsEnd).Select(boundary => boundary.Entry).ToList();
-            if (written.Count > 0 && ReferenceEquals(written[^1], decoding)) written.RemoveAt(written.Count - 1);
-            if (written.Count > 0) previous = written[^1]!;
+            if (boundaries[last] is { IsEnd: false, Entry: { } written } && _queue.Contains(written))
+            {
+                previous = written;
+                break;
+            }
         }
 
         var expected = Repeat == RepeatMode.Track ? previous : FollowingEntryLocked(previous, userInitiated: false);
 
+        // Wpisy, których nie dało się otworzyć, dekoder już zgłosił i pominął.
+        var left = _queue.Count;
+        while (expected is { IsUnsupported: true } or { OpenFailure: not null })
+            expected = left-- > 0 ? FollowingEntryLocked(expected, userInitiated: false) : null;
+
         if (decoding is null)
         {
-            // Koniec kolejki bywa zapisany po wpisach, których nie dało się otworzyć; dekoder
-            // już je zgłosił i pominął.
-            var left = _queue.Count;
-            while (expected is { IsUnsupported: true } or { OpenFailure: not null })
-                expected = left-- > 0 ? FollowingEntryLocked(expected, userInitiated: false) : null;
-
             Volatile.Write(ref session.ContinueWith, expected);
             return;
         }

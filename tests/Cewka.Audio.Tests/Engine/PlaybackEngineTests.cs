@@ -206,6 +206,71 @@ public class PlaybackEngineTests
     }
 
     /// <summary>
+    /// Usunięcie krótkiego ostatniego wiersza, już zapisanego w buforze, nie każe grać słyszanego
+    /// utworu jeszcze raz: zapisany gra do końca i kolejka się kończy.
+    /// </summary>
+    [Fact]
+    public void RemovingAShortBufferedLastTrackDoesNotReplayTheHeardOne()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.1, B);
+
+        StartLastTrackDecodedToTheEnd(h, [a, b]);
+        h.Engine.RemoveAt(1);
+        h.PumpUntil(() => h.Finished == 1);
+        h.PumpPeriods(20);
+
+        Assert.Equal(new[] { "a.wav", "b.wav" }, h.Opened.ToArray());
+    }
+
+    /// <summary>
+    /// To samo z plikiem dodanym po usunięciu: gra po zapisanym utworze, bez powtórki słyszanego.
+    /// Przy losowaniu tak samo.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TrackAddedAfterRemovingAShortBufferedLastTrackPlaysNext(bool shuffle)
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.1, B);
+        var c = h.Track("c", 0.3, C);
+
+        StartLastTrackDecodedToTheEnd(h, [a, b]);
+        h.Engine.Shuffle = shuffle;
+        h.Engine.RemoveAt(1);
+        h.Engine.Enqueue([c]);
+        h.PumpUntil(() => h.Finished == 1);
+        h.PumpPeriods(20);
+
+        Assert.Equal(new[] { "a.wav", "b.wav", "c.wav" }, h.Opened.ToArray());
+    }
+
+    /// <summary>
+    /// Dekoder pominął nieobsługiwany wpis i otworzył następny. Dodanie pliku w ostatnim pół
+    /// sekundy słyszanego utworu nie przewija go, bo następny się nie zmienił.
+    /// </summary>
+    [Fact]
+    public void TrackAddedAfterASkippedUnsupportedEntryLeavesThePrefetchAlone()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var x = h.Unsupported("x");
+        var b = h.Track("b", 10, B);
+        var c = h.Track("c", 0.3, C);
+
+        h.Engine.SetQueue([a, x, b]);
+        h.PumpUntil(() => !h.Engine.IsSeeking);
+        EngineHarness.WaitUntil(() => h.Opened.Contains("b.wav"));
+        Assert.Equal(0, h.Engine.CurrentIndex);
+
+        h.Engine.Enqueue([c]);
+        Assert.False(h.Engine.IsSeeking);
+    }
+
+    /// <summary>
     /// Utwór krótszy od bufora: dekoder dochodzi do końca pliku i zapisuje koniec kolejki,
     /// zanim cokolwiek zagra.
     /// </summary>
