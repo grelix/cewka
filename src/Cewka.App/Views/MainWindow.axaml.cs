@@ -243,10 +243,12 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(WindowClosingEventArgs e)
     {
+        // Termin dokańczania otwarć biegnie od tej chwili, także dla ścieżek odebranych niżej.
+        _viewModel.BeginClosing();
         App.BeginClosing();
         _rotation.Stop();
         PersistGeometry();
-        _viewModel.FinishPendingOpens(SingleInstance.ClosingGrace);
+        _viewModel.FinishPendingOpens();
         _viewModel.SaveQueueState();
         App.Settings.SaveNow();
         App.ReleaseSingleInstance();
