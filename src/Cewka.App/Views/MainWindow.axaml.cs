@@ -128,7 +128,12 @@ public partial class MainWindow : Window
         _rotation = new RenderLoop(this, OnRotationFrame);
 
         _systemFrame = systemFrame;
-        if (_systemFrame) WindowDecorations = WindowDecorations.BorderOnly;
+        if (_systemFrame)
+        {
+            WindowDecorations = WindowDecorations.BorderOnly;
+            TitleBarRoles.Apply(TitleBar);
+            SystemMenu.Attach(this);
+        }
 
         ApplyWindowShape();
         RestoreGeometry();
@@ -166,6 +171,12 @@ public partial class MainWindow : Window
 
     // ================= Cykl zycia =================
 
+    /// <summary>
+    /// Panel multimediów pulpitu i klawisze multimedialne. Wyłącza je pomiar okna, żeby okno
+    /// postawione na chwilę nie zgłaszało się w panelu multimediów systemu.
+    /// </summary>
+    internal bool AttachDesktopIntegration { get; init; } = true;
+
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
@@ -183,7 +194,7 @@ public partial class MainWindow : Window
         // Bez czekania na wynik, żeby start nie zależał od sieci.
         _ = _viewModel.CheckForUpdatesIfDueAsync();
 
-        AttachMediaPanel();
+        if (AttachDesktopIntegration) AttachMediaPanel();
 
         UpdateRotationLoop();
     }

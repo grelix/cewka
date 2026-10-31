@@ -112,7 +112,7 @@
                   </Panel>
                 </Button>
 
-                <Button Classes="icon" Width="30" Height="30"
+                <Button x:Name="SettingsButton" Classes="icon" Width="30" Height="30"
                         Click="OnOpenSettings"
                         ToolTip.Tip="{l:Translate TooltipSettings}"
                         AutomationProperties.Name="{l:Translate TooltipSettings}">

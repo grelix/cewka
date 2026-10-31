@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Pomiar trafień paska tytułu na prawdziwym oknie Windows (WM_NCHITTEST). Osobny proces, bo
+    w procesie testów Avalonia działa już na silniku bez okien, a drugi raz się nie inicjuje.
+    Uruchamia go test z kategorii OknoWindows.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Cewka.WindowProbe</RootNamespace>
+    <AssemblyName>Cewka.WindowProbe</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Cewka.App\Cewka.App.csproj" />
+  </ItemGroup>
+
+</Project>
