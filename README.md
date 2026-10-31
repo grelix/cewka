@@ -129,3 +129,5 @@ Media Foundation w Windowsie i GStreamer w Linuksie.
 
 MIT — treść w pliku [LICENSE](LICENSE). Osadzony font Cantarell podlega
 licencji SIL Open Font License 1.1; szczegóły w [docs/licencje.md](docs/licencje.md).
+Noty i teksty licencji wszystkich składników są w pliku
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt), dołączanym do każdej paczki.

@@ -104,4 +104,5 @@ Media Foundation on Windows and GStreamer on Linux.
 
 MIT — full text in [LICENSE](LICENSE). The embedded Cantarell font is
 licensed under the SIL Open Font License 1.1; details in [docs/licencje.md](docs/licencje.md)
-(in Polish).
+(in Polish). Notices and license texts of all third-party components are in
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt), included in every package.
