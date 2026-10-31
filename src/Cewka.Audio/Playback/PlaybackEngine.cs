@@ -50,17 +50,9 @@ public sealed class PlaybackEngine : IDisposable
     private Thread? _feeder;
     private bool _shuffle;
 
-    // Uzgodnienie przewinięcia między wątkiem sterującym, dekodującym i dźwiękowym.
+    // Uzgodnienie przewinięcia między wątkiem sterującym, dekodującym i dźwiękowym. Cel
+    // zostaje ważny także w trakcie wykonywania (FeederSession.SeekInProgress), aż do SetCurrent.
     private volatile bool _seekPending;
-
-    /// <summary>
-    /// True from the moment the decode thread picks a seek up until the new position is in
-    /// place. <see cref="_seekPending"/> alone is not enough: it is cleared as soon as the
-    /// target is read, and opening or seeking a file takes long enough for the interface to
-    /// read the old position in between and jump the indicator back.
-    /// </summary>
-    private volatile bool _seekInProgress;
-
     private QueueEntry? _seekTargetEntry;
     private long _seekTargetFrame;
 
@@ -70,12 +62,7 @@ public sealed class PlaybackEngine : IDisposable
     /// <summary>Kolejka dobiegła końca; następne Play zaczyna od początku.</summary>
     private bool _ended;
 
-    /// <summary>Urządzenie przestało pracować samo; następne Play otwiera je od nowa.</summary>
-    private volatile bool _deviceLost;
-
     // Stan wątku dźwiękowego. Pola volatile ustawiają inne wątki, resztę zmienia tylko on.
-    private volatile bool _flushRequested;
-    private volatile bool _flushDone;
     private volatile bool _pauseFadeRequested;
     private volatile bool _pauseFadeDone;
     private volatile bool _startFadeIn;
@@ -88,11 +75,6 @@ public sealed class PlaybackEngine : IDisposable
     private int _tailLength = 1;
     private int _fadeCounter;
     private bool _fadingIn;
-
-    // Sygnały z wątku dźwiękowego odbierane przez wątek dekodujący.
-    private int _trackChangeSignal;
-    private int _endSignal;
-    private int _endGeneration;
 
     private volatile TrackBoundary _current = TrackBoundary.None;
 
@@ -115,7 +97,14 @@ public sealed class PlaybackEngine : IDisposable
     internal int BufferedFrames => _session?.Ring.FramesAvailable ?? 0;
 
     /// <summary>True, dopóki zlecone przewinięcie nie zostało wykonane.</summary>
-    internal bool IsSeeking => _seekPending || _seekInProgress;
+    internal bool IsSeeking => _seekPending || SeekInProgress;
+
+    /// <summary>
+    /// Wątek dekodujący odebrał przewinięcie, ale nowe położenie jeszcze nie obowiązuje.
+    /// Otwarcie pliku z wolnego dysku trwa na tyle długo, że interfejs zdążyłby w tym czasie
+    /// odczytać stare położenie i cofnąć wskaźnik.
+    /// </summary>
+    private bool SeekInProgress => _session?.SeekInProgress ?? false;
 
     /// <summary>Raised off the audio thread when playback moves to another queue entry.</summary>
     public event Action<int>? TrackChanged;
@@ -216,7 +205,7 @@ public sealed class PlaybackEngine : IDisposable
         {
             // Między zażądaniem przewinięcia a jego wykonaniem bufor opisuje jeszcze stare
             // położenie; zwracanie go cofnęłoby wskaźnik na ułamek sekundy.
-            if (_seekPending || _seekInProgress)
+            if (IsSeeking)
             {
                 var target = Interlocked.Read(ref _seekTargetFrame);
                 return TimeSpan.FromSeconds(target / (double)SampleRate);
@@ -263,6 +252,13 @@ public sealed class PlaybackEngine : IDisposable
 
             var device = _openOutput(PreferredDeviceName, PreferredPeriodSize);
 
+            // Cel przewinięcia zaplanowany przy poprzednim urządzeniu jest w jego ramkach.
+            if (_seekPending && device.SampleRate != SampleRate)
+            {
+                var frame = Interlocked.Read(ref _seekTargetFrame);
+                Interlocked.Exchange(ref _seekTargetFrame, (long)(frame * (double)device.SampleRate / SampleRate));
+            }
+
             SampleRate = device.SampleRate;
             Channels = device.Channels;
 
@@ -274,7 +270,7 @@ public sealed class PlaybackEngine : IDisposable
 
             Graph.Prepare(SampleRate, Channels);
 
-            device.Lost += OnDeviceLost;
+            device.Lost += () => OnDeviceLost(device);
             device.Render = buffer => Render(session, buffer);
 
             _device = device;
@@ -313,53 +309,49 @@ public sealed class PlaybackEngine : IDisposable
     /// </summary>
     public void Reopen()
     {
-        QueueEntry? entry;
-        TimeSpan position;
-        bool wasPlaying;
-
         lock (_sync)
         {
             // Nic jeszcze nie zostało otwarte: wystarczy zapamiętać wybór.
             if (_device is null) return;
-
-            wasPlaying = State == PlaybackState.Playing;
-            entry = AudibleOrPendingEntry();
-            position = Position;
         }
 
-        TearDown();
+        var closed = TearDown(keepPlace: true);
         Initialise();
 
-        lock (_sync)
-        {
-            if (entry is null || !_queue.Contains(entry)) return;
-
-            RequestSeekLocked(entry, FramesFrom(position));
-            if (!wasPlaying) State = PlaybackState.Paused;
-        }
-
-        if (wasPlaying) Play();
+        if (closed is { WasPlaying: true }) Play();
     }
 
     /// <summary>
     /// Stops the decode thread and closes the device, leaving the queue intact.
+    /// Z <paramref name="keepPlace"/> utwór i pozycja zostają jako przewinięcie, które wykona
+    /// następna sesja, a stan przechodzi w pauzę; koniec kolejki zostaje końcem.
     ///
     /// <para>Pułapka: wątek dekodujący może utknąć w odczycie pliku z dysku sieciowego dłużej,
     /// niż trwa czekanie. Wtedy nie wolno zamknąć jego dekodera z zewnątrz, bo zwolniłoby to
     /// pamięć w trakcie odczytu natywnego; stary wątek dostaje sygnał końca i sam zamyka swój
-    /// dekoder, a nowa sesja ma własny bufor i własne granice.</para>
+    /// dekoder, a nowa sesja ma własny bufor, granice i flagi.</para>
     /// </summary>
-    private void TearDown()
+    /// <param name="expected">Zamyka tylko wtedy, gdy bieżącym urządzeniem jest to.</param>
+    /// <returns>Stan sprzed zamknięcia; null, gdy nic nie zamknięto.</returns>
+    private ClosedState? TearDown(bool keepPlace, IAudioOutput? expected = null)
     {
         Thread? feeder;
         FeederSession? session;
         IAudioOutput? device;
+        ClosedState closed;
 
         lock (_sync)
         {
+            if (expected is not null && !ReferenceEquals(expected, _device)) return null;
+
             feeder = _feeder;
             session = _session;
             device = _device;
+
+            var entry = AudibleOrPendingEntry();
+            closed = new ClosedState(State == PlaybackState.Playing && !_ended);
+            var frame = FramesFrom(Position);
+            var ended = _ended;
 
             _feeder = null;
             _session = null;
@@ -368,33 +360,36 @@ public sealed class PlaybackEngine : IDisposable
             State = PlaybackState.Stopped;
             _seekTargetEntry = null;
             _seekPending = false;
-            _seekInProgress = false;
             _ended = false;
-            _deviceLost = false;
+            _pauseFadeRequested = false;
             _current = TrackBoundary.None;
+
+            if (keepPlace)
+            {
+                if (ended)
+                {
+                    _ended = true;
+                    State = PlaybackState.Paused;
+                }
+                else if (entry is not null && _queue.Contains(entry))
+                {
+                    RequestSeekLocked(entry, frame);
+                    State = PlaybackState.Paused;
+                }
+            }
         }
 
         if (session is not null) session.Cancelled = true;
         feeder?.Join(1000);
+        device?.Dispose();
 
-        if (device is not null)
-        {
-            device.Lost -= OnDeviceLost;
-            device.Dispose();
-        }
-
-        _flushRequested = false;
-        _flushDone = false;
-        _pauseFadeRequested = false;
-        Interlocked.Exchange(ref _trackChangeSignal, 0);
-        Interlocked.Exchange(ref _endSignal, 0);
+        return closed;
     }
+
+    private readonly record struct ClosedState(bool WasPlaying);
 
     private void ResetAudioThreadState()
     {
-        _flushRequested = false;
-        _flushDone = false;
-        _pauseFadeRequested = false;
         _pauseFadeDone = false;
         _startFadeIn = false;
         _resetChainPending = false;
@@ -486,7 +481,8 @@ public sealed class PlaybackEngine : IDisposable
         var heard = _current.Entry;
         var decoding = _session?.Entry;
 
-        if (_seekPending || heard is null || decoding is null || ReferenceEquals(heard, decoding)) return;
+        // W trakcie przewinięcia słyszany wpis jest nieaktualny, a dekoder otwiera właśnie cel.
+        if (IsSeeking || heard is null || decoding is null || ReferenceEquals(heard, decoding)) return;
 
         var expected = Repeat == RepeatMode.Track ? heard : FollowingEntryLocked(heard, userInitiated: false);
         if (ReferenceEquals(expected, decoding)) return;
@@ -527,23 +523,27 @@ public sealed class PlaybackEngine : IDisposable
     /// </summary>
     public void PlayIndex(int index, TimeSpan start)
     {
-        EnsureOutput();
+        Initialise();
 
         lock (_sync)
         {
             if (index < 0 || index >= _queue.Count) return;
 
             var entry = _queue[index];
-            if (_shuffle) _shuffleOrder.MoveAfter(entry, _current.Entry);
+            if (_shuffle) _shuffleOrder.MoveAfter(entry, AudibleOrPendingEntry());
 
             RequestSeekLocked(entry, FramesFrom(start));
             PlayLocked();
         }
     }
 
+    /// <summary>
+    /// Wznawia albo zaczyna od początku. Po utracie urządzenia otwiera wyjście od nowa; utwór
+    /// i pozycja czekają wtedy jako zaplanowane przewinięcie.
+    /// </summary>
     public void Play()
     {
-        EnsureOutput();
+        Initialise();
 
         lock (_sync) PlayLocked();
     }
@@ -553,7 +553,7 @@ public sealed class PlaybackEngine : IDisposable
         if (_queue.Count == 0 || _device is null) return;
 
         // Nic nie gra i nic nie jest zaplanowane albo kolejka się skończyła: od początku.
-        if (_ended || (_current.Entry is null && !_seekPending))
+        if (_ended || AudibleOrPendingEntry() is null)
         {
             var first = FirstEntryLocked();
             if (first is not null) RequestSeekLocked(first, 0);
@@ -563,16 +563,6 @@ public sealed class PlaybackEngine : IDisposable
 
         _device.Start();
         State = PlaybackState.Playing;
-    }
-
-    /// <summary>
-    /// Otwiera wyjście, a po utracie urządzenia otwiera je od nowa, z utworem i pozycją.
-    /// Wołane przed blokadą: zamknięcie czeka na wątek dekodujący, który jej potrzebuje.
-    /// </summary>
-    private void EnsureOutput()
-    {
-        if (_deviceLost) Reopen();
-        Initialise();
     }
 
     public void Pause()
@@ -598,9 +588,20 @@ public sealed class PlaybackEngine : IDisposable
         {
             FadeOutAndStopLocked();
             State = PlaybackState.Stopped;
-
-            RequestSeekLocked(null, 0);
             _current = TrackBoundary.None;
+
+            // Bez urządzenia nie ma wątku, który wykonałby przewinięcie; wystarczy zapomnieć cel.
+            if (_device is not null)
+            {
+                RequestSeekLocked(null, 0);
+            }
+            else
+            {
+                _seekPending = false;
+                _seekTargetEntry = null;
+                _ended = false;
+                _generation++;
+            }
         }
     }
 
@@ -620,7 +621,7 @@ public sealed class PlaybackEngine : IDisposable
 
     private void Step(bool forward)
     {
-        EnsureOutput();
+        Initialise();
 
         lock (_sync)
         {
@@ -652,8 +653,11 @@ public sealed class PlaybackEngine : IDisposable
         }
     }
 
-    /// <summary>Wpis słyszany albo, gdy czeka przewinięcie, ten, do którego ono prowadzi.</summary>
-    private QueueEntry? AudibleOrPendingEntry() => _seekPending ? _seekTargetEntry : _current.Entry;
+    /// <summary>
+    /// Wpis słyszany albo, gdy przewinięcie czeka lub trwa, ten, do którego ono prowadzi.
+    /// Przewinięcie trwa także w czasie otwierania pliku, które z wolnego dysku zajmuje chwilę.
+    /// </summary>
+    private QueueEntry? AudibleOrPendingEntry() => IsSeeking ? _seekTargetEntry : _current.Entry;
 
     private long FramesFrom(TimeSpan position) => Math.Max(0, (long)(position.TotalSeconds * SampleRate));
 
@@ -695,13 +699,14 @@ public sealed class PlaybackEngine : IDisposable
         }
     }
 
-    private void OnDeviceLost()
+    /// <summary>
+    /// Potwierdzona utrata urządzenia. Wyjście zamyka się od razu: sterownik potrafi uruchomić
+    /// strumień sam po ponownym podłączeniu sprzętu, a wtedy grałby przy stanie pauzy.
+    /// Zgłoszenie od urządzenia, które zdążyło zostać zastąpione, nie dotyczy bieżącego.
+    /// </summary>
+    private void OnDeviceLost(IAudioOutput device)
     {
-        lock (_sync)
-        {
-            if (State == PlaybackState.Playing) State = PlaybackState.Paused;
-            _deviceLost = true;
-        }
+        if (TearDown(keepPlace: true, expected: device) is null) return;
 
         DeviceLost?.Invoke();
     }
@@ -776,13 +781,13 @@ public sealed class PlaybackEngine : IDisposable
             Graph.ApplyTrackGain(double.IsNaN(gain) ? null : gain, snap: true);
         }
 
-        if (_flushRequested && !_flushDone)
+        if (session.FlushRequested && !session.FlushDone)
         {
             if (RenderFadeOut(ring, buffer, frames))
             {
                 ring.DiscardAll();
                 ResetChain();
-                _flushDone = true;
+                session.FlushDone = true;
             }
 
             return;
@@ -808,7 +813,7 @@ public sealed class PlaybackEngine : IDisposable
 
         // Granice są nieaktualne od żądania przewinięcia do jego wykonania; ich przekroczenie
         // zgłosiłoby na chwilę utwór, który już nie zagra.
-        var trackBoundaries = !(_seekPending || _seekInProgress);
+        var trackBoundaries = !(_seekPending || session.SeekInProgress);
 
         var done = 0;
         while (done < frames)
@@ -926,14 +931,14 @@ public sealed class PlaybackEngine : IDisposable
 
         if (next.IsEnd)
         {
-            Volatile.Write(ref _endGeneration, next.Generation);
-            Volatile.Write(ref _endSignal, 1);
+            Volatile.Write(ref session.EndGeneration, next.Generation);
+            Volatile.Write(ref session.EndSignal, 1);
             return true;
         }
 
         _current = next;
         Graph.ApplyTrackGain(next.GainDb, snap: false);
-        Volatile.Write(ref _trackChangeSignal, 1);
+        Volatile.Write(ref session.TrackChangeSignal, 1);
         return true;
     }
 
@@ -1004,15 +1009,15 @@ public sealed class PlaybackEngine : IDisposable
     /// <summary>Zdarzenia sygnalizowane przez wątek dźwiękowy, zgłaszane już stąd.</summary>
     private void DeliverSignals(FeederSession session)
     {
-        if (Interlocked.Exchange(ref _trackChangeSignal, 0) != 0)
+        if (Interlocked.Exchange(ref session.TrackChangeSignal, 0) != 0)
         {
             var entry = _current.Entry;
             if (entry is not null) RaiseTrackChanged(session, entry);
         }
 
-        if (Interlocked.Exchange(ref _endSignal, 0) != 0)
+        if (Interlocked.Exchange(ref session.EndSignal, 0) != 0)
         {
-            var generation = Volatile.Read(ref _endGeneration);
+            var generation = Volatile.Read(ref session.EndGeneration);
             ThreadPool.UnsafeQueueUserWorkItem(_ => FinishPlayback(generation), null);
         }
     }
@@ -1040,7 +1045,7 @@ public sealed class PlaybackEngine : IDisposable
 
     private void HandleSeek(FeederSession session)
     {
-        _seekInProgress = true;
+        session.SeekInProgress = true;
 
         try
         {
@@ -1048,7 +1053,7 @@ public sealed class PlaybackEngine : IDisposable
         }
         finally
         {
-            _seekInProgress = false;
+            session.SeekInProgress = false;
         }
     }
 
@@ -1126,13 +1131,17 @@ public sealed class PlaybackEngine : IDisposable
         RaiseTrackChanged(session, opened);
     }
 
-    /// <summary>Przestaw bieżący utwór, o ile ta sesja nadal jest aktualna.</summary>
+    /// <summary>
+    /// Przestawia bieżący utwór, o ile ta sesja nadal jest aktualna, i kończy przewinięcie:
+    /// od tej chwili wpis i pozycję opisuje <see cref="_current"/>, nie cel.
+    /// </summary>
     private bool SetCurrent(FeederSession session, TrackBoundary boundary)
     {
         lock (_sync)
         {
             if (_session != session) return false;
             _current = boundary;
+            session.SeekInProgress = false;
             return true;
         }
     }
@@ -1144,11 +1153,11 @@ public sealed class PlaybackEngine : IDisposable
     /// </summary>
     private void WaitForFlush(FeederSession session)
     {
-        _flushDone = false;
-        _flushRequested = true;
+        session.FlushDone = false;
+        session.FlushRequested = true;
 
         var clock = Stopwatch.StartNew();
-        while (!_flushDone && !session.Cancelled)
+        while (!session.FlushDone && !session.Cancelled)
         {
             lock (_sync)
             {
@@ -1164,7 +1173,7 @@ public sealed class PlaybackEngine : IDisposable
             Thread.Sleep(1);
         }
 
-        _flushRequested = false;
+        session.FlushRequested = false;
     }
 
     private void PumpOneChunk(FeederSession session)
@@ -1334,12 +1343,12 @@ public sealed class PlaybackEngine : IDisposable
         session.Decoder = null;
     }
 
-    public void Dispose() => TearDown();
+    public void Dispose() => TearDown(keepPlace: false);
 
     /// <summary>
-    /// Stan jednego wątku dekodującego: jego bufor, granice i dekoder. Wątek, który nie
-    /// zdążył się zakończyć przy zamykaniu urządzenia, pracuje dalej wyłącznie na własnej
-    /// sesji i nie dotyka nowej.
+    /// Stan jednego wątku dekodującego: jego bufor, granice, dekoder i flagi uzgodnień
+    /// z wątkiem dźwiękowym. Wątek, który nie zdążył się zakończyć przy zamykaniu urządzenia,
+    /// pracuje dalej wyłącznie na własnej sesji i nie dotyka nowej.
     /// </summary>
     private sealed class FeederSession(PcmRingBuffer ring)
     {
@@ -1347,6 +1356,15 @@ public sealed class PlaybackEngine : IDisposable
         public readonly Lock BoundaryLock = new();
         public readonly Queue<TrackBoundary> Boundaries = new();
         public volatile bool Cancelled;
+
+        public volatile bool SeekInProgress;
+        public volatile bool FlushRequested;
+        public volatile bool FlushDone;
+
+        // Sygnały z wątku dźwiękowego odbierane przez wątek dekodujący.
+        public int TrackChangeSignal;
+        public int EndSignal;
+        public int EndGeneration;
 
         public IAudioDecoder? Decoder;
 

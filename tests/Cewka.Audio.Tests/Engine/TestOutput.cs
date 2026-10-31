@@ -84,6 +84,12 @@ internal sealed class TestOutput : IAudioOutput
         Lost?.Invoke();
     }
 
+    /// <summary>
+    /// Odbiorcy zgłoszenia utraty w tej chwili. Wywołani później naśladują zgłoszenie,
+    /// które czekało w puli wątków, gdy urządzenie już zamknięto.
+    /// </summary>
+    public Action? LostHandlers => Lost;
+
     /// <summary>Kopia próbek wysłanych dotąd na wyjście, przeplatanych.</summary>
     public float[] Samples
     {

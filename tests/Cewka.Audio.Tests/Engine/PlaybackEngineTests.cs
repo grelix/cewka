@@ -522,27 +522,176 @@ public class PlaybackEngineTests
 
     // ---------- urządzenie ----------
 
-    /// <summary>Utrata urządzenia: pauza i zdarzenie; następne Play otwiera wyjście od nowa.</summary>
+    /// <summary>
+    /// Utrata urządzenia: pauza, zdarzenie i zamknięcie wyjścia, żeby samoczynny restart
+    /// sterownika nie grał przy stanie pauzy. Utwór i pozycja czekają na Play, które
+    /// otwiera wyjście od nowa.
+    /// </summary>
     [Fact]
     public void LostDeviceStopsAndPlayReopens()
     {
         using var h = new EngineHarness();
         var a = h.Track("a", 10, A);
+        var b = h.Track("b", 10, B);
 
-        h.Engine.SetQueue([a]);
+        h.Engine.SetQueue([a, b], startIndex: 1);
         h.PumpUntil(() => h.Engine.Position > TimeSpan.FromSeconds(1));
+        var lostAt = h.Engine.Position.TotalSeconds;
 
         h.Output.Lose();
         EngineHarness.WaitUntil(() => h.Lost == 1);
-        Assert.Equal(PlaybackState.Paused, h.Engine.State);
 
-        var lostAt = h.Engine.Position.TotalSeconds;
+        Assert.Equal(PlaybackState.Paused, h.Engine.State);
+        Assert.True(h.Outputs[0].Disposed);
+        Assert.False(h.Engine.IsDeviceOpen);
+        Assert.Equal(1, h.Engine.CurrentIndex);
+        Assert.InRange(h.Engine.Position.TotalSeconds, lostAt - 0.01, lostAt + 0.1);
+
         h.Engine.Play();
         Assert.Equal(2, h.Outputs.Count);
-        Assert.True(h.Outputs[0].Disposed);
 
         AssertPlaysOnFrom(h.PositionsAfterSeek(), lostAt);
+        Assert.Equal(1, h.Engine.CurrentIndex);
         Assert.Equal(PlaybackState.Playing, h.Engine.State);
+    }
+
+    /// <summary>
+    /// Zgłoszenie utraty od urządzenia, które zdążyło zostać zamknięte przy zmianie wyjścia,
+    /// nie dotyczy nowego urządzenia.
+    /// </summary>
+    [Fact]
+    public void LossReportedByAClosedDeviceIsIgnored()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 10, A);
+
+        h.Engine.SetQueue([a]);
+        h.PumpUntil(() => h.Engine.Position > TimeSpan.FromSeconds(0.2));
+
+        var pending = h.Output.LostHandlers;
+        h.Engine.Reopen();
+        pending?.Invoke();
+
+        Assert.Equal(PlaybackState.Playing, h.Engine.State);
+        Assert.False(h.Outputs[1].Disposed);
+        Assert.Equal(0, h.Lost);
+    }
+
+    /// <summary>
+    /// Zatrzymanie, zanim cokolwiek grało, nie zostawia zaległego przewinięcia: pierwsze Play
+    /// po dodaniu plików zaczyna od pierwszego wpisu. Tak samo Play zaraz po Stop.
+    /// </summary>
+    [Fact]
+    public void StopDoesNotLeaveAnEmptySeekForTheNextPlay()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 10, A);
+
+        h.Engine.Stop();
+        Assert.False(h.Engine.IsSeeking);
+
+        h.Engine.Enqueue([a]);
+        h.Engine.Play();
+        h.PumpUntil(() => h.Engine.Position > TimeSpan.FromSeconds(0.1));
+        Assert.Equal(0, h.Engine.CurrentIndex);
+
+        h.Engine.Stop();
+        h.Engine.Play();
+        h.PumpUntil(() => !h.Engine.IsSeeking && h.Engine.Position > TimeSpan.FromSeconds(0.1));
+        Assert.Equal(0, h.Engine.CurrentIndex);
+    }
+
+    /// <summary>
+    /// Zmiana urządzenia po końcu kolejki zachowuje koniec: Play zaczyna od pierwszego wpisu,
+    /// zamiast od razu skończyć na ostatnim.
+    /// </summary>
+    [Fact]
+    public void ReopenAfterTheEndKeepsTheEnd()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.3, B);
+
+        h.Engine.SetQueue([a, b]);
+        h.PumpUntil(() => h.Finished == 1);
+
+        h.Engine.Reopen();
+        h.Engine.Play();
+        Assert.Equal(0, h.Engine.CurrentIndex);
+
+        h.PumpUntil(() => h.Finished == 2);
+        Assert.True(EngineHarness.CountFrames(h.Output.Samples, A) > EngineHarness.Frames(0.25));
+    }
+
+    /// <summary>
+    /// Przewinięcie, gdy wybrany utwór jeszcze się otwiera (wolny dysk), dotyczy tego utworu,
+    /// a numer bieżącego wpisu wskazuje go już w trakcie otwierania.
+    /// </summary>
+    [Fact]
+    public void SeekWhileTheChosenTrackIsStillOpeningTargetsIt()
+    {
+        using var h = new EngineHarness();
+        using var gate = new ManualResetEventSlim(true);
+        var a = h.Track("a", 10, A);
+        var b = h.Track("b", 10, B, d =>
+        {
+            gate.Wait();
+            return d;
+        });
+
+        h.Engine.SetQueue([a, b]);
+        h.PumpUntil(() => h.Engine.Position > TimeSpan.FromSeconds(0.1));
+
+        gate.Reset();
+        h.Engine.PlayIndex(1);
+        h.PumpUntil(() => h.Opened.Contains("b.wav"));
+        Assert.Equal(1, h.Engine.CurrentIndex);
+
+        h.Engine.SeekTo(TimeSpan.FromSeconds(5));
+        gate.Set();
+
+        h.PumpUntil(() => !h.Engine.IsSeeking && h.Engine.Position > TimeSpan.FromSeconds(5.05));
+        Assert.Equal(1, h.Engine.CurrentIndex);
+        Assert.InRange(h.Engine.Position.TotalSeconds, 5.0, 5.5);
+    }
+
+    /// <summary>
+    /// Wątek dekodujący, który utknął w otwieraniu pliku, po powrocie nie kończy przewinięcia
+    /// wykonywanego właśnie przez nową sesję.
+    /// </summary>
+    [Fact]
+    public void AStuckSessionDoesNotEndTheNewSessionsSeek()
+    {
+        using var h = new EngineHarness();
+        using var openA = new ManualResetEventSlim(false);
+        using var openB = new ManualResetEventSlim(true);
+        SyntheticDecoder? stuck = null;
+
+        var a = h.Track("a", 10, A, d =>
+        {
+            if (Interlocked.CompareExchange(ref stuck, d, null) is null) openA.Wait();
+            return d;
+        });
+        var b = h.Track("b", 10, B, d =>
+        {
+            openB.Wait();
+            return d;
+        });
+
+        h.Engine.SetQueue([a, b]);
+        EngineHarness.WaitUntil(() => h.Opened.Contains("a.wav"));
+
+        h.Engine.Reopen();
+        openB.Reset();
+        h.Engine.PlayIndex(1);
+        h.PumpUntil(() => h.Opened.Contains("b.wav"));
+
+        openA.Set();
+        EngineHarness.WaitUntil(() => stuck!.DisposeCount == 1);
+        Assert.True(h.Engine.IsSeeking);
+
+        openB.Set();
+        h.PumpUntil(() => h.Engine.CurrentIndex == 1 && h.Engine.Position > TimeSpan.FromSeconds(0.1));
     }
 
     /// <summary>
