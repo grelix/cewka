@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Cewka.App.Models;
@@ -168,6 +169,18 @@ public sealed class WindowGeometry
 /// </summary>
 public sealed class AppSettings
 {
+    /// <summary>
+    /// Wersja układu pliku. Zmienia się, gdy znaczenie zapisanej wartości się zmienia, a nie
+    /// gdy dochodzi nowe pole: 1 — głośność jako położenie suwaka i osobne wyciszenie.
+    /// </summary>
+    public const int CurrentSchema = 1;
+
+    /// <summary>
+    /// Wersja, w której zapisano plik. Brak pola oznacza plik sprzed numerowania, czyli zero;
+    /// <see cref="Services.SettingsStore"/> przenosi taki plik do bieżącej wersji przy odczycie.
+    /// </summary>
+    public int SchemaVersion { get; set; }
+
     public ThemeMode Theme { get; set; } = ThemeMode.System;
 
     /// <summary>
@@ -192,14 +205,25 @@ public sealed class AppSettings
     /// <summary>Whether the queue column on the right is shown.</summary>
     public bool QueueOpen { get; set; } = true;
 
-    public double Volume { get; set; } = 0.72;
+    /// <summary>
+    /// Położenie suwaka głośności od zera do jedności, w skali <see cref="VolumeCurve"/>.
+    /// Pliki zapisane przed <see cref="CurrentSchema"/> trzymały tu wzmocnienie liniowe.
+    /// </summary>
+    public double Volume { get; set; } = 0.95;
+
+    /// <summary>Wyciszenie, niezależne od położenia suwaka: przywrócenie dźwięku wraca do niego.</summary>
+    public bool IsMuted { get; set; }
 
     public bool EqualiserEnabled { get; set; } = true;
 
-    public double Preamp { get; set; } = 1.5;
+    /// <summary>
+    /// Korektor domyślnie płaski: program ma grać wiernie, dopóki nikt nie poprosi inaczej.
+    /// Płaski korektor jest przezroczysty, więc może pozostać włączony.
+    /// </summary>
+    public double Preamp { get; set; }
 
     /// <summary>Gain per band in decibels, ordered from 32 Hz to 16 kHz.</summary>
-    public double[] EqualiserGains { get; set; } = [2.5, 2, 0.5, 1, -1.5, -1, 0.5, 1.5, 2.5, 3];
+    public double[] EqualiserGains { get; set; } = new double[10];
 
     public bool LimiterEnabled { get; set; } = true;
 
@@ -294,6 +318,7 @@ public sealed class AppSettings
 
     public AppSettings Clone() => new()
     {
+        SchemaVersion = SchemaVersion,
         Theme = Theme,
         Language = Language,
         WindowControls = WindowControls,
@@ -304,6 +329,7 @@ public sealed class AppSettings
         PanelOpen = PanelOpen,
         QueueOpen = QueueOpen,
         Volume = Volume,
+        IsMuted = IsMuted,
         EqualiserEnabled = EqualiserEnabled,
         Preamp = Preamp,
         EqualiserGains = (double[])EqualiserGains.Clone(),
@@ -342,6 +368,8 @@ public sealed class AppSettings
 [JsonSourceGenerationOptions(
     WriteIndented = true,
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
-    UseStringEnumConverter = true)]
+    UseStringEnumConverter = true,
+    AllowTrailingCommas = true,
+    ReadCommentHandling = JsonCommentHandling.Skip)]
 [JsonSerializable(typeof(AppSettings))]
 internal sealed partial class SettingsJsonContext : JsonSerializerContext;

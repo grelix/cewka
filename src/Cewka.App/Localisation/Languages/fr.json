@@ -209,5 +209,7 @@
   "AboutLicences": "Licences",
   "LicenceSummary": "Cewka est distribué sous licence MIT. Avalonia, NVorbis, Concentus et ATL.NET — MIT. miniaudio — MIT-0. Les polices Cantarell et JetBrains Mono — SIL Open Font License 1.1.",
 
-  "NothingPlaying": "Aucune lecture en cours"
+  "NothingPlaying": "Aucune lecture en cours",
+
+  "VolumeLevel": "Volume {0} %"
 }

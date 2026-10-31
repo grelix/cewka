@@ -80,15 +80,15 @@ public sealed class SettingsStore
 
         try
         {
-            var directory = Path.GetDirectoryName(_path);
-            if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
+            // Pliku nie dało się przeczytać, więc zanim zostanie nadpisany, zostaje kopia.
+            if (_keepOriginal)
+            {
+                KeepCopy(_path);
+                _keepOriginal = false;
+            }
 
-            var json = JsonSerializer.Serialize(Current, SettingsJsonContext.Default.AppSettings);
-
-            // Write beside the target then swap, so a partial write never replaces good data.
-            var temporary = _path + ".tmp";
-            File.WriteAllText(temporary, json);
-            File.Move(temporary, _path, overwrite: true);
+            Current.SchemaVersion = AppSettings.CurrentSchema;
+            AtomicFile.Write(_path, JsonSerializer.Serialize(Current, SettingsJsonContext.Default.AppSettings));
         }
         catch (Exception ex)
         {
@@ -97,26 +97,98 @@ public sealed class SettingsStore
         }
     }
 
-    private static AppSettings Load(string path)
+    /// <summary>Plik istnieje, ale nie dał się przeczytać; przed pierwszym zapisem trzeba go zachować.</summary>
+    private bool _keepOriginal;
+
+    private AppSettings Load(string path)
     {
+        if (!File.Exists(path)) return Defaults();
+
+        string json;
         try
         {
-            if (!File.Exists(path)) return new AppSettings();
+            json = ReadWithRetry(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"[cewka] nie udało się odczytać ustawień, użyto domyślnych: {ex.Message}");
+            _keepOriginal = true;
+            return Defaults();
+        }
 
-            var json = File.ReadAllText(path);
+        try
+        {
             var loaded = JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings);
-            return Sanitise(loaded ?? new AppSettings());
+            return Sanitise(Migrate(loaded ?? Defaults()));
         }
         catch (Exception ex)
         {
+            // Nieznana wartość z nowszej wersji albo błąd ręcznej edycji. Domyślne ustawienia
+            // obowiązują tylko w tej sesji; oryginał zostaje obok pod osobną nazwą.
             Console.Error.WriteLine($"[cewka] ustawienia nieczytelne, użyto domyślnych: {ex.Message}");
-            return new AppSettings();
+            KeepCopy(path);
+            return Defaults();
         }
+    }
+
+    private static AppSettings Defaults() => new() { SchemaVersion = AppSettings.CurrentSchema };
+
+    /// <summary>Plik bywa chwilowo zablokowany przez program antywirusowy albo synchronizację.</summary>
+    private static string ReadWithRetry(string path)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return File.ReadAllText(path);
+            }
+            catch (IOException) when (attempt < 3)
+            {
+                Thread.Sleep(100);
+            }
+        }
+    }
+
+    private static void KeepCopy(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Copy(path, $"{path}.bad-{DateTime.Now:yyyyMMdd-HHmmss}", overwrite: false);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cewka] nie udało się zachować kopii ustawień: {ex.Message}");
+        }
+    }
+
+    /// <summary>Przenosi plik zapisany przez starszą wersję do bieżącego znaczenia pól.</summary>
+    private static AppSettings Migrate(AppSettings s)
+    {
+        if (s.SchemaVersion < 1)
+        {
+            // Do 0.8.1 głośność była wzmocnieniem liniowym, a wyciszenie zerowało ją samą.
+            if (s.Volume <= 0)
+            {
+                s.IsMuted = true;
+                s.Volume = 0.5;
+            }
+            else
+            {
+                s.Volume = VolumeCurve.FromGain(s.Volume);
+            }
+        }
+
+        s.SchemaVersion = AppSettings.CurrentSchema;
+        return s;
     }
 
     /// <summary>Repairs values that a hand-edited or older file could get wrong.</summary>
     private static AppSettings Sanitise(AppSettings s)
     {
+        s.EqualiserGains ??= new double[10];
+        s.Language ??= "auto";
+
         s.Volume = Math.Clamp(s.Volume, 0, 1);
         s.Preamp = Math.Clamp(s.Preamp, -12, 12);
 

@@ -84,7 +84,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _engine.Graph.Limiter.Enabled = s.LimiterEnabled;
         _engine.Graph.Equaliser.Enabled = s.EqualiserEnabled;
         _engine.Graph.Equaliser.Preamp = s.Preamp;
-        _engine.Graph.Volume.Target = (float)s.Volume;
+        _volume = s.Volume;
+        _isMuted = s.IsMuted;
+        _engine.Graph.Volume.Target = _isMuted ? 0f : (float)VolumeCurve.ToGain(_volume);
 
         for (var band = 0; band < BandLabels.Length; band++)
             _engine.Graph.Equaliser.SetGain(band, s.EqualiserGains[band]);
@@ -96,6 +98,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _engine.Graph.Equaliser.Preamp = Preamp.Gain;
             _settings.Current.Preamp = Preamp.Gain;
             _settings.Touch();
+            Raise(nameof(CanResetEqualiser));
         };
 
         Bands = new ObservableCollection<EqBandViewModel>(
@@ -110,6 +113,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 _engine.Graph.Equaliser.SetGain(index, Bands[index].Gain);
                 _settings.Current.EqualiserGains[index] = Bands[index].Gain;
                 _settings.Touch();
+                Raise(nameof(CanResetEqualiser));
             };
         }
 
@@ -276,21 +280,66 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public string Total { get => _total; private set => Set(ref _total, value); }
 
+    /// <summary>
+    /// Położenie suwaka głośności, 0–1. Wzmocnienie wynika z niego przez
+    /// <see cref="VolumeCurve"/>; przesunięcie suwaka przywraca dźwięk po wyciszeniu.
+    /// </summary>
     public double Volume
     {
-        get => _engine.Graph.Volume.Target;
+        get => _volume;
         set
         {
-            var clamped = (float)Math.Clamp(value, 0, 1);
-            if (Math.Abs(_engine.Graph.Volume.Target - clamped) < 1e-6f) return;
+            var clamped = Math.Clamp(value, 0, 1);
+            var unmute = _isMuted && clamped > 0;
+            if (Math.Abs(_volume - clamped) < 1e-9 && !unmute) return;
 
-            _engine.Graph.Volume.Target = clamped;
+            _volume = clamped;
             _settings.Current.Volume = clamped;
+            if (unmute) SetMuted(false);
+
+            ApplyVolume();
             _settings.Touch();
-            _mediaPanel?.SetVolume(clamped);
             Raise();
+            Raise(nameof(VolumeLevelText));
         }
     }
+
+    private double _volume;
+    private bool _isMuted;
+
+    /// <summary>Wyciszenie niezależne od położenia suwaka.</summary>
+    public bool IsMuted
+    {
+        get => _isMuted;
+        set
+        {
+            if (_isMuted == value) return;
+
+            SetMuted(value);
+            ApplyVolume();
+            _settings.Touch();
+        }
+    }
+
+    private void SetMuted(bool muted)
+    {
+        _isMuted = muted;
+        _settings.Current.IsMuted = muted;
+        Raise(nameof(IsMuted));
+    }
+
+    /// <summary>Poziom w procentach, do nazwy dostępności suwaka.</summary>
+    public string VolumeLevelText =>
+        string.Format(Strings.Current["VolumeLevel"], (int)Math.Round(_volume * 100));
+
+    /// <summary>Wzmocnienie dla toru i poziom dla panelu systemowego, który zna tylko jedną liczbę.</summary>
+    private void ApplyVolume()
+    {
+        _engine.Graph.Volume.Target = _isMuted ? 0f : (float)VolumeCurve.ToGain(_volume);
+        _mediaPanel?.SetVolume(PanelVolume);
+    }
+
+    private double PanelVolume => _isMuted ? 0 : _volume;
 
     public bool ShuffleEnabled
     {
@@ -537,7 +586,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         if (_mediaPanel is null) return;
 
-        _mediaPanel.SetVolume(Volume);
+        _mediaPanel.SetVolume(PanelVolume);
 
         if (_current is null)
         {
@@ -779,6 +828,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     public double EqualiserOpacity => EqualiserEnabled ? 1.0 : 0.4;
+
+    /// <summary>Polecenie zerowania ma sens tylko wtedy, gdy któreś pasmo albo przedwzmacniacz odbiega od zera.</summary>
+    public bool CanResetEqualiser => Preamp.Gain != 0 || Bands.Any(band => band.Gain != 0);
+
+    /// <summary>Ustawia wszystkie pasma i przedwzmacniacz na 0 dB.</summary>
+    public void ResetEqualiser()
+    {
+        foreach (var band in Bands) band.Gain = 0;
+        Preamp.Gain = 0;
+    }
 
     public bool LimiterEnabled
     {
@@ -1221,23 +1280,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void AdjustVolume(double delta) => Volume = Math.Clamp(Volume + delta, 0, 1);
 
     /// <summary>
-    /// Mutes and unmutes. The level before muting is remembered, so unmuting returns to it
-    /// rather than to some default.
+    /// Mutes and unmutes. The slider keeps its place while muted, so unmuting returns to it;
+    /// a slider left at zero comes back at half, because silence is not what unmuting asks for.
     /// </summary>
     public void ToggleMute()
     {
-        if (Volume > 0.0001)
+        if (_isMuted)
         {
-            _volumeBeforeMute = Volume;
-            Volume = 0;
+            IsMuted = false;
+            if (_volume <= 0) Volume = 0.5;
         }
         else
         {
-            Volume = _volumeBeforeMute > 0.01 ? _volumeBeforeMute : 0.5;
+            IsMuted = true;
         }
     }
-
-    private double _volumeBeforeMute = 0.5;
 
     // ---------- Trwałość kolejki ----------
 

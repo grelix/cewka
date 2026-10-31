@@ -209,5 +209,7 @@
   "AboutLicences": "Ліцензії",
   "LicenceSummary": "Cewka поширюється за ліцензією MIT. Avalonia, NVorbis, Concentus і ATL.NET — MIT. miniaudio — MIT-0. Шрифти Cantarell і JetBrains Mono — SIL Open Font License 1.1.",
 
-  "NothingPlaying": "Нічого не відтворюється"
+  "NothingPlaying": "Нічого не відтворюється",
+
+  "VolumeLevel": "Гучність {0}%"
 }

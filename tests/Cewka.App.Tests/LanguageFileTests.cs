@@ -255,6 +255,9 @@ public sealed class LanguageFileTests
     /// tekst albo przestawi specyfikator formatu, wywołałby wyjątek dopiero w czasie działania
     /// programu — i to wyłącznie w swoim języku.
     /// </summary>
+    /// <summary>Teksty z jednym symbolem zastępczym {0}.</summary>
+    private static readonly string[] OneArgumentKeys = ["PlaylistSaved", "PlaylistMissing", "VolumeLevel"];
+
     [Theory]
     [MemberData(nameof(All))]
     public void SymboleZastepczePrzetrwalyTlumaczenie(string code)
@@ -268,7 +271,7 @@ public sealed class LanguageFileTests
         // Sprawdzenie właściwe: tekst musi dać się sformatować bez wyjątku.
         Assert.Contains("1024", string.Format(measured, 1024, 21.3));
 
-        foreach (var key in (string[])["PlaylistSaved", "PlaylistMissing"])
+        foreach (var key in OneArgumentKeys)
         {
             Assert.True(strings.TryGetValue(key, out var text), $"{code}.json nie ma klucza {key}");
             Assert.Contains("{0}", text);

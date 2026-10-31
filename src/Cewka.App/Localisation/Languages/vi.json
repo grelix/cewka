@@ -209,5 +209,7 @@
   "AboutLicences": "Giấy phép",
   "LicenceSummary": "Cewka được phát hành theo giấy phép MIT. Avalonia, NVorbis, Concentus và ATL.NET — MIT. miniaudio — MIT-0. Phông chữ Cantarell và JetBrains Mono — SIL Open Font License 1.1.",
 
-  "NothingPlaying": "Không có gì đang phát"
+  "NothingPlaying": "Không có gì đang phát",
+
+  "VolumeLevel": "Âm lượng {0}%"
 }
