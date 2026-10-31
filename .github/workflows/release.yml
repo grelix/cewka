@@ -51,8 +51,8 @@ jobs:
     needs: sprawdzenie
     uses: ./.github/workflows/tests.yml
 
-  # Budowa pakietów i próby instalacyjne mieszkają w osobnym pliku, bo to samo potrzebne jest
-  # także poza wydaniem — do sprawdzenia na żądanie, czy pakiety nadal się instalują.
+  # Budowa pakietów i próby instalacyjne mieszkają w osobnym pliku, bo uruchamia je też budowa
+  # przy każdej zmianie i sprawdzenie na żądanie.
   pakiety:
     name: Linux
     needs: sprawdzenie

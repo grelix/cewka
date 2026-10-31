@@ -1,6 +1,7 @@
 # Pakiety dla Linuksa wraz z próbną instalacją w kontenerach.
 #
-# Osobny plik, bo korzystają z niego wydanie ze znacznika i sprawdzenie na żądanie.
+# Osobny plik, bo korzystają z niego budowa przy każdej zmianie, wydanie ze znacznika
+# i sprawdzenie na żądanie.
 
 name: Pakiety Linuksa
 

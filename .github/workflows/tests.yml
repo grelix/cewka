@@ -20,6 +20,10 @@ jobs:
     name: Linux — testy i zrzuty
     runs-on: ubuntu-latest
 
+    # Puste wyjście silnika: maszyna nie ma karty dźwiękowej, a nic nie ma grać przez urządzenie.
+    env:
+      CEWKA_NULL_AUDIO: '1'
+
     steps:
       - uses: actions/checkout@v7
 
@@ -30,20 +34,10 @@ jobs:
       - name: Zgodność numerów wersji
         run: ./tools/sprawdz-wersje.sh
 
-      - name: Zależności rysowania i dźwięku
+      - name: Zależności rysowania
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig1 pulseaudio
-
-          # Maszyna nie ma karty dźwiękowej, więc powstaje puste urządzenie. Zrzuty pokazują
-          # utwór w trakcie odtwarzania, a obrazy odniesienia powstały właśnie w takim układzie.
-          #
-          # Pułapka: bez limitu `pulseaudio --start` potrafi nie wrócić i zawiesić przebieg
-          # na kwadrans. Każde polecenie ma więc limit i wolno mu się nie udać; brak dźwięku
-          # ujawnią wtedy same sprawdziany i porównanie zrzutów.
-          timeout 40 pulseaudio --start --exit-idle-time=-1 || echo "pulseaudio: nie wystartowal"
-          timeout 20 pactl load-module module-null-sink sink_name=cewka || echo "brak pustego urzadzenia"
-          timeout 20 pactl list short sinks || true
+          sudo apt-get install -y libfontconfig1
 
       - name: Biblioteka natywna
         run: ./native/build-linux.sh
@@ -51,17 +45,12 @@ jobs:
       - name: Testy
         run: dotnet test Cewka.sln --configuration Release
 
-      # CEWKA_NULL_AUDIO=1 włącza puste wyjście silnika, żeby nic nie grało przez urządzenie.
       - name: Materiał dźwiękowy
-        env:
-          CEWKA_NULL_AUDIO: '1'
         run: dotnet run --project tools/Cewka.Snapshots -c Release -- --material artifacts/material
 
       - name: Sprawdziany zachowania
-        # Trwają sekundy, a rozstrzygają o wyrównaniu nagłówków, pamięci wysokości okna
-        # i o tym, czy zastąpienie kolejki plikiem z zewnątrz odtwarza właśnie ten plik.
-        env:
-          CEWKA_NULL_AUDIO: '1'
+        # Bez rysowania: stały rozmiar okna przy chowaniu korektora i kolejki, kolumna i nakładka
+        # kolejki, niskie okna, tło bez okładki oraz zastąpienie kolejki plikiem z zewnątrz.
         run: |
           dotnet run --project tools/Cewka.Snapshots -c Release -- \
             artifacts/zrzuty \
@@ -70,8 +59,6 @@ jobs:
             --sprawdzenia
 
       - name: Zrzuty i porównanie z odniesieniem
-        env:
-          CEWKA_NULL_AUDIO: '1'
         run: |
           dotnet run --project tools/Cewka.Snapshots -c Release -- \
             artifacts/zrzuty \
@@ -119,6 +106,9 @@ jobs:
   windows:
     name: Windows — testy
     runs-on: windows-latest
+
+    env:
+      CEWKA_NULL_AUDIO: '1'
 
     steps:
       - uses: actions/checkout@v7
