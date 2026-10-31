@@ -95,10 +95,6 @@
     <Setter Property="Background" Value="{DynamicResource AccentSoftHiBrush}" />
   </Style>
 
-  <Style Selector="ToggleButton.icon:checked Path.stroke">
-    <Setter Property="Stroke" Value="{DynamicResource AccentBrush}" />
-  </Style>
-
   <!-- Kropka na przycisku pasa: przetwarzanie włączone, choć pasa nie widać. -->
   <Style Selector="Ellipse.indicator">
     <Setter Property="Width" Value="6" />
@@ -500,6 +496,11 @@
     <Setter Property="Stroke" Value="{DynamicResource TextBrush}" />
   </Style>
   <Style Selector=":is(Button).icon.active Path.stroke">
+    <Setter Property="Stroke" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <!-- Za stylem :pointerover, żeby włączony przełącznik pod kursorem nie tracił akcentu. -->
+  <Style Selector="ToggleButton.icon:checked Path.stroke">
     <Setter Property="Stroke" Value="{DynamicResource AccentBrush}" />
   </Style>
 

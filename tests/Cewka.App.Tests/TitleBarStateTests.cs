@@ -81,6 +81,34 @@ public sealed class TitleBarStateTests
     }
 
     [Fact]
+    public void WlaczonyPrzelacznikPodKursoremZostajeWAkcencie()
+    {
+        Ui.Run(() =>
+        {
+            var glyph = new Avalonia.Controls.Shapes.Path { Classes = { "stroke" }, Width = 16, Height = 16 };
+            var toggle = new Avalonia.Controls.Primitives.ToggleButton
+            {
+                Classes = { "icon" }, IsChecked = true, Width = 40, Height = 40, Content = glyph,
+            };
+            var window = new Window { Width = 100, Height = 100, Content = toggle };
+            window.Show();
+
+            try
+            {
+                // Trafienie kursorem korzysta z wyrenderowanej sceny.
+                Tick(2);
+                window.MouseMove(new Point(20, 50));
+                Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                Assert.True(toggle.IsPointerOver);
+
+                Assert.True(window.TryFindResource("AccentBrush", window.ActualThemeVariant, out var accent));
+                Assert.Same(accent, glyph.Stroke);
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
     public void PrzyciskMotywuPokazujeTrybBiezacy()
     {
         Ui.Run(() =>
