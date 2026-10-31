@@ -158,6 +158,12 @@ public sealed class MainWindowInputTests
                 Assert.Equal(volume, h.Player.Volume);
                 Assert.Equal(0, h.Player.CurrentIndex);
 
+                // Spacja w liście steruje odtwarzaniem i nie rusza zaznaczenia.
+                var playing = h.Player.IsPlaying;
+                Key(window, Avalonia.Input.Key.Space);
+                Assert.NotEqual(playing, h.Player.IsPlaying);
+                Assert.Equal(1, list.SelectedIndex);
+
                 Key(window, Avalonia.Input.Key.Enter);
                 Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 1));
 

@@ -1029,13 +1029,23 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    /// <summary>Enter, Delete i Alt+strzałki działają tylko na liście z fokusem.</summary>
+    /// <summary>
+    /// Enter, Delete i Alt+strzałki działają tylko na liście z fokusem. Spacja zostaje przy
+    /// odtwarzaniu także tutaj, zamiast zaznaczać wiersz, który i tak zaznaczają strzałki.
+    /// </summary>
     private void OnQueueKeyDown(object? sender, KeyEventArgs e)
     {
-        if (SelectedRow is not { } row) return;
-
         var none = e.KeyModifiers == KeyModifiers.None;
         var alt = e.KeyModifiers == KeyModifiers.Alt;
+
+        if (e.Key == Key.Space && none)
+        {
+            _viewModel.TogglePlay();
+            e.Handled = true;
+            return;
+        }
+
+        if (SelectedRow is not { } row) return;
 
         switch (e.Key)
         {
