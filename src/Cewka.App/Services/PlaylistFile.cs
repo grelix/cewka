@@ -17,13 +17,13 @@ public sealed record PlaylistLoad(IReadOnlyList<string> Paths, int Missing, int 
 /// <summary>
 /// Zapisuje i czyta kolejkę jako listę M3U.
 ///
-/// <para><b>Dlaczego M3U, a nie własny format.</b> Zapisana kolejka jest przydatna głównie
+/// <para>Zapisana kolejka jest przydatna głównie
 /// wtedy, gdy da się ją otworzyć czymkolwiek innym — wysłać komuś, wrzucić na pendrive'a,
 /// wczytać w programie na telefonie. M3U czyta wszystko, co odtwarza muzykę, i jest to plik
 /// tekstowy, w którym widać, co jest w środku. Własny format zapisany w katalogu konfiguracji
 /// dałby to samo tylko w obrębie tego jednego programu na tym jednym komputerze.</para>
 ///
-/// <para><b>Kodowanie.</b> Zapis zawsze w UTF-8: <c>.m3u8</c> bez znacznika kolejności bajtów,
+/// <para>Zapis zawsze w UTF-8: <c>.m3u8</c> bez znacznika kolejności bajtów,
 /// tak jak przyjęło się dla tego rozszerzenia, a <c>.m3u</c> ze znacznikiem, bo starsze programy
 /// czytają takie pliki w stronie kodowej systemu, dopóki znacznik nie powie inaczej. Przy odczycie
 /// <c>.m3u</c> bez znacznika i niebędący poprawnym UTF-8 jest czytany w stronie kodowej systemu

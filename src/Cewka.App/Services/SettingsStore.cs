@@ -209,7 +209,7 @@ public sealed class SettingsStore
     {
         if (s.SchemaVersion < 1)
         {
-            // Do 0.8.1 głośność była wzmocnieniem liniowym, a wyciszenie zerowało ją samą.
+            // W schemacie 0 głośność jest wzmocnieniem liniowym, a wyciszenie zeruje ją samą.
             if (s.Volume <= 0)
             {
                 s.IsMuted = true;

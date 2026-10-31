@@ -1326,8 +1326,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// Adding a folder has to feel instant, so entries appear straight away with nothing but
     /// their file names. The durations and titles then fill in as the tags are read. Reading
     /// two thousand files takes a few seconds; doing it up front would freeze the window for
-    /// exactly that long. Wynik trafia do wiersza tego samego wpisu, a nie pod ten sam numer:
-    /// w międzyczasie wiersz mógł zostać przesunięty.
+    /// exactly that long. Wynik trafia do wiersza tego samego wpisu, bo w międzyczasie wiersz
+    /// mógł zostać przesunięty.
     /// </para>
     /// </summary>
     private async Task FillMetadataInBackgroundAsync(IReadOnlyList<QueueEntry> entries)
@@ -1758,8 +1758,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>Obecna kolejka w postaci gotowej do zapisania na listę.</summary>
     /// <remarks>
-    /// Z wpisów silnika, a nie z wierszy: wiersz zastępuje brak wykonawcy napisem
-    /// w języku interfejsu, który na liście udawałby prawdziwego wykonawcę.
+    /// Z wpisów silnika, bo wiersz zastępuje brak wykonawcy napisem w języku interfejsu,
+    /// który na liście udawałby prawdziwego wykonawcę.
     /// </remarks>
     public IReadOnlyList<PlaylistEntry> QueueAsPlaylist() => _engine.Queue
         .Select(entry => new PlaylistEntry(
@@ -1892,7 +1892,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private static readonly TimeSpan PowerCheckInterval = TimeSpan.FromSeconds(5);
     private DateTime _lastPowerCheck = DateTime.UtcNow;
 
-    /// <summary>Zegar odświeżania wraca do pełnego tempa od razu, a nie po pół sekundy bezczynności.</summary>
+    /// <summary>Zegar odświeżania wraca do pełnego tempa od razu, bez czekania na tyknięcie bezczynne.</summary>
     private void WakeRefresh()
     {
         if (_refresh.Interval == RefreshInterval) return;

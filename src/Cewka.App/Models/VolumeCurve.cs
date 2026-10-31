@@ -3,10 +3,9 @@ namespace Cewka.App.Models;
 /// <summary>
 /// Przełożenie położenia suwaka głośności na wzmocnienie sygnału.
 /// <para>
-/// Słuch ocenia głośność w skali logarytmicznej. Suwak liniowy w amplitudzie mieścił cały
-/// zakres cichego słuchania (−20 do −40 dB) w dolnych dziesięciu procentach drogi, a połowa
-/// suwaka dawała zaledwie −6 dB. Tutaj suwak obejmuje 60 dB równomiernie: każde pięć procent
-/// to te same 3 dB, a skrajne lewe położenie to cisza.
+/// Słuch ocenia głośność w skali logarytmicznej, więc suwak obejmuje 60 dB równomiernie:
+/// każde pięć procent drogi to te same 3 dB, połowa suwaka to −30 dB, a skrajne lewe
+/// położenie to cisza.
 /// </para>
 /// </summary>
 public static class VolumeCurve

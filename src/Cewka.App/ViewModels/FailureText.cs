@@ -23,7 +23,7 @@ internal static class FailureText
             ? "DecoderFailureCodecMissingLinux"
             : "DecoderFailure" + reason];
 
-    /// <summary>Klucz komunikatu o wyjściu dźwięku, dobrany po rodzaju wyjątku, nie po jego tekście.</summary>
+    /// <summary>Klucz komunikatu o wyjściu dźwięku, dobrany po rodzaju wyjątku.</summary>
     public static string AudioFailureKey(Exception ex) => ex switch
     {
         // Brak biblioteki wychodzi zwykle opakowany w błąd inicjalizacji klasy, która ją wołała.
