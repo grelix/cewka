@@ -9,10 +9,9 @@ namespace Cewka.App.Tests;
 /// <para>Każde z nich pracuje we własnym katalogu tymczasowym i pod własną nazwą, więc nie
 /// dotyka ustawień osoby uruchamiającej testy ani programu, który akurat u niej działa.</para>
 ///
-/// <para><b>Czego tu nie ma.</b> Sedno naprawianego błędu — muteks nazwany osobny dla każdej
-/// sesji POSIX — ujawnia się wyłącznie między dwiema sesjami. Jeden proces testowy siedzi
-/// w jednej sesji, więc żadne sprawdzenie stąd tego nie wyłapie; potwierdzeniem jest próba
-/// opisana w <see cref="SingleInstance"/>, uruchamiana ręcznie pod Linuksem.</para>
+/// <para>Pułapka: rozdzielenie kopii między sesje POSIX ujawnia się wyłącznie między dwiema
+/// sesjami, a proces testowy siedzi w jednej. Potwierdzeniem jest próba opisana
+/// w <see cref="SingleInstance"/>, uruchamiana ręcznie pod Linuksem.</para>
 /// </summary>
 public sealed class SingleInstanceTests : IDisposable
 {
@@ -35,8 +34,8 @@ public sealed class SingleInstanceTests : IDisposable
     }
 
     /// <summary>
-    /// Po zamknięciu pierwszej kopii rola musi być znów do wzięcia. Muteks nazwany zostawiał
-    /// pod Linuksem plik po sobie; blokada zwalnia się wraz z uchwytem.
+    /// Po zamknięciu pierwszej kopii rola musi być znów do wzięcia: blokada zwalnia się wraz
+    /// z uchwytem.
     /// </summary>
     [Fact]
     public void RolaWracaPoZamknieciuPierwszejKopii()
@@ -152,7 +151,6 @@ public sealed class SingleInstanceTests : IDisposable
         var complete = new ManualResetEventSlim();
 
         // Wiadomości mogą jeszcze płynąć w chwili podpięcia odbiorcy; żadna nie może przepaść.
-        Thread.Sleep(200);
         instance.Attach(paths =>
         {
             lock (all)
@@ -188,7 +186,8 @@ public sealed class SingleInstanceTests : IDisposable
 
     /// <summary>
     /// Gdy blokady nie da się założyć wcale, nikt jej nie trzyma i nie ma komu oddawać ścieżek.
-    /// Program ma ruszyć od razu, a nie po trzech sekundach prób połączenia.
+    /// Program ma ruszyć od razu. Próg leży poniżej czasu jednej próby połączenia (1 s), więc
+    /// przekracza go już pierwsza zbędna próba, a obciążona maszyna ma zapas.
     /// </summary>
     [Fact]
     public void StartRuszaOdRazuGdyBlokadaNiedostepna()
@@ -201,7 +200,7 @@ public sealed class SingleInstanceTests : IDisposable
 
         Assert.Null(claim.Instance);
         Assert.False(claim.HandedOver);
-        Assert.True(clock.Elapsed < TimeSpan.FromMilliseconds(500), $"start trwał {clock.ElapsedMilliseconds} ms");
+        Assert.True(clock.Elapsed < TimeSpan.FromMilliseconds(900), $"start trwał {clock.ElapsedMilliseconds} ms");
     }
 
     /// <summary>
@@ -282,10 +281,9 @@ public sealed class SingleInstanceTests : IDisposable
     }
 
     /// <summary>
-    /// Sedno drugiej z naprawianych usterek. Blokada jest zajęta, więc pierwsze podejście
-    /// odpada, ale nikt nie odbiera — bo właściciel właśnie skończył pracę. Kopia musi wtedy
-    /// wrócić po rolę. Wcześniej otwierała okno bez nasłuchu i od tej chwili każde następne
-    /// uruchomienie dokładało kolejne okno.
+    /// Blokada jest zajęta, więc pierwsze podejście odpada, ale nikt nie odbiera, bo właściciel
+    /// właśnie skończył pracę. Kopia musi wtedy wrócić po rolę. Okno bez nasłuchu sprawiłoby,
+    /// że każde następne uruchomienie dokłada kolejne okno.
     /// </summary>
     [Fact]
     public void StartWracaPoRoleGdyWlascicielZniknal()
