@@ -52,7 +52,7 @@ public static class TestApp
 public static class Ui
 {
     private static readonly Lazy<HeadlessUnitTestSession> Session =
-        new(() => HeadlessUnitTestSession.StartNew(typeof(TestApp)));
+        new(() => HeadlessUnitTestSession.StartNew(typeof(TestApp), AvaloniaTestIsolationLevel.PerAssembly));
 
     public static void Run(Action action) =>
         Session.Value.Dispatch(action, CancellationToken.None).GetAwaiter().GetResult();

@@ -215,6 +215,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         private set
         {
             if (!Set(ref _isPlaying, value)) return;
+            if (value) WakeRefresh();
 
             Raise(nameof(IsPaused));
             _mediaPanel?.SetStatus(value ? MediaPanelStatus.Playing : MediaPanelStatus.Paused);
@@ -241,7 +242,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             // puszczeniu przycisku (CommitScrub).
             if (_scrubbing)
             {
-                Elapsed = FormatTime(_engine.Duration.TotalSeconds * Math.Clamp(value, 0, 1));
+                Elapsed = FormatTime(_engine.Duration.TotalSeconds * Math.Clamp(value, 0, 1), _engine.Duration.TotalHours >= 1);
                 return;
             }
 
@@ -260,7 +261,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// pointer, the music waits for the button to be released.
     /// </para>
     /// </summary>
-    public void BeginScrub() => _scrubbing = true;
+    public void BeginScrub()
+    {
+        _scrubbing = true;
+        WakeRefresh();
+    }
 
     /// <summary>Called when the progress bar is released; this is where playback actually moves.</summary>
     public void CommitScrub(double value)
@@ -896,21 +901,56 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>Loads files or folders into the queue and starts playing.</summary>
-    public void OpenPaths(IEnumerable<string> paths, bool replace = true)
+    public Task OpenPaths(IEnumerable<string> paths, bool replace = true) => Open(paths, files =>
     {
-        var files = ExpandToAudioFiles(paths).ToList();
-        if (files.Count == 0) return;
-
         if (replace)
         {
+            _resume.Discard();
             if (TryPlayback(() => _engine.SetQueue(files))) SyncPlaying();
+            RebuildQueue();
         }
         else
         {
             _engine.Enqueue(files);
+            AppendRows();
+        }
+    });
+
+    private Task _openChain = Task.CompletedTask;
+
+    /// <summary>
+    /// Zamienia ścieżki na pliki dźwiękowe i przekazuje je dalej. Same pliki idą od razu;
+    /// foldery są przeglądane poza wątkiem interfejsu, bo duży katalog na wolnym dysku
+    /// zamroziłby okno. Kolejne otwarcia czekają na poprzednie, więc dwa szybkie upuszczenia
+    /// nie zamienią się kolejnością.
+    /// </summary>
+    private Task Open(IEnumerable<string> paths, Action<List<string>> apply)
+    {
+        var list = paths.ToList();
+
+        if (_openChain.IsCompleted && !list.Any(Directory.Exists))
+        {
+            var files = ExpandToAudioFiles(list).ToList();
+            if (files.Count > 0) apply(files);
+            return Task.CompletedTask;
         }
 
-        RebuildQueue();
+        return _openChain = OpenAfterAsync(_openChain, list, apply);
+    }
+
+    private async Task OpenAfterAsync(Task previous, List<string> paths, Action<List<string>> apply)
+    {
+        await previous;
+
+        try
+        {
+            var files = await Task.Run(() => ExpandToAudioFiles(paths).ToList());
+            if (!_disposed && files.Count > 0) apply(files);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cewka] nie udało się dodać plików: {ex}");
+        }
     }
 
     /// <summary>
@@ -921,15 +961,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <para>Wybór plików wewnątrz programu (<c>Ctrl+O</c>) tą drogą nie idzie: tam użytkownik
     /// właśnie nacisnął „dodaj", więc pytanie, czy dodać, byłoby już rozstrzygnięte.</para>
     /// </summary>
-    public void OpenFromOutside(IEnumerable<string> paths)
+    public Task OpenFromOutside(IEnumerable<string> paths) => Open(paths, files =>
     {
-        var files = ExpandToAudioFiles(paths).ToList();
-        if (files.Count == 0) return;
-
         switch (_settings.Current.FileOpenAction)
         {
             case FileOpenAction.ReplaceAndPlay:
+                _resume.Discard();
                 if (TryPlayback(() => _engine.SetQueue(files))) SyncPlaying();
+                RebuildQueue();
                 break;
 
             case FileOpenAction.AppendAndPlay:
@@ -938,8 +977,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 // długość kolejki obejmuje już nowe pozycje i nie wiadomo, gdzie się zaczynają.
                 var first = Queue.Count;
                 _engine.Enqueue(files);
+                AppendRows();
                 _resume.Discard();
                 if (TryPlayback(() => _engine.PlayIndex(first))) SyncPlaying();
+                RestoreCurrentMarker();
                 break;
             }
 
@@ -949,17 +990,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 if (IsQueueEmpty)
                 {
                     if (TryPlayback(() => _engine.SetQueue(files))) SyncPlaying();
+                    RebuildQueue();
                 }
                 else
                 {
                     _engine.Enqueue(files);
+                    AppendRows();
                 }
 
                 break;
         }
-
-        RebuildQueue();
-    }
+    });
 
     // ---------- Awaria wyjścia dźwięku ----------
 
@@ -1049,18 +1090,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ShowNotice(Strings.Current["DeviceLostNotice"]);
     }
 
-    /// <summary>Folders are walked recursively; anything unrecognised is left out.</summary>
+    /// <summary>
+    /// Folders are walked recursively; anything unrecognised is left out. W każdym katalogu
+    /// najpierw pliki, potem podkatalogi, jedne i drugie w porządku naturalnym: „2 - y” przed
+    /// „10 - x”, tak jak w menedżerze plików.
+    /// </summary>
     private static IEnumerable<string> ExpandToAudioFiles(IEnumerable<string> paths)
     {
         foreach (var path in paths)
         {
             if (Directory.Exists(path))
             {
-                var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
-                foreach (var file in Directory.EnumerateFiles(path, "*", options).Order())
-                {
-                    if (IsAudio(file)) yield return file;
-                }
+                foreach (var file in WalkFolder(path)) yield return file;
             }
             else if (File.Exists(path) && IsAudio(path))
             {
@@ -1069,88 +1110,138 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    private static IEnumerable<string> WalkFolder(string folder)
+    {
+        var options = new EnumerationOptions { IgnoreInaccessible = true };
+
+        var files = Directory.EnumerateFiles(folder, "*", options).Where(IsAudio).ToList();
+        files.Sort(NaturalOrder.Instance);
+        foreach (var file in files) yield return file;
+
+        var folders = Directory.EnumerateDirectories(folder, "*", options).ToList();
+        folders.Sort(NaturalOrder.Instance);
+        foreach (var child in folders)
+        foreach (var file in WalkFolder(child))
+            yield return file;
+    }
+
     private static bool IsAudio(string path) =>
         AudioFileFormatDetector.SupportedExtensions
             .Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Wiersze od nowa dla całej kolejki. Potrzebne przy jej zastąpieniu i zmianie języka;
+    /// przesunięcie, usunięcie i dołożenie zmieniają tylko dotknięte wiersze.
+    /// </summary>
     private void RebuildQueue()
     {
+        Interlocked.Increment(ref _metadataGeneration);
+        _current = null;
         Queue.Clear();
 
         var entries = _engine.Queue;
-        for (var i = 0; i < entries.Count; i++)
-        {
-            var entry = entries[i];
-            Queue.Add(new QueueItemViewModel
-            {
-                Number = i + 1,
-                Title = entry.Title,
-                Artist = entry.Artist ?? Strings.Current["UnknownArtist"],
-                AlbumLine = BuildAlbumLine(entry),
-                Duration = FormatTime(entry.Duration.TotalSeconds),
-                DurationSeconds = entry.Duration.TotalSeconds,
-                Format = entry.Metadata?.FormatBadge ?? Strings.Current["NoFormat"],
-                Path = entry.Path,
-            });
-        }
+        for (var i = 0; i < entries.Count; i++) Queue.Add(CreateRow(entries[i], i + 1));
 
         RestoreCurrentMarker();
+        QueueChanged();
+        _ = FillMetadataInBackgroundAsync(entries);
+    }
 
+    /// <summary>Dokłada wiersze dla wpisów dodanych na końcu kolejki silnika.</summary>
+    private void AppendRows()
+    {
+        var entries = _engine.Queue;
+        var added = new List<QueueEntry>();
+
+        for (var i = Queue.Count; i < entries.Count; i++)
+        {
+            Queue.Add(CreateRow(entries[i], i + 1));
+            added.Add(entries[i]);
+        }
+
+        QueueChanged();
+        _ = FillMetadataInBackgroundAsync(added);
+    }
+
+    private void QueueChanged()
+    {
         Raise(nameof(QueueSummary));
         Raise(nameof(IsQueueEmpty));
-        _ = FillMetadataInBackgroundAsync();
         TouchQueue();
     }
 
+    /// <summary>Numery od <paramref name="from"/> do końca, po przesunięciu albo usunięciu.</summary>
+    private void Renumber(int from)
+    {
+        for (var i = Math.Max(0, from); i < Queue.Count; i++) Queue[i].Number = i + 1;
+    }
+
+    private static QueueItemViewModel CreateRow(QueueEntry entry, int number)
+    {
+        var row = new QueueItemViewModel
+        {
+            Number = number,
+            Entry = entry,
+            Title = entry.Title,
+            Artist = Strings.Current["UnknownArtist"],
+            Duration = FormatTime(entry.Duration.TotalSeconds),
+            Path = entry.Path,
+        };
+
+        ApplyMetadataToRow(row, entry);
+        return row;
+    }
+
     /// <summary>
-    /// Re-attaches the „now playing" marker after the rows were rebuilt.
+    /// Re-attaches the „now playing" marker after the rows changed.
     /// <para>
-    /// The rows are throwaway objects, so anything that rebuilds them — reordering, removing an
-    /// entry, changing language — leaves <see cref="_current"/> pointing at a row that is no
-    /// longer in the list. The engine still knows which entry is playing, so the marker is
-    /// re-derived from it rather than remembered.
+    /// The engine knows which entry is playing, so the marker is re-derived from it rather
+    /// than remembered.
     /// </para>
     /// </summary>
     private void RestoreCurrentMarker()
     {
         var index = _engine.CurrentIndex;
+        var row = index >= 0 && index < Queue.Count ? Queue[index] : null;
 
-        _current = index >= 0 && index < Queue.Count ? Queue[index] : null;
+        if (!ReferenceEquals(row, _current) && _current is not null) _current.IsCurrent = false;
+
+        _current = row;
         if (_current is not null) _current.IsCurrent = true;
 
         Raise(nameof(CurrentIndex));
     }
 
     /// <summary>
-    /// Reads tags for the whole queue away from the interface thread.
+    /// Reads tags away from the interface thread, only for entries not read yet.
     /// <para>
     /// Adding a folder has to feel instant, so entries appear straight away with nothing but
     /// their file names. The durations and titles then fill in as the tags are read. Reading
     /// two thousand files takes a few seconds; doing it up front would freeze the window for
-    /// exactly that long.
+    /// exactly that long. Wynik trafia do wiersza tego samego wpisu, a nie pod ten sam numer:
+    /// w międzyczasie wiersz mógł zostać przesunięty.
     /// </para>
     /// </summary>
-    private async Task FillMetadataInBackgroundAsync()
+    private async Task FillMetadataInBackgroundAsync(IReadOnlyList<QueueEntry> entries)
     {
-        var token = ++_metadataGeneration;
-        var entries = _engine.Queue;
+        var pending = entries.Where(entry => entry.Metadata is null).ToList();
+        if (pending.Count == 0) return;
+
+        var token = Volatile.Read(ref _metadataGeneration);
 
         await Task.Run(() =>
         {
-            for (var i = 0; i < entries.Count; i++)
+            foreach (var entry in pending)
             {
-                if (token != _metadataGeneration) return;
-
-                var index = i;
-                var entry = entries[index];
+                if (token != Volatile.Read(ref _metadataGeneration)) return;
 
                 try { entry.EnsureMetadata(); }
                 catch { continue; }
 
                 Dispatcher.UIThread.Post(() =>
                 {
-                    if (token != _metadataGeneration || index >= Queue.Count) return;
-                    ApplyMetadataToRow(Queue[index], entry);
+                    if (token != _metadataGeneration || RowFor(entry) is not { } row) return;
+                    ApplyMetadataToRow(row, entry);
                 }, DispatcherPriority.Background);
             }
 
@@ -1161,6 +1252,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         });
     }
 
+    private QueueItemViewModel? RowFor(QueueEntry entry)
+    {
+        foreach (var row in Queue)
+            if (ReferenceEquals(row.Entry, entry)) return row;
+
+        return null;
+    }
+
+    /// <summary>Jedna reguła dla wiersza nowego i uzupełnianego: wykonawca albo wykonawca albumu.</summary>
     private static void ApplyMetadataToRow(QueueItemViewModel row, QueueEntry entry)
     {
         if (entry.Metadata is { } metadata)
@@ -1259,9 +1359,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         _engine.RemoveAt(index);
         _resume.OnRemoved(index);
-        RebuildQueue();
 
-        if (!wasCurrent || _engine.CurrentIndex >= 0) return;
+        Queue.RemoveAt(index);
+        Renumber(index);
+        QueueChanged();
+
+        if (!wasCurrent || _engine.CurrentIndex >= 0)
+        {
+            RestoreCurrentMarker();
+            return;
+        }
 
         ResetNowPlaying();
         if (Queue.Count > 0) _resume.Arm(Math.Min(index, Queue.Count - 1), 0, Queue.Count);
@@ -1274,7 +1381,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         _engine.Move(from, to);
         _resume.OnMoved(from, to);
-        RebuildQueue();
+
+        Queue.Move(from, to);
+        Renumber(Math.Min(from, to));
+        RestoreCurrentMarker();
+        QueueChanged();
     }
 
     public void ClearQueue()
@@ -1616,14 +1727,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         var duration = _engine.Duration;
         var position = _engine.Position;
+        var hours = duration.TotalHours >= 1;
 
-        Total = duration > TimeSpan.Zero ? FormatTime(duration.TotalSeconds) : "0:00";
+        Total = duration > TimeSpan.Zero ? FormatTime(duration.TotalSeconds, hours) : "0:00";
 
         // Podczas przeciagania suwak nalezy do wskaznika, nie do odtwarzania - inaczej
         // odswiezanie wyrywaloby uchwyt spod kursora.
         if (!_scrubbing)
         {
-            Elapsed = FormatTime(position.TotalSeconds);
+            Elapsed = FormatTime(position.TotalSeconds, hours);
 
             // Ustawienie przez pole omija setter, zeby odswiezanie nie wywolalo przewijania.
             _isSeeking = true;
@@ -1649,16 +1761,31 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         RefreshBitrateBadge();
 
+        // Bez gry wartości stoją w miejscu: zegar zwalnia, a wraca do pełnego tempa przy
+        // wznowieniu i przy przeciąganiu suwaka.
+        _refresh.Interval = playing || _scrubbing ? RefreshInterval : IdleRefreshInterval;
+
         // Stan zasilania zmienia się rzadko, a odczyt jest wywołaniem systemowym; pięć sekund
         // wystarcza, żeby podłączenie zasilacza zauważyć, a nie kosztuje praktycznie nic.
-        if (++_ticksSincePowerCheck < PowerCheckTicks) return;
+        if (DateTime.UtcNow - _lastPowerCheck < PowerCheckInterval) return;
 
-        _ticksSincePowerCheck = 0;
+        _lastPowerCheck = DateTime.UtcNow;
         if (_settings.Current.Effects == EffectsMode.Auto) UpdateEffects();
     }
 
-    private static readonly int PowerCheckTicks = (int)(5000 / RefreshInterval.TotalMilliseconds);
-    private int _ticksSincePowerCheck;
+    private static readonly TimeSpan IdleRefreshInterval = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan PowerCheckInterval = TimeSpan.FromSeconds(5);
+    private DateTime _lastPowerCheck = DateTime.UtcNow;
+
+    /// <summary>Zegar odświeżania wraca do pełnego tempa od razu, a nie po pół sekundy bezczynności.</summary>
+    private void WakeRefresh()
+    {
+        if (_refresh.Interval == RefreshInterval) return;
+
+        _refresh.Interval = RefreshInterval;
+        _refresh.Stop();
+        _refresh.Start();
+    }
 
     /// <summary>
     /// Keeps the badge in step with the live bitrate. Only variable-bitrate files are
@@ -1950,16 +2077,26 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private static string FormatTime(double seconds)
+    /// <summary>
+    /// m:ss, a od godziny h:mm:ss. Przy utworze dłuższym niż godzina także pozycja poniżej
+    /// godziny dostaje postać z godzinami, żeby szerokość pola nie skakała.
+    /// </summary>
+    internal static string FormatTime(double seconds, bool hours = false)
     {
         var whole = (int)Math.Max(0, Math.Floor(seconds));
-        return $"{whole / 60}:{whole % 60:00}";
+
+        return hours || whole >= 3600
+            ? $"{whole / 3600}:{whole / 60 % 60:00}:{whole % 60:00}"
+            : $"{whole / 60}:{whole % 60:00}";
     }
 
     private readonly EventHandler _themeWatcher;
 
+    private bool _disposed;
+
     public void Dispose()
     {
+        _disposed = true;
         App.Theme.Changed -= _themeWatcher;
         _queueSave.Stop();
         _refresh.Stop();

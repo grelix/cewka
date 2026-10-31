@@ -12,8 +12,6 @@ public class QueueItemFailureTests
         Number = 1,
         Title = "utwór",
         Artist = "wykonawca",
-        AlbumLine = string.Empty,
-        Format = string.Empty,
         Path = "C:/muzyka/utwór.flac",
         Duration = "0:00",
     };

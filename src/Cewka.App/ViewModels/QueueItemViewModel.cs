@@ -13,7 +13,13 @@ public sealed class QueueItemViewModel : ObservableObject
     private string _title = string.Empty;
     private string _artist = string.Empty;
 
-    public required int Number { get; init; }
+    private int _number;
+
+    /// <summary>Pozycja w kolejce, od jedynki; zmienia się przy przesuwaniu i usuwaniu wierszy.</summary>
+    public required int Number { get => _number; set => Set(ref _number, value); }
+
+    /// <summary>Wpis silnika, któremu odpowiada wiersz; po nim przychodzą odczytane znaczniki.</summary>
+    public QueueEntry? Entry { get; init; }
 
     /// <summary>Starts as the file name and is replaced once the tags have been read.</summary>
     public required string Title
@@ -29,11 +35,6 @@ public sealed class QueueItemViewModel : ObservableObject
         set => Set(ref _artist, value);
     }
 
-    /// <summary>Full "performer — album · year" line shown beside the record.</summary>
-    public required string AlbumLine { get; init; }
-
-    /// <summary>Technical description shown on the badge once the track starts playing.</summary>
-    public required string Format { get; init; }
 
     /// <summary>Full path, used for the tooltip and by the engine.</summary>
     public required string Path { get; init; }
