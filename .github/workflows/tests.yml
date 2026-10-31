@@ -30,10 +30,20 @@ jobs:
       - name: Zgodność numerów wersji
         run: ./tools/sprawdz-wersje.sh
 
-      - name: Zależności rysowania
+      - name: Zależności rysowania i dźwięku
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig1
+          sudo apt-get install -y libfontconfig1 pulseaudio
+
+          # Maszyna nie ma karty dźwiękowej, więc powstaje puste urządzenie. Zrzuty pokazują
+          # utwór w trakcie odtwarzania, a obrazy odniesienia powstały właśnie w takim układzie.
+          #
+          # Pułapka: bez limitu `pulseaudio --start` potrafi nie wrócić i zawiesić przebieg
+          # na kwadrans. Każde polecenie ma więc limit i wolno mu się nie udać; brak dźwięku
+          # ujawnią wtedy same sprawdziany i porównanie zrzutów.
+          timeout 40 pulseaudio --start --exit-idle-time=-1 || echo "pulseaudio: nie wystartowal"
+          timeout 20 pactl load-module module-null-sink sink_name=cewka || echo "brak pustego urzadzenia"
+          timeout 20 pactl list short sinks || true
 
       - name: Biblioteka natywna
         run: ./native/build-linux.sh
@@ -41,8 +51,8 @@ jobs:
       - name: Testy
         run: dotnet test Cewka.sln --configuration Release
 
-      # Narzędzie zrzutów gra przez puste wyjście silnika: maszyna nie ma karty dźwiękowej,
-      # a przygotowanie dźwięku w systemie potrafiło zawiesić przebieg na kwadrans.
+      # CEWKA_NULL_AUDIO=1 to prośba o puste wyjście silnika. Silnik jej jeszcze nie obsługuje,
+      # więc do tego czasu narzędzie zrzutów gra przez puste urządzenie pulseaudio.
       - name: Materiał dźwiękowy
         env:
           CEWKA_NULL_AUDIO: '1'

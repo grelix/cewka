@@ -75,8 +75,9 @@ fi
 echo "zaleznosci pliku uruchomieniowego odnalezione (biblioteki z pakunku sprawdza uruchomienie)"
 
 echo "--- uruchomienie ---"
-# Puste wyjscie dzwieku: kontener nie ma karty, a blad otwarcia urzadzenia nie jest wada
-# pakietu. Odtwarzanie i tak laduje biblioteke natywna i dekoduje plik.
+# Kontener nie ma karty dzwiekowej, a blad otwarcia urzadzenia nie jest wada pakietu:
+# program go przechwytuje i dziala dalej. CEWKA_NULL_AUDIO=1 prosi o puste wyjscie silnika;
+# silnik jeszcze jej nie obsluguje, wiec na razie zmienna niczego nie zmienia.
 set +e
 CEWKA_NULL_AUDIO=1 timeout 20 xvfb-run -a /usr/bin/cewka /material/probka-dluga.wav >/tmp/dziennik.txt 2>&1
 KOD=$?
