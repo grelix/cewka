@@ -988,14 +988,27 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>Loads files or folders into the queue and starts playing.</summary>
     public Task OpenPaths(IEnumerable<string> paths, bool replace = true) =>
-        Open(paths, files => Load(files, replace));
+        Open(paths, replace ? ReplaceOpen : AppendOpen);
 
     /// <summary>
     /// Dokłada pliki do kolejki, a pustą wypełnia nimi i zaczyna grać. O tym, czy kolejka jest
     /// pusta, rozstrzyga chwila dołożenia: folder przeglądany w tle mógł ją w międzyczasie wypełnić.
     /// </summary>
-    public Task AddPaths(IEnumerable<string> paths) =>
-        Open(paths, files => Load(files, replace: IsQueueEmpty));
+    public Task AddPaths(IEnumerable<string> paths) => Open(paths, AddOpen);
+
+    // Akcje otwierania; nazwy trafiają do zapisu otwarć niedokończonych przy zamknięciu.
+    private const string ReplaceOpen = "Replace";
+    private const string AppendOpen = "Append";
+    private const string AddOpen = "Add";
+    private const string OutsideOpen = "Outside";
+
+    private Action<List<string>> ApplyFor(string action) => action switch
+    {
+        ReplaceOpen => files => Load(files, replace: true),
+        AppendOpen => files => Load(files, replace: false),
+        OutsideOpen => ApplyFromOutside,
+        _ => files => Load(files, replace: IsQueueEmpty),
+    };
 
     private void Load(List<string> files, bool replace)
     {
@@ -1012,17 +1025,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// Wstawia pliki na miejsce kolejki i gra pierwszy. Przy zamykaniu okna pierwszy tylko czeka
-    /// jak wznowienie i tak trafia do zapisu, bo odtwarzanie otworzyłoby urządzenie do końca zamykania.
+    /// jak wznowienie i tak trafia do zapisu, bo odtwarzanie otworzyłoby urządzenie do końca zamykania;
+    /// tak samo przy otwarciu z poprzedniego uruchomienia, bo start programu ma być cichy.
     /// </summary>
     private void ReplaceQueue(List<string> files)
     {
         _resume.Discard();
 
-        if (IsClosing)
+        if (HoldsPlayback)
         {
             _engine.ClearQueue();
             _engine.Enqueue(files);
             RebuildQueue();
+            if (!IsClosing) ResetNowPlaying();
             _resume.Arm(0, 0, Queue.Count);
             return;
         }
@@ -1035,6 +1050,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private long? _closingDeadline;
 
     private bool IsClosing => _closingDeadline is not null;
+
+    /// <summary>Dokładane właśnie otwarcie z poprzedniego uruchomienia nie uruchamia odtwarzania.</summary>
+    private bool _resumingOpen;
+
+    /// <summary>Dokładane pliki tylko czekają jak wznowienie, zamiast grać.</summary>
+    private bool HoldsPlayback => IsClosing || _resumingOpen;
 
     /// <summary>
     /// Okno zaczyna się zamykać. Od tej chwili biegnie jeden termin
@@ -1049,9 +1070,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Otwarcia przeglądane w tle i jeszcze niedołożone, w kolejności przybycia.</summary>
     private readonly List<PendingOpen> _pendingOpens = [];
 
-    private sealed class PendingOpen(Task<(List<string> Files, string? Unreadable)> expansion, Action<List<string>> apply)
+    /// <summary>
+    /// Otwarcia niedokończone w terminie zamykania, w kolejności przybycia. Trafiają do zapisu
+    /// kolejki, a następne uruchomienie je dokańcza (<see cref="RestoreQueueState"/>).
+    /// </summary>
+    private readonly List<PendingOpenState> _unfinishedOpens = [];
+
+    private sealed class PendingOpen(
+        Task<(List<string> Files, string? Unreadable)> expansion, PendingOpenState request, Action<List<string>> apply)
     {
         public Task<(List<string> Files, string? Unreadable)> Expansion { get; } = expansion;
+
+        /// <summary>Surowe ścieżki i akcja, do zapisu, gdyby otwarcie nie zdążyło.</summary>
+        public PendingOpenState Request { get; } = request;
+
         public Action<List<string>> Apply { get; } = apply;
     }
 
@@ -1066,18 +1098,36 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// po wcześniejszych otwarciach. Folder przegląda się w tle i czeka na niego najwyżej do
     /// wspólnego terminu zamykania (<see cref="FinishPendingOpens"/>).
     /// </param>
-    private Task Open(IEnumerable<string> paths, Action<List<string>> apply, bool now = false)
+    /// <param name="resumed">Otwarcie z poprzedniego uruchomienia: dokłada bez uruchamiania odtwarzania.</param>
+    private Task Open(IEnumerable<string> paths, string action, bool now = false, bool resumed = false)
     {
         var list = paths.ToList();
+        var request = new PendingOpenState { Paths = list, Action = action };
+        var apply = ApplyFor(action);
+
+        if (resumed)
+        {
+            var inner = apply;
+            apply = files =>
+            {
+                _resumingOpen = true;
+                try { inner(files); }
+                finally { _resumingOpen = false; }
+            };
+        }
 
         if (now)
         {
             var folders = list.Any(Directory.Exists);
-            if (folders) _pendingOpens.Add(new PendingOpen(ExpandInBackground(list), apply));
+            if (folders) _pendingOpens.Add(new PendingOpen(ExpandInBackground(list), request, apply));
 
             FinishPendingOpens();
+            if (folders) return Task.CompletedTask;
 
-            if (!folders) ApplyNow(list, apply);
+            // Plik nie wyprzedza w kolejce otwarcia odłożonego do następnego uruchomienia.
+            if (_unfinishedOpens.Count > 0) _unfinishedOpens.Add(request);
+            else ApplyNow(list, apply);
+
             return Task.CompletedTask;
         }
 
@@ -1087,7 +1137,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return Task.CompletedTask;
         }
 
-        var pending = new PendingOpen(ExpandInBackground(list), apply);
+        var pending = new PendingOpen(ExpandInBackground(list), request, apply);
 
         _pendingOpens.Add(pending);
         return _openChain = OpenAfterAsync(_openChain, pending);
@@ -1129,7 +1179,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// przybycia. Ich nadawcy — inna kopia programu albo upuszczenie — uznali je za przyjęte.
     /// Czeka najwyżej do terminu liczonego od początku zamykania (<see cref="BeginClosing"/>),
     /// wspólnego dla wszystkich wywołań, bo zamykanie trzyma rolę działającej kopii, na którą
-    /// czeka następna; czego nie zdążono przejrzeć, tego się nie dokłada.
+    /// czeka następna. Czego nie zdążono przejrzeć — razem z otwarciami po nim, żeby zachować
+    /// kolejność — to trafia do zapisu kolejki i dokańcza się przy następnym uruchomieniu.
     /// </summary>
     public void FinishPendingOpens()
     {
@@ -1144,9 +1195,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             try
             {
                 var left = Math.Max(0, deadline - Environment.TickCount64);
-                if (!pending.Expansion.Wait(TimeSpan.FromMilliseconds(left)))
+                if (_unfinishedOpens.Count > 0 || !pending.Expansion.Wait(TimeSpan.FromMilliseconds(left)))
                 {
-                    Console.Error.WriteLine("[cewka] przeglądanie folderu nie skończyło się przed zamknięciem okna");
+                    Console.Error.WriteLine("[cewka] otwarcie nie skończyło się przed zamknięciem okna; dokończy się przy następnym uruchomieniu");
+                    _unfinishedOpens.Add(pending.Request);
                     continue;
                 }
 
@@ -1175,7 +1227,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// rozstrzygnięte.</para>
     /// </summary>
     /// <param name="now">Przy zamykaniu okna: bez przeglądania w tle, zob. <see cref="Open"/>.</param>
-    public Task OpenFromOutside(IEnumerable<string> paths, bool now = false) => Open(paths, files =>
+    public Task OpenFromOutside(IEnumerable<string> paths, bool now = false) => Open(paths, OutsideOpen, now);
+
+    private void ApplyFromOutside(List<string> files)
     {
         switch (_settings.Current.FileOpenAction)
         {
@@ -1192,8 +1246,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 AppendRows();
                 _resume.Discard();
 
-                // Przy zamykaniu pierwszy dołożony plik tylko czeka jak wznowienie, zob. ReplaceQueue.
-                if (IsClosing) _resume.Arm(first, 0, Queue.Count);
+                // Przy zamykaniu i przy otwarciu z poprzedniego uruchomienia pierwszy dołożony plik
+                // tylko czeka jak wznowienie, zob. ReplaceQueue.
+                if (HoldsPlayback) _resume.Arm(first, 0, Queue.Count);
                 else if (TryPlayback(() => _engine.PlayIndex(first))) SyncPlaying();
 
                 RestoreCurrentMarker();
@@ -1215,7 +1270,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
                 break;
         }
-    }, now);
+    }
 
     // ---------- Awaria wyjścia dźwięku ----------
 
@@ -1844,6 +1899,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // w _resume i to ją trzeba zapisać, inaczej samo otwarcie i zamknięcie programu ją kasuje.
         var armed = _resume.IsArmed;
 
+        // Otwarcia jeszcze niedołożone: odłożone przy zamykaniu i przeglądane w tle, żeby
+        // nie przepadły przy nagłym końcu programu.
+        var opens = _unfinishedOpens.Concat(_pendingOpens.Select(pending => pending.Request)).ToList();
+
         return new QueueState
         {
             Paths = _engine.QueuePaths.ToList(),
@@ -1851,20 +1910,44 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             PositionSeconds = armed ? _resume.Seconds : _engine.Position.TotalSeconds,
             Shuffle = _engine.Shuffle,
             Repeat = _engine.Repeat.ToString(),
+            PendingOpens = opens.Count > 0 ? opens : null,
         };
     }
 
     /// <summary>
     /// Przywraca poprzednią kolejkę bez uruchamiania odtwarzania; pozycja czeka na pierwsze
-    /// naciśnięcie odtwarzania.
+    /// naciśnięcie odtwarzania. Potem dokańcza otwarcia niedokończone przy zamknięciu.
     /// </summary>
     public void RestoreQueueState()
     {
+        var state = QueueStateStore.Load(_queueFile);
+
         // Ustawienie wyłączone: program zaczyna od pustej kolejki. Zapis kolejki trwa mimo to,
         // żeby ponowne włączenie przywracania miało co przywrócić.
-        if (!_settings.Current.RestoreSession) return;
+        if (_settings.Current.RestoreSession) RestoreQueue(state);
 
-        var state = QueueStateStore.Load(_queueFile);
+        // Otwarcia to jawne żądania, a nie poprzednia sesja, więc dokańczają się zawsze.
+        ResumeOpens(state);
+    }
+
+    /// <summary>
+    /// Dokańcza otwarcia niedokończone przy poprzednim zamknięciu, bez przywracania kolejki.
+    /// Na start ze ścieżkami z wiersza poleceń, które dokładają się po nich.
+    /// </summary>
+    public void ResumeUnfinishedOpens() => ResumeOpens(QueueStateStore.Load(_queueFile));
+
+    /// <summary>
+    /// Otwiera zwykłą drogą, w tle, w kolejności przybycia i z zapisaną akcją, ale bez uruchamiania
+    /// odtwarzania. Z zapisu kolejki znikają przy najbliższym zapisie po dołożeniu.
+    /// </summary>
+    private void ResumeOpens(QueueState? state)
+    {
+        foreach (var open in state?.PendingOpens ?? [])
+            Open(open.Paths, open.Action ?? AddOpen, resumed: true);
+    }
+
+    private void RestoreQueue(QueueState? state)
+    {
         if (state is null || state.Paths.Count == 0) return;
 
         // Pliki mogły zniknąć między uruchomieniami. Numer bieżącego wpisu liczy się po

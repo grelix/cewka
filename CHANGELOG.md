@@ -35,7 +35,7 @@ Przegląd całego programu: dźwięk, okno, kolejka, obsługa z klawiatury i tek
 - Kliknięcie zaznacza wiersz, odtwarza dwuklik albo Enter.
 - Ctrl+Z cofa usunięcie, wyczyszczenie i zastąpienie kolejki listą.
 - Kolejka i pozycja zapisują się na bieżąco, nie tylko przy zamknięciu programu.
-- Plik dodany pod sam koniec ostatniego utworu gra po nim, a plik otwarty w chwili zamykania programu nie przepada.
+- Plik dodany pod sam koniec ostatniego utworu gra po nim, a plik otwarty w chwili zamykania programu nie przepada. Folder, którego nie zdążono przejrzeć przed zamknięciem, dodaje się przy następnym uruchomieniu.
 - Folder dodaje się bez zamrażania okna, a pliki układają się w porządku naturalnym.
 - Wczytują się listy M3U z innych programów, także w stronie kodowej Windowsa i z adresami `file://`.
 - Pominięty plik daje komunikat z nazwą i przyczyną.

@@ -1,6 +1,7 @@
 using Cewka.App.Localisation;
 using Cewka.App.Models;
 using Cewka.App.Services;
+using Cewka.App.ViewModels;
 using Xunit;
 
 namespace Cewka.App.Tests;
@@ -284,6 +285,75 @@ public sealed class QueueSessionTests
 
         var entry = Assert.Single(h.Player.QueueAsPlaylist());
         Assert.Null(entry.Artist);
+    });
+
+    /// <summary>
+    /// Otwarcie niedokończone przy zamknięciu to jawne żądanie, a nie poprzednia sesja: dokańcza się
+    /// także przy wyłączonym przywracaniu, choć kolejka z poprzedniej sesji nie wraca.
+    /// </summary>
+    [Fact]
+    public void OczekujaceOtwarcieDokanczaSieMimoWylaczonegoPrzywracania() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness(settings => settings.RestoreSession = false);
+        var folder = Path.Combine(h.Directory, "album");
+        Directory.CreateDirectory(folder);
+        var inFolder = h.Track(Path.Combine("album", "b"));
+
+        QueueStateStore.Save(new QueueState
+        {
+            Paths = [h.Track("a")],
+            CurrentIndex = 0,
+            PendingOpens = [new PendingOpenState { Paths = [folder], Action = "Add" }],
+        }, h.QueueFile);
+
+        h.Player.RestoreQueueState();
+
+        Assert.True(h.PumpUntil(() => h.Player.Queue.Count == 1));
+        Assert.Equal([inFolder], h.Engine.QueuePaths.ToArray());
+        Assert.False(h.Player.IsPlaying);
+        Assert.Empty(h.Outputs);
+    });
+
+    /// <summary>
+    /// Folder przeglądany w tle w chwili zapisu trafia do otwarć oczekujących, żeby nie przepadł
+    /// przy nagłym końcu programu, a po dołożeniu znika z nich przy najbliższym zapisie.
+    /// </summary>
+    [Fact]
+    public void FolderPrzegladanyWTleJestWZapisieDoChwiliDolozenia() => Ui.Run(() =>
+    {
+        using var release = new ManualResetEventSlim();
+        using var h = new PlayerHarness();
+        var folder = Path.Combine(h.Directory, "album");
+        Directory.CreateDirectory(folder);
+        var inFolder = h.Track(Path.Combine("album", "b"));
+
+        MainViewModel.FolderExpanding = path =>
+        {
+            if (path == folder) release.Wait(TimeSpan.FromSeconds(10));
+        };
+
+        try
+        {
+            _ = h.Player.AddPaths([folder]);
+            h.Player.SaveQueueState();
+
+            var during = QueueStateStore.Load(h.QueueFile)!;
+            Assert.Empty(during.Paths);
+            var open = Assert.Single(during.PendingOpens ?? []);
+            Assert.Equal([folder], open.Paths.ToArray());
+        }
+        finally
+        {
+            MainViewModel.FolderExpanding = null;
+            release.Set();
+        }
+
+        Assert.True(h.PumpUntil(() => h.Player.Queue.Count == 1));
+        h.Player.SaveQueueState();
+
+        var after = QueueStateStore.Load(h.QueueFile)!;
+        Assert.Equal([inFolder], after.Paths.ToArray());
+        Assert.Null(after.PendingOpens);
     });
 
     private static void Save(PlayerHarness h, List<string> paths, int current, double seconds) =>

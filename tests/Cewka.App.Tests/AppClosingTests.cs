@@ -235,10 +235,12 @@ public sealed class AppClosingTests
     /// <summary>
     /// Folder przysłany przed zamknięciem przegląda się dłużej niż termin zamykania. Zamykanie
     /// nie czeka na niego dłużej niż <see cref="SingleInstance.ClosingGrace"/>, bo następna kopia
-    /// czeka na zwolnienie roli; plik przysłany po folderze i tak trafia do zapisanej kolejki.
+    /// czeka na zwolnienie roli, ale nadawca uznał folder za przyjęty, więc otwarcie nie przepada:
+    /// zapisuje się razem z plikiem przysłanym po nim, a następne uruchomienie dokłada oba
+    /// w kolejności przybycia, bez odtwarzania.
     /// </summary>
     [Fact]
-    public void WolnePrzegladanieFolderuNieWstrzymujeZamykaniaPonadTermin() => Ui.Run(() =>
+    public void WolnePrzegladanieFolderuDokanczaSiePrzyNastepnymUruchomieniu() => Ui.Run(() =>
     {
         using var release = new ManualResetEventSlim();
         var h = new PlayerHarness();
@@ -246,7 +248,7 @@ public sealed class AppClosingTests
         var track = h.Track("a");
         var folder = Path.Combine(h.Directory, "album");
         Directory.CreateDirectory(folder);
-        File.Copy(track, Path.Combine(folder, "b.wav"));
+        var inFolder = h.Track(Path.Combine("album", "b"));
 
         MainViewModel.FolderExpanding = path =>
         {
@@ -267,7 +269,11 @@ public sealed class AppClosingTests
 
                 Assert.True(closing.Elapsed < SingleInstance.ClosingGrace + TimeSpan.FromSeconds(1.5),
                     $"Zamykanie trwało {closing.Elapsed.TotalSeconds:0.0} s.");
-                Assert.Equal([track], QueueStateStore.Load(h.QueueFile)?.Paths.ToArray() ?? []);
+
+                // Plik przysłany po folderze czeka za nim, żeby go nie wyprzedzić w kolejce.
+                var saved = QueueStateStore.Load(h.QueueFile)!;
+                Assert.Empty(saved.Paths);
+                Assert.Equal([folder, track], saved.PendingOpens?.Select(open => string.Join("|", open.Paths)) ?? []);
             });
         }
         finally
@@ -275,6 +281,58 @@ public sealed class AppClosingTests
             MainViewModel.FolderExpanding = null;
             release.Set();
         }
+
+        using var next = new PlayerHarness(directory: h.Directory);
+        next.Track("a");
+        next.Track(Path.Combine("album", "b"));
+
+        next.Player.RestoreQueueState();
+
+        Assert.True(next.PumpUntil(() => next.Player.Queue.Count == 2), $"w kolejce {next.Player.Queue.Count}");
+        Assert.Equal([inFolder, track], next.Engine.QueuePaths.ToArray());
+        Assert.False(next.Player.IsPlaying);
+        Assert.Empty(next.Outputs);
+
+        // Dokończone otwarcia znikają z zapisu.
+        next.Player.SaveQueueState();
+        var after = QueueStateStore.Load(next.QueueFile)!;
+        Assert.Equal([inFolder, track], after.Paths.ToArray());
+        Assert.Null(after.PendingOpens);
+    });
+
+    /// <summary>
+    /// Folder przejrzany przed terminem trafia do zapisanej kolejki i nie zostaje w otwarciach
+    /// oczekujących, więc następne uruchomienie nie dokłada go drugi raz.
+    /// </summary>
+    [Fact]
+    public void FolderPrzejrzanyWTerminieNieDublujeSiePrzyNastepnymUruchomieniu() => Ui.Run(() =>
+    {
+        var h = new PlayerHarness();
+        var folder = Path.Combine(h.Directory, "album");
+        Directory.CreateDirectory(folder);
+        var inFolder = h.Track(Path.Combine("album", "b"));
+
+        WithClosingWindow(h, (address, window) =>
+        {
+            Assert.True(SingleInstance.TryHandOff(address, [folder]));
+            Thread.Sleep(200);
+
+            // Przeglądanie rusza w tle jeszcze przed zamknięciem, jak w działającym programie.
+            typeof(App).GetMethod("OnPathsHandedOver", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, null);
+            window.Close();
+
+            var saved = QueueStateStore.Load(h.QueueFile)!;
+            Assert.Equal([inFolder], saved.Paths.ToArray());
+            Assert.Null(saved.PendingOpens);
+        });
+
+        using var next = new PlayerHarness(directory: h.Directory);
+        next.Track(Path.Combine("album", "b"));
+        next.Player.RestoreQueueState();
+
+        // Czas na ewentualne spóźnione dołożenie z tła.
+        next.PumpUntil(() => false, 300);
+        Assert.Equal([inFolder], next.Engine.QueuePaths.ToArray());
     });
 
     /// <summary>
