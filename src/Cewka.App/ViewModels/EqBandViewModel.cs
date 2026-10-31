@@ -13,7 +13,7 @@ public sealed class EqBandViewModel : ObservableObject
         _gain = gain;
     }
 
-    /// <summary>Frequency caption such as <c>125</c> or <c>16k</c>, or <c>PREAMP</c>.</summary>
+    /// <summary>Frequency caption such as <c>125</c> or <c>16k</c>, or <c>Preamp</c>.</summary>
     public string Label { get; }
 
     /// <summary>Nazwa pasma dla czytnika ekranu, z jednostką: „125 Hz”, „16 kHz”.</summary>

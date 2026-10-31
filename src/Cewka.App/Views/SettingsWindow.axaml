@@ -200,7 +200,7 @@
                   potrzebna. Odsylacz do zgloszen na koncu: prosba o poprawke bez wskazania,
                   gdzie ja zlozyc, jest prosba bez adresata.
                 -->
-                <Border Classes="section">
+                <Border Classes="section" IsVisible="{Binding ShowTranslationNote}">
                   <StackPanel Spacing="8">
                     <TextBlock Classes="setting-hint" Text="{l:Translate HintMachineTranslation}" />
                     <Button Classes="link" Click="OnOpenIssues"

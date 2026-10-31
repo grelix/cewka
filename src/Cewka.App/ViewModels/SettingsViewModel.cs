@@ -186,9 +186,9 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         Loudness = new SegmentGroup(
             value => _player.SetLoudnessTarget((LoudnessTarget)value),
             literalLabels: true,
-            ("-23 LUFS", LoudnessTarget.Broadcast),
-            ("-18 LUFS", LoudnessTarget.Reference),
-            ("-14 LUFS", LoudnessTarget.Streaming));
+            ("−23 LUFS", LoudnessTarget.Broadcast),
+            ("−18 LUFS", LoudnessTarget.Reference),
+            ("−14 LUFS", LoudnessTarget.Streaming));
 
         // Etykiety kroku przewijania są liczbami z jednostką, jednakową we wszystkich językach,
         // więc nie przechodzą przez tłumaczenie.
@@ -553,6 +553,9 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     public bool HasRepository => WebLink.IsSafe(RepositoryUrl);
 
+    /// <summary>Uwaga o tłumaczeniu maszynowym dotyczy każdego języka poza polskim, w którym powstał interfejs.</summary>
+    public bool ShowTranslationNote => Strings.Current.CurrentCode != Strings.FallbackCode;
+
     /// <summary>Sprawdzanie ma sens tylko wtedy, gdy z adresu da się zbudować adres usługi.</summary>
     public bool CanCheckForUpdates => UpdateCheck.ApiUrl(RepositoryUrl) is not null;
 
@@ -649,7 +652,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public string DecodersText => Strings.Current["DecodersSummary"];
 
     public string SystemCodecsText => SystemCodecs.IsAvailable
-        ? $"{SystemCodecs.Name} — {Strings.Current["CodecsAvailable"]}"
+        ? $"{SystemCodecs.Name}: {Strings.Current["CodecsAvailable"]}"
         : SystemCodecs.UnavailableReason ?? Strings.Current["CodecsMissing"];
 
     public bool SystemCodecsAvailable => SystemCodecs.IsAvailable;
@@ -697,6 +700,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         Raise(nameof(DecodersText));
         Raise(nameof(SystemCodecsText));
         Raise(nameof(LicenceText));
+        Raise(nameof(ShowTranslationNote));
         Raise(nameof(LatencyDescription));
         Raise(nameof(ActiveDeviceName));
         Raise(nameof(Shortcuts));
@@ -728,8 +732,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
                 new("T", s["SettingTheme"]),
                 new("F11", s["ShortcutFullScreen"]),
                 new(KeyNames.Escape, s["ShortcutEscape"]),
-                new(KeyNames.Chord(ctrl, "O"), s["OpenFiles"]),
-                new(KeyNames.Chord(ctrl, KeyNames.Shift, "O"), s["OpenFolder"]),
+                new(KeyNames.Chord(ctrl, "O"), s["OpenFilesTitle"]),
+                new(KeyNames.Chord(ctrl, KeyNames.Shift, "O"), s["OpenFolderTitle"]),
                 new(KeyNames.Chord(ctrl, ","), s["Settings"]),
                 new(KeyNames.Enter, s["ShortcutQueuePlay"]),
                 new(KeyNames.Delete, s["ShortcutQueueRemove"]),

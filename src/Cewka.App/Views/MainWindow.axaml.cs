@@ -815,7 +815,7 @@ public partial class MainWindow : Window
         {
             var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = Strings.Current["OpenFiles"],
+                Title = Strings.Current["OpenFilesTitle"],
                 AllowMultiple = true,
                 FileTypeFilter = [BuildAudioFilter()],
             });
@@ -912,7 +912,7 @@ public partial class MainWindow : Window
         {
             var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
             {
-                Title = Strings.Current["OpenFolder"],
+                Title = Strings.Current["OpenFolderTitle"],
                 AllowMultiple = false,
             });
 

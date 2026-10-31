@@ -1,3 +1,4 @@
+using Cewka.App.Localisation;
 using Cewka.App.Models;
 using Cewka.App.ViewModels;
 using Xunit;
@@ -57,5 +58,42 @@ public sealed class SettingsTrackingTests
         {
             App.Theme.SetMode(previous);
         }
+    });
+
+    /// <summary>Uwaga o tłumaczeniu maszynowym nie dotyczy polskiego, w którym interfejs powstał.</summary>
+    [Fact]
+    public void UwagaOTlumaczeniuMaszynowymNieDotyczyPolskiego() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        using var settings = new SettingsViewModel(h.Settings, h.Player);
+        var raised = new List<string?>();
+        settings.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        var previous = Strings.Current.CurrentCode;
+
+        try
+        {
+            Strings.Current.SetLanguage("pl");
+            Assert.False(settings.ShowTranslationNote);
+
+            Strings.Current.SetLanguage("de");
+            Assert.True(settings.ShowTranslationNote);
+            Assert.Contains(nameof(SettingsViewModel.ShowTranslationNote), raised);
+        }
+        finally
+        {
+            Strings.Current.SetLanguage(previous);
+        }
+    });
+
+    /// <summary>Poziomy głośności mają prawdziwy minus, jak liczby w podpowiedzi pod paskiem.</summary>
+    [Fact]
+    public void EtykietyPoziomowGlosnosciMajaPrawdziwyMinus() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        using var settings = new SettingsViewModel(h.Settings, h.Player);
+
+        var labels = settings.Loudness.Options.Select(option => option.Label).ToArray();
+
+        Assert.Equal(["−23 LUFS", "−18 LUFS", "−14 LUFS"], labels);
     });
 }

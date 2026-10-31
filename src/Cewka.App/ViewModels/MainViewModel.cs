@@ -93,7 +93,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         for (var band = 0; band < BandLabels.Length; band++)
             _engine.Graph.Equaliser.SetGain(band, s.EqualiserGains[band]);
 
-        Preamp = new EqBandViewModel("PREAMP", s.Preamp);
+        Preamp = new EqBandViewModel("Preamp", s.Preamp);
         Preamp.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName != nameof(EqBandViewModel.Gain)) return;

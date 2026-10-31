@@ -251,6 +251,25 @@ public sealed class LanguageFileTests
     }
 
     /// <summary>
+    /// Polecenie otwierające okno wyboru kończy się wielokropkiem, a tytuł tego okna jest tą
+    /// samą nazwą bez niego. Dwa osobne klucze, bo jeden tekst nie może być jednocześnie
+    /// poleceniem i tytułem.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(All))]
+    public void PolecenieOtwarciaMaWielokropekATytulOknaNie(string code)
+    {
+        var strings = Load(code);
+
+        foreach (var key in new[] { "OpenFiles", "OpenFolder" })
+        {
+            Assert.True(strings.TryGetValue(key + "Title", out var title), $"{code}.json nie ma klucza {key}Title");
+            Assert.False(title.EndsWith('…'), $"{code}.json: {key}Title kończy się wielokropkiem");
+            Assert.Equal(title + "…", strings[key]);
+        }
+    }
+
+    /// <summary>
     /// Symbole zastępcze przechodzą przez <c>string.Format</c>. Tłumacz, który zamieni je na
     /// tekst albo przestawi specyfikator formatu, wywołałby wyjątek dopiero w czasie działania
     /// programu — i to wyłącznie w swoim języku.
