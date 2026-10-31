@@ -39,17 +39,26 @@ public sealed class DynamicRange : IAudioProcessor
     /// </summary>
     private const double MakeupShare = 0.6;
 
+    /// <summary>Czas płynnego włączania, wyłączania i zmiany wzmocnienia wyrównawczego.</summary>
+    private const double SwitchSeconds = 0.020;
+
     private int _channels = 2;
     private double _attackCoefficient;
     private double _releaseCoefficient;
+    private double _switchCoefficient;
     private double _envelope = 1;
 
     private double _strength;
     private double _thresholdDb = ThresholdAtZeroDb;
     private double _ratio = RatioAtZero;
-    private float _makeup = 1;
+    private double _targetMakeup = 1;
+    private double _makeup = 1;
 
-    /// <summary>Gdy wyłączone, sygnał przechodzi bez zmiany ani jednej próbki.</summary>
+    // Udział stopnia w wyniku, 0–1, i to, czy w poprzednim buforze stopień pracował.
+    private double _wet;
+    private bool _running;
+
+    /// <summary>Po wyłączeniu stopień wygasa płynnie, a potem sygnał przechodzi bez zmiany ani jednej próbki.</summary>
     public bool Enabled { get; set; }
 
     /// <summary>Siła działania w procentach, 0–100.</summary>
@@ -66,9 +75,11 @@ public sealed class DynamicRange : IAudioProcessor
 
             // Wyrównanie odpowiada redukcji, jaką kompresor nałożyłby na sygnał o pełnej skali.
             var reductionAtFullScale = -_thresholdDb * (1 - 1 / _ratio);
-            _makeup = (float)Math.Pow(10, reductionAtFullScale * MakeupShare / 20);
+            _targetMakeup = Math.Pow(10, reductionAtFullScale * MakeupShare / 20);
         }
     }
+
+    private double TargetWet => Enabled && _strength > 0 ? 1 : 0;
 
     /// <summary>Bieżąca redukcja w decybelach, nigdy dodatnia. Do pokazania w interfejsie.</summary>
     public double GainReductionDb => 20 * Math.Log10(Math.Max(_envelope, 1e-6));
@@ -80,15 +91,28 @@ public sealed class DynamicRange : IAudioProcessor
 
         _attackCoefficient = 1 - Math.Exp(-1.0 / (AttackSeconds * sampleRate));
         _releaseCoefficient = 1 - Math.Exp(-1.0 / (ReleaseSeconds * sampleRate));
+        _switchCoefficient = 1 - Math.Exp(-1.0 / (SwitchSeconds * sampleRate));
 
         Strength = _strength;
+        _makeup = _targetMakeup;
+        _wet = TargetWet;
+        _running = _wet > 0;
     }
 
     public void Process(Span<float> buffer, int frames)
     {
-        if (!Enabled || _strength <= 0) return;
+        var targetWet = TargetWet;
+        if (targetWet == 0 && _wet == 0)
+        {
+            _running = false;
+            return;
+        }
 
-        var makeup = _makeup;
+        // Obwiednia zatrzymana przy wyłączeniu opisuje materiał sprzed wielu buforów.
+        if (!_running) Reset();
+        _running = true;
+
+        var targetMakeup = _targetMakeup;
 
         for (var frame = 0; frame < frames; frame++)
         {
@@ -107,9 +131,17 @@ public sealed class DynamicRange : IAudioProcessor
             var coefficient = desired < _envelope ? _attackCoefficient : _releaseCoefficient;
             _envelope += (desired - _envelope) * coefficient;
 
-            var gain = (float)_envelope * makeup;
+            // Wzmocnienie wyrównawcze sięga kilkunastu decybeli, więc i ono, i udział stopnia
+            // zmieniają się płynnie; skok o tyle w jednej próbce to głośny trzask.
+            _makeup += (targetMakeup - _makeup) * _switchCoefficient;
+            _wet += (targetWet - _wet) * _switchCoefficient;
+
+            var gain = (float)(1 + _wet * (_envelope * _makeup - 1));
             for (var c = 0; c < _channels; c++) buffer[baseIndex + c] *= gain;
         }
+
+        if (Math.Abs(targetWet - _wet) < 1e-4) _wet = targetWet;
+        if (Math.Abs(targetMakeup - _makeup) < 1e-6) _makeup = targetMakeup;
     }
 
     /// <summary>Wzmocnienie sprowadzające szczyt na charakterystykę, z miękkim kolanem wokół progu.</summary>
