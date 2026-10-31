@@ -10,7 +10,7 @@ public enum AudioFileFormat
     OggVorbis,
     Opus,
 
-    /// <summary>MP4 family: .m4a, .aac, .alac. Handled by system codecs in stage 5.</summary>
+    /// <summary>MP4 family and raw ADTS: .m4a, .aac, .alac. Handled by system codecs.</summary>
     Mp4,
 
     /// <summary>Windows Media. Out of the declared scope; recognised only to explain itself.</summary>
@@ -68,16 +68,15 @@ public static class AudioFileFormatDetector
             if (header[0] == 'f' && header[1] == 'L' && header[2] == 'a' && header[3] == 'C')
                 return AudioFileFormat.Flac;
 
-            // OggS — the codec inside is decided further in; the extension settles it.
+            // OggS — the codec inside is named by the first packet.
             if (header[0] == 'O' && header[1] == 'g' && header[2] == 'g' && header[3] == 'S')
                 return DetectInsideOgg(stream, path);
 
-            // ID3 tag, or an MPEG frame sync.
-            if (header[0] == 'I' && header[1] == 'D' && header[2] == '3')
-                return AudioFileFormat.Mp3;
+            if (header[0] == 'I' && header[1] == 'D' && header[2] == '3' && read >= 10)
+                return DetectBehindId3(stream, header, path);
 
-            if (header[0] == 0xFF && (header[1] & 0xE0) == 0xE0)
-                return AudioFileFormat.Mp3;
+            if (FromFrameSync(header) is { } framed)
+                return framed;
         }
 
         if (read >= 16 && header[0] == 0x30 && header[1] == 0x26 && header[2] == 0xB2 && header[3] == 0x75)
@@ -87,8 +86,57 @@ public static class AudioFileFormatDetector
     }
 
     /// <summary>
-    /// Both Vorbis and Opus travel inside Ogg. The codec identifier sits in the first
-    /// packet, right after the 27-byte page header plus the segment table.
+    /// ADTS i ramka MPEG Audio mają ten sam 12-bitowy znacznik synchronizacji. Rozróżnia je
+    /// pole warstwy: w ADTS zawsze 00, a w MPEG Audio ta wartość jest zarezerwowana.
+    /// </summary>
+    private static AudioFileFormat? FromFrameSync(ReadOnlySpan<byte> header)
+    {
+        if (header.Length < 2 || header[0] != 0xFF) return null;
+
+        if ((header[1] & 0xF6) == 0xF0) return AudioFileFormat.Mp4;
+        if ((header[1] & 0xE0) == 0xE0 && (header[1] & 0x06) != 0) return AudioFileFormat.Mp3;
+
+        return null;
+    }
+
+    /// <summary>
+    /// Znacznik ID3v2 stoi przed MP3, ale także przed surowym AAC (podcasty) i czasem przed FLAC,
+    /// więc o formacie rozstrzyga dopiero to, co leży za nim.
+    /// </summary>
+    private static AudioFileFormat DetectBehindId3(Stream stream, ReadOnlySpan<byte> header, string? path)
+    {
+        var hinted = FromExtension(path);
+        var fallback = hinted is AudioFileFormat.Mp4 or AudioFileFormat.Flac ? hinted : AudioFileFormat.Mp3;
+
+        if (!stream.CanSeek) return fallback;
+
+        // Rozmiar zapisany jest w czterech bajtach po siedem bitów i nie obejmuje nagłówka ani stopki.
+        var size = 10L + ((header[6] & 0x7F) << 21 | (header[7] & 0x7F) << 14 | (header[8] & 0x7F) << 7 | (header[9] & 0x7F));
+        if ((header[5] & 0x10) != 0) size += 10;
+
+        var origin = stream.Position;
+        try
+        {
+            stream.Position = origin + size;
+
+            Span<byte> next = stackalloc byte[4];
+            var read = stream.ReadAtLeast(next, next.Length, throwOnEndOfStream: false);
+
+            if (read >= 4 && next[0] == 'f' && next[1] == 'L' && next[2] == 'a' && next[3] == 'C')
+                return AudioFileFormat.Flac;
+
+            return (read >= 2 ? FromFrameSync(next) : null) ?? fallback;
+        }
+        finally
+        {
+            stream.Position = origin;
+        }
+    }
+
+    /// <summary>
+    /// Vorbis, Opus and FLAC all travel inside Ogg. The codec identifier sits in the first
+    /// packet, right after the 27-byte page header plus the segment table. A readable packet
+    /// naming some other codec gives Unknown, so the queue does not call the file damaged.
     /// </summary>
     private static AudioFileFormat DetectInsideOgg(Stream stream, string? path)
     {
@@ -114,7 +162,12 @@ public static class AudioFileFormatDetector
                 body[4] == 'b' && body[5] == 'i' && body[6] == 's')
                 return AudioFileFormat.OggVorbis;
 
-            return FromExtension(path);
+            // Ogg FLAC: 0x7F i „FLAC”. Dekoder FLAC w miniaudio sam rozpakowuje kontener Ogg.
+            if (body.Length >= 5 && body[0] == 0x7F && body[1] == 'F' && body[2] == 'L' &&
+                body[3] == 'A' && body[4] == 'C')
+                return AudioFileFormat.Flac;
+
+            return AudioFileFormat.Unknown;
         }
         finally
         {
