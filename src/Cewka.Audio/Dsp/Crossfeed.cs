@@ -22,13 +22,16 @@ namespace Cewka.Audio.Dsp;
 /// </summary>
 public sealed class Crossfeed : IAudioProcessor
 {
-    /// <summary>Różnica poziomów w basie przy sile bliskiej zera i przy pełnej.</summary>
+    /// <summary>Różnica poziomów w basie na obu końcach skali siły.</summary>
     private const double WeakestFeedDb = 15;
     private const double StrongestFeedDb = 4.5;
 
     /// <summary>Częstotliwość graniczna filtru na drodze skrośnej, przy skrajnych siłach.</summary>
     private const double MinimumCutoffHz = 700;
     private const double MaximumCutoffHz = 650;
+
+    /// <summary>Siła, od której domieszka odpowiada nastawom bs2b.</summary>
+    private const double FadeInFraction = 0.1;
 
     private const double SwitchSeconds = 0.020;
 
@@ -82,9 +85,11 @@ public sealed class Crossfeed : IAudioProcessor
         _lowpassCoefficient = 1 - Math.Exp(-2 * Math.PI * cutoff / _sampleRate);
 
         // Domieszka k daje w basie drogę bezpośrednią 1 − k i skrośną k; ich stosunek to
-        // różnica poziomów z nastaw bs2b.
+        // różnica poziomów z nastaw bs2b. Poniżej FadeInFraction domieszka maleje liniowo do zera,
+        // inaczej pierwszy krok suwaka od zera włączałby od razu najsłabszą nastawę bs2b.
         var feedDb = WeakestFeedDb + (StrongestFeedDb - WeakestFeedDb) * fraction;
-        _targetFeed = _strength > 0 ? 1 / (1 + Math.Pow(10, feedDb / 20)) : 0;
+        var fadeIn = Math.Min(1, fraction / FadeInFraction);
+        _targetFeed = fadeIn / (1 + Math.Pow(10, feedDb / 20));
     }
 
     private double TargetFeed => Enabled && _channels == 2 ? _targetFeed : 0;

@@ -156,6 +156,18 @@ public class ParameterSmoothingTests
         Assert.True(weak > medium + 3, $"10%: {weak:F2} dB, 50%: {medium:F2} dB");
     }
 
+    /// <summary>Pierwsze kroki suwaka od zera dokładają domieszkę stopniowo, od prawie niesłyszalnej.</summary>
+    [Fact]
+    public void CrossfeedFadesInFromZeroStrength()
+    {
+        var one = BassSeparationDb(1);
+        var five = BassSeparationDb(5);
+        var ten = BassSeparationDb(10);
+
+        Assert.True(one > 30, $"1%: {one:F2} dB");
+        Assert.True(one > five && five > ten, $"1%: {one:F2} dB, 5%: {five:F2} dB, 10%: {ten:F2} dB");
+    }
+
     [Fact]
     public void CrossfeedSwitchesOnAndOffWithoutAStep()
     {
