@@ -2165,8 +2165,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (ramp.Length == 0) return [];
 
         var saturation = ColourPreferences.Saturation(_settings.Current.ColourIntensity);
-        var first = Saturate(ramp[0], saturation);
-        var last = Saturate(ramp[^1], saturation);
+        var first = Contrast.LimitForBackdrop(Saturate(ramp[0], saturation), darkTheme);
+        var last = Contrast.LimitForBackdrop(Saturate(ramp[^1], saturation), darkTheme);
 
         return [first, last, first, last];
     }

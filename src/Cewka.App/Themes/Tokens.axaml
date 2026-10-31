@@ -27,9 +27,14 @@
       <SolidColorBrush x:Key="DeskBrush" Color="#FF111113" />
       <SolidColorBrush x:Key="ScrimBrush" Color="#73101013" />
 
+      <!--
+        Krycie tekstu drugorzędnego dobrane do najjaśniejszej plamy tła, na jaką pozwala
+        Contrast.DarkBackdropCeiling (i do najciemniejszej z Contrast.LightBackdropFloor w motywie
+        jasnym): Text3 ma tam co najmniej 4,5:1. Pilnuje tego test kontrastu.
+      -->
       <SolidColorBrush x:Key="TextBrush" Color="#FFF3F3F5" />
-      <SolidColorBrush x:Key="Text2Brush" Color="#A3F3F3F5" />
-      <SolidColorBrush x:Key="Text3Brush" Color="#66F3F3F5" />
+      <SolidColorBrush x:Key="Text2Brush" Color="#D9F3F3F5" />
+      <SolidColorBrush x:Key="Text3Brush" Color="#B3F3F3F5" />
 
       <SolidColorBrush x:Key="GlassBrush" Color="#0FFFFFFF" />
       <SolidColorBrush x:Key="Glass2Brush" Color="#1FFFFFFF" />
@@ -41,6 +46,9 @@
       <SolidColorBrush x:Key="TrackBrush" Color="#29FFFFFF" />
       <SolidColorBrush x:Key="FillBrush" Color="#FFF3F3F5" />
       <SolidColorBrush x:Key="AccentBrush" Color="#FF7FB6EF" />
+      <SolidColorBrush x:Key="AccentSoftBrush" Color="#387FB6EF" />
+      <SolidColorBrush x:Key="AccentSoftHiBrush" Color="#527FB6EF" />
+      <SolidColorBrush x:Key="OverlayBrush" Color="#FF18191D" />
       <SolidColorBrush x:Key="HeaderBarBrush" Color="#0DFFFFFF" />
 
       <Color x:Key="AccentColor">#FF7FB6EF</Color>
@@ -71,8 +79,8 @@
       <SolidColorBrush x:Key="ScrimBrush" Color="#2EFAFAFC" />
 
       <SolidColorBrush x:Key="TextBrush" Color="#FF1B1B1D" />
-      <SolidColorBrush x:Key="Text2Brush" Color="#9E1B1B1D" />
-      <SolidColorBrush x:Key="Text3Brush" Color="#611B1B1D" />
+      <SolidColorBrush x:Key="Text2Brush" Color="#DE1B1B1D" />
+      <SolidColorBrush x:Key="Text3Brush" Color="#BD1B1B1D" />
 
       <SolidColorBrush x:Key="GlassBrush" Color="#7AFFFFFF" />
       <SolidColorBrush x:Key="Glass2Brush" Color="#B8FFFFFF" />
@@ -84,6 +92,9 @@
       <SolidColorBrush x:Key="TrackBrush" Color="#21000000" />
       <SolidColorBrush x:Key="FillBrush" Color="#FF1B1B1D" />
       <SolidColorBrush x:Key="AccentBrush" Color="#FF2A75BA" />
+      <SolidColorBrush x:Key="AccentSoftBrush" Color="#2E2A75BA" />
+      <SolidColorBrush x:Key="AccentSoftHiBrush" Color="#452A75BA" />
+      <SolidColorBrush x:Key="OverlayBrush" Color="#FFF2F2F5" />
       <SolidColorBrush x:Key="HeaderBarBrush" Color="#8CFFFFFF" />
 
       <Color x:Key="AccentColor">#FF2A75BA</Color>

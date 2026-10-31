@@ -190,7 +190,10 @@ public static class CoverPalette
             ? Math.Clamp(hsl.L * 0.55 + 0.16, 0.18, 0.48)
             : Math.Clamp(hsl.L * 0.28 + 0.56, 0.55, 0.78);
 
-        return HslColor.ToRgb(hsl.H, saturation, lightness);
+        // Pasmo HSL nie wystarcza: żółć i limonka przy tej samej jasności HSL są dla oka znacznie
+        // jaśniejsze niż błękit. Ostateczną granicę wyznacza luminancja względna, do której
+        // dobrany jest kolor tekstu drugorzędnego.
+        return Contrast.LimitForBackdrop(HslColor.ToRgb(hsl.H, saturation, lightness), darkTheme);
     }
 
     private static Color[] Pad(Color[] colours, bool darkTheme)
