@@ -145,7 +145,7 @@
   "OptionAlwaysAnalyse": "Omitir etiquetas ReplayGain",
   "HintAlwaysAnalyse": "El volumen de cada pista se determina mediante una medición propia, incluso si el archivo contiene etiquetas. Resulta útil en una colección etiquetada con herramientas distintas. La primera escucha de una pista se reproduce sin igualación; las siguientes ya la incluyen.",
 
-  "SettingQuality": "Calidad de conversión de frecuencia",
+  "SettingQuality": "Calidad de conversión de frecuencia de muestreo",
   "QualityOff": "Sin filtro",
   "QualityStandard": "Estándar",
   "QualityHigh": "Alta",
@@ -156,7 +156,7 @@
   "LatencyBalanced": "Medio",
   "LatencySafe": "Grande",
   "HintLatency": "Un búfer más pequeño acorta el retraso entre una orden y el sonido, pero aumenta el riesgo de cortes cuando el sistema está ocupado. La elección es solo una indicación para el controlador, que puede adoptar un valor distinto.",
-  "LatencyMeasured": "El dispositivo aceptó {0} tramas, unos {1:F1} ms.",
+  "LatencyMeasured": "El dispositivo aceptó {0} frames, unos {1:F1} ms.",
   "LatencyUnknown": "El valor se lee al abrir el dispositivo.",
 
   "SettingRestoreSession": "Restaurar la sesión anterior",
@@ -167,8 +167,8 @@
 
   "SettingFileOpen": "Archivos abiertos desde fuera del programa",
   "FileOpenAppend": "Añadir al final",
-  "FileOpenAppendPlay": "Añadir y oír",
-  "FileOpenReplace": "Reemplazar y oír",
+  "FileOpenAppendPlay": "Añadir y reproducir",
+  "FileOpenReplace": "Sustituir y reproducir",
   "HintFileOpen": "Comportamiento ante un archivo abierto fuera de la aplicación: desde el explorador de archivos, desde la lista «Abrir con» o soltado sobre la ventana. Elegir archivos dentro de la aplicación siempre los añade al final de la cola.",
 
   "SettingMediaKeys": "Teclas multimedia",

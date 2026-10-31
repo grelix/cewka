@@ -166,9 +166,9 @@
   "HintSeekStep": "Wie weit die Wiedergabe durch die Pfeiltasten links und rechts verschoben wird.",
 
   "SettingFileOpen": "Von außerhalb geöffnete Dateien",
-  "FileOpenAppend": "Anhängen",
-  "FileOpenAppendPlay": "Anhängen, spielen",
-  "FileOpenReplace": "Ersetzen, spielen",
+  "FileOpenAppend": "Anfügen",
+  "FileOpenAppendPlay": "Anfügen und abspielen",
+  "FileOpenReplace": "Ersetzen und abspielen",
   "HintFileOpen": "Verhalten bei einer außerhalb der Anwendung geöffneten Datei — aus dem Dateimanager, aus der Liste „Öffnen mit“ oder auf das Fenster gezogen. Die Auswahl von Dateien innerhalb der Anwendung fügt sie stets an das Ende der Warteschlange an.",
 
   "SettingMediaKeys": "Multimedia-Tasten",

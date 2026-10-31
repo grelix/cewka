@@ -166,7 +166,7 @@
   "HintSeekStep": "O kolik posunou přehrávání šipky vlevo a vpravo.",
 
   "SettingFileOpen": "Soubory otevřené mimo program",
-  "FileOpenAppend": "Na konec fronty",
+  "FileOpenAppend": "Přidat na konec",
   "FileOpenAppendPlay": "Přidat a přehrát",
   "FileOpenReplace": "Nahradit a přehrát",
   "HintFileOpen": "Co se stane se souborem otevřeným mimo aplikaci — ze správce souborů, ze seznamu „Otevřít pomocí“ nebo přetažením na okno. Výběr souborů uvnitř aplikace je vždy přidá na konec fronty.",

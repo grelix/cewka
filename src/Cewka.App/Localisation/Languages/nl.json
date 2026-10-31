@@ -166,9 +166,9 @@
   "HintSeekStep": "Hoe ver de pijltjestoetsen links en rechts de weergave verplaatsen.",
 
   "SettingFileOpen": "Bestanden van buitenaf geopend",
-  "FileOpenAppend": "Voeg achteraan toe",
-  "FileOpenAppendPlay": "Voeg toe en speel",
-  "FileOpenReplace": "Vervang en speel",
+  "FileOpenAppend": "Achteraan toevoegen",
+  "FileOpenAppendPlay": "Toevoegen en afspelen",
+  "FileOpenReplace": "Vervangen en afspelen",
   "HintFileOpen": "Wat er gebeurt met een bestand dat buiten de toepassing wordt geopend — vanuit de bestandsbeheerder, vanuit de lijst ‘Openen met’ of op het venster gesleept. Het kiezen van bestanden binnen de toepassing voegt ze altijd toe aan het einde van de wachtrij.",
 
   "SettingMediaKeys": "Multimediatoetsen",

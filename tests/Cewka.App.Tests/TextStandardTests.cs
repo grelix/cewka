@@ -145,4 +145,157 @@ public sealed class TextStandardTests
         Assert.Matches(Pictograms, "Gotowe \U0001F600");
         Assert.DoesNotMatch(Pictograms, "Powtarzanie: wyłączone (R)");
     }
+
+    /// <summary>Jednoliterowy spójnik lub przyimek polski ze zwykłą spacją za sobą: wisi na końcu wiersza.</summary>
+    private static readonly Regex HangingConjunction = new(@"(?<![\p{L}\p{N}+])[aiouwzAIOUWZ] (?=\S)");
+
+    /// <summary>Liczba (albo symbol liczby) oddzielona zwykłą spacją od jednostki.</summary>
+    private static readonly Regex SplitUnit = new(@"[\d}] (?:dB|LUFS|kHz|Hz|ms)(?!\p{L})");
+
+    [Fact]
+    public void PolskieTekstyMajaTwardaSpacjePoJednoliterowychSpojnikach()
+    {
+        var found = Texts("pl")
+            .Where(pair => HangingConjunction.IsMatch(pair.Value))
+            .Select(pair => $"{pair.Key}: \"{HangingConjunction.Match(pair.Value).Value}\"")
+            .ToArray();
+
+        Assert.True(found.Length == 0, $"pl.json ma wiszące spójniki: {string.Join("; ", found)}");
+    }
+
+    [Theory]
+    [MemberData(nameof(Written))]
+    public void LiczbaZJednostkaNieRozdzielaSieNaKoniecWiersza(string code)
+    {
+        var found = Texts(code)
+            .Where(pair => SplitUnit.IsMatch(pair.Value))
+            .Select(pair => pair.Key)
+            .ToArray();
+
+        Assert.True(found.Length == 0, $"{code}.json oddziela liczbę od jednostki zwykłą spacją: {string.Join(", ", found)}");
+    }
+
+    [Fact]
+    public void WzorceTwardychSpacjiLapiaZwykleSpacje()
+    {
+        Assert.Matches(HangingConjunction, "Pliki i odtwarzanie");
+        Assert.Matches(HangingConjunction, "O programie");
+        Assert.DoesNotMatch(HangingConjunction, "Pliki i odtwarzanie");
+        Assert.DoesNotMatch(HangingConjunction, "Skrót Ctrl+, otwiera");
+        Assert.Matches(SplitUnit, "Poziom −23 LUFS");
+        Assert.Matches(SplitUnit, "ok. {1:F1} ms");
+        Assert.DoesNotMatch(SplitUnit, "Poziom −23 LUFS");
+    }
+
+    /// <summary>Teksty zdaniowe: podpowiedzi, komunikaty, opisy. Kończą się kropką.</summary>
+    private static readonly Regex SentenceKey = new(
+        @"^(Hint[A-Z]|EffectDescription|AudioFailure|DecoderFailure|TrackFailure|MediaPanel[A-Z]" +
+        @"|Associations(Current|Stale|Absent|Unsupported|Failed)|Update(Available|Current|Failed|Notice)$" +
+        @"|Playlist(Saved|Missing|Empty|LoadFailed|SaveFailed)$|Device(Idle|LostNotice|FallbackNotice)$" +
+        @"|DropHint$|FolderReadFailed$|Latency(Measured|Unknown)$|TracksSkipped$)");
+
+    /// <summary>Etykiety, nazwy, podpowiedzi przycisków i skróty: bez kropki na końcu.</summary>
+    private static readonly Regex LabelKey = new(
+        @"^(Setting|Section|Option|Tooltip|Shortcut|Palette|Queue[A-Z]|Theme|Controls|Effects[A-Z]|Colours[A-Z]|Quality[A-Z]" +
+        @"|Latency(Low|Balanced|Safe)$|FileOpen|Open|About|Effect(Crossfeed|Loudness|VirtualBass|DynamicRange|StereoWidth|Strength)$)");
+
+    [Theory]
+    [MemberData(nameof(Written))]
+    public void TekstyZdaniowePrzechodzaKropkaAEtykietyNie(string code)
+    {
+        var withoutPeriod = Texts(code)
+            .Where(pair => SentenceKey.IsMatch(pair.Key) && !pair.Value.EndsWith('.'))
+            .Select(pair => pair.Key)
+            .ToArray();
+
+        var withPeriod = Texts(code)
+            .Where(pair => LabelKey.IsMatch(pair.Key) && pair.Value.EndsWith('.'))
+            .Select(pair => pair.Key)
+            .ToArray();
+
+        Assert.True(withoutPeriod.Length == 0, $"{code}.json: zdania bez kropki: {string.Join(", ", withoutPeriod)}");
+        Assert.True(withPeriod.Length == 0, $"{code}.json: etykiety z kropką: {string.Join(", ", withPeriod)}");
+    }
+
+    private static readonly Regex SentenceEnd = new(@"[.!?…](?=\s+\p{Lu}|\s*$)");
+
+    /// <summary>Podpowiedź ma najwyżej dwa zdania; dłuższy wywód należy do dokumentacji.</summary>
+    [Theory]
+    [MemberData(nameof(Written))]
+    public void PodpowiedziMajaNajwyzejDwaZdania(string code)
+    {
+        var tooLong = Texts(code)
+            .Where(pair => pair.Key.StartsWith("Hint", StringComparison.Ordinal))
+            .Select(pair => (pair.Key, Sentences: SentenceEnd.Matches(pair.Value).Count))
+            .Where(item => item.Sentences > 2)
+            .Select(item => $"{item.Key} ({item.Sentences})")
+            .ToArray();
+
+        Assert.True(tooLong.Length == 0, $"{code}.json ma podpowiedzi dłuższe niż dwa zdania: {string.Join(", ", tooLong)}");
+    }
+
+    /// <summary>Tekst, który wskazuje przycisk po nazwie, musi używać nazwy ze słownika.</summary>
+    [Theory]
+    [MemberData(nameof(Written))]
+    public void OdwolaniaDoPrzyciskowUzywajaIchNazwZeSlownika(string code)
+    {
+        var strings = Load(code);
+
+        (string Text, string Button)[] references =
+        [
+            ("HintQuality", "QualityOff"),
+            ("HintUpdateCheck", "UpdateCheckNow"),
+            ("AssociationsStale", "AssociationsRegister"),
+        ];
+
+        foreach (var (text, button) in references)
+            Assert.Contains(strings[button], strings[text]);
+    }
+
+    [Fact]
+    public void WzorceKluczyIZdanRozpoznajaTypyTekstow()
+    {
+        Assert.Matches(SentenceKey, "HintQuality");
+        Assert.Matches(SentenceKey, "AudioFailureDevice");
+        Assert.Matches(SentenceKey, "TrackFailureDamagedFile");
+        Assert.DoesNotMatch(SentenceKey, "AudioRetry");
+        Assert.Matches(LabelKey, "SettingQuality");
+        Assert.Matches(LabelKey, "TooltipRepeatOff");
+        Assert.Matches(LabelKey, "FileOpenReplace");
+        Assert.DoesNotMatch(LabelKey, "HintQuality");
+
+        Assert.Single(SentenceEnd.Matches("Jedno zdanie, bez końca w środku."));
+        Assert.Equal(2, SentenceEnd.Matches("Pierwsze. Drugie.").Count);
+        Assert.Equal(3, SentenceEnd.Matches("Pierwsze. Drugie. Trzecie.").Count);
+    }
+
+    /// <summary>
+    /// Jedno pojęcie, jedna nazwa: synonimy, które wcześniej oznaczały to samo co nazwa przyjęta
+    /// w słowniku, nie wracają do tekstów.
+    /// </summary>
+    private static readonly Dictionary<string, Regex> Synonyms = new()
+    {
+        // normalizacja głośności (nie „wyrównanie”), skojarzenia plików (nie „rejestracja formatów”),
+        // panel (nie „pas”), urządzenie (nie „wyjście”), pełna nazwa przedwzmacniacza (nie „preamp”)
+        ["pl"] = new Regex(
+            @"wyrówn|zarejestruj formaty|usuń rejestrację|(?<!\p{L})pasie(?!\p{L})|aktywne wyjście|(?<!\p{L})preamp",
+            Options),
+        ["en"] = new Regex(
+            @"loudness matching|matches loudness|register formats|remove registration|in the strip|active output|preamplifier|blobs" +
+            @"|(?<![\w-])start(?![\w-])|in the system(?! (settings|media))",
+            Options),
+    };
+
+    [Theory]
+    [MemberData(nameof(Written))]
+    public void TekstyNieUzywajaZarzuconychSynonimow(string code)
+    {
+        var found = Texts(code)
+            .Select(pair => (pair.Key, Match: Synonyms[code].Match(pair.Value)))
+            .Where(item => item.Match.Success)
+            .Select(item => $"{item.Key}: \"{item.Match.Value}\"")
+            .ToArray();
+
+        Assert.True(found.Length == 0, $"{code}.json ma zarzucone synonimy: {string.Join("; ", found)}");
+    }
 }

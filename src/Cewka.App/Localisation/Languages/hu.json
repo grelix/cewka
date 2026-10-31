@@ -166,9 +166,9 @@
   "HintSeekStep": "Az a távolság, amellyel a bal és jobb nyíl elmozdítja a lejátszást.",
 
   "SettingFileOpen": "Kívülről megnyitott fájlok",
-  "FileOpenAppend": "Hozzáad a végére",
-  "FileOpenAppendPlay": "Hozzáad, lejátszik",
-  "FileOpenReplace": "Cserél, lejátszik",
+  "FileOpenAppend": "Hozzáadás a végére",
+  "FileOpenAppendPlay": "Hozzáadás és lejátszás",
+  "FileOpenReplace": "Csere és lejátszás",
   "HintFileOpen": "A programon kívülről megnyitott fájllal – a fájlkezelőből, a „Megnyitás mással” listáról vagy az ablakra húzva – való bánásmód. A programon belüli fájlválasztás mindig a sor végéhez adja hozzá a fájlokat.",
 
   "SettingMediaKeys": "Multimédia billentyűk",

@@ -145,7 +145,7 @@
   "OptionAlwaysAnalyse": "Ignorer les balises ReplayGain",
   "HintAlwaysAnalyse": "Le volume de chaque piste est déterminé par une mesure propre au lecteur, même lorsque le fichier comporte des balises. Utile pour une bibliothèque balisée par plusieurs outils différents. La première écoute d'une piste se fait sans alignement ; les suivantes en bénéficient.",
 
-  "SettingQuality": "Qualité de conversion de fréquence",
+  "SettingQuality": "Qualité de conversion de la fréquence d'échantillonnage",
   "QualityOff": "Sans filtre",
   "QualityStandard": "Standard",
   "QualityHigh": "Élevée",
@@ -156,7 +156,7 @@
   "LatencyBalanced": "Moyen",
   "LatencySafe": "Grand",
   "HintLatency": "Un tampon plus petit réduit le délai entre une commande et le son, mais augmente le risque de coupures lorsque le système est sollicité. Le choix constitue une indication pour le pilote, qui peut retenir une autre valeur.",
-  "LatencyMeasured": "Le périphérique a retenu {0} trames, soit environ {1:F1} ms.",
+  "LatencyMeasured": "Le périphérique a retenu {0} frames, soit environ {1:F1} ms.",
   "LatencyUnknown": "La valeur est lue une fois le périphérique ouvert.",
 
   "SettingRestoreSession": "Restauration de la session précédente",

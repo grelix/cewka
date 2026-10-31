@@ -145,7 +145,7 @@
   "OptionAlwaysAnalyse": "Ignorar tags ReplayGain",
   "HintAlwaysAnalyse": "O volume de cada faixa é determinado por medição própria, mesmo quando o arquivo contém tags. Útil para uma coleção marcada com ferramentas diferentes. A primeira reprodução de uma faixa ocorre sem igualação; as seguintes já contam com ela.",
 
-  "SettingQuality": "Qualidade da conversão de frequência",
+  "SettingQuality": "Qualidade da conversão da taxa de amostragem",
   "QualityOff": "Sem filtro",
   "QualityStandard": "Padrão",
   "QualityHigh": "Alta",
