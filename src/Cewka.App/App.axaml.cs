@@ -36,16 +36,10 @@ public partial class App : Application
     /// <summary>
     /// Ustawienia fontów przekazywane Avalonii przy budowaniu aplikacji.
     ///
-    /// <para>Program niesie własny font i przypisuje go kontrolkom w arkuszu stylów, ale to nie
-    /// wystarcza: Avalonia osobno pyta system o <em>domyślną</em> rodzinę pisma i bez odpowiedzi
-    /// przerywa działanie komunikatem „Default font family name can't be null or empty".
-    /// Na pulpicie fonty są zawsze, więc nie wychodziło to nigdy — wyszło dopiero przy próbnej
-    /// instalacji w gołym kontenerze, gdzie nie ma żadnego. Skoro cała zawartość programu jest
-    /// w jednym pliku, to i pismo nie ma powodu pochodzić skądinąd.</para>
-    ///
-    /// <para>Ta sama wartość obowiązuje narzędzie zrzutów, które buduje aplikację samo. Inaczej
-    /// obrazy odniesienia powstawałyby przy innych ustawieniach niż te, z którymi program
-    /// naprawdę działa.</para>
+    /// <para>Pułapka: sam styl kontrolek nie wystarcza. Avalonia osobno pyta system o domyślną
+    /// rodzinę pisma i w systemie bez fontów (goły kontener) przerywa działanie komunikatem
+    /// „Default font family name can't be null or empty”. Narzędzie zrzutów używa tych samych
+    /// ustawień.</para>
     /// </summary>
     public static FontManagerOptions FontOptions => new()
     {
@@ -107,15 +101,9 @@ public partial class App : Application
     private static readonly List<IDisposable> SignalHandlers = [];
 
     /// <summary>
-    /// Closes the application in an orderly way when the system asks it to stop.
-    ///
-    /// <para>Wylogowanie albo zamknięcie sesji wysyła programowi sygnał zakończenia. Bez
-    /// obsługi proces ginie natychmiast, a że kolejka i geometria okna zapisywane są przy
-    /// zamykaniu okna, przepadałyby za każdym razem. Tutaj sygnał jest wstrzymywany, a okno
-    /// zamyka się normalną drogą — dokładnie tak, jakby użytkownik nacisnął krzyżyk.</para>
-    ///
-    /// <para>W systemie Windows sygnały te przychodzą tylko do programów konsolowych, więc
-    /// rejestracja pozostaje tam bez skutku i nic nie kosztuje.</para>
+    /// Zamyka program zwykłą drogą, gdy system każe mu skończyć (wylogowanie, koniec sesji).
+    /// Bez tego proces ginąłby od razu, a kolejka i geometria okna zapisują się przy zamknięciu
+    /// okna. W Windows te sygnały dostają tylko programy konsolowe.
     /// </summary>
     private static void AttachShutdownSignals(IClassicDesktopStyleApplicationLifetime desktop)
     {
@@ -152,11 +140,8 @@ public partial class App : Application
     internal static void BeginClosing() => _closing = true;
 
     /// <summary>
-    /// Gives up the role of the running copy once the queue and settings are saved.
-    /// <para>
-    /// Kopia uruchomiona po zwolnieniu roli otwiera własne okno i czyta kolejkę oraz ustawienia
-    /// z dysku, więc muszą tam już być. Ścieżki przysłane w trakcie zapisu przepadają.
-    /// </para>
+    /// Oddaje rolę działającej kopii dopiero po zapisaniu kolejki i ustawień, bo następna kopia
+    /// czyta je z dysku. Ścieżki przysłane w trakcie zapisu przepadają.
     /// </summary>
     internal static void ReleaseSingleInstance()
     {
@@ -168,12 +153,8 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Adds files sent by another copy to the queue and brings the window forward.
-    /// <para>
-    /// Appending rather than replacing is deliberate: selecting a dozen files in the file
-    /// manager starts a dozen copies, each handing over one path. Replacing the queue would
-    /// leave only whichever of them happened to arrive last.
-    /// </para>
+    /// Dokłada pliki od innej kopii do kolejki i wysuwa okno. Dokłada, bo zaznaczenie kilkunastu
+    /// plików uruchamia kilkanaście kopii po jednej ścieżce.
     /// </summary>
     private static void OnPathsHandedOver(string[] paths)
     {
@@ -209,13 +190,10 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Used by the snapshot tool, which sets up the application without a desktop
-    /// lifetime and therefore never reaches the branch above.
+    /// Dla narzędzia zrzutów, które buduje aplikację bez cyklu życia pulpitu.
     /// </summary>
     /// <param name="startupPaths">
-    /// Files the window should load, as if they had been named on the command line. The
-    /// snapshot tool uses it to photograph the interface with a real track in it rather than
-    /// with the empty queue — the same path a file opened from the file manager takes.
+    /// Pliki do wczytania, jak podane w wierszu polecenia.
     /// </param>
     public void InitialiseServicesForHeadless(SettingsStore settings, string[]? startupPaths = null)
     {

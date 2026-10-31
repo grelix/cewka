@@ -5,14 +5,11 @@ using Avalonia.Media;
 namespace Cewka.App.Controls;
 
 /// <summary>
-/// Three overlapping travelling waves drawn above the seek bar.
+/// Trzy nakładające się fale nad paskiem przewijania; <see cref="Level"/> to amplituda
+/// z obwiedni sygnału, do której dochodzi animacja.
 /// <para>
-/// The geometry is a direct port of the design mock. <see cref="Level"/> is the amplitude
-/// the animation eases towards, fed from the signal envelope.
-/// </para>
-/// <para>
-/// W pauzie fala opada do linii spoczynkowej i staje, a pętla klatek zatrzymuje się, gdy
-/// ruch ustanie. W trybie ograniczonym fala jest prostą linią.
+/// W pauzie fala opada do linii spoczynkowej, a pętla klatek staje, gdy ruch ustanie.
+/// W trybie ograniczonym fala jest prostą linią.
 /// </para>
 /// </summary>
 public sealed class WaveformView : Control
@@ -147,11 +144,8 @@ public sealed class WaveformView : Control
     }
 
     /// <summary>
-    /// Stops the travelling waves at the start of their cycle, for the snapshot tool.
-    /// <para>
-    /// The amplitude is set to whatever the current state calls for instead of being carried
-    /// over, so a snapshot taken shortly after pausing does not catch the wave on its way down.
-    /// </para>
+    /// Zatrzymuje fale na początku cyklu, dla narzędzia zrzutów. Amplituda ustawiana jest od
+    /// razu na docelową, żeby zrzut tuż po pauzie nie złapał fali w trakcie opadania.
     /// </summary>
     public void FreezeForCapture()
     {

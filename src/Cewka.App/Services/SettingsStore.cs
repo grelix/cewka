@@ -6,9 +6,8 @@ using Cewka.Platform;
 namespace Cewka.App.Services;
 
 /// <summary>
-/// Loads and saves <see cref="AppSettings"/>. Writes are debounced because the UI
-/// touches settings on every slider move, and they are atomic so that a crash
-/// mid-write cannot leave an unreadable file behind.
+/// Wczytuje i zapisuje <see cref="AppSettings"/>. Zapis jest odkładany, bo interfejs zmienia
+/// ustawienia przy każdym ruchu suwaka, i niepodzielny, żeby awaria nie zostawiła urwanego pliku.
 /// </summary>
 public sealed class SettingsStore
 {
@@ -38,12 +37,11 @@ public sealed class SettingsStore
     public AppSettings Current { get; private set; }
 
     /// <summary>
-    /// Reads the single-instance preference before the framework starts.
+    /// Odczytuje ustawienie jednej kopii przed startem Avalonii, bo kopia oddająca pliki nie może
+    /// budować okna.
     /// <para>
-    /// The decision has to be made in <c>Main</c>, before Avalonia is initialised, because a
-    /// copy that is handing its files over must never build a window. Constructing the whole
-    /// store there is not an option — it owns a dispatcher timer, and the dispatcher does not
-    /// exist yet.
+    /// Pułapka: pełnego magazynu nie da się tu utworzyć, bo ma zegar dyspozytora, a dyspozytora
+    /// jeszcze nie ma.
     /// </para>
     /// </summary>
     public static bool ReadSingleInstanceFlag()

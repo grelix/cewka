@@ -45,16 +45,10 @@ internal sealed partial class ReleaseJsonContext : JsonSerializerContext;
 /// <summary>
 /// Pyta serwis GitHuba o najnowsze wydanie i porównuje je z wersją działającego programu.
 ///
-/// <para><b>Co dokładnie się dzieje.</b> Jedno żądanie GET na
-/// <c>api.github.com/repos/…/releases/latest</c>, bez uwierzytelniania, z ośmiosekundowym
-/// ograniczeniem czasu. Program nie wysyła niczego o odtwarzanych plikach ani o użytkowniku —
-/// ale GitHub, jak każdy serwer, widzi adres IP i nagłówek identyfikujący program. Dlatego
-/// sprawdzanie automatyczne jest domyślnie wyłączone i nic się nie dzieje, dopóki nikt o to
-/// nie poprosi.</para>
-///
-/// <para><b>Czego nie robi.</b> Nie pobiera plików, nie aktualizuje się sam i nie przechowuje
-/// wyniku. Jedyne, co zostaje zapisane, to data ostatniego sprawdzenia — po to, żeby przy
-/// sprawdzaniu automatycznym nie odpytywać serwisu częściej niż raz na dobę.</para>
+/// <para>Jedno żądanie GET na <c>api.github.com/repos/…/releases/latest</c>, bez
+/// uwierzytelniania, z limitem ośmiu sekund. Serwer widzi adres IP i nagłówek programu, dlatego
+/// sprawdzanie automatyczne jest domyślnie wyłączone. Zapisywana jest tylko data ostatniego
+/// sprawdzenia, żeby nie pytać częściej niż raz na dobę.</para>
 /// </summary>
 public static class UpdateCheck
 {

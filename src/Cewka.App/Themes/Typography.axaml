@@ -2,8 +2,8 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
   <!--
-    Fonty osadzone w pliku wykonywalnym, zeby interfejs wygladal identycznie
-    niezaleznie od tego, co uzytkownik ma zainstalowane w systemie.
+    Fonty osadzone w pliku wykonywalnym, żeby interfejs wyglądał tak samo
+    w każdym systemie.
     Cantarell      - tekst interfejsu (SIL OFL 1.1)
     JetBrains Mono - liczby, czasy, dane techniczne (SIL OFL 1.1)
   -->

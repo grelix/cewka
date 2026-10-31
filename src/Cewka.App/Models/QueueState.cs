@@ -4,12 +4,8 @@ using Cewka.Audio.Playback;
 namespace Cewka.App.Models;
 
 /// <summary>
-/// The playback queue as it stood when the application last closed.
-/// <para>
-/// Kept apart from <see cref="AppSettings"/> because it changes far more often and can grow
-/// to thousands of entries; mixing the two would mean rewriting the whole settings file every
-/// time a folder is added.
-/// </para>
+/// Kolejka z chwili ostatniego zamknięcia. Osobno od <see cref="AppSettings"/>, bo zmienia się
+/// znacznie częściej i bywa długa na tysiące pozycji.
 /// </summary>
 public sealed class QueueState
 {
@@ -29,8 +25,8 @@ public sealed class QueueState
     public string? Repeat { get; set; }
 
     /// <summary>
-    /// The two-state form written by earlier versions. Read only for compatibility — a queue
-    /// saved before repeat-one existed should not lose its setting on the first run afterwards.
+    /// Dwustanowa postać ze starszych plików, czytana tylko dla zgodności, żeby kolejka zapisana
+    /// przed powtarzaniem jednego utworu nie straciła ustawienia.
     /// </summary>
     public bool RepeatQueue { get; set; }
 

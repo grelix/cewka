@@ -6,10 +6,8 @@ namespace Cewka.App.Models;
 /// <summary>
 /// Przekłada wybory z okna ustawień na liczby, którymi posługuje się warstwa dźwięku.
 ///
-/// <para>Tłumaczenie stoi w jednym miejscu, bo każda z tych wartości potrzebna jest dwa razy:
-/// raz przy uruchomieniu programu, gdy ustawienia wczytywane są z pliku, i raz przy zmianie
-/// dokonanej w oknie. Rozdzielenie tych dwóch dróg skończyłoby się tym, że program po
-/// ponownym uruchomieniu brzmi inaczej niż przed zamknięciem.</para>
+/// <para>W jednym miejscu, bo te same wartości potrzebne są przy starcie i przy zmianie w oknie;
+/// dwie drogi mogłyby się rozjechać.</para>
 /// </summary>
 public static class AudioPreferences
 {

@@ -10,9 +10,8 @@ using Avalonia.Rendering;
 namespace Cewka.App.Controls;
 
 /// <summary>
-/// The 44×25 switch that arms the equaliser. Fluent's <c>ToggleSwitch</c> carries a template
-/// with a header, an on/off caption and its own metrics; drawing this one directly is both
-/// shorter and an exact match for the design.
+/// Przełącznik 44×25 włączający korektor, rysowany wprost zamiast <c>ToggleSwitch</c>
+/// z Fluent, który ma nagłówek, podpis i własne wymiary.
 /// </summary>
 public sealed class GlassSwitch : Control, ICustomHitTest
 {

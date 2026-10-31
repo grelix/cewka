@@ -25,20 +25,14 @@ public partial class MainWindow : Window
     private const double DegreesPerSecond = 360.0 / 9.0;
 
     /// <summary>
-    /// How long the record takes to come to rest upright once the effects are cut back.
-    /// <para>
-    /// Long enough to read as slowing down rather than snapping, short enough that nobody waits
-    /// for it. The rotation always finishes forwards, never backwards: a record that reverses
-    /// to reach the top looks broken.
-    /// </para>
+    /// Czas, w jakim płyta staje okładką prosto po ograniczeniu efektów: dość długi, żeby było
+    /// widać zwalnianie, i dość krótki, żeby nikt na to nie czekał.
     /// </summary>
     private const double UprightReturnSeconds = 0.45;
 
     /// <summary>
-    /// Layout steps by window width, from a narrow window to a maximised one on a large display.
-    /// Avalonia has no equivalent of CSS media queries, so the handful of affected properties
-    /// is set directly. Without the upper steps the window on a 27-inch screen reads as a small
-    /// interface stranded in a lot of empty space.
+    /// Stopnie układu według szerokości okna, od wąskiego do zmaksymalizowanego na dużym ekranie.
+    /// Avalonia nie ma odpowiednika zapytań o media z CSS, więc kilka właściwości ustawia się wprost.
     /// </summary>
     private static readonly (double MinWidth, double Disc, double Title, double Queue, double Volume)[]
         LayoutSteps =
@@ -179,15 +173,14 @@ public partial class MainWindow : Window
         ApplyResponsiveLayout();
         AttachQueueScrollBar();
 
-        // Sciezki z wiersza polecen maja pierwszenstwo przed kolejka z poprzedniej sesji:
-        // uruchomienie przez "Otworz za pomoca" ma zagrac wskazany plik, nie poprzedni.
+        // Ścieżki z wiersza poleceń mają pierwszeństwo przed kolejką z poprzedniej sesji:
+        // „Otwórz za pomocą” ma zagrać wskazany plik.
         if (App.StartupPaths.Length > 0) _viewModel.OpenFromOutside(App.StartupPaths);
         else _viewModel.RestoreQueueState();
 
         RevealCurrent();
 
-        // Bez oczekiwania na wynik: uruchomienie programu nie ma zalezec od tego, czy siec
-        // odpowiada. Przy wylaczonym ustawieniu — a tak jest domyslnie — nic sie nie dzieje.
+        // Bez czekania na wynik, żeby start nie zależał od sieci.
         _ = _viewModel.CheckForUpdatesIfDueAsync();
 
         AttachMediaPanel();
@@ -196,9 +189,8 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Hooks the window up to the desktop's media panel: the Windows overlay, attached to this
-    /// window's handle, or MPRIS on the session bus in Linux. Only possible once the window
-    /// exists, because the Windows panel belongs to a window rather than to the process.
+    /// Podłącza okno do panelu multimediów pulpitu: nakładki Windows albo MPRIS pod Linuksem.
+    /// Dopiero po otwarciu okna, bo panel Windows należy do okna, a nie do procesu.
     /// </summary>
     private void AttachMediaPanel()
     {
@@ -221,9 +213,8 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Publishes the player on the session bus. Klawisze multimedialne obsługuje w Linuksie
-    /// pulpit i przekazuje je właśnie tędy, więc osobne przechwytywanie klawiatury — jak
-    /// w systemie Windows — jest tu niepotrzebne.
+    /// Wystawia odtwarzacz na szynie sesji. Pulpit Linuksa przekazuje tędy też klawisze
+    /// multimedialne.
     /// </summary>
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
     private void AttachMpris()
@@ -499,8 +490,8 @@ public partial class MainWindow : Window
         TrackTitle.FontSize = titleSize;
         TrackArtist.FontSize = Math.Round(titleSize * 0.40, 1);
 
-        // Pasek glosnosci to jedyny element rzedu transportu o swobodnej szerokosci, wiec on
-        // ustepuje pierwszy, gdy rzad sie nie miesci.
+        // Pasek głośności jako jedyny w rzędzie transportu ma swobodną szerokość, więc ustępuje
+        // pierwszy, gdy rząd się nie mieści.
         VolumeSlider.Width = step.Volume;
     }
 
@@ -608,9 +599,8 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Starts the record coasting to rest with the cover the right way up. Cutting the effects
-    /// used to leave the sleeve on its side or upside down — the one state in which a still
-    /// picture of a record looks wrong.
+    /// Wytraca obrót płyty tak, żeby stanęła okładką prosto; przekrzywiona nieruchoma płyta
+    /// wygląda na błąd.
     /// </summary>
     private void BeginUprightReturn()
     {
@@ -626,8 +616,8 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Carries the coast-to-rest forward by one frame. The easing is cubic on the way out, so
-    /// the record leaves at close to playing speed and settles gently instead of stopping dead.
+    /// Jedna klatka wytracania obrotu. Wygładzanie sześcienne: płyta rusza z prędkością bliską
+    /// grania i staje łagodnie.
     /// </summary>
     private void AdvanceUprightReturn(double delta)
     {
@@ -636,8 +626,7 @@ public partial class MainWindow : Window
         var progress = Math.Clamp(_returnElapsed / UprightReturnSeconds, 0, 1);
         var eased = 1 - Math.Pow(1 - progress, 3);
 
-        // Zawsze w przod, do najblizszego pelnego obrotu: 360 stopni to ta sama pozycja co zero,
-        // wiec plyta dojezdza na gore, nie cofa sie do niej.
+        // Zawsze w przód, do pełnego obrotu, żeby płyta nie cofała się do góry.
         _angle = _returnFrom + (360 - _returnFrom) * eased;
 
         if (progress >= 1)
@@ -650,10 +639,8 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Brings every moving part to a fixed, repeatable state for the snapshot tool: the record
-    /// upright, the background blobs at the start of their paths, the waveform at the start of
-    /// its cycle. All three run off wall-clock time, so without this two runs of the same code
-    /// produced two different pictures.
+    /// Ustawia wszystko, co się rusza, w powtarzalnym stanie dla narzędzia zrzutów: płytę
+    /// prosto, plamy tła i falę na początku cyklu. Wszystkie idą według zegara.
     /// </summary>
     public void FreezeAnimationsForCapture()
     {
@@ -735,8 +722,8 @@ public partial class MainWindow : Window
 
     private void OnTogglePlay(object? sender, RoutedEventArgs e) => _viewModel.TogglePlay();
 
-    // Przewijanie dzieje sie po puszczeniu przycisku; w trakcie przeciagania suwak i czas
-    // podazaja za wskaznikiem, ale odtwarzanie zostaje tam, gdzie bylo.
+    // Przewinięcie następuje po puszczeniu przycisku; w trakcie przeciągania za wskaźnikiem
+    // idą tylko suwak i czas.
     private void OnSeekScrubbing(object? sender, double value) => _viewModel.BeginScrub();
 
     private void OnSeekCommitted(object? sender, double value) => _viewModel.CommitScrub(value);
@@ -779,9 +766,8 @@ public partial class MainWindow : Window
     internal SettingsWindow? OpenSettingsWindow => _settingsWindow;
 
     /// <summary>
-    /// Opens the settings, or brings them forward if they are already up. Shown beside the
-    /// player rather than over it: several of the settings are judged by ear, which needs the
-    /// music playing and the transport reachable.
+    /// Otwiera ustawienia albo wysuwa otwarte. Okno staje obok odtwarzacza, bo część ustawień
+    /// ocenia się słuchem.
     /// </summary>
     private void OnOpenSettings(object? sender, RoutedEventArgs e) => OpenSettings();
 
@@ -842,9 +828,7 @@ public partial class MainWindow : Window
     /// <summary>
     /// Wczytuje listę M3U na miejsce obecnej kolejki.
     /// <para>
-    /// O plikach z listy, których już nie ma, program mówi wprost, w miejscu przeznaczonym na
-    /// komunikaty. Milczące pominięcie ich znaczyłoby, że wczytana kolejka jest krótsza od
-    /// zapisanej, a użytkownik dowiaduje się o tym najwcześniej wtedy, gdy czegoś w niej szuka.
+    /// O brakujących plikach z listy mówi komunikat, żeby krótsza kolejka nie była zaskoczeniem.
     /// </para>
     /// </summary>
     private async void OnLoadPlaylist(object? sender, RoutedEventArgs e)
@@ -971,8 +955,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Acts on a multimedia key. „Stop" pauses rather than stopping outright: the position is
-    /// then kept, and pressing play again carries on instead of starting the track over.
+    /// Obsługuje klawisz multimedialny. „Stop” wstrzymuje, żeby zachować pozycję w utworze.
     /// </summary>
     public void HandleMediaKey(MediaKey key)
     {
@@ -986,9 +969,8 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Acts on a request from the desktop's media panel. „Play" i „Pause" są tu osobnymi
-    /// poleceniami, a nie przełącznikiem: panel, który prosi o pauzę, oczekuje pauzy również
-    /// wtedy, gdy nic nie gra, a przełącznik zacząłby wtedy grać.
+    /// Obsługuje polecenie z panelu multimediów. „Play” i „Pause” są osobne, bo przełącznik
+    /// zacząłby grać na prośbę o pauzę, gdy nic nie gra.
     /// </summary>
     public void HandleMediaCommand(MediaCommand command)
     {

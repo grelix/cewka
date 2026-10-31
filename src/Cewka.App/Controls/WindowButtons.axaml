@@ -14,7 +14,7 @@
 
     <Panel VerticalAlignment="Center">
 
-      <!-- Wariant kwadratowy: krazki w stylu reszty interfejsu. Kolejność ustala kod. -->
+      <!-- Wariant kwadratowy w stylu reszty interfejsu. Kolejność ustala kod. -->
       <StackPanel x:Name="SquareGroup" Orientation="Horizontal" Spacing="6">
         <Button x:Name="SquareMinimise" Classes="window" Click="OnMinimise"
                 ToolTip.Tip="{l:Translate TooltipMinimise}"

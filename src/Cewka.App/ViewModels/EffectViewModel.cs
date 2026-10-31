@@ -5,10 +5,7 @@ namespace Cewka.App.ViewModels;
 /// <summary>
 /// Jeden efekt dźwiękowy w interfejsie: przełącznik i suwak siły.
 ///
-/// <para>Wszystkie pięć różni się wyłącznie nazwą i tym, dokąd trafiają wartości, więc jeden
-/// model widoku obsługuje je wszystkie, a okno rysuje je z listy. Alternatywą byłoby piętnaście
-/// właściwości w <see cref="MainViewModel"/> — powielony kod, który przy szóstym efekcie trzeba
-/// by powielić znowu.</para>
+/// <para>Efekty różnią się tylko nazwą i celem wartości, więc okno rysuje je z listy.</para>
 /// </summary>
 public sealed class EffectViewModel : ObservableObject
 {
@@ -52,11 +49,8 @@ public sealed class EffectViewModel : ObservableObject
     /// <summary>
     /// Siła działania w zakresie 0–1, czyli w postaci, jakiej oczekuje suwak.
     ///
-    /// <para>Siła ma jedenaście położeń: od zera do dziesięciu, gdzie każdy punkt to dziesięć
-    /// procent. Suwaki w oknach przeskakują tymi samymi stopniami (<c>Step</c>), a zaokrąglenie
-    /// tutaj pilnuje wartości z innych źródeł, na przykład z ręcznie poprawionych ustawień.
-    /// Skala z punktami jest przy okazji łatwiejsza do odtworzenia: „sześć" da się powtórzyć,
-    /// „pięćdziesiąt siedem procent" nie.</para>
+    /// <para>Jedenaście położeń co dziesięć procent, jak <c>Step</c> suwaków; zaokrąglenie
+    /// pilnuje wartości z innych źródeł, na przykład z ręcznie poprawionych ustawień.</para>
     /// </summary>
     public double Strength
     {

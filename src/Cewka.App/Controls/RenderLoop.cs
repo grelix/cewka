@@ -4,16 +4,11 @@ using Avalonia.Controls;
 namespace Cewka.App.Controls;
 
 /// <summary>
-/// A per-frame callback driven by the compositor.
+/// Wywołanie na każdą klatkę kompozytora, bo <c>Animation</c> z Avalonii nie da się wstrzymać
+/// i wznowić w tym samym miejscu. <see cref="TopLevel.RequestAnimationFrame"/> działa raz, więc
+/// pętla zamawia kolejną klatkę sama.
 /// <para>
-/// Avalonia's <c>Animation</c> cannot be paused and resumed at the same position through
-/// public API, and the decorative pieces here (the spinning disc, the waveform) need exactly
-/// that. <see cref="TopLevel.RequestAnimationFrame"/> is a one-shot, so the loop re-arms
-/// itself until stopped.
-/// </para>
-/// <para>
-/// Przy zminimalizowanym oknie pętla nie prosi o klatki, tylko czeka na zmianę stanu okna
-/// i rusza sama, gdy okno wraca na ekran.
+/// Przy zminimalizowanym oknie pętla czeka na zmianę stanu okna i rusza sama po powrocie.
 /// </para>
 /// </summary>
 public sealed class RenderLoop

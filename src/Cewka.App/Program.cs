@@ -7,9 +7,8 @@ namespace Cewka.App;
 internal static class Program
 {
     /// <summary>
-    /// Where copies of the application look for one another. Scoped to the user: the Windows
-    /// pipe namespace is shared by everyone logged in, and two people on one machine must not
-    /// end up steering each other's music.
+    /// Gdzie kopie programu się szukają. Osobno dla każdego użytkownika, bo przestrzeń nazw
+    /// potoków w Windows jest wspólna dla wszystkich zalogowanych.
     /// </summary>
     private static InstanceAddress Address => InstanceAddress.Default($"Cewka.{Environment.UserName}");
 

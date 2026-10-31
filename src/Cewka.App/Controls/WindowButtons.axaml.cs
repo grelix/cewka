@@ -10,11 +10,8 @@ using Cewka.App.Models;
 namespace Cewka.App.Controls;
 
 /// <summary>
-/// The minimise, maximise and close buttons, in whichever form the settings ask for.
-/// <para>
-/// Kept as one control rather than three copies in the window so that the placement setting
-/// only has to move a single element between the left and right ends of the title bar.
-/// </para>
+/// Przyciski minimalizacji, maksymalizacji i zamknięcia w postaci wybranej w ustawieniach;
+/// jedna kontrolka, żeby ustawienie położenia przenosiło jeden element.
 /// <para>
 /// Przy układzie po lewej zamknięcie stoi na zewnętrznej krawędzi, jak w GNOME i macOS,
 /// a kreska oddziela grupę od poleceń paska. Na pełnym ekranie przyciski znikają.
@@ -26,9 +23,7 @@ public partial class WindowButtons : UserControl
         AvaloniaProperty.Register<WindowButtons, WindowControlsPosition>(nameof(Position));
 
     /// <summary>
-    /// Shows the close button alone. Used by the settings window, which has a fixed shape:
-    /// a maximise button that stretches a column of switches across a wide screen would be
-    /// an invitation to do something the window has no use for.
+    /// Sam przycisk zamknięcia, dla okna ustawień, którego nie ma sensu maksymalizować.
     /// </summary>
     public static readonly StyledProperty<bool> CloseOnlyProperty =
         AvaloniaProperty.Register<WindowButtons, bool>(nameof(CloseOnly));

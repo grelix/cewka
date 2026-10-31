@@ -15,16 +15,11 @@ public sealed record LanguageInfo(string Code, string Name);
 internal sealed partial class LanguageJsonContext : JsonSerializerContext;
 
 /// <summary>
-/// Every piece of text shown in the interface, looked up by key.
+/// Wszystkie teksty interfejsu, pobierane po kluczu. Wiązanie <c>{l:Translate Klucz}</c>
+/// obserwuje indeksator, więc zmiana języka odświeża okna bez ponownego otwierania.
 ///
-/// <para><b>Dlaczego indekser, a nie stałe.</b> Teksty pobierane są przez wiązanie
-/// <c>{l:Translate Klucz}</c>, które obserwuje zmianę indeksatora. Dzięki temu zmiana języka
-/// odświeża cały interfejs bez ponownego otwierania okna — a to jedyny sposób, żeby ustawienie
-/// języka w oknie ustawień działało tak, jak użytkownik oczekuje.</para>
-///
-/// <para>Dodanie kolejnego języka sprowadza się do dołożenia jednego pliku JSON obok
-/// <c>pl.json</c> i dopisania go do listy poniżej. Klucze nieprzetłumaczone wracają do
-/// polskiego, więc częściowe tłumaczenie nie psuje interfejsu.</para>
+/// <para>Nowy język to plik JSON obok <c>pl.json</c> i wpis na liście poniżej. Brakujące klucze
+/// wracają do polskiego.</para>
 /// </summary>
 public sealed class Strings : INotifyPropertyChanged
 {
