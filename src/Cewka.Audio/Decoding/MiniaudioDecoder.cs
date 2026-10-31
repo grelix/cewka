@@ -30,6 +30,16 @@ internal sealed unsafe class MiniaudioDecoder : IAudioDecoder
         _ownsStream = ownsStream;
         _meter = meter;
 
+        try
+        {
+            NativeAudio.EnsureCompatible();
+        }
+        catch
+        {
+            if (_ownsStream) _stream.Dispose();
+            throw;
+        }
+
         _self = GCHandle.Alloc(this);
 
         var result = NativeAudio.DecoderOpen(

@@ -1,5 +1,6 @@
 using Cewka.Audio.Decoding;
 using Cewka.Audio.Devices;
+using Cewka.Audio.Interop;
 using Xunit;
 
 namespace Cewka.Audio.Tests.Engine;
@@ -30,6 +31,50 @@ public class NativeLayerTests
         Assert.True(Volatile.Read(ref periods) >= 3);
 
         Assert.False(device.IsRunning);
+    }
+
+    /// <summary>Biblioteka natywna ma wersję interfejsu, której oczekuje warstwa zarządzana.</summary>
+    [Fact]
+    public void NativeLibraryMatchesTheExpectedInterface()
+    {
+        NativeAudio.EnsureCompatible();
+    }
+
+    /// <summary>
+    /// Zatrzymanie, którego nie zlecił program, jest utratą dopiero wtedy, gdy urządzenie nie
+    /// ruszy samo w czasie karencji. Przy zmianie urządzenia domyślnego sterownik zatrzymuje
+    /// strumień, przekierowuje go i uruchamia ponownie.
+    /// </summary>
+    [Fact]
+    public void StopFollowedByAnAutomaticRestartIsNotALoss()
+    {
+        var polls = 0;
+        var lost = DeviceLossCheck.Confirm(
+            isStarted: () => Interlocked.Increment(ref polls) > 3,
+            stillExpected: () => true,
+            TimeSpan.FromSeconds(2),
+            pollMilliseconds: 5);
+
+        Assert.False(lost);
+        Assert.Equal(4, polls);
+    }
+
+    [Fact]
+    public void DeviceThatStaysStoppedIsLost()
+    {
+        var lost = DeviceLossCheck.Confirm(() => false, () => true, TimeSpan.FromMilliseconds(60), pollMilliseconds: 5);
+
+        Assert.True(lost);
+    }
+
+    /// <summary>Program zatrzymał urządzenie w czasie karencji: to nie jest utrata.</summary>
+    [Fact]
+    public void StopRequestedDuringTheGraceIsNotALoss()
+    {
+        var calls = 0;
+        var lost = DeviceLossCheck.Confirm(() => false, () => Interlocked.Increment(ref calls) < 3, TimeSpan.FromSeconds(2), pollMilliseconds: 5);
+
+        Assert.False(lost);
     }
 
     /// <summary>Po pierwszym użyciu dźwięku zaplecza nie da się już przełączyć.</summary>

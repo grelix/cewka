@@ -16,6 +16,45 @@ internal static unsafe partial class NativeAudio
     /// <summary>Zmienna środowiskowa włączająca puste wyjście; wartość „1” je włącza.</summary>
     internal const string NullOutputVariable = "CEWKA_NULL_AUDIO";
 
+    // ---------- zgodność ----------
+
+    /// <summary>
+    /// Wersja zestawu funkcji, której oczekuje ten kod; ta sama stała jest w
+    /// <c>native/cewka_audio.c</c>. Zmienia się przy każdej zmianie sygnatur lub znaczenia eksportów.
+    /// </summary>
+    internal const int AbiVersion = 2;
+
+    [LibraryImport(Library, EntryPoint = "cewka_abi_version")]
+    private static partial int NativeAbiVersion();
+
+    private static readonly Lazy<string?> AbiMismatch = new(DescribeAbiMismatch);
+
+    /// <summary>
+    /// Biblioteka natywna nie jest w repozytorium i bywa starsza od kodu. Wywołanie funkcji
+    /// o innej sygnaturze kończy się awarią procesu, więc niezgodność trzeba wykryć wcześniej.
+    /// </summary>
+    internal static void EnsureCompatible()
+    {
+        if (AbiMismatch.Value is { } message) throw new AudioException(message);
+    }
+
+    private static string? DescribeAbiMismatch()
+    {
+        int found;
+        try
+        {
+            found = NativeAbiVersion();
+        }
+        catch (EntryPointNotFoundException)
+        {
+            found = 0;
+        }
+
+        return found == AbiVersion
+            ? null
+            : $"Biblioteka {FileName} ma wersję interfejsu {found}, a program wymaga {AbiVersion}; trzeba ją przebudować.";
+    }
+
     // ---------- zaplecze ----------
 
     [LibraryImport(Library, EntryPoint = "cewka_use_null_backend")]
@@ -36,6 +75,8 @@ internal static unsafe partial class NativeAudio
     /// </summary>
     internal static void SetNullBackend(bool on)
     {
+        EnsureCompatible();
+
         lock (BackendLock)
         {
             if (UseNullBackend(on ? 1 : 0) != Success)
@@ -49,6 +90,8 @@ internal static unsafe partial class NativeAudio
     /// <summary>Przekazuje wybór zaplecza do biblioteki przed pierwszym utworzeniem kontekstu.</summary>
     internal static void EnsureBackend()
     {
+        EnsureCompatible();
+
         lock (BackendLock)
         {
             if (_backendApplied) return;
@@ -74,8 +117,11 @@ internal static unsafe partial class NativeAudio
         int deviceIndex, uint sampleRate, uint channels, uint periodSizeInFrames,
         delegate* unmanaged<void*, float*, uint, void> callback, void* user, out nint handle);
 
-    /// <summary>Zdarzenie urządzenia zgłaszane przez <see cref="DeviceSetNotify"/>: urządzenie przestało pracować samo.</summary>
-    internal const int DeviceLostEvent = 1;
+    /// <summary>
+    /// Zdarzenie urządzenia zgłaszane przez <see cref="DeviceSetNotify"/>: urządzenie zatrzymało
+    /// się bez polecenia. Może to być utrata albo przekierowanie, po którym ruszy samo.
+    /// </summary>
+    internal const int DeviceStoppedUnrequestedEvent = 1;
 
     [LibraryImport(Library, EntryPoint = "cewka_device_set_notify")]
     internal static partial int DeviceSetNotify(nint handle, delegate* unmanaged<void*, int, void> notify);
@@ -86,6 +132,7 @@ internal static unsafe partial class NativeAudio
     [LibraryImport(Library, EntryPoint = "cewka_device_stop")]
     internal static partial int DeviceStop(nint handle);
 
+    /// <summary>1, gdy urządzenie faktycznie pracuje.</summary>
     [LibraryImport(Library, EntryPoint = "cewka_device_is_started")]
     internal static partial int DeviceIsStarted(nint handle);
 

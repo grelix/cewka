@@ -35,6 +35,7 @@ internal sealed unsafe class SampleConverter : IDisposable
 
         if (sourceRate != targetRate)
         {
+            NativeAudio.EnsureCompatible();
             NativeAudio.ThrowIfFailed(
                 NativeAudio.ResamplerCreate(
                     (uint)targetChannels, (uint)sourceRate, (uint)targetRate, (uint)FilterOrder, out _resampler),

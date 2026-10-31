@@ -18,10 +18,21 @@ public sealed unsafe class AudioDevice : IAudioOutput
     /// <summary>Fills one period of audio. The span length is frames × channels.</summary>
     public delegate void RenderCallback(Span<float> buffer);
 
+    /// <summary>Czas, w którym urządzenie zatrzymane bez polecenia może ruszyć samo po przekierowaniu.</summary>
+    private static readonly TimeSpan LossGrace = TimeSpan.FromMilliseconds(1500);
+
+    /// <summary>Odstęp okresowego sprawdzania, czy urządzenie, które ma grać, faktycznie gra.</summary>
+    private static readonly TimeSpan WatchdogPeriod = TimeSpan.FromMilliseconds(500);
+
+    private readonly Lock _nativeLock = new();
+    private readonly Timer _watchdog;
     private GCHandle _self;
     private nint _handle;
-    private bool _disposed;
+    private volatile bool _disposed;
     private volatile bool _running;
+    private volatile bool _starting;
+    private int _checkingLoss;
+    private int _watchdogMisses;
 
     /// <summary>
     /// Puste wyjście: urządzenie pobiera próbki w tempie rzeczywistym i niczego nie odtwarza.
@@ -62,6 +73,8 @@ public sealed unsafe class AudioDevice : IAudioOutput
         Channels = (int)NativeAudio.DeviceChannels(_handle);
         PeriodSizeInFrames = (int)NativeAudio.DevicePeriod(_handle);
         Name = ReadName();
+
+        _watchdog = new Timer(static state => ((AudioDevice)state!).Watch(), this, WatchdogPeriod, WatchdogPeriod);
     }
 
     /// <summary>
@@ -112,14 +125,15 @@ public sealed unsafe class AudioDevice : IAudioOutput
     public bool IsFallback { get; private init; }
 
     /// <summary>
-    /// True od chwili uruchomienia do zatrzymania albo utraty urządzenia. Ustawiane przed
-    /// startem natywnym, bo wywołanie zwrotne może ruszyć, zanim start wróci.
+    /// True od chwili uruchomienia do zatrzymania albo potwierdzonej utraty urządzenia.
+    /// Ustawiane przed startem natywnym, bo wywołanie zwrotne może ruszyć, zanim start wróci.
+    /// W czasie karencji po zatrzymaniu bez polecenia pozostaje true.
     /// </summary>
     public bool IsRunning => _running;
 
     /// <summary>
-    /// Urządzenie przestało pracować bez polecenia: odłączono je albo sterownik unieważnił
-    /// strumień. Zgłaszane z puli wątków.
+    /// Urządzenie przestało pracować bez polecenia i nie ruszyło samo w czasie karencji:
+    /// odłączono je albo sterownik unieważnił strumień. Zgłaszane z puli wątków.
     /// </summary>
     public event Action? Lost;
 
@@ -135,8 +149,18 @@ public sealed unsafe class AudioDevice : IAudioOutput
         if (_running) return;
 
         _running = true;
+        _starting = true;
 
-        var result = NativeAudio.DeviceStart(_handle);
+        int result;
+        try
+        {
+            result = NativeAudio.DeviceStart(_handle);
+        }
+        finally
+        {
+            _starting = false;
+        }
+
         if (result != NativeAudio.Success)
         {
             _running = false;
@@ -187,19 +211,69 @@ public sealed unsafe class AudioDevice : IAudioOutput
     {
         try
         {
-            if (notification != NativeAudio.DeviceLostEvent) return;
+            if (notification != NativeAudio.DeviceStoppedUnrequestedEvent) return;
 
             var self = (AudioDevice?)GCHandle.FromIntPtr((nint)user).Target;
             if (self is null || self._disposed) return;
 
-            // Wątek roboczy miniaudio: tylko flaga i przekazanie dalej. Zatrzymanie albo
-            // zamknięcie urządzenia stąd skończyłoby się zakleszczeniem.
-            self._running = false;
-            ThreadPool.UnsafeQueueUserWorkItem(static device => device.Lost?.Invoke(), self, preferLocal: false);
+            // Wątek roboczy miniaudio: tylko przekazanie dalej. Zatrzymanie albo zamknięcie
+            // urządzenia stąd skończyłoby się zakleszczeniem.
+            self.BeginLossCheck();
         }
         catch
         {
             // Wyjątek nie może przejść do kodu natywnego.
+        }
+    }
+
+    /// <summary>
+    /// Okresowe sprawdzenie na wypadek, gdy zgłoszenie zatrzymania nie przyszło: po odłączeniu
+    /// urządzenia wybranego jawnie zatrzymanie strumienia w Windows się nie udaje i miniaudio
+    /// nic nie zgłasza. Dwa kolejne odczyty, żeby nie złapać chwili przekierowania.
+    /// </summary>
+    private void Watch()
+    {
+        if (!_running || _starting || _disposed || IsStartedNatively())
+        {
+            _watchdogMisses = 0;
+            return;
+        }
+
+        if (++_watchdogMisses < 2) return;
+
+        _watchdogMisses = 0;
+        BeginLossCheck();
+    }
+
+    private void BeginLossCheck()
+    {
+        if (Interlocked.Exchange(ref _checkingLoss, 1) != 0) return;
+
+        ThreadPool.UnsafeQueueUserWorkItem(static device => device.CheckLoss(), this, preferLocal: false);
+    }
+
+    private void CheckLoss()
+    {
+        try
+        {
+            var lost = DeviceLossCheck.Confirm(IsStartedNatively, () => _running && !_starting && !_disposed, LossGrace);
+            if (!lost) return;
+
+            _running = false;
+            Lost?.Invoke();
+        }
+        finally
+        {
+            Volatile.Write(ref _checkingLoss, 0);
+        }
+    }
+
+    /// <summary>Stan urządzenia po stronie natywnej; pod blokadą, bo zamknięcie zwalnia uchwyt.</summary>
+    private bool IsStartedNatively()
+    {
+        lock (_nativeLock)
+        {
+            return !_disposed && _handle != nint.Zero && NativeAudio.DeviceIsStarted(_handle) != 0;
         }
     }
 
@@ -212,8 +286,13 @@ public sealed unsafe class AudioDevice : IAudioOutput
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        lock (_nativeLock)
+        {
+            if (_disposed) return;
+            _disposed = true;
+        }
+
+        _watchdog.Dispose();
 
         // Stop first: destroying a running device would let the callback fire against
         // a freed handle.
@@ -222,10 +301,13 @@ public sealed unsafe class AudioDevice : IAudioOutput
 
         Render = null;
 
-        if (_handle != nint.Zero)
+        lock (_nativeLock)
         {
-            NativeAudio.DeviceDestroy(_handle);
-            _handle = nint.Zero;
+            if (_handle != nint.Zero)
+            {
+                NativeAudio.DeviceDestroy(_handle);
+                _handle = nint.Zero;
+            }
         }
 
         if (_self.IsAllocated) _self.Free();
