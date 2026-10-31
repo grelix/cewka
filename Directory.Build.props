@@ -18,7 +18,7 @@
     <Copyright>Copyright (c) 2026 Maciej Grela</Copyright>
     <!-- Widoczne we wlasciwosciach pliku wykonywalnego i w menedzerze zadan. -->
     <AssemblyTitle>Cewka</AssemblyTitle>
-    <Description>Minimalistyczny odtwarzacz plików lokalnych</Description>
+    <Description>Odtwarzacz plików muzycznych z korektorem i wyrównaniem głośności</Description>
     <!--
       Jedyne miejsce z numerem wersji. AssemblyVersion i FileVersion wyprowadza z niego SDK,
       a pkgver w packaging/arch/PKGBUILD pilnuje tools/sprawdz-wersje.sh.
