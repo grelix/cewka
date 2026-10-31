@@ -66,8 +66,9 @@ Program ich nie dołącza. Ładuje je w czasie działania, jeśli są w systemie
 
 - Windows: WASAPI (wyjście dźwięku przez miniaudio), Media Foundation (AAC, M4A, ALAC),
   `SystemMediaTransportControls` przez WinRT (panel multimediów), `advapi32` (skojarzenia plików).
-- Linux: ALSA, PulseAudio lub PipeWire (wyjście dźwięku, ładowane przez miniaudio), GStreamer
-  z wtyczkami (AAC, M4A, ALAC), `libdbus-1` (MPRIS), OpenSSL (sprawdzanie nowej wersji przez HTTPS).
+- Linux: ALSA albo PulseAudio (wyjście dźwięku, ładowane przez miniaudio; PipeWire działa przez
+  warstwę zgodności z PulseAudio), GStreamer z wtyczkami (AAC, M4A, ALAC), `libdbus-1` (MPRIS),
+  OpenSSL (sprawdzanie nowej wersji przez HTTPS).
 
 ## Fonty
 
