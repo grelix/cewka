@@ -34,6 +34,62 @@ public sealed class PlatformTests
         Assert.Equal([full, "file:///home/u/a.mp3", ""], result);
     }
 
+    // ---------- Język systemu ----------
+
+    /// <summary>Angielski interfejs Windows z polskim formatem regionalnym daje Cewkę po angielsku.</summary>
+    [Fact]
+    public void JezykWindowsZListyJezykowWyswietlania()
+    {
+        Assert.Equal(["en", "pl"], SystemLanguage.ParseLanguageList("en-US\0pl-PL\0\0"));
+        Assert.Empty(SystemLanguage.ParseLanguageList(null));
+    }
+
+    /// <summary>Lista z LANGUAGE jest przeglądana cała: pierwszy nieprzetłumaczony język nie przekreśla reszty.</summary>
+    [Fact]
+    public void LinuxPrzegladaCalaListeLanguage()
+    {
+        var result = SystemLanguage.FromEnvironment(Variables(("LANGUAGE", "be:ru:en"), ("LANG", "be_BY.UTF-8")));
+
+        Assert.Equal(["be", "ru", "en"], result);
+    }
+
+    [Fact]
+    public void LinuxBierzeLcAllPrzedLang()
+    {
+        var result = SystemLanguage.FromEnvironment(Variables(("LC_ALL", "de_DE.UTF-8"), ("LANG", "pl_PL.UTF-8")));
+
+        Assert.Equal(["de"], result);
+    }
+
+    /// <summary>Reguła gettext: przy języku „C” zmienna LANGUAGE nie obowiązuje.</summary>
+    [Theory]
+    [InlineData("C")]
+    [InlineData("POSIX")]
+    [InlineData("C.UTF-8")]
+    public void LinuxPomijaLanguageGdyJezykiemJestC(string locale)
+    {
+        var result = SystemLanguage.FromEnvironment(Variables(("LANGUAGE", "pl"), ("LANG", locale)));
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void LinuxBezLangBierzeLanguage()
+    {
+        Assert.Equal(["uk"], SystemLanguage.FromEnvironment(Variables(("LANGUAGE", "uk"))));
+    }
+
+    [Fact]
+    public void WindowsPodajeChocJedenJezyk()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        Assert.NotEmpty(SystemLanguage.Candidates());
+    }
+
+    private static Func<string, string?> Variables(params (string Name, string Value)[] values) =>
+        name => values.FirstOrDefault(v => v.Name == name).Value;
+
     // ---------- Klawisze multimedialne ----------
 
     /// <summary>Gdy panel systemowy działa, Windows sam kieruje klawisze do sesji odtwarzania.</summary>

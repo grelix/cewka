@@ -89,11 +89,11 @@ public sealed class Strings : INotifyPropertyChanged
 
         // Nie CultureInfo: przy InvariantGlobalization jest zawsze kulturą niezmienną, więc to
         // dopasowanie nie mogło się udać dla żadnego języka. Szczegóły w SystemLanguage.
-        var system = SystemLanguage.TwoLetterCode();
+        // Pierwszy z preferowanych języków systemu, który ma tłumaczenie.
+        foreach (var system in SystemLanguage.Candidates())
+            if (Codes.Contains(system, StringComparer.OrdinalIgnoreCase)) return system;
 
-        return system is not null && Codes.Contains(system, StringComparer.OrdinalIgnoreCase)
-            ? system
-            : FallbackCode;
+        return FallbackCode;
     }
 
     private static Dictionary<string, string> Load(string code)
