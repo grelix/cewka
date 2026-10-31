@@ -478,11 +478,9 @@ public sealed class SingleInstanceTests : IDisposable
     /// u odbiorcy przed powrotem, a zamykanie trwa jeden limit odczytu, nie po jednym na nadawcę.
     /// W Windows czeka najwyżej jeden połączony nadawca, więc przypadek tam nie zachodzi.
     /// </summary>
-    [Fact]
+    [LinuxFact]
     public void ZamkniecieNasluchuCzytaZawieszonychNadawcowNaraz()
     {
-        if (!OperatingSystem.IsLinux()) return;
-
         var address = Temporary();
 
         using var instance = SingleInstance.TryAcquire(address);
