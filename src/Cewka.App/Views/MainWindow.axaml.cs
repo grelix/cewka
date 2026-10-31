@@ -110,7 +110,12 @@ public partial class MainWindow : Window
     private bool _queueCollapsedByWidth;
     private bool _adjustingQueue;
 
-    public MainWindow()
+    public MainWindow() : this(OperatingSystem.IsWindows())
+    {
+    }
+
+    /// <param name="systemFrame">Ramka i narożniki systemowe (Windows) zamiast własnych.</param>
+    internal MainWindow(bool systemFrame)
     {
         // InitializeComponent, not AvaloniaXamlLoader.Load: only the generated method
         // assigns the x:Name backing fields, and every piece of behaviour below depends
@@ -122,7 +127,7 @@ public partial class MainWindow : Window
 
         _rotation = new RenderLoop(this, OnRotationFrame);
 
-        _systemFrame = OperatingSystem.IsWindows();
+        _systemFrame = systemFrame;
         if (_systemFrame) WindowDecorations = WindowDecorations.BorderOnly;
 
         ApplyWindowShape();

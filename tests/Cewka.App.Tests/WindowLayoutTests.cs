@@ -215,26 +215,31 @@ public sealed class WindowLayoutTests
         });
     }
 
-    [Fact]
-    public void PoZaZwyklymOknemNarozinikiSaProste()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PozaZwyklymOknemNarozinikiSaProste(bool systemFrame)
     {
         Ui.Run(() =>
         {
-            var window = Open(1100, 600);
+            App.Settings.Current.Window = null;
+            var window = new MainWindow(systemFrame) { Width = 1100, Height = 600 };
+            window.Show();
+            Settle(window);
 
             try
             {
                 var shell = window.FindControl<Border>("Shell")!;
-                Assert.Equal(OperatingSystem.IsWindows(), shell.Classes.Contains("square"));
+                Assert.Equal(systemFrame, shell.Classes.Contains("square"));
 
                 window.WindowState = WindowState.Maximized;
-                Assert.True(shell.Classes.Contains("square"));
+                Assert.Contains("square", shell.Classes);
 
                 window.WindowState = WindowState.FullScreen;
-                Assert.True(shell.Classes.Contains("square"));
+                Assert.Contains("square", shell.Classes);
 
                 window.WindowState = WindowState.Normal;
-                Assert.Equal(OperatingSystem.IsWindows(), shell.Classes.Contains("square"));
+                Assert.Equal(systemFrame, shell.Classes.Contains("square"));
             }
             finally { window.Close(); }
         });
