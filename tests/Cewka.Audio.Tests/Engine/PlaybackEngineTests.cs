@@ -181,6 +181,31 @@ public class PlaybackEngineTests
     }
 
     /// <summary>
+    /// Krótki ostatni utwór zapisany w buforze w całości, zanim zagrał: plik dodany w tej chwili
+    /// gra po nim raz, zamiast powtarzać już zapisany utwór.
+    /// </summary>
+    [Fact]
+    public void TrackAddedAfterAShortBufferedLastTrackPlaysOnceAfterIt()
+    {
+        using var h = new EngineHarness();
+        var a = h.Track("a", 0.3, A);
+        var b = h.Track("b", 0.1, B);
+        // Wartość, której nie da narastanie głośności A.
+        const float later = 0.75f;
+        var c = h.Track("c", 0.3, later);
+
+        StartLastTrackDecodedToTheEnd(h, [a, b]);
+        Assert.Equal(0, h.Engine.CurrentIndex);
+
+        h.Engine.Enqueue([c]);
+        h.PumpUntil(() => h.Finished == 1);
+
+        Assert.Equal(new[] { "a.wav", "b.wav", "c.wav" }, h.Opened.ToArray());
+        Assert.Equal(EngineHarness.Frames(0.1), EngineHarness.CountFrames(h.Output.Samples, B));
+        Assert.Equal(EngineHarness.Frames(0.3), EngineHarness.CountFrames(h.Output.Samples, later));
+    }
+
+    /// <summary>
     /// Utwór krótszy od bufora: dekoder dochodzi do końca pliku i zapisuje koniec kolejki,
     /// zanim cokolwiek zagra.
     /// </summary>

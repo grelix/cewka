@@ -517,7 +517,17 @@ public sealed class PlaybackEngine : IDisposable
         // W trakcie przewinięcia słyszany wpis jest nieaktualny, a dekoder otwiera właśnie cel.
         if (IsSeeking || _ended || heard is null || session is null || ReferenceEquals(heard, decoding)) return;
 
-        var expected = Repeat == RepeatMode.Track ? heard : FollowingEntryLocked(heard, userInitiated: false);
+        // Następnik liczy się od wpisu zapisanego w buforze tuż przed dekodowanym albo przed
+        // znacznikiem końca; krótki utwór bywa zapisany w całości, zanim zagra.
+        var previous = heard;
+        lock (session.BoundaryLock)
+        {
+            var written = session.Boundaries.Where(boundary => !boundary.IsEnd).Select(boundary => boundary.Entry).ToList();
+            if (written.Count > 0 && ReferenceEquals(written[^1], decoding)) written.RemoveAt(written.Count - 1);
+            if (written.Count > 0) previous = written[^1]!;
+        }
+
+        var expected = Repeat == RepeatMode.Track ? previous : FollowingEntryLocked(previous, userInitiated: false);
 
         if (decoding is null)
         {
