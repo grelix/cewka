@@ -26,6 +26,9 @@ public partial class SettingsWindow : Window
     /// <summary>Odstęp od okna głównego przy ustawianiu obok niego.</summary>
     private const double Gap = 12;
 
+    /// <summary>Zapas na niewidoczną ramkę systemową przy sprawdzaniu zapamiętanego położenia.</summary>
+    private const double FrameTolerance = 8;
+
     private SettingsViewModel? _viewModel;
 
     /// <summary>Ramka systemowa w Windows, jak w oknie głównym.</summary>
@@ -98,9 +101,18 @@ public partial class SettingsWindow : Window
         }
 
         var scale = screen.Scaling;
-        var size = new PixelSize((int)Math.Ceiling(Width * scale), (int)Math.Ceiling(Height * scale));
 
-        if (App.Settings.Current.SettingsWindow is { } saved && FitsOnAScreen(new PixelPoint(saved.X, saved.Y), size))
+        // Na małym ekranie (np. 1366×768 przy 125%) okno o wysokości z projektu wystawałoby
+        // poza obszar roboczy i nigdy nie wróciłoby w zapamiętane miejsce.
+        Width = FitLength(Width, MinWidth, screen.WorkingArea.Width / scale);
+        Height = FitLength(Height, MinHeight, screen.WorkingArea.Height / scale);
+
+        var size = new PixelSize((int)Math.Ceiling(Width * scale), (int)Math.Ceiling(Height * scale));
+        var saved = App.Settings.Current.SettingsWindow;
+
+        if (saved is not null
+            && FitsOn(new PixelRect(new PixelPoint(saved.X, saved.Y), size),
+                      Screens.All.Select(s => s.WorkingArea), (int)(FrameTolerance * scale)))
         {
             Position = new PixelPoint(saved.X, saved.Y);
             return;
@@ -109,6 +121,18 @@ public partial class SettingsWindow : Window
         var ownerRect = new PixelRect(owner.Position, PixelSize.FromSize(owner.ClientSize, owner.RenderScaling));
         Position = Beside(ownerRect, size, screen.WorkingArea, (int)(Gap * scale));
     }
+
+    /// <summary>Długość okna przycięta do dostępnego miejsca, ale nie poniżej minimum.</summary>
+    internal static double FitLength(double length, double minimum, double available) =>
+        Math.Max(minimum, Math.Min(length, available));
+
+    /// <summary>
+    /// Okno leży na którymś z obszarów roboczych. Kilka pikseli zapasu obejmuje niewidoczną ramkę
+    /// systemową i okno przyciągnięte do krawędzi, które zaczyna się tuż poza obszarem.
+    /// </summary>
+    internal static bool FitsOn(PixelRect window, IEnumerable<PixelRect> areas, int tolerance) =>
+        areas.Any(area => new PixelRect(area.X - tolerance, area.Y - tolerance,
+                                        area.Width + 2 * tolerance, area.Height + 2 * tolerance).Contains(window));
 
     /// <summary>Położenie obok prostokąta okna głównego w obrębie obszaru roboczego.</summary>
     internal static PixelPoint Beside(PixelRect owner, PixelSize size, PixelRect area, int gap)
@@ -126,12 +150,6 @@ public partial class SettingsWindow : Window
         var x = roomRight >= roomLeft ? area.Right - size.Width : area.X;
 
         return new PixelPoint(Math.Max(area.X, x), y);
-    }
-
-    private bool FitsOnAScreen(PixelPoint position, PixelSize size)
-    {
-        var rect = new PixelRect(position, size);
-        return Screens.All.Any(screen => screen.WorkingArea.Contains(rect));
     }
 
     protected override void OnClosing(WindowClosingEventArgs e)

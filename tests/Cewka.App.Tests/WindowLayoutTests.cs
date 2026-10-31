@@ -360,4 +360,29 @@ public sealed class WindowLayoutTests
         Assert.Equal(50, tight.Y);
     }
 
+    [Fact]
+    public void OknoUstawienMiesciSieNaNiskimEkranie()
+    {
+        // 1366×768 przy 125%: obszar roboczy ok. 1093×590 jednostek.
+        Assert.Equal(590, SettingsWindow.FitLength(640, 520, 590));
+        Assert.Equal(820, SettingsWindow.FitLength(820, 700, 1093));
+        Assert.Equal(520, SettingsWindow.FitLength(640, 520, 480));
+
+        // Po przycięciu okno staje u góry obszaru i mieści się w nim całe.
+        var area = new PixelRect(0, 0, 1366, 738);
+        var size = new PixelSize(1025, 738);
+        var place = SettingsWindow.Beside(new PixelRect(100, 0, 1100, 650), size, area, 15);
+        Assert.True(area.Contains(new PixelRect(place, size)), $"{place}");
+    }
+
+    [Fact]
+    public void ZapamietanePolozenieUstawienTolerujeRameSystemowa()
+    {
+        var areas = new[] { new PixelRect(0, 0, 1920, 1040) };
+
+        // Okno przyciągnięte do lewej krawędzi zaczyna się kilka pikseli poza obszarem.
+        Assert.True(SettingsWindow.FitsOn(new PixelRect(-7, 0, 974, 1047), areas, 8));
+        Assert.False(SettingsWindow.FitsOn(new PixelRect(-200, 0, 820, 640), areas, 8));
+        Assert.False(SettingsWindow.FitsOn(new PixelRect(2000, 100, 820, 640), areas, 8));
+    }
 }
