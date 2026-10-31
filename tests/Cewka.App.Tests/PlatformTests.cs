@@ -1,4 +1,5 @@
 using Cewka.Platform;
+using Cewka.Platform.Linux;
 using Xunit;
 
 namespace Cewka.App.Tests;
@@ -89,6 +90,86 @@ public sealed class PlatformTests
 
     private static Func<string, string?> Variables(params (string Name, string Value)[] values) =>
         name => values.FirstOrDefault(v => v.Name == name).Value;
+
+    // ---------- MPRIS ----------
+
+    [Fact]
+    public void ZwyklyBiegOdtwarzaniaToNiePrzewiniecie()
+    {
+        var detector = new SeekDetector();
+
+        Assert.False(detector.Report(TimeSpan.FromSeconds(30), playing: true, now: 0));
+        Assert.False(detector.Report(TimeSpan.FromSeconds(30.025), playing: true, now: 25));
+
+        // Zminimalizowane okno odświeża rzadko, ale pozycja idzie z zegarem.
+        Assert.False(detector.Report(TimeSpan.FromSeconds(35.025), playing: true, now: 5025));
+    }
+
+    /// <summary>Przewinięcie z 0:30 na 3:00 musi trafić do panelu, który inaczej liczy dalej od 0:30.</summary>
+    [Fact]
+    public void SkokPozycjiJestPrzewinieciem()
+    {
+        var detector = new SeekDetector();
+
+        detector.Report(TimeSpan.FromSeconds(30), playing: true, now: 0);
+
+        Assert.True(detector.Report(TimeSpan.FromSeconds(180), playing: true, now: 25));
+        Assert.True(detector.Report(TimeSpan.FromSeconds(10), playing: true, now: 50));
+    }
+
+    [Fact]
+    public void PrzewiniecieWPauzieTezJestPrzewinieciem()
+    {
+        var detector = new SeekDetector();
+
+        detector.Report(TimeSpan.FromSeconds(30), playing: false, now: 0);
+
+        Assert.False(detector.Report(TimeSpan.FromSeconds(30), playing: false, now: 60_000));
+        Assert.True(detector.Report(TimeSpan.FromSeconds(90), playing: false, now: 60_025));
+    }
+
+    [Fact]
+    public void NowyUtworNieJestPrzewinieciem()
+    {
+        var detector = new SeekDetector();
+
+        detector.Report(TimeSpan.FromSeconds(200), playing: true, now: 0);
+        detector.Reset();
+
+        Assert.False(detector.Report(TimeSpan.Zero, playing: true, now: 25));
+    }
+
+    /// <summary>Puszczenie suwaka w panelu w chwili zmiany utworu nie może przewinąć następnego.</summary>
+    [Fact]
+    public void PozycjaDlaInnegoUtworuJestPomijana()
+    {
+        const string current = MprisRules.TrackIdPrefix + "2";
+        const long length = 180_000_000;
+
+        Assert.True(MprisRules.IsPositionRequestValid(current, 60_000_000, current, length));
+        Assert.False(MprisRules.IsPositionRequestValid(MprisRules.TrackIdPrefix + "1", 60_000_000, current, length));
+        Assert.False(MprisRules.IsPositionRequestValid(current, -1, current, length));
+        Assert.False(MprisRules.IsPositionRequestValid(current, length + 1, current, length));
+        Assert.False(MprisRules.IsPositionRequestValid(MprisRules.NoTrack, 0, MprisRules.NoTrack, 0));
+    }
+
+    [Fact]
+    public void IdentyfikatoryUtworowPozaPrzestrzeniaMpris()
+    {
+        Assert.False(MprisRules.TrackIdPrefix.StartsWith("/org/mpris", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void OpenUriPrzyjmujeTylkoPlikiLokalne()
+    {
+        var file = Path.Combine(Path.GetTempPath(), "a b.mp3");
+
+        Assert.True(MprisRules.TryGetLocalPath(new Uri(file).AbsoluteUri, out var path));
+        Assert.Equal(file, path);
+
+        Assert.False(MprisRules.TryGetLocalPath("https://example.com/a.mp3", out _));
+        Assert.False(MprisRules.TryGetLocalPath("nie adres", out _));
+    }
 
     // ---------- Klawisze multimedialne ----------
 

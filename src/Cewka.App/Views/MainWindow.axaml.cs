@@ -260,6 +260,8 @@ public partial class MainWindow : Window
         mpris.CommandReceived += command => Dispatcher.UIThread.Post(() => HandleMediaCommand(command));
         mpris.SeekRequested += offset => Dispatcher.UIThread.Post(() => _viewModel.SeekRelative(offset.TotalSeconds));
         mpris.PositionRequested += position => Dispatcher.UIThread.Post(() => _viewModel.SeekToPosition(position));
+        mpris.VolumeRequested += volume => Dispatcher.UIThread.Post(() => _viewModel.Volume = volume);
+        mpris.OpenRequested += path => Dispatcher.UIThread.Post(() => _viewModel.OpenFromOutside([path]));
 
         mpris.RaiseRequested += () => Dispatcher.UIThread.Post(() =>
         {
