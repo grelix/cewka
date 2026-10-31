@@ -17,13 +17,12 @@ zachowanie noty o prawach autorskich.
 
 ## Fonty
 
-Oba fonty osadzone są w pliku wykonywalnym, aby interfejs wyglądał identycznie niezależnie od
+Font osadzony jest w pliku wykonywalnym, aby interfejs wyglądał identycznie niezależnie od
 tego, co użytkownik ma zainstalowane w systemie.
 
 | Font | Wersja | Zastosowanie | Licencja | Tekst licencji |
 |------|--------|--------------|----------|----------------|
-| Cantarell | 0.303 | Tekst interfejsu | SIL Open Font License 1.1 | `src/Cewka.App/Assets/Fonts/OFL-Cantarell.txt` |
-| JetBrains Mono | 2.304 | Liczby, czasy, dane techniczne | SIL Open Font License 1.1 | `src/Cewka.App/Assets/Fonts/OFL-JetBrainsMono.txt` |
+| Cantarell | 0.303 | Cały interfejs; liczby i czasy z cyframi tabelarycznymi (cecha `tnum`) | SIL Open Font License 1.1 | `src/Cewka.App/Assets/Fonts/OFL-Cantarell.txt` |
 
 Licencja OFL zezwala na osadzanie i rozpowszechnianie fontów wraz z oprogramowaniem, także
 komercyjnym, pod warunkiem dołączenia tekstu licencji i niesprzedawania samych fontów. Oba

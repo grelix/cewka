@@ -22,8 +22,9 @@
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
   </Style>
 
-  <Style Selector="TextBlock.mono">
-    <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+  <!-- Liczby, czasy i dane techniczne: cyfry równej szerokości, żeby nie skakały przy zmianie. -->
+  <Style Selector="TextBlock.tabular">
+    <Setter Property="FontFeatures" Value="tnum" />
   </Style>
 
   <Style Selector="TextBlock.dim">

@@ -102,6 +102,6 @@ Media Foundation on Windows and GStreamer on Linux.
 
 ## License
 
-MIT — full text in [LICENSE](LICENSE). The embedded Cantarell and JetBrains Mono fonts are
+MIT — full text in [LICENSE](LICENSE). The embedded Cantarell font is
 licensed under the SIL Open Font License 1.1; details in [docs/licencje.md](docs/licencje.md)
 (in Polish).

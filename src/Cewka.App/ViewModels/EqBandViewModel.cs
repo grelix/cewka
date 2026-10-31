@@ -32,7 +32,7 @@ public sealed class EqBandViewModel : ObservableObject
 
     /// <summary>
     /// Signed value with a true minus sign (U+2212) rather than a hyphen, matching the
-    /// design and keeping the column visually aligned in the monospaced font.
+    /// design and keeping the column aligned: the minus is as wide as the plus.
     /// </summary>
     public string GainText
     {

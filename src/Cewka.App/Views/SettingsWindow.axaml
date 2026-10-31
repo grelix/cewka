@@ -406,8 +406,8 @@
                 <Border Classes="section">
                   <StackPanel Spacing="13">
                     <StackPanel Spacing="4">
-                      <TextBlock Classes="mono dim" Text="{Binding VersionText}" FontSize="11" />
-                      <TextBlock Classes="mono faint" Text="{Binding AudioEngineText}" FontSize="10.5" />
+                      <TextBlock Classes="tabular dim" Text="{Binding VersionText}" FontSize="11" />
+                      <TextBlock Classes="tabular faint" Text="{Binding AudioEngineText}" FontSize="10.5" />
                     </StackPanel>
 
                     <StackPanel Spacing="4">
