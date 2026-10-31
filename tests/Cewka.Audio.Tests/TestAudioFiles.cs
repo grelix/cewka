@@ -99,6 +99,9 @@ internal static class TestAudioFiles
         /// <summary>Kanał, w którym gra ton; pozostałe milczą. Null oznacza ton we wszystkich.</summary>
         public int? ToneChannel { get; init; }
 
+        /// <summary>Rodzina mapowania zapisana w nagłówku zamiast tej, której użył koder.</summary>
+        public byte? MappingFamilyOverride { get; init; }
+
         public IReadOnlyDictionary<string, string> Tags { get; init; } = new Dictionary<string, string>();
     }
 
@@ -137,7 +140,7 @@ internal static class TestAudioFiles
         head.AddRange(BitConverter.GetBytes((ushort)options.PreSkip));
         head.AddRange(BitConverter.GetBytes((uint)OpusRate));
         head.AddRange(BitConverter.GetBytes(options.OutputGainQ8));
-        head.Add((byte)family);
+        head.Add(options.MappingFamilyOverride ?? (byte)family);
         if (family != 0)
         {
             head.Add((byte)streams);
