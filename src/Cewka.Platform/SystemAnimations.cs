@@ -46,50 +46,20 @@ public static class SystemAnimations
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SystemParametersInfo(uint action, uint parameter, ref int value, uint flags);
 
-    // Zapytanie do portalu idzie przez szynę sesji, więc wykonuje się w tle, a właściwość
-    // oddaje ostatnią znaną odpowiedź. Odpytujący co kilka sekund dostaje zmianę z opóźnieniem
-    // jednego cyklu.
-
-    private static readonly TimeSpan LinuxRefresh = TimeSpan.FromSeconds(5);
-    private static readonly object Gate = new();
-    private static bool _linuxEnabled = true;
-    private static DateTime _linuxReadAt = DateTime.MinValue;
-    private static bool _linuxReading;
+    // Zapytanie do portalu idzie przez szynę sesji, więc wykonuje się w tle.
+    private static readonly PolledValue LinuxAnimations =
+        new(initial: true, ReadLinux, TimeSpan.FromSeconds(5));
 
     [SupportedOSPlatform("linux")]
-    private static bool LinuxEnabled()
+    private static bool LinuxEnabled() => LinuxAnimations.Value;
+
+    private static bool? ReadLinux()
     {
-        lock (Gate)
-        {
-            if (!_linuxReading && DateTime.UtcNow - _linuxReadAt >= LinuxRefresh)
-            {
-                _linuxReading = true;
-                ThreadPool.QueueUserWorkItem(_ => ReadLinux());
-            }
+        if (!OperatingSystem.IsLinux()) return null;
 
-            return _linuxEnabled;
-        }
-    }
+        // Bez adresu szyny libdbus próbowałby ją uruchomić (autolaunch) przy każdym odczycie.
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS"))) return null;
 
-    [SupportedOSPlatform("linux")]
-    private static void ReadLinux()
-    {
-        bool? value = null;
-
-        try
-        {
-            value = PortalSettings.ReadBoolean("org.gnome.desktop.interface", "enable-animations");
-        }
-        catch
-        {
-            // Brak libdbus albo szyny: zostaje ostatnia znana wartość.
-        }
-
-        lock (Gate)
-        {
-            if (value is { } enabled) _linuxEnabled = enabled;
-            _linuxReadAt = DateTime.UtcNow;
-            _linuxReading = false;
-        }
+        return PortalSettings.ReadBoolean("org.gnome.desktop.interface", "enable-animations");
     }
 }

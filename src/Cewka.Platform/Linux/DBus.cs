@@ -84,6 +84,9 @@ internal static unsafe class DBus
     internal static extern void dbus_connection_set_exit_on_disconnect(nint connection, int exit);
 
     [DllImport(Library)]
+    internal static extern int dbus_connection_get_is_connected(nint connection);
+
+    [DllImport(Library)]
     internal static extern int dbus_connection_send(nint connection, nint message, uint* serial);
 
     [DllImport(Library)]

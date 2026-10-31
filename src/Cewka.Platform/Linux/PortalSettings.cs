@@ -16,30 +16,45 @@ internal static unsafe class PortalSettings
     /// <summary>Krótko: brak portalu nie może wstrzymać wątku, który pyta.</summary>
     private const int TimeoutMilliseconds = 500;
 
+    private static readonly object Gate = new();
+
+    /// <summary>
+    /// Jedno połączenie na cały czas pracy: odczyt powtarza się co kilka sekund, a każde nowe
+    /// połączenie to rejestracja na szynie. Zerwane zastępuje się nowym przy następnym odczycie.
+    /// </summary>
+    private static nint _connection;
+
     /// <summary>
     /// Wartość logiczna albo <c>null</c>, gdy szyny, portalu lub klucza nie ma.
     /// </summary>
     public static bool? ReadBoolean(string scope, string key)
     {
-        DBus.Error error;
-        DBus.dbus_error_init(&error);
+        lock (Gate)
+        {
+            if (_connection != 0 && DBus.dbus_connection_get_is_connected(_connection) == 0)
+            {
+                DBus.dbus_connection_close(_connection);
+                DBus.dbus_connection_unref(_connection);
+                _connection = 0;
+            }
 
-        var connection = DBus.dbus_bus_get_private(DBus.BusSession, &error);
-        if (connection == 0)
-        {
-            DBus.TakeMessage(&error);
-            return null;
-        }
+            if (_connection == 0)
+            {
+                DBus.Error error;
+                DBus.dbus_error_init(&error);
 
-        try
-        {
-            DBus.dbus_connection_set_exit_on_disconnect(connection, 0);
-            return Read(connection, scope, key);
-        }
-        finally
-        {
-            DBus.dbus_connection_close(connection);
-            DBus.dbus_connection_unref(connection);
+                var connection = DBus.dbus_bus_get_private(DBus.BusSession, &error);
+                if (connection == 0)
+                {
+                    DBus.TakeMessage(&error);
+                    return null;
+                }
+
+                DBus.dbus_connection_set_exit_on_disconnect(connection, 0);
+                _connection = connection;
+            }
+
+            return Read(_connection, scope, key);
         }
     }
 
