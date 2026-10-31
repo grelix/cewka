@@ -581,6 +581,49 @@ public class PlaybackEngineTests
     }
 
     /// <summary>
+    /// Sterownik potrafi sam uruchomić utracone urządzenie po ponownym podłączeniu sprzętu,
+    /// zanim silnik zdąży je zamknąć. Jeśli w tej chwili Play otworzyło już nowe wyjście, stare
+    /// nie może grać ani dotykać toru, który przygotowano dla nowego.
+    /// </summary>
+    [Fact]
+    public async Task OldDeviceRestartedDuringLossHandlingDoesNotRender()
+    {
+        using var h = new EngineHarness();
+        using var gate = new ManualResetEventSlim(true);
+        using var waiting = new ManualResetEventSlim(false);
+        SyntheticDecoder? stuck = null;
+
+        // Zawiesza się tylko pierwszy dekoder, żeby zamykanie starej sesji czekało na jej wątek.
+        var a = h.Track("a", 10, A, d => stuck is null
+            ? stuck = new SyntheticDecoder(d.TotalFrames, A, d.Channels, d.SampleRate) { Gate = gate, Waiting = waiting }
+            : d);
+
+        h.Engine.SetQueue([a]);
+        h.PumpUntil(() => h.Engine.Position > TimeSpan.FromSeconds(0.5));
+
+        // Bufor starej sesji zostaje prawie pełny, a jej wątek stoi w odczycie.
+        gate.Reset();
+        h.PumpUntil(() => waiting.IsSet);
+
+        var old = h.Outputs[0];
+        var loss = Task.Run(old.Lose);
+        EngineHarness.WaitUntil(() => !h.Engine.IsDeviceOpen);
+
+        h.Engine.Play();
+        Assert.Equal(2, h.Outputs.Count);
+
+        old.ClearSamples();
+        old.Start();
+        old.Pump();
+        Assert.All(old.Samples, sample => Assert.Equal(0f, sample));
+
+        gate.Set();
+        await loss;
+        Assert.Equal(1, h.Lost);
+        Assert.Equal(PlaybackState.Playing, h.Engine.State);
+    }
+
+    /// <summary>
     /// Zgłoszenie utraty od urządzenia, które zdążyło zostać zamknięte przy zmianie wyjścia,
     /// nie dotyczy nowego urządzenia.
     /// </summary>

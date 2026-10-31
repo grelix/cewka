@@ -364,6 +364,14 @@ public sealed class PlaybackEngine : IDisposable
             _session = null;
             _device = null;
 
+            // Odłączenie jeszcze pod blokadą: sterownik może sam uruchomić utracone urządzenie,
+            // a Initialise nowej sesji przygotowuje ten sam tor. Stop czeka na trwający okres.
+            if (device is not null)
+            {
+                device.Render = null;
+                try { device.Stop(); } catch (AudioException) { }
+            }
+
             State = PlaybackState.Stopped;
             _seekTargetEntry = null;
             _seekPending = false;
