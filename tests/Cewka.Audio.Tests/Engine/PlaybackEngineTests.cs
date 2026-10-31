@@ -116,8 +116,8 @@ public class PlaybackEngineTests
     {
         h.Engine.SetQueue([track]);
         h.PumpUntil(() => !h.Engine.IsSeeking);
-        EngineHarness.WaitUntil(() => h.Engine.BufferedFrames >= EngineHarness.Frames(0.25));
-        Thread.Sleep(100);
+        EngineHarness.WaitUntil(() => h.Engine.EndOfQueueBuffered);
+        Assert.True(h.Engine.EndOfQueueBuffered);
     }
 
     // ---------- przewijanie ----------

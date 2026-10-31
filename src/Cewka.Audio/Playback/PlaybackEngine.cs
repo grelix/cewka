@@ -105,6 +105,17 @@ public sealed class PlaybackEngine : IDisposable
     /// <summary>Ramki czekające w buforze; testy dozują nim tempo wątku dźwiękowego.</summary>
     internal int BufferedFrames => _session?.Ring.FramesAvailable ?? 0;
 
+    /// <summary>Dekoder zapisał koniec kolejki, a odtwarzanie jeszcze go nie minęło.</summary>
+    internal bool EndOfQueueBuffered
+    {
+        get
+        {
+            var session = _session;
+            if (session is null) return false;
+            lock (session.BoundaryLock) return session.Boundaries.Any(boundary => boundary.IsEnd);
+        }
+    }
+
     /// <summary>True, dopóki zlecone przewinięcie nie zostało wykonane.</summary>
     internal bool IsSeeking => _seekPending || SeekInProgress;
 
