@@ -1133,7 +1133,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         IsPlaying = false;
 
         RebuildQueue();
-        _coverGeneration++;
+        _covers.Cancel();
         UpdateArtwork(null);
         PublishToMediaPanel();
     }
@@ -1501,19 +1501,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Queue[index].UnsupportedReason = reason;
     }
 
-    private int _coverGeneration;
+    /// <summary>Okładka czytana jest z pliku dopiero dla bieżącego utworu, poza wątkiem interfejsu.</summary>
+    private readonly CoverLoader _covers = new(path => MetadataReader.ReadCover(path));
 
-    /// <summary>
-    /// Okładka czytana jest z pliku dopiero dla bieżącego utworu, poza wątkiem interfejsu.
-    /// Licznik pokolenia odrzuca wynik, który przyszedł po zmianie utworu.
-    /// </summary>
-    private async void LoadCover(string path)
-    {
-        var generation = ++_coverGeneration;
-        var bytes = await Task.Run(() => MetadataReader.ReadCover(path));
-
-        if (generation == _coverGeneration) UpdateArtwork(bytes);
-    }
+    private void LoadCover(string path) => _ = _covers.LoadAsync(path, UpdateArtwork);
 
     private void UpdateArtwork(byte[]? bytes)
     {
@@ -1727,6 +1718,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         _refresh.Stop();
         _noticeTimer.Stop();
+        _covers.Cancel();
         _engine.Dispose();
         _loudness.Dispose();
         _cover?.Dispose();
