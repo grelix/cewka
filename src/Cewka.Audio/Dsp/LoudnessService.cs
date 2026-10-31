@@ -14,6 +14,9 @@ public sealed class LoudnessRecord
     public required long Length { get; init; }
     public required long ModifiedTicks { get; init; }
     public required double IntegratedLufs { get; init; }
+
+    /// <summary>Największa bezwzględna wartość próbki; brak we wpisach zapisanych przed pomiarem szczytu.</summary>
+    public double? SamplePeak { get; init; }
 }
 
 [JsonSourceGenerationOptions(WriteIndented = false, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
@@ -28,11 +31,19 @@ internal sealed partial class LoudnessJsonContext : JsonSerializerContext;
 /// plik trafia do kolejki analizy w tle. Analiza pełnego utworu trwa ułamek sekundy, ale
 /// prowadzona jest poza wątkiem dekodującym, żeby nie opóźniła startu odtwarzania — przy
 /// pierwszym odsłuchu utwór zagra bez wyrównania, przy kolejnym już z nim.</para>
+///
+/// <para>Dodatnie wzmocnienie ograniczane jest szczytem utworu, tak żeby szczyt wypadł na
+/// progu limitera. Inaczej ciche, dynamiczne nagranie podbite o kilkanaście decybeli trafiałoby
+/// limiterem w każdy akcent. Szczyt pochodzi z tagu ReplayGain albo z własnej analizy; gdy nie
+/// ma żadnego, wzmocnienie z tagu zostaje bez zmian, a ochronę przejmuje limiter.</para>
 /// </summary>
 public sealed class LoudnessService : ITrackGainSource, IDisposable
 {
     /// <summary>ReplayGain 2.0 reference level — poziom, do którego odnoszą się tagi.</summary>
     public const double ReferenceLufs = -18.0;
+
+    /// <summary>Zapas pod pełną skalą przy ograniczaniu wzmocnienia szczytem; równy progowi limitera.</summary>
+    public const double PeakHeadroomDb = 1.0;
 
     /// <summary>Format used for the analysis; matching the pipeline avoids a second resample.</summary>
     private const int AnalysisRate = 48000;
@@ -91,25 +102,54 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
     {
         entry.EnsureMetadata();
 
-        // Po wyrównaniu utwór gra na poziomie docelowym, niezależnie od tego, jak go nagrano.
-        var level = TargetLufs - ReferenceLufs;
-
         // 1. Tagi — najtańsze i zwykle najlepsze źródło. Wpisane w nich wzmocnienie odnosi się
         //    do poziomu ReplayGain, więc inny poziom docelowy trzeba do niego doliczyć.
         if (!AlwaysAnalyse)
         {
             var tagged = entry.Metadata?.ReplayGainTrack;
-            if (tagged is not null) return new TrackGain(tagged.Value + level, level);
+            if (tagged is not null)
+            {
+                var peak = entry.Metadata?.ReplayGainTrackPeak;
+                if (peak is null && TryGetCached(entry.Path, out var measured)) peak = measured.SamplePeak;
+                return FromReplayGain(tagged.Value, peak, TargetLufs);
+            }
         }
 
         // 2. Wcześniejsza analiza.
         if (TryGetCached(entry.Path, out var record))
-            return new TrackGain(TargetLufs - record.IntegratedLufs, level);
+        {
+            if (record.SamplePeak is not null)
+                return FromMeasurement(record.IntegratedLufs, record.SamplePeak, TargetLufs);
+
+            // Wpis sprzed pomiaru szczytu: do ponownej analizy, a do tej pory bez podbijania.
+            Enqueue(entry.Path);
+            return LowerTo(FromMeasurement(record.IntegratedLufs, null, TargetLufs), 0);
+        }
 
         // 3. Do kolejki; ten odsłuch zagra bez wyrównania.
         Enqueue(entry.Path);
         return null;
     }
+
+    /// <summary>Wzmocnienie z tagu ReplayGain dla zadanego poziomu docelowego, ograniczone szczytem.</summary>
+    public static TrackGain FromReplayGain(double replayGainDb, double? peak, double targetLufs) =>
+        LimitByPeak(new TrackGain(replayGainDb + targetLufs - ReferenceLufs, targetLufs - ReferenceLufs), peak);
+
+    /// <summary>Wzmocnienie z własnego pomiaru dla zadanego poziomu docelowego, ograniczone szczytem.</summary>
+    public static TrackGain FromMeasurement(double integratedLufs, double? peak, double targetLufs) =>
+        LimitByPeak(new TrackGain(targetLufs - integratedLufs, targetLufs - ReferenceLufs), peak);
+
+    private static TrackGain LimitByPeak(TrackGain gain, double? peak)
+    {
+        if (gain.GainDecibels <= 0 || peak is not > 0) return gain;
+        return LowerTo(gain, -20 * Math.Log10(peak.Value) - PeakHeadroomDb);
+    }
+
+    /// <summary>Obniża wzmocnienie do zadanego, a o tyle samo poziom, na jakim program zagra.</summary>
+    private static TrackGain LowerTo(TrackGain gain, double ceilingDb) =>
+        gain.GainDecibels <= ceilingDb
+            ? gain
+            : new TrackGain(ceilingDb, gain.ProgrammeLevelDecibels - (gain.GainDecibels - ceilingDb));
 
     private bool TryGetCached(string path, out LoudnessRecord record)
     {
@@ -154,8 +194,8 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
 
             try
             {
-                var loudness = Measure(path);
-                if (loudness is null) continue;
+                var measurement = Measure(path);
+                if (measurement is null) continue;
 
                 var info = new FileInfo(path);
                 var record = new LoudnessRecord
@@ -163,13 +203,14 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
                     Path = path,
                     Length = info.Length,
                     ModifiedTicks = info.LastWriteTimeUtc.Ticks,
-                    IntegratedLufs = loudness.Value,
+                    IntegratedLufs = measurement.Value.IntegratedLufs,
+                    SamplePeak = measurement.Value.SamplePeak,
                 };
 
                 _cache[path] = record;
                 _dirty = true;
 
-                Measured?.Invoke(path, TargetLufs - loudness.Value);
+                Measured?.Invoke(path, FromMeasurement(record.IntegratedLufs, record.SamplePeak, TargetLufs).GainDecibels);
             }
             catch (Exception ex)
             {
@@ -186,7 +227,7 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
         }
     }
 
-    private static double? Measure(string path)
+    private static (double IntegratedLufs, double SamplePeak)? Measure(string path)
     {
         using var decoder = DecoderFactory.Open(path, AnalysisRate, AnalysisChannels);
 
@@ -200,7 +241,8 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
             analyser.Add(buffer, frames);
         }
 
-        return analyser.ComputeIntegratedLoudness();
+        var loudness = analyser.ComputeIntegratedLoudness();
+        return loudness is null ? null : (loudness.Value, analyser.SamplePeak);
     }
 
     private void Load()

@@ -59,6 +59,9 @@ public sealed class LoudnessAnalyser
     /// <summary>Number of 400 ms blocks measured so far.</summary>
     public int BlockCount => _blockEnergies.Count;
 
+    /// <summary>Największa bezwzględna wartość próbki we wszystkich kanałach, bez nadpróbkowania.</summary>
+    public double SamplePeak { get; private set; }
+
     /// <summary>Feeds interleaved samples. Can be called any number of times.</summary>
     public void Add(ReadOnlySpan<float> buffer, int frames)
     {
@@ -68,7 +71,10 @@ public sealed class LoudnessAnalyser
 
             for (var c = 0; c < _channels; c++)
             {
-                var filtered = _highPass[c].ProcessDouble(_shelf[c].ProcessDouble(buffer[baseIndex + c]));
+                var sample = buffer[baseIndex + c];
+                if (Math.Abs(sample) > SamplePeak) SamplePeak = Math.Abs(sample);
+
+                var filtered = _highPass[c].ProcessDouble(_shelf[c].ProcessDouble(sample));
                 _accumulator[c] += filtered * filtered;
             }
 
