@@ -28,6 +28,9 @@ public sealed class TrackSlider : Control
     public static readonly StyledProperty<double> ThumbDiameterProperty =
         AvaloniaProperty.Register<TrackSlider, double>(nameof(ThumbDiameter), 13.0);
 
+    public static readonly StyledProperty<double> StepProperty =
+        AvaloniaProperty.Register<TrackSlider, double>(nameof(Step));
+
     static TrackSlider()
     {
         AffectsRender<TrackSlider>(
@@ -47,6 +50,13 @@ public sealed class TrackSlider : Control
     public IBrush? FillBrush { get => GetValue(FillBrushProperty); set => SetValue(FillBrushProperty, value); }
     public double TrackThickness { get => GetValue(TrackThicknessProperty); set => SetValue(TrackThicknessProperty, value); }
     public double ThumbDiameter { get => GetValue(ThumbDiameterProperty); set => SetValue(ThumbDiameterProperty, value); }
+
+    /// <summary>
+    /// Odstęp stopni, na które przeskakuje wskaźnik; zero oznacza suwak ciągły. Model widoku
+    /// zaokrąglający wartość nie cofnie suwaka sam, bo wiązanie pomija zgłoszenia wysłane
+    /// w trakcie zapisu do źródła.
+    /// </summary>
+    public double Step { get => GetValue(StepProperty); set => SetValue(StepProperty, value); }
 
     /// <summary>Raised while the user drags, and once more when the drag ends.</summary>
     public event EventHandler<double>? Scrubbing;
@@ -102,6 +112,12 @@ public sealed class TrackSlider : Control
     {
         var usable = Math.Max(1, Bounds.Width);
         var value = Math.Clamp(x / usable, 0, 1);
+        if (Step > 0)
+        {
+            var steps = Math.Round(1 / Step);
+            value = Math.Round(value * steps) / steps;
+        }
+
         Value = value;
         Scrubbing?.Invoke(this, value);
     }

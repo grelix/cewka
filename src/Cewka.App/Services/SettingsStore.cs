@@ -72,6 +72,9 @@ public sealed class SettingsStore
         _debounce.Start();
     }
 
+    /// <summary>Zapis jest zamówiony i czeka na zegar.</summary>
+    internal bool SavePending => _debounce.IsEnabled;
+
     /// <summary>Writes immediately. Called on shutdown, where a debounce would be lost.</summary>
     public void SaveNow()
     {

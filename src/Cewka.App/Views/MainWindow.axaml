@@ -384,7 +384,7 @@
                           </Grid>
 
                           <c:TrackSlider Height="14"
-                                         Value="{Binding Strength, Mode=TwoWay}"
+                                         Value="{Binding Strength, Mode=TwoWay}" Step="0.1"
                                          TrackThickness="4" ThumbDiameter="11"
                                          TrackBrush="{DynamicResource TrackBrush}"
                                          FillBrush="{DynamicResource AccentBrush}" />

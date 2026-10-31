@@ -49,9 +49,9 @@ public sealed class EffectViewModel : ObservableObject
     /// <summary>
     /// Siła działania w zakresie 0–1, czyli w postaci, jakiej oczekuje suwak.
     ///
-    /// <para>Suwak jest ciągły, ale siła ma jedenaście położeń: od zera do dziesięciu, gdzie
-    /// każdy punkt to dziesięć procent. Zaokrąglanie stoi tutaj, a nie w oknie, bo tę samą
-    /// wartość ustawiają dwa suwaki w dwóch miejscach i oba mają zachowywać się jednakowo.
+    /// <para>Siła ma jedenaście położeń: od zera do dziesięciu, gdzie każdy punkt to dziesięć
+    /// procent. Suwaki w oknach przeskakują tymi samymi stopniami (<c>Step</c>), a zaokrąglenie
+    /// tutaj pilnuje wartości z innych źródeł, na przykład z ręcznie poprawionych ustawień.
     /// Skala z punktami jest przy okazji łatwiejsza do odtworzenia: „sześć" da się powtórzyć,
     /// „pięćdziesiąt siedem procent" nie.</para>
     /// </summary>
@@ -61,15 +61,7 @@ public sealed class EffectViewModel : ObservableObject
         set
         {
             var snapped = Math.Round(Math.Clamp(value, 0, 1) * Steps) / Steps;
-            if (!Set(ref _strength, snapped))
-            {
-                // Wartość zaokrągliła się do dotychczasowej, ale suwak stoi w położeniu pośrednim;
-                // zgłoszenie każe mu wrócić na stopień, który pokazuje liczba obok.
-                if (value != snapped) Raise();
-                return;
-            }
-
-            Raise(nameof(StrengthText));
+            if (Set(ref _strength, snapped)) Raise(nameof(StrengthText));
         }
     }
 

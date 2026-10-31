@@ -513,10 +513,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             ApplyEffect(effect);
 
             var captured = effect;
+            var stored = (effect.Enabled, effect.Strength);
             captured.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName != nameof(EffectViewModel.Enabled)
                     && e.PropertyName != nameof(EffectViewModel.Strength)) return;
+
+                // Suwak wracający na stopień zgłasza zmianę bez zmiany wartości.
+                if ((captured.Enabled, captured.Strength) == stored) return;
+                stored = (captured.Enabled, captured.Strength);
 
                 ApplyEffect(captured);
                 StoreEffect(captured);

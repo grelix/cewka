@@ -350,7 +350,7 @@
                             <Grid ColumnDefinitions="*,44" ColumnSpacing="12"
                                   Opacity="{Binding RowOpacity}">
                               <c:TrackSlider Grid.Column="0" Height="18" VerticalAlignment="Center"
-                                             Value="{Binding Strength, Mode=TwoWay}"
+                                             Value="{Binding Strength, Mode=TwoWay}" Step="0.1"
                                              TrackThickness="4" ThumbDiameter="11"
                                              TrackBrush="{DynamicResource TrackBrush}"
                                              FillBrush="{DynamicResource AccentBrush}" />
