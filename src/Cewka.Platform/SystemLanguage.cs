@@ -34,9 +34,6 @@ public static class SystemLanguage
         }
     }
 
-    /// <summary>Pierwszy z <see cref="Candidates"/> albo <c>null</c>.</summary>
-    public static string? TwoLetterCode() => Candidates().FirstOrDefault();
-
     /// <summary>
     /// Kandydaci ze zmiennych środowiskowych: najpierw lista z <c>LANGUAGE</c>, potem
     /// <c>LC_ALL</c>, <c>LC_MESSAGES</c> albo <c>LANG</c>. Jak w gettext, <c>LANGUAGE</c> nie

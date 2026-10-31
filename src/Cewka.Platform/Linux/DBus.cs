@@ -59,8 +59,7 @@ internal static unsafe class DBus
     internal static extern void dbus_error_free(Error* error);
 
     /// <summary>
-    /// Połączenie prywatne, a nie współdzielone z <c>dbus_bus_get</c>: tylko takie da się
-    /// zamknąć, a zamknięcie zwalnia nazwę na szynie.
+    /// Połączenie prywatne. Tylko takie da się zamknąć, a zamknięcie zwalnia nazwę na szynie.
     /// </summary>
     [DllImport(Library)]
     internal static extern nint dbus_bus_get_private(int type, Error* error);

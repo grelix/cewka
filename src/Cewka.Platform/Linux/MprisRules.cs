@@ -36,7 +36,7 @@ internal static class MprisRules
 ///
 /// <para>Panele ekstrapolują pozycję z ostatniego odczytu, więc skok, którego zwykłe granie nie
 /// tłumaczy, trzeba ogłosić sygnałem <c>Seeked</c>. Oczekiwana pozycja liczona jest z zegara,
-/// a nie z liczby odświeżeń: przy zminimalizowanym oknie odświeżenia przychodzą rzadziej.</para>
+/// bo przy zminimalizowanym oknie odświeżenia przychodzą rzadziej.</para>
 /// </summary>
 internal sealed class SeekDetector
 {
