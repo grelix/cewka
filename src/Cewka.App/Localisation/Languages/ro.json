@@ -68,7 +68,7 @@
   "NoTrack": "Nicio piesă în coadă",
   "NoFormat": "—",
 
-  "AudioFailure": "Redarea nu a putut fi pornită.",
+  "AudioFailure": "Redarea nu poate porni. Se poate încerca din nou sau alege alt dispozitiv.",
 
   "Settings": "Setări",
   "SectionAppearance": "Aspect",
@@ -183,7 +183,7 @@
   "AssociationsStale": "Înregistrarea indică o altă copie a programului și este recomandat să fie actualizată.",
   "AssociationsAbsent": "Aplicația nu este înregistrată. Înregistrarea o adaugă la lista „Deschide cu” numai pentru utilizatorul curent și nu preia niciun format fără a fi indicat explicit.",
   "AssociationsUnsupported": "Acest sistem nu oferă un registru de asocieri de fișiere.",
-  "AssociationsFailed": "Operațiunea a eșuat:",
+  "AssociationsFailed": "Asocierile de fișiere nu au fost salvate. Rămân neschimbate.",
 
   "AboutAuthor": "Autor",
   "AboutRepository": "Depozit",
@@ -211,5 +211,34 @@
 
   "NothingPlaying": "Nu se redă nimic",
 
-  "VolumeLevel": "Volum {0}%"
+  "VolumeLevel": "Volum {0}%",
+
+  "AudioFailureDevice": "Dispozitivul de ieșire nu poate fi deschis. Poate a fost deconectat sau este ocupat de alt program.",
+  "AudioFailureLibrary": "Biblioteca audio lipsește din fișierele programului. Redarea necesită reinstalarea programului.",
+  "AudioFailureFallback": "Dispozitivul ales nu poate fi deschis. Sunetul merge la dispozitivul implicit.",
+  "AudioRetry": "Reîncearcă",
+  "AudioChooseDevice": "Alege dispozitivul",
+  "DeviceLostNotice": "Dispozitivul de ieșire a fost deconectat. Redarea este în pauză.",
+  "DeviceFallbackNotice": "Dispozitivul ales nu este disponibil. Sunetul merge la dispozitivul implicit.",
+  "TrackSkipped": "„{0}” a fost omis. {1}",
+  "TracksSkipped": "Fișiere omise deoarece nu pot fi redate: {0}.",
+  "TrackFailureFileMissing": "Fișierul nu mai există la calea salvată.",
+  "TrackFailureAccessDenied": "Lipsește permisiunea de citire a fișierului.",
+  "TrackFailureFileUnavailable": "Fișierul este temporar indisponibil. Poate e ocupat de alt program sau suportul a fost deconectat.",
+  "TrackFailureDamagedFile": "Fișierul este deteriorat sau nu corespunde extensiei sale.",
+  "TrackFailurePlaybackInterrupted": "Citirea fișierului s-a întrerupt în timpul redării.",
+  "DecoderFailureUnspecified": "Formatul acestui fișier nu poate fi redat.",
+  "DecoderFailureUnrecognisedFormat": "Formatul fișierului nu a fost recunoscut.",
+  "DecoderFailureOutOfScopeFormat": "Formatul WMA nu este acceptat.",
+  "DecoderFailureSystemCodecsUnavailable": "Lipsesc codecurile de sistem pentru AAC, M4A și ALAC.",
+  "DecoderFailureCodecMissing": "Sistemului îi lipsește un decodor pentru acest fișier.",
+  "DecoderFailureCodecMissingLinux": "GStreamer nu are un modul pentru decodarea acestui fișier. Pentru AAC, M4A și ALAC îl oferă pachetul gstreamer1.0-libav.",
+  "DecoderFailureDamagedFile": "Fișierul este deteriorat sau ilizibil.",
+  "DecoderFailureNoAudioStream": "Fișierul nu conține o pistă audio.",
+  "DecoderFailureUnsupportedChannelLayout": "Dispunerea canalelor acestui fișier nu este acceptată.",
+  "DecimalSeparator": ",",
+  "AssociationsFailedExecutable": "Locația fișierului programului nu a putut fi stabilită. Asocierile rămân neschimbate.",
+  "AssociationsFailedRegistry": "Registrul sistemului a refuzat salvarea asocierilor. Rămân neschimbate.",
+  "AssociationFileType": "Fișier audio",
+  "AssociationDescription": "Player de fișiere audio"
 }

@@ -127,6 +127,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _engine.TrackChanged += index => Dispatcher.UIThread.Post(() => OnTrackChanged(index));
         _engine.TrackFailed += (index, failure) => Dispatcher.UIThread.Post(() => OnTrackFailed(index, failure));
         _engine.QueueFinished += () => Dispatcher.UIThread.Post(() => IsPlaying = false);
+        _engine.DeviceLost += () => Dispatcher.UIThread.Post(OnDeviceLost);
 
         _title = Strings.Current["NoTrack"];
         _artistLine = string.Empty;
@@ -462,6 +463,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         RebuildQueue();
         if (_current is null) Title = IdleTitle;
         RaiseRepeat();
+        Raise(nameof(AudioFailure));
+        Raise(nameof(UpdateNotice));
+        Raise(nameof(LatencyDescription));
+        Raise(nameof(VolumeLevelText));
+        Preamp.RefreshText();
+        foreach (var band in Bands) band.RefreshText();
 
         foreach (var effect in SoundEffects) effect.RefreshLabels();
     }
@@ -690,11 +697,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         if (TryPlayback(() => _engine.SwitchDevice(chosen)) || chosen is null) return;
 
-        var failure = _audioFailure;
         _engine.SwitchDevice(null);
         if (wasPlaying && TryPlayback(_engine.Play)) SyncPlaying();
 
-        AudioFailure = failure;
+        SetAudioFailure("AudioFailureFallback");
     }
 
     /// <summary>Stan wyjścia mógł się zmienić: otwarcie, zamknięcie albo inne urządzenie.</summary>
@@ -745,7 +751,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (frames <= 0) return Strings.Current["LatencyUnknown"];
 
             var milliseconds = frames * 1000.0 / Math.Max(1, _engine.SampleRate);
-            return string.Format(Strings.Current["LatencyMeasured"], frames, milliseconds);
+            return string.Format(Strings.Current.Numbers, Strings.Current["LatencyMeasured"], frames, milliseconds);
         }
     }
 
@@ -957,7 +963,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     // ---------- Awaria wyjścia dźwięku ----------
 
-    private string _audioFailure = string.Empty;
+    /// <summary>Klucz słownika z opisem awarii; pusty, gdy wszystko działa.</summary>
+    private string _audioFailureKey = string.Empty;
 
     /// <summary>
     /// Why playback is impossible, or empty when all is well.
@@ -966,37 +973,80 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// application: no sound card, a device taken exclusively by something else, a missing
     /// native library in a hand-assembled build. None of them is a reason to take the window
     /// down — the queue, the settings and the reason itself are all still worth showing.
+    /// Przyczyna jest opisana zwykłymi słowami w języku interfejsu; tekst wyjątku trafia
+    /// wyłącznie do dziennika.
     /// </para>
     /// </summary>
-    public string AudioFailure
+    public string AudioFailure => _audioFailureKey.Length == 0 ? string.Empty : Strings.Current[_audioFailureKey];
+
+    public bool HasAudioFailure => _audioFailureKey.Length > 0;
+
+    private void SetAudioFailure(string key)
     {
-        get => _audioFailure;
-        private set
-        {
-            if (!Set(ref _audioFailure, value)) return;
-            Raise(nameof(HasAudioFailure));
-        }
+        if (_audioFailureKey == key) return;
+
+        _audioFailureKey = key;
+        Raise(nameof(AudioFailure));
+        Raise(nameof(HasAudioFailure));
     }
 
-    public bool HasAudioFailure => !string.IsNullOrEmpty(_audioFailure);
+    /// <summary>
+    /// Polecenie „Spróbuj ponownie” przy komunikacie o awarii: otwiera wyjście od nowa
+    /// i wznawia to, co miało grać.
+    /// </summary>
+    public void RetryAudio()
+    {
+        if (ResumeRestoredTrack()) return;
+
+        if (Queue.Count == 0)
+        {
+            SetAudioFailure(string.Empty);
+            return;
+        }
+
+        if (TryPlayback(_engine.Play)) SyncPlaying();
+    }
+
+    /// <summary>Polecenie „Wybierz urządzenie”: okno otwiera Ustawienia na sekcji dźwięku.</summary>
+    public event Action? DeviceSelectionRequested;
+
+    public void RequestDeviceSelection() => DeviceSelectionRequested?.Invoke();
 
     /// <summary>Runs an engine operation, turning a failure into a message instead of a crash.</summary>
     private bool TryPlayback(Action operation)
     {
+        var wasOpen = _engine.IsDeviceOpen;
+
         try
         {
             operation();
-            AudioFailure = string.Empty;
+            SetAudioFailure(string.Empty);
+
+            if (wasOpen != _engine.IsDeviceOpen)
+            {
+                RaiseOutputState();
+                if (_engine.UsingFallbackDevice) ShowNotice(Strings.Current["DeviceFallbackNotice"]);
+            }
+
             return true;
         }
         catch (Exception ex)
         {
-            AudioFailure = $"{Strings.Current["AudioFailure"]} {ex.Message}";
+            SetAudioFailure(FailureText.AudioFailureKey(ex));
             Console.Error.WriteLine($"[cewka] wyjście dźwięku: {ex}");
 
             IsPlaying = false;
+            RaiseOutputState();
             return false;
         }
+    }
+
+    /// <summary>Urządzenie przestało pracować samo, na przykład odłączono słuchawki.</summary>
+    private void OnDeviceLost()
+    {
+        IsPlaying = false;
+        RaiseOutputState();
+        ShowNotice(Strings.Current["DeviceLostNotice"]);
     }
 
     /// <summary>Folders are walked recursively; anything unrecognised is left out.</summary>
@@ -1124,7 +1174,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (!entry.IsUnsupported) return;
 
         row.IsUnsupported = true;
-        row.UnsupportedReason = entry.UnsupportedReason;
+        row.UnsupportedReason = FailureText.ForTrack(TrackFailureReason.UnsupportedFormat, entry.Format);
     }
 
     /// <summary>
@@ -1412,6 +1462,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public void ShowNotice(string text)
     {
+        _skippedInNotice = 0;
         Notice = text;
 
         // Ponowne wywołanie odlicza czas od nowa, zamiast gasić komunikat w połowie czytania.
@@ -1421,23 +1472,18 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     // ---------- Nowsze wydanie ----------
 
-    private string _updateNotice = string.Empty;
+    private Version? _availableUpdate;
 
     /// <summary>
     /// Informacja o dostępnym nowszym wydaniu. Trwała, nie gasnąca sama: opisuje stan, a nie
-    /// zdarzenie, i po zamknięciu okna ustawień ma nadal być widoczna.
+    /// zdarzenie, i po zamknięciu okna ustawień ma nadal być widoczna. Składana przy odczycie,
+    /// żeby zmiana języka obejmowała i ją.
     /// </summary>
-    public string UpdateNotice
-    {
-        get => _updateNotice;
-        private set
-        {
-            if (!Set(ref _updateNotice, value)) return;
-            Raise(nameof(HasUpdateNotice));
-        }
-    }
+    public string UpdateNotice => _availableUpdate is null
+        ? string.Empty
+        : string.Format(Strings.Current["UpdateNotice"], _availableUpdate.ToString(3));
 
-    public bool HasUpdateNotice => _updateNotice.Length > 0;
+    public bool HasUpdateNotice => _availableUpdate is not null;
 
     /// <summary>Strona wydania, którą otwiera odsyłacz obok komunikatu.</summary>
     public string UpdateNoticeUrl { get; private set; } = string.Empty;
@@ -1459,16 +1505,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         var result = await UpdateCheck.LatestAsync(UpdateCheck.Repository, UpdateCheck.Current);
 
-        _settings.Current.LastUpdateCheck = DateTimeOffset.UtcNow;
-        _settings.Touch();
-
         if (!result.Succeeded)
         {
             // Brak połączenia nie jest wart pokazywania: użytkownik nie prosił o wynik teraz,
-            // więc informacja o nieudanej próbie byłaby zawracaniem uwagi.
+            // więc informacja o nieudanej próbie byłaby zawracaniem uwagi. Data sprawdzenia
+            // nie jest zapisywana, żeby laptop bez sieci tuż po wybudzeniu nie tracił próby na dobę.
             Console.Error.WriteLine($"[cewka] sprawdzanie wersji: {result.Failure}");
             return;
         }
+
+        _settings.Current.LastUpdateCheck = DateTimeOffset.UtcNow;
+        _settings.Touch();
 
         var latest = result.Latest!;
         if (latest <= UpdateCheck.Current) return;
@@ -1476,7 +1523,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UpdateNoticeUrl = result.ReleaseUrl ?? UpdateCheck.ReleasesUrl(UpdateCheck.Repository) ?? string.Empty;
         Raise(nameof(UpdateNoticeUrl));
 
-        UpdateNotice = string.Format(Strings.Current["UpdateNotice"], latest.ToString(3));
+        _availableUpdate = latest;
+        Raise(nameof(UpdateNotice));
+        Raise(nameof(HasUpdateNotice));
     }
 
     // ---------- Listy odtwarzania ----------
@@ -1670,15 +1719,29 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public int CurrentIndex => _current is null ? -1 : Queue.IndexOf(_current);
 
     /// <summary>
-    /// Surowy opis wyjątku nie trafia do interfejsu. Do czasu osobnych tekstów dla każdej
-    /// przyczyny pozostałe błędy opisuje ogólny komunikat odtwarzania.
+    /// Silnik pominął plik. Wiersz zostaje wyszarzony z przyczyną w podpowiedzi, a komunikat
+    /// mówi, co pominięto i dlaczego; seria porażek (folder plików bez kodeka) daje jedno
+    /// podsumowanie zamiast komunikatu za każdy plik. Szczegół techniczny zostaje w dzienniku.
     /// </summary>
     private void OnTrackFailed(int index, TrackFailure failure)
     {
         if (index < 0 || index >= Queue.Count) return;
 
-        Queue[index].ShowFailure(failure.Reason, failure.Detail, Strings.Current["AudioFailure"]);
+        var entry = _engine.Queue.ElementAtOrDefault(index);
+        var row = Queue[index];
+        var reason = FailureText.ForTrack(failure.Reason, entry?.Format ?? AudioFileFormat.Unknown);
+
+        row.ShowFailure(failure.Reason, reason, reason);
+
+        var count = _skippedInNotice + 1;
+        ShowNotice(count == 1
+            ? string.Format(Strings.Current["TrackSkipped"], Path.GetFileName(row.Path), reason)
+            : string.Format(Strings.Current["TracksSkipped"], count));
+        _skippedInNotice = count;
     }
+
+    /// <summary>Ile pominiętych plików obejmuje komunikat, który jest teraz na ekranie.</summary>
+    private int _skippedInNotice;
 
     /// <summary>Okładka czytana jest z pliku dopiero dla bieżącego utworu, poza wątkiem interfejsu.</summary>
     private readonly CoverLoader _covers = new(path => MetadataReader.ReadCover(path));

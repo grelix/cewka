@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Avalonia.Platform;
@@ -48,6 +49,7 @@ public sealed class Strings : INotifyPropertyChanged
         _fallback = Load(FallbackCode);
         _active = _fallback;
         CurrentCode = FallbackCode;
+        Numbers = BuildNumbers();
     }
 
     /// <summary>The single instance bound to by the interface.</summary>
@@ -57,8 +59,19 @@ public sealed class Strings : INotifyPropertyChanged
 
     public string CurrentCode { get; private set; }
 
-    /// <summary>Languages available to choose from, for the settings window.</summary>
-    public static IReadOnlyList<LanguageInfo> Available { get; } = BuildAvailable();
+    /// <summary>
+    /// Languages available to choose from, for the settings window. Czytane dopiero przy
+    /// pierwszym otwarciu okna ustawień: wymaga to przejrzenia wszystkich plików języków.
+    /// </summary>
+    public static IReadOnlyList<LanguageInfo> Available => LazyAvailable.Value;
+
+    private static readonly Lazy<IReadOnlyList<LanguageInfo>> LazyAvailable = new(BuildAvailable);
+
+    /// <summary>
+    /// Zapis liczb w bieżącym języku. Program działa z niezmienną globalizacją, więc kultura
+    /// zawsze stawiałaby kropkę dziesiętną, także w polskim interfejsie.
+    /// </summary>
+    public NumberFormatInfo Numbers { get; private set; }
 
     /// <summary>Missing keys are returned in square brackets so a gap is obvious, never blank.</summary>
     public string this[string key] =>
@@ -77,6 +90,7 @@ public sealed class Strings : INotifyPropertyChanged
 
         _active = resolved == FallbackCode ? _fallback : Load(resolved);
         CurrentCode = resolved;
+        Numbers = BuildNumbers();
 
         // Pusta nazwa własności odświeża wszystkie wiązania, w tym indeksator.
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(null));
@@ -94,6 +108,14 @@ public sealed class Strings : INotifyPropertyChanged
             if (Codes.Contains(system, StringComparer.OrdinalIgnoreCase)) return system;
 
         return FallbackCode;
+    }
+
+    private NumberFormatInfo BuildNumbers()
+    {
+        var format = (NumberFormatInfo)NumberFormatInfo.InvariantInfo.Clone();
+        var separator = this["DecimalSeparator"];
+        if (separator.Length == 1) format.NumberDecimalSeparator = separator;
+        return format;
     }
 
     private static Dictionary<string, string> Load(string code)

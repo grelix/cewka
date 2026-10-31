@@ -68,7 +68,7 @@
   "NoTrack": "Tidak ada trek dalam antrean",
   "NoFormat": "—",
 
-  "AudioFailure": "Pemutaran tidak dapat dimulai.",
+  "AudioFailure": "Pemutaran tidak dapat dimulai. Percobaan ulang atau perangkat lain dapat membantu.",
 
   "Settings": "Pengaturan",
   "SectionAppearance": "Tampilan",
@@ -183,7 +183,7 @@
   "AssociationsStale": "Pendaftaran menunjuk ke salinan aplikasi yang berbeda — sebaiknya disegarkan kembali.",
   "AssociationsAbsent": "Aplikasi belum terdaftar. Pendaftaran menambahkannya ke daftar „Buka dengan” hanya untuk pengguna saat ini, dan tidak mengambil alih format apa pun tanpa persetujuan.",
   "AssociationsUnsupported": "Sistem ini tidak menyediakan registri asosiasi berkas.",
-  "AssociationsFailed": "Operasi gagal:",
+  "AssociationsFailed": "Asosiasi berkas tidak tersimpan. Asosiasi tetap tidak berubah.",
 
   "AboutAuthor": "Pembuat",
   "AboutRepository": "Repositori",
@@ -211,5 +211,34 @@
 
   "NothingPlaying": "Tidak ada yang diputar",
 
-  "VolumeLevel": "Volume {0}%"
+  "VolumeLevel": "Volume {0}%",
+
+  "AudioFailureDevice": "Perangkat keluaran tidak dapat dibuka. Perangkat mungkin terputus atau dipakai program lain.",
+  "AudioFailureLibrary": "Pustaka audio tidak ada di berkas program. Pemutaran memerlukan pemasangan ulang program.",
+  "AudioFailureFallback": "Perangkat yang dipilih tidak dapat dibuka. Suara diarahkan ke perangkat bawaan.",
+  "AudioRetry": "Coba lagi",
+  "AudioChooseDevice": "Pilih perangkat",
+  "DeviceLostNotice": "Perangkat keluaran terputus. Pemutaran dijeda.",
+  "DeviceFallbackNotice": "Perangkat yang dipilih tidak tersedia. Suara diarahkan ke perangkat bawaan.",
+  "TrackSkipped": "“{0}” dilewati. {1}",
+  "TracksSkipped": "Berkas yang dilewati karena tidak dapat diputar: {0}.",
+  "TrackFailureFileMissing": "Berkas tidak ada lagi di jalur yang tersimpan.",
+  "TrackFailureAccessDenied": "Tidak ada izin untuk membaca berkas.",
+  "TrackFailureFileUnavailable": "Berkas untuk sementara tidak tersedia. Mungkin dipakai program lain atau medianya terputus.",
+  "TrackFailureDamagedFile": "Berkas rusak atau tidak sesuai dengan ekstensinya.",
+  "TrackFailurePlaybackInterrupted": "Pembacaan berkas terhenti saat pemutaran.",
+  "DecoderFailureUnspecified": "Format berkas ini tidak dapat diputar.",
+  "DecoderFailureUnrecognisedFormat": "Format berkas tidak dikenali.",
+  "DecoderFailureOutOfScopeFormat": "Format WMA tidak didukung.",
+  "DecoderFailureSystemCodecsUnavailable": "Kodek sistem untuk AAC, M4A, dan ALAC tidak tersedia.",
+  "DecoderFailureCodecMissing": "Sistem tidak memiliki dekoder untuk berkas ini.",
+  "DecoderFailureCodecMissingLinux": "GStreamer tidak memiliki plugin untuk mendekode berkas ini. Untuk AAC, M4A, dan ALAC plugin ini ada di paket gstreamer1.0-libav.",
+  "DecoderFailureDamagedFile": "Berkas rusak atau tidak dapat dibaca.",
+  "DecoderFailureNoAudioStream": "Berkas tidak berisi trek audio.",
+  "DecoderFailureUnsupportedChannelLayout": "Tata letak saluran berkas ini tidak didukung.",
+  "DecimalSeparator": ",",
+  "AssociationsFailedExecutable": "Lokasi berkas program tidak dapat ditentukan. Asosiasi tetap tidak berubah.",
+  "AssociationsFailedRegistry": "Registri sistem menolak menyimpan asosiasi. Asosiasi tetap tidak berubah.",
+  "AssociationFileType": "Berkas audio",
+  "AssociationDescription": "Pemutar berkas audio"
 }

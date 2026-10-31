@@ -68,7 +68,7 @@
   "NoTrack": "Không có bản nhạc nào trong hàng đợi",
   "NoFormat": "—",
 
-  "AudioFailure": "Không thể bắt đầu phát.",
+  "AudioFailure": "Không thể bắt đầu phát. Có thể thử lại hoặc chọn thiết bị khác.",
 
   "Settings": "Cài đặt",
   "SectionAppearance": "Giao diện",
@@ -183,7 +183,7 @@
   "AssociationsStale": "Đăng ký hiện trỏ đến một bản cài đặt khác của chương trình, nên được cập nhật lại.",
   "AssociationsAbsent": "Ứng dụng chưa được đăng ký. Việc đăng ký chỉ thêm ứng dụng vào danh sách „Mở bằng” cho người dùng hiện tại, và không chiếm bất kỳ định dạng nào nếu không được yêu cầu.",
   "AssociationsUnsupported": "Hệ thống này không có sổ đăng ký liên kết tệp.",
-  "AssociationsFailed": "Thao tác không thành công:",
+  "AssociationsFailed": "Chưa lưu liên kết tệp. Các liên kết vẫn giữ nguyên.",
 
   "AboutAuthor": "Tác giả",
   "AboutRepository": "Kho mã nguồn",
@@ -211,5 +211,34 @@
 
   "NothingPlaying": "Không có gì đang phát",
 
-  "VolumeLevel": "Âm lượng {0}%"
+  "VolumeLevel": "Âm lượng {0}%",
+
+  "AudioFailureDevice": "Không thể mở thiết bị đầu ra. Thiết bị có thể đã bị ngắt kết nối hoặc đang được chương trình khác sử dụng.",
+  "AudioFailureLibrary": "Thiếu thư viện âm thanh trong tệp chương trình. Cần cài đặt lại chương trình để phát.",
+  "AudioFailureFallback": "Không thể mở thiết bị đã chọn. Âm thanh được chuyển tới thiết bị mặc định.",
+  "AudioRetry": "Thử lại",
+  "AudioChooseDevice": "Chọn thiết bị",
+  "DeviceLostNotice": "Thiết bị đầu ra đã bị ngắt kết nối. Đã tạm dừng phát.",
+  "DeviceFallbackNotice": "Thiết bị đã chọn không khả dụng. Âm thanh được chuyển tới thiết bị mặc định.",
+  "TrackSkipped": "Đã bỏ qua “{0}”. {1}",
+  "TracksSkipped": "Số tệp bị bỏ qua vì không thể phát: {0}.",
+  "TrackFailureFileMissing": "Tệp không còn ở đường dẫn đã lưu.",
+  "TrackFailureAccessDenied": "Không có quyền đọc tệp.",
+  "TrackFailureFileUnavailable": "Tệp tạm thời không khả dụng. Có thể chương trình khác đang dùng hoặc ổ đĩa đã bị ngắt kết nối.",
+  "TrackFailureDamagedFile": "Tệp bị hỏng hoặc không khớp với phần mở rộng.",
+  "TrackFailurePlaybackInterrupted": "Việc đọc tệp bị gián đoạn khi đang phát.",
+  "DecoderFailureUnspecified": "Không thể phát định dạng tệp này.",
+  "DecoderFailureUnrecognisedFormat": "Không nhận dạng được định dạng tệp.",
+  "DecoderFailureOutOfScopeFormat": "Định dạng WMA không được hỗ trợ.",
+  "DecoderFailureSystemCodecsUnavailable": "Thiếu bộ mã hóa hệ thống cho AAC, M4A và ALAC.",
+  "DecoderFailureCodecMissing": "Hệ thống thiếu bộ giải mã cho tệp này.",
+  "DecoderFailureCodecMissingLinux": "GStreamer thiếu phần bổ trợ để giải mã tệp này. Với AAC, M4A và ALAC, gói gstreamer1.0-libav cung cấp phần này.",
+  "DecoderFailureDamagedFile": "Tệp bị hỏng hoặc không đọc được.",
+  "DecoderFailureNoAudioStream": "Tệp không chứa luồng âm thanh.",
+  "DecoderFailureUnsupportedChannelLayout": "Không hỗ trợ bố cục kênh của tệp này.",
+  "DecimalSeparator": ",",
+  "AssociationsFailedExecutable": "Không xác định được vị trí tệp chương trình. Các liên kết vẫn giữ nguyên.",
+  "AssociationsFailedRegistry": "Sổ đăng ký hệ thống từ chối lưu liên kết. Các liên kết vẫn giữ nguyên.",
+  "AssociationFileType": "Tệp âm thanh",
+  "AssociationDescription": "Trình phát tệp âm thanh"
 }

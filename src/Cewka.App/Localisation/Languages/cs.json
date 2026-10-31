@@ -68,7 +68,7 @@
   "NoTrack": "Žádná skladba ve frontě",
   "NoFormat": "—",
 
-  "AudioFailure": "Přehrávání se nepodařilo spustit.",
+  "AudioFailure": "Přehrávání nelze spustit. Lze to zkusit znovu nebo zvolit jiné zařízení.",
 
   "Settings": "Nastavení",
   "SectionAppearance": "Vzhled",
@@ -183,7 +183,7 @@
   "AssociationsStale": "Registrace odkazuje na jinou kopii programu a je vhodné ji obnovit.",
   "AssociationsAbsent": "Aplikace není zaregistrována. Registrace ji přidá do seznamu „Otevřít pomocí“ pouze pro aktuálního uživatele a nepřevezme žádný formát bez vyžádání.",
   "AssociationsUnsupported": "Tento systém neposkytuje registr přiřazení souborů.",
-  "AssociationsFailed": "Operace se nezdařila:",
+  "AssociationsFailed": "Přidružení souborů nebylo uloženo. Zůstává beze změny.",
 
   "AboutAuthor": "Autor",
   "AboutRepository": "Repozitář",
@@ -211,5 +211,34 @@
 
   "NothingPlaying": "Nic se nepřehrává",
 
-  "VolumeLevel": "Hlasitost {0} %"
+  "VolumeLevel": "Hlasitost {0} %",
+
+  "AudioFailureDevice": "Výstupní zařízení nelze otevřít. Mohlo být odpojeno nebo je používá jiný program.",
+  "AudioFailureLibrary": "V souborech programu chybí zvuková knihovna. Přehrávání vyžaduje novou instalaci programu.",
+  "AudioFailureFallback": "Zvolené zařízení nelze otevřít. Zvuk jde do výchozího zařízení.",
+  "AudioRetry": "Zkusit znovu",
+  "AudioChooseDevice": "Zvolit zařízení",
+  "DeviceLostNotice": "Výstupní zařízení bylo odpojeno. Přehrávání je pozastaveno.",
+  "DeviceFallbackNotice": "Zvolené zařízení není k dispozici. Zvuk jde do výchozího zařízení.",
+  "TrackSkipped": "Soubor „{0}“ byl přeskočen. {1}",
+  "TracksSkipped": "Přeskočené soubory, které nelze přehrát: {0}.",
+  "TrackFailureFileMissing": "Soubor na uložené cestě již neexistuje.",
+  "TrackFailureAccessDenied": "Chybí oprávnění ke čtení souboru.",
+  "TrackFailureFileUnavailable": "Soubor je dočasně nedostupný. Mohl ho zablokovat jiný program nebo bylo odpojeno médium.",
+  "TrackFailureDamagedFile": "Soubor je poškozený nebo neodpovídá své příponě.",
+  "TrackFailurePlaybackInterrupted": "Čtení souboru se během přehrávání přerušilo.",
+  "DecoderFailureUnspecified": "Formát tohoto souboru nelze přehrát.",
+  "DecoderFailureUnrecognisedFormat": "Formát souboru nebyl rozpoznán.",
+  "DecoderFailureOutOfScopeFormat": "Formát WMA není podporován.",
+  "DecoderFailureSystemCodecsUnavailable": "Chybí systémové kodeky pro formáty AAC, M4A a ALAC.",
+  "DecoderFailureCodecMissing": "V systému chybí dekodér pro tento soubor.",
+  "DecoderFailureCodecMissingLinux": "GStreameru chybí zásuvný modul pro dekódování tohoto souboru. Pro AAC, M4A a ALAC ho dodává balíček gstreamer1.0-libav.",
+  "DecoderFailureDamagedFile": "Soubor je poškozený nebo nečitelný.",
+  "DecoderFailureNoAudioStream": "Soubor neobsahuje zvukovou stopu.",
+  "DecoderFailureUnsupportedChannelLayout": "Rozložení kanálů tohoto souboru není podporováno.",
+  "DecimalSeparator": ",",
+  "AssociationsFailedExecutable": "Umístění souboru programu se nepodařilo zjistit. Přidružení zůstává beze změny.",
+  "AssociationsFailedRegistry": "Systémový registr odmítl zápis přidružení. Přidružení zůstává beze změny.",
+  "AssociationFileType": "Zvukový soubor",
+  "AssociationDescription": "Přehrávač zvukových souborů"
 }

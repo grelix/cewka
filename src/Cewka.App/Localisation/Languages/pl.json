@@ -68,7 +68,7 @@
   "NoTrack": "Brak utworu w kolejce",
   "NoFormat": "—",
 
-  "AudioFailure": "Nie udało się uruchomić odtwarzania.",
+  "AudioFailure": "Nie można uruchomić odtwarzania. Można spróbować ponownie albo wybrać inne urządzenie.",
 
   "Settings": "Ustawienia",
   "SectionAppearance": "Wygląd",
@@ -183,7 +183,7 @@
   "AssociationsStale": "Rejestracja wskazuje inne położenie programu — warto ją odświeżyć.",
   "AssociationsAbsent": "Program nie jest zarejestrowany. Rejestracja dodaje go do listy „Otwórz za pomocą” wyłącznie dla bieżącego użytkownika i nie przejmuje żadnego formatu bez jego wskazania.",
   "AssociationsUnsupported": "Ten system nie udostępnia rejestru skojarzeń plików.",
-  "AssociationsFailed": "Operacja nie powiodła się:",
+  "AssociationsFailed": "Nie zapisano skojarzeń plików. Skojarzenia pozostały bez zmian.",
 
   "AboutAuthor": "Autor",
   "AboutRepository": "Repozytorium",
@@ -211,5 +211,34 @@
 
   "NothingPlaying": "Nic nie jest odtwarzane",
 
-  "VolumeLevel": "Głośność {0}%"
+  "VolumeLevel": "Głośność {0}%",
+
+  "AudioFailureDevice": "Nie można otworzyć urządzenia wyjściowego. Mogło zostać odłączone albo zajęte przez inny program.",
+  "AudioFailureLibrary": "Brak biblioteki dźwięku w plikach programu. Odtwarzanie wymaga ponownej instalacji programu.",
+  "AudioFailureFallback": "Nie można otworzyć wybranego urządzenia. Dźwięk kierowany jest do urządzenia domyślnego.",
+  "AudioRetry": "Spróbuj ponownie",
+  "AudioChooseDevice": "Wybierz urządzenie",
+  "DeviceLostNotice": "Urządzenie wyjściowe zostało odłączone. Odtwarzanie wstrzymano.",
+  "DeviceFallbackNotice": "Wybrane urządzenie jest niedostępne. Dźwięk kierowany jest do urządzenia domyślnego.",
+  "TrackSkipped": "Pominięto plik „{0}”. {1}",
+  "TracksSkipped": "Pominięto pliki, których nie można odtworzyć: {0}.",
+  "TrackFailureFileMissing": "Plik nie istnieje pod zapisaną ścieżką.",
+  "TrackFailureAccessDenied": "Brak uprawnień do odczytu pliku.",
+  "TrackFailureFileUnavailable": "Plik jest chwilowo niedostępny. Mógł zostać zajęty przez inny program albo odłączono nośnik.",
+  "TrackFailureDamagedFile": "Plik jest uszkodzony albo niezgodny ze swoim rozszerzeniem.",
+  "TrackFailurePlaybackInterrupted": "Odczyt pliku przerwał się w trakcie odtwarzania.",
+  "DecoderFailureUnspecified": "Formatu tego pliku nie można odtworzyć.",
+  "DecoderFailureUnrecognisedFormat": "Nie rozpoznano formatu pliku.",
+  "DecoderFailureOutOfScopeFormat": "Format WMA nie jest obsługiwany.",
+  "DecoderFailureSystemCodecsUnavailable": "Brak kodeków systemowych dla formatów AAC, M4A i ALAC.",
+  "DecoderFailureCodecMissing": "W systemie brakuje dekodera dla tego pliku.",
+  "DecoderFailureCodecMissingLinux": "W GStreamerze brakuje wtyczki dekodującej ten plik. Dla AAC, M4A i ALAC dostarcza ją pakiet gstreamer1.0-libav.",
+  "DecoderFailureDamagedFile": "Plik jest uszkodzony lub nieczytelny.",
+  "DecoderFailureNoAudioStream": "Plik nie zawiera ścieżki dźwiękowej.",
+  "DecoderFailureUnsupportedChannelLayout": "Układ kanałów tego pliku nie jest obsługiwany.",
+  "DecimalSeparator": ",",
+  "AssociationsFailedExecutable": "Nie ustalono położenia pliku programu. Skojarzenia pozostały bez zmian.",
+  "AssociationsFailedRegistry": "Rejestr systemu odrzucił zapis skojarzeń. Skojarzenia pozostały bez zmian.",
+  "AssociationFileType": "Plik dźwiękowy",
+  "AssociationDescription": "Odtwarzacz plików dźwiękowych"
 }

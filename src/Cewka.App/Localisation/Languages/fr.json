@@ -68,7 +68,7 @@
   "NoTrack": "Aucune piste dans la file d'attente",
   "NoFormat": "—",
 
-  "AudioFailure": "Impossible de démarrer la lecture.",
+  "AudioFailure": "Impossible de lancer la lecture. Un nouvel essai ou un autre périphérique peut résoudre le problème.",
 
   "Settings": "Paramètres",
   "SectionAppearance": "Apparence",
@@ -183,7 +183,7 @@
   "AssociationsStale": "L'enregistrement pointe vers un autre emplacement du programme — il est conseillé de l'actualiser.",
   "AssociationsAbsent": "L'application n'est pas enregistrée. L'enregistrement l'ajoute à la liste « Ouvrir avec » pour l'utilisateur actuel uniquement et ne prend en charge aucun format sans indication explicite.",
   "AssociationsUnsupported": "Ce système ne propose pas de registre d'associations de fichiers.",
-  "AssociationsFailed": "L'opération a échoué :",
+  "AssociationsFailed": "Les associations de fichiers n’ont pas été enregistrées. Elles restent inchangées.",
 
   "AboutAuthor": "Auteur",
   "AboutRepository": "Dépôt",
@@ -211,5 +211,34 @@
 
   "NothingPlaying": "Aucune lecture en cours",
 
-  "VolumeLevel": "Volume {0} %"
+  "VolumeLevel": "Volume {0} %",
+
+  "AudioFailureDevice": "Impossible d’ouvrir le périphérique de sortie. Il a peut-être été déconnecté ou est occupé par un autre programme.",
+  "AudioFailureLibrary": "La bibliothèque audio est absente des fichiers du programme. La lecture nécessite une réinstallation.",
+  "AudioFailureFallback": "Impossible d’ouvrir le périphérique choisi. Le son est dirigé vers le périphérique par défaut.",
+  "AudioRetry": "Réessayer",
+  "AudioChooseDevice": "Choisir le périphérique",
+  "DeviceLostNotice": "Le périphérique de sortie a été déconnecté. La lecture est en pause.",
+  "DeviceFallbackNotice": "Le périphérique choisi est indisponible. Le son est dirigé vers le périphérique par défaut.",
+  "TrackSkipped": "« {0} » a été ignoré. {1}",
+  "TracksSkipped": "Fichiers ignorés car illisibles : {0}.",
+  "TrackFailureFileMissing": "Le fichier n’existe plus à l’emplacement enregistré.",
+  "TrackFailureAccessDenied": "L’autorisation de lire le fichier fait défaut.",
+  "TrackFailureFileUnavailable": "Le fichier est momentanément indisponible. Un autre programme l’occupe peut-être, ou le support a été déconnecté.",
+  "TrackFailureDamagedFile": "Le fichier est endommagé ou ne correspond pas à son extension.",
+  "TrackFailurePlaybackInterrupted": "La lecture du fichier s’est interrompue pendant la diffusion.",
+  "DecoderFailureUnspecified": "Le format de ce fichier ne peut pas être lu.",
+  "DecoderFailureUnrecognisedFormat": "Le format du fichier n’a pas été reconnu.",
+  "DecoderFailureOutOfScopeFormat": "Le format WMA n’est pas pris en charge.",
+  "DecoderFailureSystemCodecsUnavailable": "Les codecs système pour AAC, M4A et ALAC sont absents.",
+  "DecoderFailureCodecMissing": "Le système ne dispose d’aucun décodeur pour ce fichier.",
+  "DecoderFailureCodecMissingLinux": "Il manque à GStreamer un greffon pour décoder ce fichier. Pour AAC, M4A et ALAC, il est fourni par le paquet gstreamer1.0-libav.",
+  "DecoderFailureDamagedFile": "Le fichier est endommagé ou illisible.",
+  "DecoderFailureNoAudioStream": "Le fichier ne contient aucune piste audio.",
+  "DecoderFailureUnsupportedChannelLayout": "La disposition des canaux de ce fichier n’est pas prise en charge.",
+  "DecimalSeparator": ",",
+  "AssociationsFailedExecutable": "L’emplacement du fichier du programme n’a pas pu être déterminé. Les associations restent inchangées.",
+  "AssociationsFailedRegistry": "Le registre du système a refusé l’enregistrement des associations. Elles restent inchangées.",
+  "AssociationFileType": "Fichier audio",
+  "AssociationDescription": "Lecteur de fichiers audio"
 }

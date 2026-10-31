@@ -68,7 +68,7 @@
   "NoTrack": "Nothing in the queue",
   "NoFormat": "—",
 
-  "AudioFailure": "Playback could not be started.",
+  "AudioFailure": "Playback could not be started. Another attempt or a different device may help.",
 
   "Settings": "Settings",
   "SectionAppearance": "Appearance",
@@ -183,7 +183,7 @@
   "AssociationsStale": "The registration points at a different copy of the program and is worth refreshing.",
   "AssociationsAbsent": "The application is not registered. Registering adds it to the „Open with” list for the current user only and takes no format over without being asked.",
   "AssociationsUnsupported": "This system provides no file association registry.",
-  "AssociationsFailed": "The operation failed:",
+  "AssociationsFailed": "The file associations were not saved. They remain unchanged.",
 
   "AboutAuthor": "Author",
   "AboutRepository": "Repository",
@@ -211,5 +211,34 @@
 
   "NothingPlaying": "Nothing playing",
 
-  "VolumeLevel": "Volume {0}%"
+  "VolumeLevel": "Volume {0}%",
+
+  "AudioFailureDevice": "The output device could not be opened. It may have been disconnected or taken by another program.",
+  "AudioFailureLibrary": "The audio library is missing from the program files. Playback requires reinstalling the program.",
+  "AudioFailureFallback": "The chosen device could not be opened. Sound is going to the default device.",
+  "AudioRetry": "Try again",
+  "AudioChooseDevice": "Choose device",
+  "DeviceLostNotice": "The output device was disconnected. Playback is paused.",
+  "DeviceFallbackNotice": "The chosen device is unavailable. Sound is going to the default device.",
+  "TrackSkipped": "Skipped “{0}”. {1}",
+  "TracksSkipped": "Files skipped because they cannot be played: {0}.",
+  "TrackFailureFileMissing": "The file no longer exists at its saved path.",
+  "TrackFailureAccessDenied": "There is no permission to read the file.",
+  "TrackFailureFileUnavailable": "The file is temporarily unavailable. Another program may hold it, or its drive was disconnected.",
+  "TrackFailureDamagedFile": "The file is damaged or does not match its extension.",
+  "TrackFailurePlaybackInterrupted": "Reading the file stopped during playback.",
+  "DecoderFailureUnspecified": "This file format cannot be played.",
+  "DecoderFailureUnrecognisedFormat": "The file format was not recognised.",
+  "DecoderFailureOutOfScopeFormat": "The WMA format is not supported.",
+  "DecoderFailureSystemCodecsUnavailable": "The system codecs for AAC, M4A and ALAC are missing.",
+  "DecoderFailureCodecMissing": "The system has no decoder for this file.",
+  "DecoderFailureCodecMissingLinux": "GStreamer lacks a plugin to decode this file. For AAC, M4A and ALAC it comes with the gstreamer1.0-libav package.",
+  "DecoderFailureDamagedFile": "The file is damaged or unreadable.",
+  "DecoderFailureNoAudioStream": "The file contains no audio stream.",
+  "DecoderFailureUnsupportedChannelLayout": "The channel layout of this file is not supported.",
+  "DecimalSeparator": ".",
+  "AssociationsFailedExecutable": "The location of the program file could not be determined. The associations remain unchanged.",
+  "AssociationsFailedRegistry": "The system registry refused to save the associations. They remain unchanged.",
+  "AssociationFileType": "Audio file",
+  "AssociationDescription": "Audio file player"
 }

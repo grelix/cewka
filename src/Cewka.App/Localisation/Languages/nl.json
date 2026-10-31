@@ -68,7 +68,7 @@
   "NoTrack": "Niets in de wachtrij",
   "NoFormat": "—",
 
-  "AudioFailure": "Afspelen kon niet worden gestart.",
+  "AudioFailure": "Afspelen kan niet worden gestart. Opnieuw proberen of een ander apparaat kiezen kan helpen.",
 
   "Settings": "Instellingen",
   "SectionAppearance": "Uiterlijk",
@@ -183,7 +183,7 @@
   "AssociationsStale": "De registratie verwijst naar een andere locatie van het programma — het is aan te raden deze te vernieuwen.",
   "AssociationsAbsent": "De toepassing is niet geregistreerd. Registratie voegt haar alleen voor de huidige gebruiker toe aan de lijst „Openen met” en neemt geen enkel formaat over zonder dat dit uitdrukkelijk is aangegeven.",
   "AssociationsUnsupported": "Dit systeem biedt geen register voor bestandskoppelingen.",
-  "AssociationsFailed": "De bewerking is mislukt:",
+  "AssociationsFailed": "De bestandskoppelingen zijn niet opgeslagen. Ze blijven ongewijzigd.",
 
   "AboutAuthor": "Auteur",
   "AboutRepository": "Repository",
@@ -211,5 +211,34 @@
 
   "NothingPlaying": "Er wordt niets afgespeeld",
 
-  "VolumeLevel": "Volume {0}%"
+  "VolumeLevel": "Volume {0}%",
+
+  "AudioFailureDevice": "Het uitvoerapparaat kan niet worden geopend. Het is mogelijk losgekoppeld of in gebruik door een ander programma.",
+  "AudioFailureLibrary": "De audiobibliotheek ontbreekt in de programmabestanden. Afspelen vereist een nieuwe installatie.",
+  "AudioFailureFallback": "Het gekozen apparaat kan niet worden geopend. Het geluid gaat naar het standaardapparaat.",
+  "AudioRetry": "Opnieuw proberen",
+  "AudioChooseDevice": "Apparaat kiezen",
+  "DeviceLostNotice": "Het uitvoerapparaat is losgekoppeld. Het afspelen is gepauzeerd.",
+  "DeviceFallbackNotice": "Het gekozen apparaat is niet beschikbaar. Het geluid gaat naar het standaardapparaat.",
+  "TrackSkipped": "‘{0}’ is overgeslagen. {1}",
+  "TracksSkipped": "Overgeslagen bestanden die niet afspeelbaar zijn: {0}.",
+  "TrackFailureFileMissing": "Het bestand bestaat niet meer op het opgeslagen pad.",
+  "TrackFailureAccessDenied": "Er is geen toestemming om het bestand te lezen.",
+  "TrackFailureFileUnavailable": "Het bestand is tijdelijk niet beschikbaar. Een ander programma gebruikt het mogelijk, of de schijf is losgekoppeld.",
+  "TrackFailureDamagedFile": "Het bestand is beschadigd of past niet bij de extensie.",
+  "TrackFailurePlaybackInterrupted": "Het lezen van het bestand stopte tijdens het afspelen.",
+  "DecoderFailureUnspecified": "Dit bestandsformaat kan niet worden afgespeeld.",
+  "DecoderFailureUnrecognisedFormat": "Het bestandsformaat is niet herkend.",
+  "DecoderFailureOutOfScopeFormat": "Het WMA-formaat wordt niet ondersteund.",
+  "DecoderFailureSystemCodecsUnavailable": "De systeemcodecs voor AAC, M4A en ALAC ontbreken.",
+  "DecoderFailureCodecMissing": "Het systeem heeft geen decoder voor dit bestand.",
+  "DecoderFailureCodecMissingLinux": "GStreamer mist een plug-in om dit bestand te decoderen. Voor AAC, M4A en ALAC zit die in het pakket gstreamer1.0-libav.",
+  "DecoderFailureDamagedFile": "Het bestand is beschadigd of onleesbaar.",
+  "DecoderFailureNoAudioStream": "Het bestand bevat geen audiospoor.",
+  "DecoderFailureUnsupportedChannelLayout": "De kanaalindeling van dit bestand wordt niet ondersteund.",
+  "DecimalSeparator": ",",
+  "AssociationsFailedExecutable": "De locatie van het programmabestand is niet bepaald. De koppelingen blijven ongewijzigd.",
+  "AssociationsFailedRegistry": "Het systeemregister weigerde de koppelingen op te slaan. Ze blijven ongewijzigd.",
+  "AssociationFileType": "Audiobestand",
+  "AssociationDescription": "Speler voor audiobestanden"
 }

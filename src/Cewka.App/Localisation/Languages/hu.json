@@ -68,7 +68,7 @@
   "NoTrack": "Nincs szám a sorban",
   "NoFormat": "—",
 
-  "AudioFailure": "A lejátszást nem sikerült elindítani.",
+  "AudioFailure": "A lejátszás nem indítható el. Újrapróbálkozás vagy másik eszköz választása segíthet.",
 
   "Settings": "Beállítások",
   "SectionAppearance": "Megjelenés",
@@ -183,7 +183,7 @@
   "AssociationsStale": "A regisztráció a program egy másik példányára mutat — érdemes frissíteni.",
   "AssociationsAbsent": "A program nincs regisztrálva. A regisztráció a „Megnyitás mással” listához adja hozzá, kizárólag az aktuális felhasználó számára, és felkérés nélkül egyetlen formátumot sem vesz át.",
   "AssociationsUnsupported": "Ez a rendszer nem biztosít fájltársítási nyilvántartást.",
-  "AssociationsFailed": "A művelet nem sikerült:",
+  "AssociationsFailed": "A fájltársítások mentése nem sikerült. Változatlanok maradtak.",
 
   "AboutAuthor": "Szerző",
   "AboutRepository": "Tároló",
@@ -211,5 +211,34 @@
 
   "NothingPlaying": "Nincs lejátszás",
 
-  "VolumeLevel": "Hangerő {0}%"
+  "VolumeLevel": "Hangerő {0}%",
+
+  "AudioFailureDevice": "A kimeneti eszköz nem nyitható meg. Lehet, hogy leválasztották, vagy egy másik program használja.",
+  "AudioFailureLibrary": "A program fájljaiból hiányzik a hangkönyvtár. A lejátszáshoz újra kell telepíteni a programot.",
+  "AudioFailureFallback": "A kiválasztott eszköz nem nyitható meg. A hang az alapértelmezett eszközre megy.",
+  "AudioRetry": "Újrapróbálás",
+  "AudioChooseDevice": "Eszköz választása",
+  "DeviceLostNotice": "A kimeneti eszközt leválasztották. A lejátszás szünetel.",
+  "DeviceFallbackNotice": "A kiválasztott eszköz nem érhető el. A hang az alapértelmezett eszközre megy.",
+  "TrackSkipped": "„{0}” kimaradt. {1}",
+  "TracksSkipped": "Kihagyott, nem lejátszható fájlok: {0}.",
+  "TrackFailureFileMissing": "A fájl már nem létezik a mentett útvonalon.",
+  "TrackFailureAccessDenied": "Nincs jogosultság a fájl olvasásához.",
+  "TrackFailureFileUnavailable": "A fájl átmenetileg nem érhető el. Lehet, hogy egy másik program használja, vagy leválasztották a meghajtót.",
+  "TrackFailureDamagedFile": "A fájl sérült, vagy nem felel meg a kiterjesztésének.",
+  "TrackFailurePlaybackInterrupted": "A fájl olvasása lejátszás közben megszakadt.",
+  "DecoderFailureUnspecified": "Ennek a fájlnak a formátuma nem játszható le.",
+  "DecoderFailureUnrecognisedFormat": "A fájl formátuma nem ismerhető fel.",
+  "DecoderFailureOutOfScopeFormat": "A WMA formátum nem támogatott.",
+  "DecoderFailureSystemCodecsUnavailable": "Hiányoznak a rendszerkodekek az AAC, M4A és ALAC formátumhoz.",
+  "DecoderFailureCodecMissing": "A rendszerből hiányzik a fájlhoz szükséges dekóder.",
+  "DecoderFailureCodecMissingLinux": "A GStreamerből hiányzik a fájl dekódolásához szükséges bővítmény. AAC, M4A és ALAC esetén a gstreamer1.0-libav csomag tartalmazza.",
+  "DecoderFailureDamagedFile": "A fájl sérült vagy olvashatatlan.",
+  "DecoderFailureNoAudioStream": "A fájl nem tartalmaz hangsávot.",
+  "DecoderFailureUnsupportedChannelLayout": "A fájl csatornakiosztása nem támogatott.",
+  "DecimalSeparator": ",",
+  "AssociationsFailedExecutable": "A programfájl helye nem állapítható meg. A társítások változatlanok maradtak.",
+  "AssociationsFailedRegistry": "A rendszerleíró adatbázis elutasította a társítások mentését. Változatlanok maradtak.",
+  "AssociationFileType": "Hangfájl",
+  "AssociationDescription": "Hangfájl-lejátszó"
 }

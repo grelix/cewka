@@ -68,7 +68,7 @@
   "NoTrack": "Нет трека в очереди",
   "NoFormat": "—",
 
-  "AudioFailure": "Не удалось запустить воспроизведение.",
+  "AudioFailure": "Не удаётся начать воспроизведение. Можно повторить попытку или выбрать другое устройство.",
 
   "Settings": "Настройки",
   "SectionAppearance": "Внешний вид",
@@ -183,7 +183,7 @@
   "AssociationsStale": "Регистрация указывает на другую копию программы, и её стоит обновить.",
   "AssociationsAbsent": "Приложение не зарегистрировано. Регистрация добавляет его в список «Открыть с помощью» только для текущего пользователя и не занимает ни один формат без явного указания.",
   "AssociationsUnsupported": "Эта система не предоставляет реестр ассоциаций файлов.",
-  "AssociationsFailed": "Операция не выполнена:",
+  "AssociationsFailed": "Сопоставления файлов не сохранены. Они остались без изменений.",
 
   "AboutAuthor": "Автор",
   "AboutRepository": "Репозиторий",
@@ -211,5 +211,34 @@
 
   "NothingPlaying": "Ничего не воспроизводится",
 
-  "VolumeLevel": "Громкость {0}%"
+  "VolumeLevel": "Громкость {0}%",
+
+  "AudioFailureDevice": "Не удаётся открыть устройство вывода. Возможно, оно отключено или занято другой программой.",
+  "AudioFailureLibrary": "В файлах программы нет звуковой библиотеки. Для воспроизведения нужна переустановка программы.",
+  "AudioFailureFallback": "Не удаётся открыть выбранное устройство. Звук направлен на устройство по умолчанию.",
+  "AudioRetry": "Повторить",
+  "AudioChooseDevice": "Выбрать устройство",
+  "DeviceLostNotice": "Устройство вывода отключено. Воспроизведение приостановлено.",
+  "DeviceFallbackNotice": "Выбранное устройство недоступно. Звук направлен на устройство по умолчанию.",
+  "TrackSkipped": "Файл «{0}» пропущен. {1}",
+  "TracksSkipped": "Пропущено файлов, которые нельзя воспроизвести: {0}.",
+  "TrackFailureFileMissing": "Файла больше нет по сохранённому пути.",
+  "TrackFailureAccessDenied": "Нет прав на чтение файла.",
+  "TrackFailureFileUnavailable": "Файл временно недоступен. Возможно, он занят другой программой или носитель отключён.",
+  "TrackFailureDamagedFile": "Файл повреждён или не соответствует своему расширению.",
+  "TrackFailurePlaybackInterrupted": "Чтение файла прервалось во время воспроизведения.",
+  "DecoderFailureUnspecified": "Формат этого файла нельзя воспроизвести.",
+  "DecoderFailureUnrecognisedFormat": "Формат файла не распознан.",
+  "DecoderFailureOutOfScopeFormat": "Формат WMA не поддерживается.",
+  "DecoderFailureSystemCodecsUnavailable": "Нет системных кодеков для AAC, M4A и ALAC.",
+  "DecoderFailureCodecMissing": "В системе нет декодера для этого файла.",
+  "DecoderFailureCodecMissingLinux": "В GStreamer нет модуля для декодирования этого файла. Для AAC, M4A и ALAC его содержит пакет gstreamer1.0-libav.",
+  "DecoderFailureDamagedFile": "Файл повреждён или нечитаем.",
+  "DecoderFailureNoAudioStream": "Файл не содержит звуковой дорожки.",
+  "DecoderFailureUnsupportedChannelLayout": "Раскладка каналов этого файла не поддерживается.",
+  "DecimalSeparator": ",",
+  "AssociationsFailedExecutable": "Не удалось определить расположение файла программы. Сопоставления остались без изменений.",
+  "AssociationsFailedRegistry": "Системный реестр отказал в сохранении сопоставлений. Они остались без изменений.",
+  "AssociationFileType": "Звуковой файл",
+  "AssociationDescription": "Проигрыватель звуковых файлов"
 }

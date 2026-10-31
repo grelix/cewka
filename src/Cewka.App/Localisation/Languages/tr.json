@@ -68,7 +68,7 @@
   "NoTrack": "Kuyrukta parça yok",
   "NoFormat": "—",
 
-  "AudioFailure": "Çalma başlatılamadı.",
+  "AudioFailure": "Oynatma başlatılamıyor. Yeniden denenebilir veya başka bir aygıt seçilebilir.",
 
   "Settings": "Ayarlar",
   "SectionAppearance": "Görünüm",
@@ -183,7 +183,7 @@
   "AssociationsStale": "Kayıt, programın farklı bir kopyasını gösteriyor ve yenilenmesi önerilir.",
   "AssociationsAbsent": "Uygulama kayıtlı değildir. Kayıt işlemi, uygulamayı yalnızca geçerli kullanıcı için „Birlikte Aç” listesine ekler ve sorulmadan hiçbir biçimi üstlenmez.",
   "AssociationsUnsupported": "Bu sistem dosya ilişkilendirme kaydı sunmuyor.",
-  "AssociationsFailed": "İşlem başarısız oldu:",
+  "AssociationsFailed": "Dosya ilişkilendirmeleri kaydedilmedi. Değişmeden kaldılar.",
 
   "AboutAuthor": "Yazar",
   "AboutRepository": "Depo",
@@ -211,5 +211,34 @@
 
   "NothingPlaying": "Çalan bir şey yok",
 
-  "VolumeLevel": "Ses düzeyi %{0}"
+  "VolumeLevel": "Ses düzeyi %{0}",
+
+  "AudioFailureDevice": "Çıkış aygıtı açılamıyor. Bağlantısı kesilmiş veya başka bir program tarafından kullanılıyor olabilir.",
+  "AudioFailureLibrary": "Program dosyalarında ses kitaplığı yok. Oynatma için programın yeniden kurulması gerekiyor.",
+  "AudioFailureFallback": "Seçilen aygıt açılamıyor. Ses varsayılan aygıta gidiyor.",
+  "AudioRetry": "Yeniden dene",
+  "AudioChooseDevice": "Aygıt seç",
+  "DeviceLostNotice": "Çıkış aygıtının bağlantısı kesildi. Oynatma duraklatıldı.",
+  "DeviceFallbackNotice": "Seçilen aygıt kullanılamıyor. Ses varsayılan aygıta gidiyor.",
+  "TrackSkipped": "“{0}” atlandı. {1}",
+  "TracksSkipped": "Oynatılamadığı için atlanan dosyalar: {0}.",
+  "TrackFailureFileMissing": "Dosya kayıtlı yolda artık bulunmuyor.",
+  "TrackFailureAccessDenied": "Dosyayı okuma izni yok.",
+  "TrackFailureFileUnavailable": "Dosya geçici olarak kullanılamıyor. Başka bir program kullanıyor olabilir veya sürücünün bağlantısı kesilmiş olabilir.",
+  "TrackFailureDamagedFile": "Dosya bozuk veya uzantısıyla uyuşmuyor.",
+  "TrackFailurePlaybackInterrupted": "Dosyanın okunması oynatma sırasında kesildi.",
+  "DecoderFailureUnspecified": "Bu dosya biçimi oynatılamıyor.",
+  "DecoderFailureUnrecognisedFormat": "Dosya biçimi tanınmadı.",
+  "DecoderFailureOutOfScopeFormat": "WMA biçimi desteklenmiyor.",
+  "DecoderFailureSystemCodecsUnavailable": "AAC, M4A ve ALAC için sistem kodekleri eksik.",
+  "DecoderFailureCodecMissing": "Sistemde bu dosya için kod çözücü yok.",
+  "DecoderFailureCodecMissingLinux": "GStreamer’da bu dosyayı çözecek eklenti yok. AAC, M4A ve ALAC için gstreamer1.0-libav paketi sağlar.",
+  "DecoderFailureDamagedFile": "Dosya bozuk veya okunamıyor.",
+  "DecoderFailureNoAudioStream": "Dosyada ses akışı yok.",
+  "DecoderFailureUnsupportedChannelLayout": "Bu dosyanın kanal düzeni desteklenmiyor.",
+  "DecimalSeparator": ",",
+  "AssociationsFailedExecutable": "Program dosyasının konumu belirlenemedi. İlişkilendirmeler değişmeden kaldı.",
+  "AssociationsFailedRegistry": "Sistem kayıt defteri ilişkilendirmelerin kaydını reddetti. Değişmeden kaldılar.",
+  "AssociationFileType": "Ses dosyası",
+  "AssociationDescription": "Ses dosyası oynatıcı"
 }

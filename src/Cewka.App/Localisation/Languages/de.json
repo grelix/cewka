@@ -68,7 +68,7 @@
   "NoTrack": "Nichts in der Warteschlange",
   "NoFormat": "—",
 
-  "AudioFailure": "Wiedergabe konnte nicht gestartet werden.",
+  "AudioFailure": "Die Wiedergabe kann nicht gestartet werden. Ein erneuter Versuch oder ein anderes Gerät kann helfen.",
 
   "Settings": "Einstellungen",
   "SectionAppearance": "Erscheinungsbild",
@@ -183,7 +183,7 @@
   "AssociationsStale": "Die Registrierung verweist auf eine andere Programmkopie — eine Aktualisierung wird empfohlen.",
   "AssociationsAbsent": "Die Anwendung ist nicht registriert. Die Registrierung fügt sie nur für den aktuellen Benutzer der Liste „Öffnen mit“ hinzu und übernimmt kein Format, ohne dass es ausdrücklich angegeben wird.",
   "AssociationsUnsupported": "Dieses System stellt keine Registrierung für Dateizuordnungen bereit.",
-  "AssociationsFailed": "Der Vorgang ist fehlgeschlagen:",
+  "AssociationsFailed": "Die Dateizuordnungen wurden nicht gespeichert. Sie bleiben unverändert.",
 
   "AboutAuthor": "Autor",
   "AboutRepository": "Repository",
@@ -211,5 +211,34 @@
 
   "NothingPlaying": "Keine Wiedergabe",
 
-  "VolumeLevel": "Lautstärke {0} %"
+  "VolumeLevel": "Lautstärke {0} %",
+
+  "AudioFailureDevice": "Das Ausgabegerät kann nicht geöffnet werden. Es wurde möglicherweise getrennt oder von einem anderen Programm belegt.",
+  "AudioFailureLibrary": "In den Programmdateien fehlt die Audiobibliothek. Für die Wiedergabe ist eine Neuinstallation nötig.",
+  "AudioFailureFallback": "Das gewählte Gerät kann nicht geöffnet werden. Der Ton geht an das Standardgerät.",
+  "AudioRetry": "Erneut versuchen",
+  "AudioChooseDevice": "Gerät wählen",
+  "DeviceLostNotice": "Das Ausgabegerät wurde getrennt. Die Wiedergabe ist angehalten.",
+  "DeviceFallbackNotice": "Das gewählte Gerät ist nicht verfügbar. Der Ton geht an das Standardgerät.",
+  "TrackSkipped": "„{0}“ wurde übersprungen. {1}",
+  "TracksSkipped": "Übersprungene Dateien, die nicht abspielbar sind: {0}.",
+  "TrackFailureFileMissing": "Die Datei existiert unter dem gespeicherten Pfad nicht mehr.",
+  "TrackFailureAccessDenied": "Es fehlt die Berechtigung zum Lesen der Datei.",
+  "TrackFailureFileUnavailable": "Die Datei ist vorübergehend nicht verfügbar. Ein anderes Programm belegt sie, oder der Datenträger wurde getrennt.",
+  "TrackFailureDamagedFile": "Die Datei ist beschädigt oder passt nicht zu ihrer Endung.",
+  "TrackFailurePlaybackInterrupted": "Das Lesen der Datei brach während der Wiedergabe ab.",
+  "DecoderFailureUnspecified": "Dieses Dateiformat kann nicht abgespielt werden.",
+  "DecoderFailureUnrecognisedFormat": "Das Dateiformat wurde nicht erkannt.",
+  "DecoderFailureOutOfScopeFormat": "Das WMA-Format wird nicht unterstützt.",
+  "DecoderFailureSystemCodecsUnavailable": "Die Systemcodecs für AAC, M4A und ALAC fehlen.",
+  "DecoderFailureCodecMissing": "Im System fehlt ein Decoder für diese Datei.",
+  "DecoderFailureCodecMissingLinux": "GStreamer fehlt ein Plugin zum Dekodieren dieser Datei. Für AAC, M4A und ALAC liefert es das Paket gstreamer1.0-libav.",
+  "DecoderFailureDamagedFile": "Die Datei ist beschädigt oder unlesbar.",
+  "DecoderFailureNoAudioStream": "Die Datei enthält keine Tonspur.",
+  "DecoderFailureUnsupportedChannelLayout": "Die Kanalanordnung dieser Datei wird nicht unterstützt.",
+  "DecimalSeparator": ",",
+  "AssociationsFailedExecutable": "Der Speicherort der Programmdatei konnte nicht ermittelt werden. Die Zuordnungen bleiben unverändert.",
+  "AssociationsFailedRegistry": "Die Systemregistrierung hat das Speichern der Zuordnungen abgelehnt. Sie bleiben unverändert.",
+  "AssociationFileType": "Audiodatei",
+  "AssociationDescription": "Player für Audiodateien"
 }

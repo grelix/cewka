@@ -450,11 +450,13 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     {
         try
         {
-            FileAssociations.Register(AudioFileFormatDetector.SupportedExtensions);
+            FileAssociations.Register(
+                AudioFileFormatDetector.SupportedExtensions,
+                new AssociationTexts(Strings.Current["AssociationFileType"], Strings.Current["AssociationDescription"]));
         }
         catch (Exception ex)
         {
-            AssociationStatus = $"{Strings.Current["AssociationsFailed"]} {ex.Message}";
+            ShowAssociationFailure(ex);
             return;
         }
 
@@ -469,11 +471,24 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            AssociationStatus = $"{Strings.Current["AssociationsFailed"]} {ex.Message}";
+            ShowAssociationFailure(ex);
             return;
         }
 
         RefreshAssociationStatus();
+    }
+
+    /// <summary>Przyczyna zwykłymi słowami; tekst wyjątku idzie do dziennika.</summary>
+    private void ShowAssociationFailure(Exception ex)
+    {
+        Console.Error.WriteLine($"[cewka] skojarzenia plików: {ex}");
+
+        AssociationStatus = Strings.Current[ex switch
+        {
+            AssociationException { Reason: AssociationFailure.ExecutableUnknown } => "AssociationsFailedExecutable",
+            AssociationException { Reason: AssociationFailure.RegistryWrite } => "AssociationsFailedRegistry",
+            _ => "AssociationsFailed",
+        }];
     }
 
     private void RefreshAssociationStatus()
@@ -583,15 +598,15 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         {
             var result = await UpdateCheck.LatestAsync(RepositoryUrl, UpdateCheck.Current);
 
-            _settings.Current.LastUpdateCheck = DateTimeOffset.UtcNow;
-            _settings.Touch();
-
             if (!result.Succeeded)
             {
                 Console.Error.WriteLine($"[cewka] sprawdzanie wersji: {result.Failure}");
                 UpdateStatus = Strings.Current["UpdateFailed"];
                 return;
             }
+
+            _settings.Current.LastUpdateCheck = DateTimeOffset.UtcNow;
+            _settings.Touch();
 
             var latest = result.Latest!;
 
@@ -662,6 +677,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         foreach (var palette in Palettes) palette.RefreshLabel();
 
         RefreshAssociationStatus();
+        RefreshDevices();
 
         Raise(nameof(VersionText));
         Raise(nameof(DecodersText));

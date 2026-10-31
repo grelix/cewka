@@ -1,4 +1,4 @@
-using System.Globalization;
+using Cewka.App.Localisation;
 
 namespace Cewka.App.ViewModels;
 
@@ -37,7 +37,10 @@ public sealed class EqBandViewModel : ObservableObject
         {
             var rounded = Math.Round(_gain * 2, MidpointRounding.AwayFromZero) / 2;
             var sign = rounded > 0 ? "+" : rounded < 0 ? "−" : string.Empty;
-            return sign + Math.Abs(rounded).ToString("F1", CultureInfo.InvariantCulture);
+            return sign + Math.Abs(rounded).ToString("F1", Strings.Current.Numbers);
         }
     }
+
+    /// <summary>Po zmianie języka: separator dziesiętny mógł się zmienić.</summary>
+    public void RefreshText() => Raise(nameof(GainText));
 }

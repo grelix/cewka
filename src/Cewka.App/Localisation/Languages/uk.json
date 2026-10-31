@@ -68,7 +68,7 @@
   "NoTrack": "Немає треку в черзі",
   "NoFormat": "—",
 
-  "AudioFailure": "Не вдалося розпочати відтворення.",
+  "AudioFailure": "Не вдається розпочати відтворення. Можна повторити спробу або вибрати інший пристрій.",
 
   "Settings": "Налаштування",
   "SectionAppearance": "Вигляд",
@@ -183,7 +183,7 @@
   "AssociationsStale": "Реєстрація вказує на інше розташування програми — варто її оновити.",
   "AssociationsAbsent": "Програму не зареєстровано. Реєстрація додає її до списку «Відкрити за допомогою» лише для поточного користувача і не займає жодного формату без його вказання.",
   "AssociationsUnsupported": "Ця система не надає реєстру асоціацій файлів.",
-  "AssociationsFailed": "Операція не вдалася:",
+  "AssociationsFailed": "Зіставлення файлів не збережено. Вони лишилися без змін.",
 
   "AboutAuthor": "Автор",
   "AboutRepository": "Репозиторій",
@@ -211,5 +211,34 @@
 
   "NothingPlaying": "Нічого не відтворюється",
 
-  "VolumeLevel": "Гучність {0}%"
+  "VolumeLevel": "Гучність {0}%",
+
+  "AudioFailureDevice": "Не вдається відкрити пристрій виведення. Можливо, його від’єднано або він зайнятий іншою програмою.",
+  "AudioFailureLibrary": "У файлах програми немає звукової бібліотеки. Для відтворення потрібне перевстановлення програми.",
+  "AudioFailureFallback": "Не вдається відкрити вибраний пристрій. Звук спрямовано на типовий пристрій.",
+  "AudioRetry": "Повторити",
+  "AudioChooseDevice": "Вибрати пристрій",
+  "DeviceLostNotice": "Пристрій виведення від’єднано. Відтворення призупинено.",
+  "DeviceFallbackNotice": "Вибраний пристрій недоступний. Звук спрямовано на типовий пристрій.",
+  "TrackSkipped": "Файл «{0}» пропущено. {1}",
+  "TracksSkipped": "Пропущено файлів, які не можна відтворити: {0}.",
+  "TrackFailureFileMissing": "Файлу більше немає за збереженим шляхом.",
+  "TrackFailureAccessDenied": "Немає дозволу на читання файлу.",
+  "TrackFailureFileUnavailable": "Файл тимчасово недоступний. Можливо, його зайняла інша програма або носій від’єднано.",
+  "TrackFailureDamagedFile": "Файл пошкоджений або не відповідає своєму розширенню.",
+  "TrackFailurePlaybackInterrupted": "Читання файлу перервалося під час відтворення.",
+  "DecoderFailureUnspecified": "Формат цього файлу не можна відтворити.",
+  "DecoderFailureUnrecognisedFormat": "Формат файлу не розпізнано.",
+  "DecoderFailureOutOfScopeFormat": "Формат WMA не підтримується.",
+  "DecoderFailureSystemCodecsUnavailable": "Немає системних кодеків для AAC, M4A та ALAC.",
+  "DecoderFailureCodecMissing": "У системі немає декодера для цього файлу.",
+  "DecoderFailureCodecMissingLinux": "У GStreamer немає модуля для декодування цього файлу. Для AAC, M4A та ALAC його містить пакет gstreamer1.0-libav.",
+  "DecoderFailureDamagedFile": "Файл пошкоджений або нечитабельний.",
+  "DecoderFailureNoAudioStream": "Файл не містить звукової доріжки.",
+  "DecoderFailureUnsupportedChannelLayout": "Розкладка каналів цього файлу не підтримується.",
+  "DecimalSeparator": ",",
+  "AssociationsFailedExecutable": "Не вдалося визначити розташування файлу програми. Зіставлення лишилися без змін.",
+  "AssociationsFailedRegistry": "Системний реєстр відмовив у збереженні зіставлень. Вони лишилися без змін.",
+  "AssociationFileType": "Звуковий файл",
+  "AssociationDescription": "Програвач звукових файлів"
 }
