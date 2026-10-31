@@ -1,34 +1,19 @@
 namespace Cewka.Audio.Decoding;
 
 /// <summary>
-/// Measures the bitrate of the passage being decoded.
+/// Mierzy przepływność fragmentu, który jest właśnie dekodowany; wartość z tagu to średnia
+/// z całego pliku.
 ///
-/// <para><b>Po co.</b> Plik o zmiennej przepływności ma inną gęstość danych w cichym przejściu
-/// i w kulminacji. Wartość z tagu jest średnią z całości i nie mówi nic o tym, co gra w tej
-/// chwili.</para>
-///
-/// <para><b>Dlaczego pomiar idzie od porcji, a nie z okna czasowego.</b> Dekoder nie czyta pliku
-/// równomiernie: pobiera go porcjami po kilkadziesiąt kilobajtów i między nimi nie sięga do pliku
-/// wcale. Zmierzone na pliku MP3 128 kbps: 394 z 400 wywołań dekodowania nie odczytały ani jednego
-/// bajtu, a pozostałe pobrały po około 49 kB — czyli mniej więcej po trzy sekundy dźwięku.
-/// Zużycie danych jest więc obserwowalne wyłącznie w takich granulach.</para>
-///
-/// <para>Okno czasowe krótsze od porcji daje bezwartościowy wynik: przy oknie półsekundowym
-/// zmierzone wartości wahały się od 0 do 1117 kbps przy prawdziwej średniej 128. Wcześniejsza
-/// wersja miernika ukrywała ten rozrzut, pomijając okna bez odczytu — i przez to zatrzymywała się
-/// na wartości jedynego okna, które trafiło w porcję, zawyżonej o połowę. Stąd wrażenie, że
-/// odczyt po kilku sekundach zamiera.</para>
-///
-/// <para>Przepływność liczona jest teraz z jednej porcji podzielonej przez czas dźwięku, jaki
-/// z niej powstał. Rozdzielczość odczytu to długość porcji, czyli kilka sekund — i tyle da się
-/// z tego materiału uczciwie odczytać.</para>
+/// <para>Pułapka: dekoder czyta plik porcjami po kilkadziesiąt kilobajtów (w MP3 128 kbps około
+/// 49 kB, czyli trzy sekundy dźwięku), a między nimi nie sięga do pliku wcale. Okno czasowe
+/// krótsze od porcji daje wartości od zera do kilkukrotności średniej. Dlatego przepływność to
+/// bajty jednej porcji podzielone przez czas dźwięku, jaki z niej powstał.</para>
 /// </summary>
 public sealed class BitrateMeter
 {
     /// <summary>
-    /// Minimum audio time between two measurements. Sąsiadujące odczyty, które dekoder wykonuje
-    /// jeden po drugim, trafiają dzięki temu do jednej porcji, zamiast dawać wartość policzoną
-    /// z ułamka sekundy.
+    /// Najkrótszy czas dźwięku między pomiarami. Odczyty wykonane tuż po sobie trafiają dzięki
+    /// temu do jednej porcji.
     /// </summary>
     private const double MinimumSpanSeconds = 0.75;
 
@@ -42,9 +27,8 @@ public sealed class BitrateMeter
     public int Kilobits { get; private set; }
 
     /// <summary>
-    /// Called once the output format is known. Also clears the counters: opening a file reads far
-    /// more than it plays — miniaudio przeskanowuje cały plik MP3, żeby policzyć jego ramki —
-    /// a te bajty nie należą do żadnego fragmentu nagrania.
+    /// Wywoływane po ustaleniu formatu wyjścia. Zeruje też liczniki, bo przy otwarciu miniaudio
+    /// przegląda cały plik MP3, żeby policzyć ramki, a te bajty nie należą do żadnego fragmentu.
     /// </summary>
     public void Configure(int sampleRate)
     {
@@ -53,8 +37,7 @@ public sealed class BitrateMeter
     }
 
     /// <summary>
-    /// Called by the counting stream for every read. Tutaj powstaje pomiar: odczyt wyznacza
-    /// granicę między jedną porcją danych skompresowanych a następną.
+    /// Wywoływane przez strumień liczący przy każdym odczycie; odczyt wyznacza granicę porcji.
     /// </summary>
     public void AddBytes(long bytes)
     {

@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Chrome;
 using Avalonia.Input;
@@ -10,13 +10,8 @@ using Cewka.Platform;
 namespace Cewka.App.Views;
 
 /// <summary>
-/// The settings window: everything the player remembers between runs, in one place.
-/// <para>
-/// Frameless like the main window, and deliberately not modal — a device or a theme is chosen
-/// by listening and looking, which means the music has to keep playing and the window behind
-/// has to stay usable while the choice is made. Z tego samego powodu okno przyjmuje skróty
-/// odtwarzania i staje obok okna głównego, a nie na nim.
-/// </para>
+/// Okno ustawień, bez ramki jak okno główne i niemodalne, bo urządzenie czy motyw wybiera się
+/// słuchając i patrząc. Z tego powodu przyjmuje skróty odtwarzania i staje obok okna głównego.
 /// </summary>
 public partial class SettingsWindow : Window
 {
@@ -51,8 +46,8 @@ public partial class SettingsWindow : Window
             Shell.Classes.Add("square");
         }
 
-        // Wlasny pasek przewijania, ten sam co przy kolejce; domyslny z motywu Fluent
-        // jest szerszy i nie nalezy do jezyka wizualnego reszty programu.
+        // Własny pasek przewijania, ten sam co przy kolejce; domyślny z motywu Fluent jest
+        // szerszy i odstaje od reszty programu.
         ContentScrollBar.Target = ContentArea;
     }
 
@@ -61,9 +56,7 @@ public partial class SettingsWindow : Window
         _viewModel = viewModel;
         DataContext = viewModel;
 
-        // Pozycja przycisków okna jest jednym z ustawień w tym oknie, więc musi się w nim
-        // przestawić natychmiast — inaczej jedyne miejsce, gdzie tej zmiany nie widać, byłoby
-        // to, w którym się jej dokonuje.
+        // Położenie przycisków okna zmienia się w tym oknie, więc i tutaj ma się przestawić od razu.
         _viewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(SettingsViewModel.CurrentWindowControls)) ApplyControlsPosition();
@@ -203,14 +196,13 @@ public partial class SettingsWindow : Window
     {
         _viewModel?.SelectSection(section);
 
-        // Przewiniecie nalezy do porzuconej zakladki; bez tego kolejna otwieralaby sie
-        // w polowie, w miejscu, ktorego uzytkownik nigdy nie wskazal.
+        // Przewinięcie należało do poprzedniej zakładki; następna ma się otworzyć od góry.
         ContentArea.Offset = default;
     }
 
     /// <summary>
-    /// Wybor jezyka ma postac listy, a nie paska segmentow: przy szesciu pozycjach segmenty
-    /// nie mieszcza sie w jednym wierszu. Grupa pod spodem pozostaje ta sama.
+    /// Wybór języka ma postać listy, bo tylu pozycji nie zmieści pasek segmentów. Grupa pod
+    /// spodem jest ta sama.
     /// </summary>
     private void OnLanguageClick(object? sender, RoutedEventArgs e)
     {

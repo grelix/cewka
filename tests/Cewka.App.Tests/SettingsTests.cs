@@ -27,8 +27,7 @@ public sealed class SettingsTests
         Assert.Equal(expected, AudioPreferences.FilterOrder(quality));
 
     /// <summary>
-    /// Wartość domyślna musi zostawiać brzmienie takim, jakie było przed wprowadzeniem
-    /// ustawienia — inaczej sama aktualizacja programu zmieniłaby dźwięk.
+    /// Domyślna jakość to rząd filtru przyjęty przez miniaudio, żeby brzmienie się nie zmieniało.
     /// </summary>
     [Fact]
     public void DomyslnaJakoscToWartoscMiniaudio()
@@ -59,8 +58,7 @@ public sealed class SettingsTests
     }
 
     /// <summary>
-    /// Wyważony rozmiar bufora oznacza „bez żądania": zero zostawia wybór sterownikowi, czyli
-    /// zachowanie sprzed wprowadzenia ustawienia.
+    /// Wyważony rozmiar bufora oznacza „bez żądania”: zero zostawia wybór sterownikowi.
     /// </summary>
     [Fact]
     public void WywazonyBuforNieNarzucaRozmiaru() =>
@@ -145,9 +143,8 @@ public sealed class SettingsTests
     }
 
     /// <summary>
-    /// Plik ustawień zapisany przez wcześniejszą wersję nie zawiera nowych pól. Musi się wczytać
-    /// bez błędu, a brakujące ustawienia przyjąć wartości domyślne — pojawienie się nowej opcji
-    /// nie może kasować tego, co użytkownik już ustawił.
+    /// Starszy plik ustawień bez nowych pól wczytuje się bez błędu, brakujące pola dostają
+    /// wartości domyślne, a zapisane zostają.
     /// </summary>
     [Fact]
     public void StarszyPlikUstawienWczytujeSieZWartosciamiDomyslnymi()
@@ -189,8 +186,7 @@ public sealed class SettingsTests
         Assert.Equal(defaults.RestoreSession, loaded.RestoreSession);
         Assert.Equal(defaults.SeekStep, loaded.SeekStep);
 
-        // Efekty dźwiękowe: plik sprzed ich wprowadzenia nie może ich włączyć. Program ma grać
-        // tak samo jak przedtem, dopóki nikt sam po nie nie sięgnie.
+        // Plik bez pól efektów dźwiękowych nie może ich włączyć.
         Assert.False(loaded.CrossfeedEnabled);
         Assert.False(loaded.LoudnessEnabled);
         Assert.False(loaded.VirtualBassEnabled);
@@ -200,9 +196,8 @@ public sealed class SettingsTests
         Assert.Equal(defaults.CrossfeedStrength, loaded.CrossfeedStrength);
         Assert.Equal(defaults.LoudnessStrength, loaded.LoudnessStrength);
 
-        // Kolejka ma od 0.8.0 własny stan. Plik sprzed rozdzielenia niesie tylko wartość dla
-        // pasa dolnego, a kolejka musi wyjść widoczna — inaczej aktualizacja programu schowałaby
-        // komuś kolejkę bez pytania.
+        // Plik bez osobnego stanu kolejki niesie tylko wartość pasa dolnego, a kolejka ma wyjść
+        // widoczna.
         Assert.False(loaded.PanelOpen);
         Assert.True(loaded.QueueOpen);
     }

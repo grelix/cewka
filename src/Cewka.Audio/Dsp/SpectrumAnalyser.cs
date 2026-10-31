@@ -1,16 +1,11 @@
 namespace Cewka.Audio.Dsp;
 
 /// <summary>
-/// Feeds the waveform drawn above the seek bar.
+/// Zasila falę nad paskiem przewijania: każdą z trzech fal napędza energia jednego pasma
+/// (niskie, środek, wysokie), a amplituda całości idzie za obwiednią sygnału.
 /// <para>
-/// The design shows three overlapping travelling waves. Rather than invent their motion,
-/// each one is driven by the energy of one part of the spectrum — low, middle and high —
-/// while the overall amplitude follows the signal envelope. The result moves with the music
-/// instead of merely next to it.
-/// </para>
-/// <para>
-/// Results are published as plain floats read by the interface thread. A torn read would
-/// at worst show one frame from an adjacent analysis window, which nobody can see.
+/// Wyniki to zwykłe liczby czytane przez wątek interfejsu bez blokady; rozdarty odczyt pokaże
+/// najwyżej klatkę z sąsiedniego okna analizy.
 /// </para>
 /// </summary>
 public sealed class SpectrumAnalyser : IAudioProcessor

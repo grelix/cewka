@@ -37,12 +37,8 @@ public sealed class ThemeManager
     public ThemeMode Mode { get; private set; }
 
     /// <summary>
-    /// The variant actually in force right now.
-    /// <para>
-    /// Read from the application rather than recomputed from <see cref="Mode"/>: anything
-    /// that sets <c>RequestedThemeVariant</c> directly — the snapshot tool does — would
-    /// otherwise get an answer that disagrees with what is on screen.
-    /// </para>
+    /// Wariant obowiązujący w tej chwili, odczytany z aplikacji, bo narzędzie zrzutów ustawia
+    /// <c>RequestedThemeVariant</c> wprost z pominięciem <see cref="Mode"/>.
     /// </summary>
     public bool IsDark => _application.ActualThemeVariant == ThemeVariant.Dark;
 

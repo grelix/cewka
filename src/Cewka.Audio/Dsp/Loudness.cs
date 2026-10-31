@@ -3,15 +3,10 @@ namespace Cewka.Audio.Dsp;
 /// <summary>
 /// Kompensacja głośności: podbicie basu i skrajnej góry tym mocniejsze, im ciszej gra muzyka.
 ///
-/// <para>Czułość ucha zmienia się z poziomem. Przy cichym słuchaniu bas i najwyższe tony słabną
-/// wyraźnie szybciej niż środek pasma, co opisują krzywe jednakowej głośności z ISO 226. Wielkość
-/// korekty wynika z rzeczywistego poziomu odsłuchu: z położenia suwaka głośności i z poziomu,
-/// na jakim gra program. Po normalizacji każdy utwór gra na poziomie docelowym, więc samo
-/// wzmocnienie normalizacji nie mówi nic o głośności odsłuchu; liczy się tylko to, o ile poziom
-/// docelowy odbiega od poziomu odniesienia ReplayGain.</para>
-///
-/// <para>Wartość odniesienia to suwak na maksimum przy programie na poziomie odniesienia. Powyżej
-/// niej nic się nie dzieje: stopień wyłącznie dodaje przy ściszaniu, nigdy nie odejmuje.</para>
+/// <para>Wielkość korekty (według krzywych jednakowej głośności z ISO 226) wynika z położenia
+/// suwaka i z tego, o ile poziom docelowy wyrównania odbiega od odniesienia ReplayGain; samo
+/// wzmocnienie wyrównania nie mówi nic o głośności odsłuchu. Przy suwaku na maksimum i poziomie
+/// odniesienia korekta wynosi zero i nigdy nie jest ujemna.</para>
 /// </summary>
 public sealed class Loudness : IAudioProcessor
 {

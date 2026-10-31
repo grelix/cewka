@@ -11,14 +11,14 @@ namespace Cewka.Audio.Tests;
 /// </summary>
 public class KWeightingTests
 {
-    // Tablica 1 z BS.1770-4: pierwszy stopien, polka gorna.
+    // Tablica 1 z BS.1770-4: pierwszy stopień, półka górna.
     private const double ShelfB0 = 1.53512485958697;
     private const double ShelfB1 = -2.69169618940638;
     private const double ShelfB2 = 1.19839281085285;
     private const double ShelfA1 = -1.69065929318241;
     private const double ShelfA2 = 0.73248077421585;
 
-    // Tablica 2 z BS.1770-4: drugi stopien, filtr gornoprzepustowy RLB.
+    // Tablica 2 z BS.1770-4: drugi stopień, filtr górnoprzepustowy RLB.
     private const double HighPassA1 = -1.99004745483398;
     private const double HighPassA2 = 0.99007225036621;
 
@@ -146,7 +146,7 @@ public class KWeightingTests
 
         limiter.Process(buffer, frames);
 
-        // Po ustabilizowaniu obwiedni szczyt powinien siedziec przy progu -1 dBFS.
+        // Po ustabilizowaniu obwiedni szczyt ma siedzieć przy progu -1 dBFS.
         var peak = 0f;
         for (var frame = sampleRate / 2; frame < frames; frame++)
             peak = Math.Max(peak, Math.Abs(buffer[frame * 2]));

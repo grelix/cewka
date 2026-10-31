@@ -3,20 +3,16 @@
 
   <!--
     Tokeny przeniesione jeden do jednego z projektu wizualnego (zmienne CSS).
-    Kolory zapisane w formacie #AARRGGBB; wartosci alfa przeliczone z zapisu rgba().
-    Akcent podany w projekcie jako oklch() przeliczony na sRGB:
+    Kolory w formacie #AARRGGBB; wartości alfa przeliczone z zapisu rgba().
+    Akcent z projektu w oklch() przeliczony na sRGB:
       oklch(0.76 0.10 250) -> #7FB6EF   (ciemny)
       oklch(0.55 0.13 250) -> #2A75BA   (jasny)
   -->
 
   <!--
-    Wysokosc wiersza naglowkowego w panelu korektora i kolejki, wspolna dla obu stron.
-
-    Po stronie korektora wiersz ma taka wysokosc sam z siebie, bo stoi w nim przelacznik
-    i przyciski trybow. Po stronie kolejki byl wysoki jedynie na tyle, co sam napis, wiec
-    oba naglowki rozjezdzaly sie w pionie o 8 px - dokladnie o polowe tej roznicy. Jedna
-    wartosc dla obu stron zamyka mozliwosc, zeby rozjechaly sie ponownie, a narzedzie
-    zrzutow i tak mierzy to przy kazdym przebiegu.
+    Wysokość wiersza nagłówkowego, wspólna dla korektora i kolejki, żeby oba nagłówki
+    stały na jednej linii; korektor ma w nim przełącznik i przyciski trybów, kolejka sam
+    napis. Narzędzie zrzutów sprawdza to przy każdym przebiegu.
   -->
   <x:Double x:Key="PanelHeaderRowHeight">34</x:Double>
 
@@ -60,14 +56,14 @@
       <x:Double x:Key="CoverOpacity">0.95</x:Double>
 
       <!--
-        Uchwyty faderow. W projekcie ich jasnosc bierze sie z rozmycia podkladu
-        (backdrop-filter), ktorego Avalonia nie ma. Bez tego samo glassHi wypada
-        za ciemno, wiec te dwa tokeny sa jasniejsze niz doslowny odpowiednik CSS.
+        Uchwyty faderów. W projekcie ich jasność bierze się z rozmycia podkładu
+        (backdrop-filter), którego Avalonia nie ma, więc te dwa tokeny są jaśniejsze
+        niż dosłowny odpowiednik CSS.
       -->
       <SolidColorBrush x:Key="FaderThumbBrush" Color="#4DFFFFFF" />
       <SolidColorBrush x:Key="FaderThumbBorderBrush" Color="#66FFFFFF" />
 
-      <!-- Plyta winylowa -->
+      <!-- Płyta winylowa -->
       <SolidColorBrush x:Key="DiscInnerBrush" Color="#FF1A1A1C" />
       <SolidColorBrush x:Key="DiscOuterBrush" Color="#FF0C0C0E" />
       <SolidColorBrush x:Key="DiscGrooveBrush" Color="#0EFFFFFF" />
@@ -77,8 +73,7 @@
     <!-- ================= JASNY ================= -->
     <ResourceDictionary x:Key="Light">
       <SolidColorBrush x:Key="DeskBrush" Color="#FFE9E9EC" />
-      <!-- Przyciemnienie slabsze niz w motywie ciemnym: przy 0x4D barwa okladki ledwie sie
-           przebijala i okno wygladalo niemal tak samo dla kazdego albumu. -->
+      <!-- Przyciemnienie słabsze niż w motywie ciemnym; mocniejsze tłumiłoby barwę okładki. -->
       <SolidColorBrush x:Key="ScrimBrush" Color="#2EFAFAFC" />
 
       <SolidColorBrush x:Key="TextBrush" Color="#FF1B1B1D" />
@@ -109,7 +104,7 @@
       <SolidColorBrush x:Key="FaderThumbBrush" Color="#FFFFFFFF" />
       <SolidColorBrush x:Key="FaderThumbBorderBrush" Color="#26000000" />
 
-      <!-- Plyta pozostaje ciemna takze w motywie jasnym - to fizyczny obiekt, nie element interfejsu. -->
+      <!-- Płyta zostaje ciemna także w motywie jasnym, jak prawdziwa płyta. -->
       <SolidColorBrush x:Key="DiscInnerBrush" Color="#FF1A1A1C" />
       <SolidColorBrush x:Key="DiscOuterBrush" Color="#FF0C0C0E" />
       <SolidColorBrush x:Key="DiscGrooveBrush" Color="#0EFFFFFF" />

@@ -71,13 +71,7 @@ public sealed class PaletteOption(string labelKey, PlaceholderPalette value) : O
 }
 
 /// <summary>
-/// State behind the settings window.
-///
-/// <para><b>Zmiany działają od razu.</b> Okno nie ma przycisków „Zastosuj" ani „Anuluj": każda
-/// zmiana jest widoczna lub słyszalna natychmiast i od razu zapisywana. Przy ustawieniach, które
-/// ocenia się zmysłami — motyw, urządzenie wyjściowe, siła efektów — porównanie „przed
-/// i po" jest jedynym sensownym sposobem wyboru, a okno z przyciskiem zatwierdzenia właśnie to
-/// uniemożliwia.</para>
+/// Stan okna ustawień. Każda zmiana działa i zapisuje się od razu, bez „Zastosuj” i „Anuluj”.
 /// </summary>
 public sealed class SettingsViewModel : ObservableObject, IDisposable
 {
@@ -143,11 +137,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             ("ColoursRecommended", ColourIntensity.Recommended),
             ("ColoursIntense", ColourIntensity.Intense));
 
-        // Lista wyprowadzona wprost z CoilCover.Fixed, a nie wypisana drugi raz. Kiedy była
-        // wypisana, dołożenie sześciu par w 0.8.0 zmieniło rysowanie okładek, ale do tej listy
-        // nie dotarło — i nowe pary po prostu nie pojawiły się w ustawieniach. Klucz językowy
-        // składa się z nazwy pozycji wyliczenia; pilnuje tego test, który sprawdza, czy każdy
-        // taki klucz istnieje w każdym pliku językowym.
+        // Lista z CoilCover.Fixed, żeby nowa para nie ominęła ustawień. Klucz językowy to nazwa
+        // pozycji wyliczenia; test sprawdza, że jest w każdym pliku języka.
         Palettes =
         [
             ..CoilCover.Fixed.Select(value => new PaletteOption("Palette" + value, value)),
@@ -264,9 +255,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public SettingsSection About { get; }
 
     /// <summary>
-    /// Przechodzi do wskazanej zakładki. Wybór nie jest zapamiętywany między uruchomieniami:
-    /// zapamiętywanie kosztowałoby kolejne pole w ustawieniach, a rozwiązywałoby problem,
-    /// którego nie ma — okno otwiera się po to, żeby czegoś poszukać, a nie żeby wrócić.
+    /// Przechodzi do wskazanej zakładki. Wybór nie jest zapamiętywany między uruchomieniami.
     /// </summary>
     public void SelectSection(SettingsSection section)
     {
@@ -598,10 +587,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Sprawdza dostępność nowszego wydania i opisuje wynik słowami.
     ///
-    /// <para>Wynik nie jest nigdzie zapisywany: zapisana zostaje wyłącznie data sprawdzenia,
-    /// żeby sprawdzanie automatyczne nie powtarzało żądania częściej niż raz na dobę. Powód
-    /// niepowodzenia trafia do dziennika, a w oknie staje jedno zdanie — użytkownikowi
-    /// niepotrzebny jest numer błędu HTTP.</para>
+    /// <para>Zapisywana jest tylko data sprawdzenia. Powód niepowodzenia trafia do dziennika,
+    /// a w oknie staje jedno zdanie.</para>
     /// </summary>
     public async Task CheckForUpdatesNowAsync()
     {

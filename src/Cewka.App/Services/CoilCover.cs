@@ -6,46 +6,24 @@ using Cewka.App.Models;
 namespace Cewka.App.Services;
 
 /// <summary>
-/// Rysuje domyślną okładkę: cewkę, od której program wziął nazwę. Używana dla plików,
-/// które nie mają własnej okładki.
-///
-/// <para><b>Dlaczego rysowana, a nie wczytywana z pliku.</b> Wcześniej były to dwa obrazy PNG,
-/// po jednym na motyw, w jednej barwie. Pięć par barw znaczyłoby dziesięć plików ważących
-/// razem blisko megabajt, a przejście barwy wzdłuż zwoju trzeba by i tak było wygenerować
-/// programem. Rysowanie na miejscu daje wszystkie warianty za darmo, waży zero i pozwala
-/// dobrać jasność barw do motywu, zamiast utrwalać ją w pliku.</para>
+/// Rysuje domyślną okładkę: cewkę, od której program wziął nazwę, dla plików bez własnej
+/// okładki. Rysowana w locie, bo każda para barw i każdy motyw dawałyby osobny plik.
 /// </summary>
 public static class CoilCover
 {
-    /// <summary>Bok obrazu w pikselach. Tyle miały pliki, które to zastępuje.</summary>
+    /// <summary>Bok obrazu w pikselach.</summary>
     private const int Size = 640;
 
-    /// <summary>Liczba zwojów. Tyle widać na okładce z poprzednich wydań.</summary>
+    /// <summary>Liczba zwojów.</summary>
     private const double Turns = 4.0;
 
-    /// <summary>
-    /// Na tyle odcinków dzielony jest zwój. Każdy dostaje własną barwę, więc odcinków musi być
-    /// dość, żeby przejście było gładkie — przy zaokrąglonych końcach nie widać wtedy styków.
-    /// </summary>
+    /// <summary>Liczba odcinków zwoju; każdy ma własną barwę, więc musi ich być dość na gładkie przejście.</summary>
     private const int Segments = 320;
 
     /// <summary>Promień początkowy i końcowy zwoju, w częściach połowy boku.</summary>
     private const double InnerRadius = 0.10;
     private const double OuterRadius = 0.70;
 
-    /// <summary>
-    /// Barwy zwoju: środek, połowa drogi, koniec. Podane w jasności odpowiedniej dla motywu
-    /// ciemnego; dla jasnego są przyciemniane.
-    ///
-    /// <para><b>Dlaczego trzy barwy, a nie dwie.</b> Przy dwóch barwa środkowa wypada z ich
-    /// wymieszania, a to działa tylko wtedy, gdy obie leżą blisko siebie na kole barw. Para
-    /// turkus i róż leży prawie po przeciwnych stronach: prosta między nimi — w sRGB czy
-    /// w Oklabie, bez różnicy — przechodzi obok osi bezbarwnej i połowa zwoju wychodziła szara.
-    /// Wybór drogi po kole barw też nie rozwiązuje sprawy, bo najkrótszy łuk z turkusu do różu
-    /// wiedzie przez zieleń i żółć, których w tej parze nie ma. Środek podany wprost zamienia
-    /// przypadek na decyzję: turkus dochodzi do różu przez fiolet, czyli tak, jak wygląda ta
-    /// para wszędzie tam, gdzie się jej używa.</para>
-    /// </summary>
     /// <summary>
     /// Pary o ustalonych barwach, bez pozycji „losowo". Kolejność jest kolejnością na liście
     /// w ustawieniach i zarazem zbiorem, z którego losuje <see cref="Resolve"/>.
@@ -74,6 +52,9 @@ public static class CoilCover
             ? Fixed[System.Random.Shared.Next(Fixed.Length)]
             : palette;
 
+    // Barwy zwoju: początek, środek, koniec, w jasności dla motywu ciemnego. Środek podany
+    // wprost, bo przy parach z przeciwnych stron koła barw (turkus i róż) zwykłe wymieszanie
+    // przechodzi przez szarość.
     private static (Color From, Color Mid, Color To) Ramp(PlaceholderPalette palette) => palette switch
     {
         PlaceholderPalette.Turquoise =>
@@ -115,15 +96,13 @@ public static class CoilCover
         : (Color.FromRgb(0xFA, 0xFA, 0xFC), Color.FromRgb(0xE2, 0xE2, 0xE7), Color.FromRgb(0x1A, 0x1A, 0x1E));
 
     /// <summary>
-    /// Trzy barwy zwoju w postaci, w jakiej faktycznie zostaną narysowane dla danego motywu.
-    /// Okno ustawień rysuje z nich próbkę — próbka pokazująca inne barwy niż te, które wyjdą,
-    /// byłaby myląca akurat tam, gdzie wybiera się je wzrokiem.
+    /// Trzy barwy zwoju w postaci, w jakiej zostaną narysowane dla danego motywu; z nich okno
+    /// ustawień rysuje próbkę.
     /// </summary>
     public static Color[] RampColours(PlaceholderPalette palette, bool darkTheme)
     {
-        // Pozycja „losowo" nie ma własnych barw, a próbka losowana za każdym odświeżeniem
-        // migotałaby w oknie ustawień. Zamiast tego pokazuje po jednej barwie z każdej pary,
-        // czyli dokładnie to, z czego losuje.
+        // Próbka losowana przy każdym odświeżeniu migotałaby, więc „losowo” pokazuje środek
+        // każdej pary, z których losuje.
         if (palette == PlaceholderPalette.Random)
         {
             return Fixed
@@ -141,7 +120,7 @@ public static class CoilCover
         : (ForLightTheme(ramp.From), ForLightTheme(ramp.Mid), ForLightTheme(ramp.To));
 
     /// <summary>
-    /// Zwraca gotową okładkę. Wołane na wątku interfejsu — <see cref="RenderTargetBitmap"/>
+    /// Zwraca gotową okładkę. Wołane na wątku interfejsu, bo <see cref="RenderTargetBitmap"/>
     /// wymaga działającego środowiska graficznego.
     /// </summary>
     public static Bitmap Render(PlaceholderPalette palette, bool darkTheme)
@@ -163,8 +142,7 @@ public static class CoilCover
 
     private static void DrawGround(DrawingContext context, Color near, Color far)
     {
-        // Przejście po skosie, nie promieniste: promieniste tło z jaśniejszym środkiem
-        // konkurowałoby ze zwojem, który też zaczyna się w środku.
+        // Przejście po skosie, bo jaśniejszy środek konkurowałby ze zwojem.
         var brush = new LinearGradientBrush
         {
             StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
@@ -198,12 +176,10 @@ public static class CoilCover
             var radius = inner + (outer - inner) * t;
             var point = PointOn(centre, radius, angle);
 
-            // Barwa odcinka brana z połowy jego długości — inaczej pierwszy odcinek miałby
-            // barwę końcową poprzedniego, którego nie ma, i zwój zaczynałby się skokiem.
+            // Barwa z połowy długości odcinka, żeby zwój nie zaczynał się skokiem.
             var colour = Along(ramp, t - 0.5 / Segments);
 
-            // Zaokrąglone końce zamiast styków na płasko: każdy odcinek dokłada wtedy pół
-            // grubości z każdej strony i sąsiedzi zachodzą na siebie, nie zostawiając szczelin.
+            // Zaokrąglone końce zachodzą na sąsiednie odcinki i nie zostawiają szczelin.
             var pen = new Pen(new SolidColorBrush(colour), thickness, lineCap: PenLineCap.Round);
             context.DrawLine(pen, previous, point);
 
@@ -222,9 +198,8 @@ public static class CoilCover
         centre.Y + radius * Math.Sin(angle));
 
     /// <summary>
-    /// Przyciemnia barwę na tyle, żeby czytała się na jasnym podłożu, zachowując jej odcień.
-    /// Jasność ustawiana jest w Oklabie, więc ta sama operacja nie zmienia barwy na inną —
-    /// w HSL obniżenie jasności żółtego daje brud, a błękitu prawie nic.
+    /// Przyciemnia barwę dla jasnego podłoża, w Oklabie, żeby zachować odcień (w HSL żółty
+    /// robi się brudny, a błękit prawie się nie zmienia).
     /// </summary>
     private static Color ForLightTheme(Color colour)
     {
@@ -246,13 +221,8 @@ public static class CoilCover
     }
 
     /// <summary>
-    /// Miesza dwie barwy w Oklabie, nie w sRGB.
-    ///
-    /// <para>Odcinki między podanymi punktami są krótkie, więc nie chodzi tu o omijanie osi
-    /// bezbarwnej — tym zajmuje się środkowy punkt z <see cref="Ramp"/>. Oklab wybrano dlatego,
-    /// że jego jasność odpowiada jasności widzianej: w sRGB przejście od jasnej limonki do
-    /// ciemnego szmaragdu ciemnieje najpierw wolno, a potem gwałtownie, i widać, gdzie leży
-    /// punkt podziału. W Oklabie ten sam zakres ciemnieje równomiernie i podziału nie widać.</para>
+    /// Miesza dwie barwy w Oklabie, w którym jasność ciemnieje równomiernie i nie widać punktu
+    /// podziału zwoju.
     /// </summary>
     private static Color Mix(Color from, Color to, double t)
     {

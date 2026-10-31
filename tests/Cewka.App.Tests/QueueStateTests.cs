@@ -6,13 +6,8 @@ using Xunit;
 namespace Cewka.App.Tests;
 
 /// <summary>
-/// Tests for the queue saved between runs, with the repeat mode written two different ways.
-/// <para>
-/// Tryb powtarzania był wcześniej zapisywany jako pojedyncza wartość logiczna, bo istniały tylko
-/// dwa stany. Po dodaniu powtarzania jednego utworu format musiał się zmienić, a plik zapisany
-/// przez starszą wersję nadal musi dać się odczytać — inaczej pierwsze uruchomienie po
-/// aktualizacji po cichu gubiłoby ustawienie.
-/// </para>
+/// Kolejka zapisana między uruchomieniami, z trybem powtarzania w dwóch postaciach: tekstowej
+/// i starszej, logicznej, która też musi się wczytać.
 /// </summary>
 public class QueueStateTests
 {

@@ -3,13 +3,9 @@ namespace Cewka.Snapshots;
 /// <summary>
 /// Wytwarza materiał dźwiękowy dla zrzutów.
 ///
-/// <para>W repozytorium nie ma i nie będzie żadnego pliku muzycznego, a zrzuty z utworem
-/// powstawały dotąd z prywatnej biblioteki. Maszyna budująca w chmurze nie ma do niej dostępu,
-/// więc materiał musi powstać na miejscu — i musi być za każdym razem taki sam, inaczej
-/// porównanie z odniesieniem porównywałoby szum, a nie zmiany w programie.</para>
-///
-/// <para>Sygnał jest liczony z samych funkcji trygonometrycznych, bez losowania i bez odczytu
-/// zegara, więc dwa wywołania dają plik co do bajtu identyczny.</para>
+/// <para>W repozytorium nie ma plików muzycznych, więc materiał powstaje na miejscu i musi być
+/// zawsze taki sam. Sygnał liczony jest z funkcji trygonometrycznych, bez losowania i zegara,
+/// więc dwa wywołania dają plik identyczny co do bajtu.</para>
 /// </summary>
 internal static class Material
 {
@@ -24,9 +20,8 @@ internal static class Material
     private const int SekundDluga = 143;
 
     /// <summary>
-    /// Krótszy plik istnieje wyłącznie po to, żeby różnił się czasem trwania od dłuższego.
-    /// Na tej różnicy opiera się sprawdzian zastąpienia kolejki: tytuł i numer pozycji były
-    /// poprawne także wtedy, gdy dekoder trzymał jeszcze poprzedni plik, a czas trwania nie.
+    /// Krótszy plik różni się czasem trwania od dłuższego; na tej różnicy opiera się sprawdzian
+    /// zastąpienia kolejki, bo tytuł i numer pozycji są poprawne nawet przy starym dekoderze.
     /// </summary>
     private const int SekundKrotka = 95;
 
@@ -53,9 +48,8 @@ internal static class Material
         {
             var t = (double)i / Czestotliwosc;
 
-            // Obwiednia z dwóch powolnych przebiegów o niewspółmiernych okresach. Sam ton dałby
-            // na wykresie fali równy prostokąt, po którym nie widać, czy rysowanie fali w ogóle
-            // działa. Tu wykres ma kształt, a kształt jest powtarzalny.
+            // Obwiednia z dwóch powolnych przebiegów o niewspółmiernych okresach, żeby fala miała
+            // powtarzalny kształt; sam ton dałby równy prostokąt.
             var obwiednia = 0.30 + 0.22 * Math.Sin(2 * Math.PI * t / 11.0)
                                  + 0.16 * Math.Sin(2 * Math.PI * t / 3.7);
 

@@ -17,12 +17,8 @@ using Cewka.Platform;
 namespace Cewka.App.ViewModels;
 
 /// <summary>
-/// State behind the player window, driven by the real audio engine.
-/// <para>
-/// The engine reports position from the audio thread, so the interface polls it on a timer
-/// rather than being pushed to. Sixty milliseconds is far below what anyone perceives as
-/// lag on a progress bar and costs nothing.
-/// </para>
+/// Stan okna odtwarzacza, napędzany przez silnik dźwięku. Pozycję zgłasza wątek dźwiękowy,
+/// więc interfejs odpytuje ją zegarem co 60 ms.
 /// </summary>
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
@@ -188,9 +184,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// False when the file carries no artist, album or year worth showing. The line is then
-    /// removed rather than filled with a placeholder — a stray dash or a stray "1" under the
-    /// title is noise, and it costs the title its descenders.
+    /// Fałsz, gdy plik nie ma wykonawcy, albumu ani roku do pokazania; wiersz znika wtedy
+    /// zamiast wypełniacza.
     /// </summary>
     public bool HasArtistLine => !string.IsNullOrWhiteSpace(_artistLine);
 
@@ -255,10 +250,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             if (!Set(ref _progress, value)) return;
 
-            // Ustawienie z kodu przy odswiezaniu nie moze przewijac odtwarzania.
+            // Ustawienie z kodu przy odświeżaniu nie może przewijać odtwarzania.
             if (_isSeeking) return;
 
-            // W trakcie przeciagania suwak tylko sie przesuwa; przewiniecie nastepuje po
+            // W trakcie przeciągania suwak tylko się przesuwa; przewinięcie następuje po
             // puszczeniu przycisku (CommitScrub).
             if (_scrubbing)
             {
@@ -273,13 +268,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _scrubbing;
 
     /// <summary>
-    /// Called while the user holds the progress bar.
-    /// <para>
-    /// Seeking on every pointer move would issue a full buffer handshake per pixel of travel:
-    /// the decoder parks, the audio thread fades out and discards, the file is repositioned.
-    /// Dragging across a long track would do that hundreds of times. The indicator follows the
-    /// pointer, the music waits for the button to be released.
-    /// </para>
+    /// Wołane w trakcie przeciągania paska postępu. Wskaźnik idzie za kursorem, a przewinięcie
+    /// czeka na puszczenie przycisku, bo każde przewinięcie wycisza i opróżnia bufor.
     /// </summary>
     public void BeginScrub()
     {
@@ -424,11 +414,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     // ---------- Obszary okna ----------
 
     /// <summary>
-    /// Pas dolny: korektor i efekty. Od wersji 0.8.0 niezależny od kolejki.
-    ///
-    /// <para>Wcześniej jeden stan rządził oboma, bo dzieliły jeden panel u dołu okna. Odkąd
-    /// kolejka stoi we własnej kolumnie, są to dwa obszary w dwóch różnych miejscach i wiązanie
-    /// ich razem kazało pokazywać korektor komuś, kto chciał tylko zobaczyć, co dalej zagra.</para>
+    /// Pas dolny: korektor i efekty, rozwijany niezależnie od kolumny kolejki.
     /// </summary>
     public bool PanelOpen
     {
@@ -539,9 +525,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Re-reads the pieces of text the view model built itself. Bindings written as
-    /// <c>{l:Translate}</c> refresh on their own, but a title or a queue row assembled in code
-    /// keeps whatever language it was assembled in until it is rebuilt.
+    /// Odczytuje od nowa teksty złożone w kodzie (tytuł, wiersze kolejki); wiązania
+    /// <c>{l:Translate}</c> odświeżają się same.
     /// </summary>
     private void RefreshTextForLanguage()
     {
@@ -607,9 +592,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Przenosi stan jednego efektu do łańcucha. Siła podawana jest stopniom w procentach,
-    /// a interfejs trzyma ją w zakresie 0–1, bo tego wymaga suwak — stąd mnożenie w jednym
-    /// miejscu zamiast dwóch różnych jednostek krążących po całym programie.
+    /// Przenosi stan jednego efektu do toru. Tor przyjmuje siłę w procentach, interfejs trzyma
+    /// ją w zakresie 0–1.
     /// </summary>
     private void ApplyEffect(EffectViewModel effect)
     {
@@ -723,9 +707,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _reducedEffects;
 
     /// <summary>
-    /// True while the decorative animation runs in its cheaper form. Bound by the window rather
-    /// than read from the settings directly, because in the automatic mode it also depends on
-    /// whether the machine is on battery.
+    /// Czy animacje działają w tańszej postaci. W trybie automatycznym zależy też od zasilania
+    /// z baterii, dlatego okno wiąże to, a nie samo ustawienie.
     /// </summary>
     public bool ReducedEffects => _reducedEffects;
 
@@ -784,15 +767,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Points the engine at the chosen device. A name that no longer matches anything — the
-    /// headset was unplugged since it was chosen — falls back to the system default rather than
-    /// leaving the application silent; the engine resolves the name when it opens the device.
+    /// Kieruje silnik na wybrane urządzenie. Nazwa, która już niczego nie wskazuje, przechodzi
+    /// na urządzenie domyślne.
     ///
-    /// <para>Urządzenie obecne na liście może mimo to odmówić otwarcia: słuchawki zdążyły się
-    /// rozłączyć, inny program zajął je na wyłączność. Grający utwór przechodzi wtedy na
-    /// urządzenie domyślne, a komunikat zostaje na ekranie, dopóki gra ono zamiast wybranego.
-    /// Wstrzymany zostaje przy wybranym urządzeniu, żeby następne odtworzenie spróbowało je
-    /// otworzyć jeszcze raz.</para>
+    /// <para>Urządzenie z listy może mimo to odmówić otwarcia (rozłączone słuchawki, wyłączność
+    /// innego programu). Grający utwór przechodzi wtedy na domyślne, a komunikat zostaje, dopóki
+    /// tak gra. Wstrzymany zostaje przy wybranym, żeby następne odtworzenie spróbowało znowu.</para>
     /// </summary>
     private void ApplyOutputDevice()
     {
@@ -1085,8 +1065,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// od drugiej kopii programu albo upuszczone na okno — i postępuje z nimi tak, jak wybrano
     /// w ustawieniach.
     ///
-    /// <para>Wybór plików wewnątrz programu (<c>Ctrl+O</c>) tą drogą nie idzie: tam użytkownik
-    /// właśnie nacisnął „dodaj", więc pytanie, czy dodać, byłoby już rozstrzygnięte.</para>
+    /// <para>Wybór plików w programie (<c>Ctrl+O</c>) idzie inną drogą, bo tam dodanie jest już
+    /// rozstrzygnięte.</para>
     /// </summary>
     public Task OpenFromOutside(IEnumerable<string> paths) => Open(paths, files =>
     {
@@ -1135,15 +1115,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _audioFailureKey = string.Empty;
 
     /// <summary>
-    /// Why playback is impossible, or empty when all is well.
-    /// <para>
-    /// Opening the output device can fail for reasons that have nothing to do with the
-    /// application: no sound card, a device taken exclusively by something else, a missing
-    /// native library in a hand-assembled build. None of them is a reason to take the window
-    /// down — the queue, the settings and the reason itself are all still worth showing.
-    /// Przyczyna jest opisana zwykłymi słowami w języku interfejsu; tekst wyjątku trafia
-    /// wyłącznie do dziennika.
-    /// </para>
+    /// Dlaczego odtwarzanie jest niemożliwe; puste, gdy wszystko działa. Brak wyjścia dźwięku
+    /// nie zamyka okna. Tekst wyjątku trafia wyłącznie do dziennika.
     /// </summary>
     public string AudioFailure => _audioFailureKey.Length == 0 ? string.Empty : Strings.Current[_audioFailureKey];
 
@@ -1224,7 +1197,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Folders are walked recursively; anything unrecognised is left out. W każdym katalogu
+    /// Foldery przeglądane są rekurencyjnie, z pominięciem plików nierozpoznanych. W każdym katalogu
     /// najpierw pliki, potem podkatalogi, jedne i drugie w porządku naturalnym: „2 - y” przed
     /// „10 - x”, tak jak w menedżerze plików.
     ///
@@ -1386,11 +1359,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Re-attaches the „now playing" marker after the rows changed.
-    /// <para>
-    /// The engine knows which entry is playing, so the marker is re-derived from it rather
-    /// than remembered.
-    /// </para>
+    /// Przywraca znacznik grającego wiersza po zmianie wierszy, na podstawie wpisu z silnika.
     /// </summary>
     private void RestoreCurrentMarker()
     {
@@ -1406,14 +1375,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Reads tags away from the interface thread, only for entries not read yet.
-    /// <para>
-    /// Adding a folder has to feel instant, so entries appear straight away with nothing but
-    /// their file names. The durations and titles then fill in as the tags are read. Reading
-    /// two thousand files takes a few seconds; doing it up front would freeze the window for
-    /// exactly that long. Wynik trafia do wiersza tego samego wpisu, bo w międzyczasie wiersz
-    /// mógł zostać przesunięty.
-    /// </para>
+    /// Czyta tagi poza wątkiem interfejsu, tylko dla wpisów jeszcze nieprzeczytanych; wiersze
+    /// pojawiają się od razu z nazwą pliku. Wynik trafia do wiersza tego samego wpisu, bo wiersz
+    /// mógł się w międzyczasie przesunąć.
     /// </summary>
     private async Task FillMetadataInBackgroundAsync(IReadOnlyList<QueueEntry> entries)
     {
@@ -1515,7 +1479,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public void TogglePlay()
     {
-        // Pierwsze nacisniecie po starcie wznawia utwor przywrocony z poprzedniej sesji.
+        // Pierwsze naciśnięcie po starcie wznawia utwór przywrócony z poprzedniej sesji.
         if (ResumeRestoredTrack()) return;
 
         // Pusta kolejka: nie ma czego grać, więc nie ma też powodu zajmować karty dźwiękowej.
@@ -1750,7 +1714,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Writes the queue and position so the next run resumes where this one stopped. Wołane
+    /// Zapisuje kolejkę i pozycję dla następnego uruchomienia. Wołane
     /// przy zamykaniu, więc zapisuje od razu; zapisy w trakcie pracy idą przez
     /// <see cref="SaveQueueStateInBackground"/>.
     /// </summary>
@@ -1778,9 +1742,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Restores the previous queue without starting playback. Coming back to a player that
-    /// immediately makes noise is rarely what anyone wants; the position is restored so that
-    /// pressing play carries on from where it stopped.
+    /// Przywraca poprzednią kolejkę bez uruchamiania odtwarzania; pozycja czeka na pierwsze
+    /// naciśnięcie odtwarzania.
     /// </summary>
     public void RestoreQueueState()
     {
@@ -1830,9 +1793,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// Krótki komunikat o czynności, która się właśnie wykonała — zapisaniu listy, brakujących
     /// plikach. Znika sam po <see cref="NoticeDuration"/>.
     ///
-    /// <para>Osobno od <see cref="AudioFailure"/>, bo tamten opisuje stan trwały: dopóki nie ma
-    /// wyjścia dźwięku, informacja o tym musi zostać na ekranie. Ten opisuje zdarzenie i po
-    /// przeczytaniu nie jest już do niczego potrzebny.</para>
+    /// <para>Osobno od <see cref="AudioFailure"/>, który opisuje stan trwały.</para>
     /// </summary>
     public string Notice
     {
@@ -1861,9 +1822,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private Version? _availableUpdate;
 
     /// <summary>
-    /// Informacja o dostępnym nowszym wydaniu. Trwała, nie gasnąca sama: opisuje stan, a nie
-    /// zdarzenie, i po zamknięciu okna ustawień ma nadal być widoczna. Składana przy odczycie,
-    /// żeby zmiana języka obejmowała i ją.
+    /// Informacja o nowszym wydaniu. Opisuje stan, więc nie gaśnie sama; składana przy odczycie,
+    /// żeby obejmowała ją zmiana języka.
     /// </summary>
     public string UpdateNotice => _availableUpdate is null
         ? string.Empty
@@ -1878,9 +1838,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// Pyta o nowsze wydanie, jeśli użytkownik na to przystał i jeśli minęła doba od ostatniego
     /// sprawdzenia.
     ///
-    /// <para>Wywoływane przy otwarciu okna i celowo bez oczekiwania na wynik: uruchomienie
-    /// programu nie może zależeć od tego, czy sieć odpowiada. Gdy sprawdzanie jest wyłączone —
-    /// a tak jest domyślnie — ta metoda nie wykonuje żadnego połączenia i kończy się od razu.</para>
+    /// <para>Wołane przy otwarciu okna bez czekania na wynik, żeby start nie zależał od sieci.
+    /// Przy sprawdzaniu wyłączonym (domyślnie) nie łączy się z niczym.</para>
     /// </summary>
     public async Task CheckForUpdatesIfDueAsync()
     {
@@ -1933,10 +1892,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// Wstawia listę odtwarzania na miejsce obecnej kolejki. Zwraca wynik odczytu, żeby okno
     /// mogło powiedzieć, ilu plików z listy już nie ma.
     ///
-    /// <para>Odtwarzanie nie zaczyna się samo. Pierwszy utwór jest tylko uzbrojony tym samym
-    /// mechanizmem, którym wraca utwór z poprzedniej sesji, więc pierwsze naciśnięcie
-    /// odtwarzania rusza od początku listy. Wczytanie listy jest czynnością porządkową —
-    /// program, który po niej od razu zaczyna grać, przerywa to, czego nikt nie kazał przerywać.</para>
+    /// <para>Odtwarzanie nie zaczyna się samo: pierwszy utwór czeka tak jak wznowienie
+    /// z poprzedniej sesji, więc pierwsze naciśnięcie odtwarzania rusza od początku listy.</para>
     /// </summary>
     public PlaylistLoad LoadPlaylist(string path)
     {
@@ -1989,13 +1946,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Wykonuje odświeżenie od razu, zamiast czekać na zegar. Wyłącznie dla narzędzia zrzutów.
     ///
-    /// <para>Zegar odświeżania ma odstęp 60 ms i w zwykłej pracy programu tyka sam. Narzędzie
-    /// zrzutów pracuje jednak bez pętli komunikatów — pompuje dyspozytora wywołaniami
-    /// <c>RunJobs</c> w pętli — a wtedy zegar potrafi nie dojść do głosu wcale. Sprawdzian
-    /// odczytujący czas trwania utworu opierał się przez to na tym, czy pętla odpytująca
-    /// przypadkiem zostawi zegarowi dość miejsca: przy uśpieniu 50 ms zostawiała, przy 10 ms
-    /// już nie. Tutaj odczyt jest wymuszany wprost, więc czekanie dotyczy wyłącznie tego, aż
-    /// dekoder faktycznie otworzy plik.</para>
+    /// <para>Pułapka: narzędzie zrzutów pompuje dyspozytora wywołaniami <c>RunJobs</c> bez pętli
+    /// komunikatów i zegar odświeżania potrafi wtedy nie ruszyć wcale.</para>
     /// </summary>
     public void RefreshForCapture() => Refresh();
 
@@ -2009,13 +1961,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         Total = duration > TimeSpan.Zero ? FormatTime(duration.TotalSeconds, hours) : "0:00";
 
-        // Podczas przeciagania suwak nalezy do wskaznika, nie do odtwarzania - inaczej
-        // odswiezanie wyrywaloby uchwyt spod kursora.
+        // Podczas przeciągania suwak należy do wskaźnika, inaczej odświeżanie wyrywałoby
+        // uchwyt spod kursora.
         if (!_scrubbing)
         {
             Elapsed = FormatTime(position.TotalSeconds, hours);
 
-            // Ustawienie przez pole omija setter, zeby odswiezanie nie wywolalo przewijania.
+            // Ustawienie przez pole omija setter, żeby odświeżanie nie wywołało przewijania.
             _isSeeking = true;
             var progress = duration > TimeSpan.Zero
                 ? Math.Clamp(position.TotalSeconds / duration.TotalSeconds, 0, 1)
@@ -2066,9 +2018,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Keeps the badge in step with the live bitrate. Only variable-bitrate files are
-    /// touched: for everything else the value never changes, and a badge that redraws itself
-    /// for no reason is a distraction.
+    /// Odświeża plakietkę zgodnie z bieżącą przepływnością, tylko dla plików o zmiennej
+    /// przepływności.
     /// </summary>
     private void RefreshBitrateBadge()
     {
@@ -2077,7 +2028,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var live = _engine.InstantaneousBitrate;
         if (live <= 0) return;
 
-        // Kwantyzacja do 2 kbps: bez niej ostatnia cyfra migotalaby kilka razy na sekunde.
+        // Kwantyzacja do 2 kbps, bo inaczej ostatnia cyfra migotałaby kilka razy na sekundę.
         var quantised = (int)Math.Round(live / 2.0) * 2;
         if (quantised == _shownBitrate) return;
 
@@ -2254,9 +2205,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Swaps the placeholder when the palette changes. Only relevant while the placeholder
-    /// is on screen: a real cover belongs to the record, not to the interface, and must not
-    /// change with the theme.
+    /// Podmienia okładkę domyślną po zmianie palety; prawdziwa okładka z motywem się nie zmienia.
     /// </summary>
     public void OnThemeChanged()
     {
@@ -2292,24 +2241,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Plamy tła dla okładki domyślnej, wzięte wprost ze skrajnych barw pary.
+    /// Plamy tła dla okładki domyślnej: obie skrajne barwy pary po dwa razy, z nasyceniem
+    /// skalowanym intensywnością barw.
     ///
-    /// <para><b>Dlaczego nie przez analizę obrazka.</b> Dla prawdziwej okładki nie ma innego
-    /// wyjścia: barwy trzeba z niej odczytać. Ale okładkę domyślną program rysuje sam i zna jej
-    /// parę co do składowej — a droga przez analizę te barwy psuje. <see cref="CoverPalette"/>
-    /// dzieli przestrzeń barw na kubełki i uśrednia zawartość każdego z nich, co samo w sobie
-    /// ciągnie wynik do szarości; do tego spirala to cienkie kreski na ciemnym podłożu, więc
-    /// w kubełkach przeważa tło, a nie barwa kreski. Skutek: para „turkus i róż" dawała na tle
-    /// dwa odcienie tego samego zamglonego fioletu.</para>
-    ///
-    /// <para><b>Skrajne, nie środkowa.</b> Spirala przechodzi od pierwszej barwy pary do drugiej,
-    /// więc to te dwie mówią, czym para jest. Barwa środkowa jest ich mieszaniną i na tle nie
-    /// wnosi nic poza rozmyciem różnicy. Cztery plamy dostają więc obie skrajne barwy po dwa
-    /// razy, dzięki czemu tło jest dwubarwne tak samo jak okładka.</para>
-    ///
-    /// <para>Ustawienie intensywności barw działa tu dalej — skaluje nasycenie, tak jak robi to
-    /// dla barw wyciąganych z prawdziwej okładki. Przełączniki i suwaki barwy nie stąd biorą:
-    /// akcent liczony jest osobno, z pełnej palety i bez tego skalowania.</para>
+    /// <para>Pułapka: analiza narysowanej spirali przez <see cref="CoverPalette"/> psuje barwy,
+    /// bo cienkie kreski giną w ciemnym tle przegródek, a uśrednianie ciągnie je ku szarości.</para>
     /// </summary>
     private Color[] PlaceholderBackdrop(bool darkTheme)
     {
@@ -2377,9 +2313,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Applies a new default-cover colour pair. Only visible while a file without its own
-    /// cover is loaded, but the palette behind the window changes with it, so the whole
-    /// window takes on the new pair.
+    /// Stosuje nową parę barw okładki domyślnej; widać ją tylko przy pliku bez okładki, ale
+    /// razem z nią zmienia się tło okna.
     /// </summary>
     public void SetPlaceholderPalette(PlaceholderPalette palette)
     {
@@ -2397,12 +2332,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private readonly PlaceholderDraw _placeholderDraw = new();
 
     /// <summary>
-    /// The default sleeve: a coil, after the application's name. Drawn rather than loaded, so
-    /// the colour pair and the theme both take effect without a file for every combination.
+    /// Okładka domyślna: cewka.
     ///
-    /// <para>Para barw przechodzi przez <see cref="PlaceholderDraw"/>, a nie wprost z ustawień:
-    /// przy wyborze losowym barwy mają być wylosowane raz na utwór, a ta metoda wołana jest
-    /// także przy przewinięciu i przy zmianie motywu.</para>
+    /// <para>Pułapka: para barw idzie przez <see cref="PlaceholderDraw"/>, bo przy wyborze
+    /// losowym ma być losowana raz na utwór, a ta metoda działa też po przewinięciu i zmianie
+    /// motywu.</para>
     /// </summary>
     private Bitmap? LoadPlaceholder()
     {

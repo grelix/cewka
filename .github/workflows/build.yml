@@ -23,9 +23,8 @@ jobs:
     name: Testy
     uses: ./.github/workflows/tests.yml
 
-  # Pakiety i próby instalacyjne w kontenerach. Wywołanie tego samego pliku, z którego korzysta
-  # potok wydania — dzięki temu zepsute pakowanie wychodzi przy zmianie, a nie dopiero
-  # przy wydawaniu, gdy jest już najmniej czasu na poprawki.
+  # Pakiety i próby instalacyjne w kontenerach, z tego samego pliku co potok wydania, żeby
+  # zepsute pakowanie wyszło przy zmianie.
   pakiety:
     name: Linux
     uses: ./.github/workflows/packages.yml

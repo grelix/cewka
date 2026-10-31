@@ -1,12 +1,12 @@
 #!/bin/bash
-# Sprawdza, czy numer wersji zgadza sie wszedzie tam, gdzie musi byc wpisany.
+# Sprawdza, czy numer wersji zgadza się wszędzie, gdzie musi być wpisany.
 #
-# Zrodlem jest <Version> w Directory.Build.props. PKGBUILD musi niesc ten sam numer jako
-# pkgver, bo makepkg nie czyta plikow projektu. Podany znacznik (np. v0.8.1) jest
-# porownywany z ta sama wartoscia.
+# Źródłem jest <Version> w Directory.Build.props. PKGBUILD musi mieć ten sam numer jako
+# pkgver, bo makepkg nie czyta plików projektu. Podany znacznik (np. v1.2.3) jest
+# porównywany z tą samą wartością.
 #
-# Uzycie:  ./tools/sprawdz-wersje.sh [znacznik]
-# Wypisuje wersje na standardowe wyjscie; przy niezgodnosci konczy sie bledem.
+# Użycie:  ./tools/sprawdz-wersje.sh [znacznik]
+# Wypisuje wersję na standardowe wyjście; przy niezgodności kończy się błędem.
 
 set -euo pipefail
 

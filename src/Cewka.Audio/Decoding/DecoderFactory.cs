@@ -11,7 +11,7 @@ public static class DecoderFactory
         AudioFileFormat.Wav or AudioFileFormat.Mp3 or AudioFileFormat.Flac => true,
         AudioFileFormat.OggVorbis or AudioFileFormat.Opus => true,
 
-        // Zalezne od systemu: Media Foundation w Windows, GStreamer w Linux.
+        // Zależne od systemu: Media Foundation w Windows, GStreamer pod Linuksem.
         _ when SystemCodecs.Handles(format) => SystemCodecs.IsAvailable,
 
         _ => false,
@@ -45,8 +45,8 @@ public static class DecoderFactory
         var format = AudioFileFormatDetector.Detect(path);
         if (!IsSupported(format)) throw Unsupported(format);
 
-        // Kodeki systemowe czytaja plik po sciezce, wiec omijaja strumien zliczajacy;
-        // dla nich chwilowa przeplywnosc nie jest mierzona.
+        // Kodeki systemowe czytają plik po ścieżce, z pominięciem strumienia liczącego,
+        // więc ich przepływność nie jest mierzona.
         if (SystemCodecs.Handles(format))
             return SystemCodecs.Open(path, outputSampleRate, outputChannels, null);
 

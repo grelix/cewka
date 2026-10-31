@@ -1,25 +1,16 @@
 namespace Cewka.Audio.Dsp;
 
 /// <summary>
-/// Soft-knee limiter with lookahead, sitting at the end of the chain.
+/// Ogranicznik z miękkim kolanem i wyprzedzeniem na końcu toru. Korektor potrafi dodać do 12 dB
+/// w kilku pasmach naraz, a nagrania i tak sięgają pełnej skali.
 /// <para>
-/// It exists because the equaliser can add up to 12 dB in several bands at once, and most
-/// modern recordings already peak close to full scale. Without it, boosting the bass would
-/// simply clip.
+/// Wzmocnienie próbki to minimum wymaganego wzmocnienia z okna wyprzedzenia, wygładzone średnią
+/// ruchomą tej samej długości, więc zejście kończy się dokładnie, gdy szczyt wychodzi z linii
+/// opóźnienia. Redukcja jest wspólna dla kanałów, żeby nie przesuwać obrazu stereo.
 /// </para>
 /// <para>
-/// Wzmocnienie dla każdej próbki to minimum wymaganego wzmocnienia z całego okna wyprzedzenia,
-/// wygładzone średnią ruchomą tej samej długości. Zejście jest więc liniowe i kończy się
-/// dokładnie wtedy, gdy szczyt wychodzi z linii opóźnienia, nawet gdy trwa on jedną próbkę.
-/// Powrót jest wolny, żeby ograniczanie nie brzmiało jak oddychanie.
-/// </para>
-/// <para>
-/// Gain reduction is shared by all channels. Reducing each channel on its own would move
-/// the stereo image whenever one side happened to be louder.
-/// </para>
-/// <para>
-/// Linia opóźnienia działa także po wyłączeniu, które tylko płynnie sprowadza wzmocnienie do
-/// jedności. Opóźnienie toru jest przez to stałe, a przełączenie niczego nie gubi ani nie powtarza.
+/// Pułapka: linia opóźnienia działa także po wyłączeniu. Opóźnienie toru jest przez to stałe
+/// i przełączenie niczego nie gubi ani nie powtarza.
 /// </para>
 /// </summary>
 public sealed class Limiter : IAudioProcessor

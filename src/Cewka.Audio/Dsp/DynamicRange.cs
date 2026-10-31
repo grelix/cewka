@@ -1,21 +1,11 @@
 namespace Cewka.Audio.Dsp;
 
 /// <summary>
-/// Ograniczanie dynamiki — „tryb nocny". Ścisza to, co głośne, i podnosi całość, przez co ciche
-/// fragmenty stają się słyszalne bez podkręcania głośności w miejscach głośnych.
+/// Ograniczanie dynamiki („tryb nocny”): kompresor progowy z miękkim kolanem i wzmocnieniem
+/// wyrównawczym, z redukcją wspólną dla kanałów.
 ///
-/// <para>Nagranie o dużej rozpiętości dynamicznej — muzyka poważna, dobrze
-/// zrealizowany jazz, ścieżka filmowa — w cichym pokoju wymaga ciągłego sięgania do suwaka,
-/// a w hałasie po prostu ginie w tle. Ten stopień zawęża rozpiętość, zamiast kazać użytkownikowi
-/// wybierać między zbyt cicho a za głośno.</para>
-///
-/// <para>Zwykły kompresor progowy z miękkim kolanem i wzmocnieniem wyrównawczym.
-/// Redukcja jest wspólna dla wszystkich kanałów — osobna dla każdego przesuwałaby obraz stereo
-/// za każdym razem, gdy jedna strona zagra głośniej. Ta sama zasada rządzi limiterem na końcu
-/// łańcucha.</para>
-///
-/// <para>Stopień stoi <em>przed</em> limiterem, więc limiter pozostaje ostatnim zabezpieczeniem
-/// i łapie wszystko, co wzmocnienie wyrównawcze wypchnęłoby ponad skalę.</para>
+/// <para>Pułapka: stoi przed limiterem, który łapie to, co wzmocnienie wyrównawcze wypchnęłoby
+/// ponad skalę.</para>
 /// </summary>
 public sealed class DynamicRange : IAudioProcessor
 {
@@ -33,10 +23,7 @@ public sealed class DynamicRange : IAudioProcessor
     private const double RatioAtZero = 1.0;
     private const double RatioAtFull = 4.0;
 
-    /// <summary>
-    /// Jaka część teoretycznego wyrównania jest stosowana. Pełne przywróciłoby głośność
-    /// szczytów, a chodzi o to, żeby całość była równiejsza, nie żeby była głośniejsza.
-    /// </summary>
+    /// <summary>Część teoretycznego wyrównania; pełne przywróciłoby głośność szczytów.</summary>
     private const double MakeupShare = 0.6;
 
     /// <summary>Czas płynnego włączania, wyłączania i zmiany wzmocnienia wyrównawczego.</summary>

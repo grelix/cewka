@@ -46,18 +46,13 @@ public sealed record AssociationTexts(string FileTypeName, string Description)
 }
 
 /// <summary>
-/// Registers the application as a program able to open audio files.
+/// Rejestruje program jako zdolny do otwierania plików dźwiękowych.
+/// Wpisy trafiają pod <c>HKEY_CURRENT_USER</c>, więc nie trzeba uprawnień administratora.
+/// Program żadnego rozszerzenia nie przejmuje: dopisuje się do „Otwórz za pomocą” i do listy
+/// aplikacji domyślnych.
 ///
-/// <para><b>Tylko dla bieżącego użytkownika.</b> Wszystkie wpisy trafiają pod
-/// <c>HKEY_CURRENT_USER</c>, więc skojarzenie nie wymaga uprawnień administratora i nie zmienia
-/// niczego innym użytkownikom komputera. Program nie przejmuje przy tym żadnego rozszerzenia na
-/// siłę: dopisuje się do listy „Otwórz za pomocą", a wpis w rejestrze programów sprawia, że można
-/// go wskazać w ustawieniach domyślnych aplikacji. Wybór należy do użytkownika, nie do instalacji.</para>
-///
-/// <para><b>Dlaczego rejestr obsługiwany bezpośrednio.</b> Klasa <c>Microsoft.Win32.Registry</c>
-/// jest dostępna dopiero dla platform docelowych z sufiksem <c>-windows</c>. Przejście na taką
-/// platformę wciągnęłoby cały pakiet referencyjny Windows SDK do projektu, który poza tym jednym
-/// miejscem jest w pełni wieloplatformowy — trzy funkcje z <c>advapi32</c> są tańsze.</para>
+/// <para>Rejestr obsługiwany przez trzy funkcje z <c>advapi32</c>, bo <c>Microsoft.Win32.Registry</c>
+/// wymaga platformy docelowej <c>-windows</c> i całego pakietu Windows SDK.</para>
 /// </summary>
 public static unsafe class FileAssociations
 {

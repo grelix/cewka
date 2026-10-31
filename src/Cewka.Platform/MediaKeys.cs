@@ -13,17 +13,14 @@ public enum MediaKey
 }
 
 /// <summary>
-/// Global handling of the multimedia keys, used only where the system media panel is missing.
+/// Globalna obsługa klawiszy multimedialnych tam, gdzie brakuje panelu multimediów systemu
+/// (<see cref="SystemMediaControls"/>). Przechwytuje klawisz tylko wtedy, gdy Cewka gra albo jej
+/// okno jest na wierzchu; w pozostałych przypadkach klawisz idzie do innych programów.
 ///
-/// <para>Gdy działa panel multimediów systemu (<see cref="SystemMediaControls"/>), Windows sam
-/// kieruje klawisze do ostatnio aktywnej sesji odtwarzania i zaczep nie jest potrzebny. Zostaje
-/// drogą zapasową: przechwytuje klawisz tylko wtedy, gdy Cewka gra albo jej okno jest na
-/// wierzchu. W pozostałych przypadkach klawisz idzie dalej do innych programów.</para>
-///
-/// <para>Pułapka: zaczep niskiego poziomu system wywołuje w wątku, który go założył, i każde
-/// naciśnięcie klawisza w całej sesji czeka na ten wątek. Dlatego zaczep ma własny wątek
-/// z pętlą komunikatów. W wątku interfejsu dłuższe zajęcie okna opóźniałoby klawiaturę całego
-/// systemu, a po przekroczeniu limitu czasu Windows zdejmuje zaczep bez powiadomienia.</para>
+/// <para>Pułapka: zaczep niskiego poziomu działa w wątku, który go założył, i każde naciśnięcie
+/// klawisza w sesji czeka na ten wątek. Dlatego zaczep ma własny wątek z pętlą komunikatów;
+/// w wątku interfejsu opóźniałby klawiaturę systemu, a po limicie czasu Windows zdejmuje go
+/// bez powiadomienia.</para>
 /// </summary>
 public static unsafe class MediaKeys
 {
@@ -318,11 +315,9 @@ internal enum KeyVerdict
 }
 
 /// <summary>
-/// Decides the fate of each press and release of a multimedia key.
-///
-/// <para>Decyzja zapada przy pierwszym wciśnięciu i obowiązuje do puszczenia klawisza:
-/// powtórzenia z przytrzymania nie wywołują kolejnych poleceń, a puszczenie idzie tam, dokąd
-/// poszło wciśnięcie. Inny program nie dostaje więc samego puszczenia klawisza.</para>
+/// Rozstrzyga o każdym wciśnięciu i puszczeniu klawisza multimedialnego. Decyzja zapada przy
+/// pierwszym wciśnięciu i obowiązuje do puszczenia: powtórzenia nie wywołują poleceń, a puszczenie
+/// idzie tam, dokąd poszło wciśnięcie.
 ///
 /// <para>Pułapka: zgubione puszczenie zostawiłoby klawisz na zawsze „wciśnięty”, a każde
 /// następne naciśnięcie uchodziłoby za powtórzenie. Dlatego wciśnięcie po przerwie dłuższej niż

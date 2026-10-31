@@ -4,12 +4,8 @@ using Cewka.App.Localisation;
 namespace Cewka.App.ViewModels;
 
 /// <summary>
-/// One choice within a <see cref="SegmentGroup"/>.
-/// <para>
-/// The caption is kept as a key rather than as finished text: switching language has to
-/// relabel the buttons already on screen, and a string copied once would stay in whatever
-/// language it was copied from.
-/// </para>
+/// Jedna pozycja <see cref="SegmentGroup"/>. Podpis trzymany jako klucz, żeby zmiana języka
+/// obejmowała przyciski już widoczne.
 /// </summary>
 public sealed class SegmentOption(string key, object value, bool literal = false) : ObservableObject
 {
@@ -32,9 +28,7 @@ public sealed class SegmentOption(string key, object value, bool literal = false
 }
 
 /// <summary>
-/// A row of mutually exclusive buttons, in the manner of the limiter and normalisation
-/// switches in the main window. Used wherever a setting has a handful of values and a drop-down
-/// list would hide them behind an extra click.
+/// Rząd wzajemnie wykluczających się przycisków dla ustawień o kilku wartościach.
 /// </summary>
 public sealed class SegmentGroup
 {

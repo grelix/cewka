@@ -20,7 +20,7 @@
 
     <DockPanel>
 
-      <!-- Pasek tytulu -->
+      <!-- Pasek tytułu -->
       <Border x:Name="TitleBar"
               DockPanel.Dock="Top"
               Height="47"
@@ -32,7 +32,7 @@
                      LetterSpacing="0.13"
                      HorizontalAlignment="Center" VerticalAlignment="Center" />
 
-          <!-- Przyciski po obu stronach, widoczny ten zgodny z ustawieniem; obsluga w kodzie. -->
+          <!-- Przyciski po obu stronach, widoczny ten zgodny z ustawieniem; obsługa w kodzie. -->
           <DockPanel Margin="12,0,12,0">
             <c:WindowButtons x:Name="ControlsLeft" DockPanel.Dock="Left"
                              CloseOnly="True" IsVisible="False" VerticalAlignment="Center" />
@@ -45,7 +45,7 @@
 
       <Grid ColumnDefinitions="188,*">
 
-        <!-- Zakladki: lista pionowa, bo nazwy sekcji miesza sie w calosci w kazdym jezyku -->
+        <!-- Zakładki: lista pionowa, żeby nazwy sekcji mieściły się w całości w każdym języku -->
         <Border Grid.Column="0"
                 Background="{DynamicResource HeaderBarBrush}"
                 BorderBrush="{DynamicResource StrokeBrush}"
@@ -72,17 +72,17 @@
           </ItemsControl>
         </Border>
 
-        <!-- Tresc; pasek przewijania jak w kolejce, zamiast domyslnego z motywu Fluent -->
+        <!-- Treść; pasek przewijania jak w kolejce, zamiast domyślnego z motywu Fluent -->
         <Panel Grid.Column="1">
           <ScrollViewer x:Name="ContentArea"
                         HorizontalScrollBarVisibility="Disabled"
                         VerticalScrollBarVisibility="Hidden">
             <Panel Margin="24,20,30,26">
 
-              <!-- ========== Wyglad ========== -->
+              <!-- ========== Wygląd ========== -->
               <StackPanel Spacing="18" IsVisible="{Binding Appearance.IsSelected}">
-                <!-- Bez tytulu karty: nazwe sekcji podaje zakladka po lewej, na tej samej
-                     wysokosci, wiec powtorzenie jej tutaj bylo echem, nie informacja -->
+                <!-- Bez tytułu karty: nazwę sekcji podaje zakładka po lewej, na tej samej
+                     wysokości -->
                 <Border Classes="section">
                   <StackPanel Spacing="16">
                     <StackPanel Spacing="8">
@@ -122,8 +122,8 @@
                   </StackPanel>
                 </Border>
 
-                <!-- Barwa domyslnej okladki: wybor wzrokiem, wiec kazda pozycja pokazuje
-                     przejscie barw takie, jakie faktycznie wyjdzie w obecnym motywie -->
+                <!-- Barwa domyślnej okładki: każda pozycja pokazuje przejście barw takie,
+                     jakie wyjdzie w bieżącym motywie -->
                 <Border Classes="section">
                   <StackPanel Spacing="10">
                     <TextBlock Classes="section-title" Text="{l:Translate SettingPlaceholder}" />
@@ -158,13 +158,12 @@
 
               </StackPanel>
 
-              <!-- ========== Jezyk ========== -->
+              <!-- ========== Język ========== -->
               <StackPanel Spacing="18" IsVisible="{Binding LanguageSection.IsSelected}">
 
-                <!-- Wybor ma postac listy, nie paska segmentow: przy czternastu pozycjach pasek
-                     nie miesci sie w wierszu. Kafel ma 168 px, zeby przy szerokosci domyslnej
-                     okna w wierszu stawaly trzy pozycje; przy oknie scisnietym do minimum
-                     WrapPanel sam zwija je do dwoch. -->
+                <!-- Lista, bo przy kilkunastu pozycjach pasek segmentów nie mieści się w wierszu.
+                     Kafel ma 168 px, żeby przy domyślnej szerokości okna w wierszu stały trzy
+                     pozycje; w oknie ściśniętym do minimum WrapPanel zwija je do dwóch. -->
                 <Border Classes="section">
                   <StackPanel Spacing="10">
                     <TextBlock Classes="section-title" Text="{l:Translate SettingLanguage}" />
@@ -195,10 +194,8 @@
                 </Border>
 
                 <!--
-                  Skad wziely sie tlumaczenia. Stoi w tej zakladce, a nie w informacjach
-                  o programie, bo tutaj ktos wlasnie wybiera jezyk i tutaj ta wiedza jest mu
-                  potrzebna. Odsylacz do zgloszen na koncu: prosba o poprawke bez wskazania,
-                  gdzie ja zlozyc, jest prosba bez adresata.
+                  Skąd pochodzą tłumaczenia, przy wyborze języka, z odsyłaczem do zgłoszeń
+                  poprawek na końcu.
                 -->
                 <Border Classes="section" IsVisible="{Binding ShowTranslationNote}">
                   <StackPanel Spacing="8">
@@ -210,7 +207,7 @@
                 </Border>
               </StackPanel>
 
-              <!-- ========== Dzwiek ========== -->
+              <!-- ========== Dźwięk ========== -->
               <StackPanel Spacing="18" IsVisible="{Binding Audio.IsSelected}">
 
                 <Border Classes="section">
@@ -222,8 +219,7 @@
                               Content="{l:Translate DeviceRefresh}" />
                     </Grid>
 
-                    <!-- Lista zamiast listy rozwijanej: urządzeń jest zwykle kilka, a wybór
-                         bez dodatkowego kliknięcia pokazuje od razu, co jest do wyboru. -->
+                    <!-- Lista zamiast listy rozwijanej, bo urządzeń jest zwykle kilka. -->
                     <StackPanel Spacing="8">
                       <ItemsControl ItemsSource="{Binding Devices}">
                         <ItemsControl.ItemsPanel>
@@ -456,12 +452,8 @@
                 </Border>
 
                 <!--
-                  Karta druga: sprawdzanie nowszego wydania. Jedyna rzecz w tej zakladce, ktora
-                  cokolwiek robi — przycisk i przelacznik. Karta pierwsza podaje fakty do
-                  przeczytania, ta wymaga decyzji, wiec stoi osobno.
-
-                  Domyslnie nic sie nie dzieje samo: przycisk dziala na zadanie, a przelacznik
-                  dopiero wlacza sprawdzanie przy uruchomieniu.
+                  Karta druga: sprawdzanie nowszego wydania, osobno, bo wymaga decyzji.
+                  Przycisk działa na żądanie, a przełącznik włącza sprawdzanie przy uruchomieniu.
                 -->
                 <Border Classes="section" IsVisible="{Binding CanCheckForUpdates}">
                   <StackPanel Spacing="10">
@@ -493,8 +485,7 @@
                 </Border>
 
                 <!--
-                  Karta ostatnia: repozytorium. Dwa odsylacze wyprowadzajace poza program, wiec
-                  na samym koncu zakladki — po tym, co o programie mowi on sam.
+                  Karta ostatnia: repozytorium. Odsyłacze poza program na końcu zakładki.
                 -->
                 <Border Classes="section" IsVisible="{Binding HasRepository}">
                   <StackPanel Spacing="4">

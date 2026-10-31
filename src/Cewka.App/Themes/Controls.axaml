@@ -86,12 +86,12 @@
     <Setter Property="Opacity" Value="0.4" />
   </Style>
 
-  <!-- Wariant o pelnej jasnosci (transport, przewijanie utworow) -->
+  <!-- Wariant o pełnej jasności (transport, przewijanie utworów) -->
   <Style Selector=":is(Button).icon.strong">
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
   </Style>
 
-  <!-- Stan wlaczony dla przelacznikow losowo / powtarzaj -->
+  <!-- Stan włączony przełączników losowo / powtarzaj -->
   <Style Selector=":is(Button).icon.active">
     <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
   </Style>
@@ -203,7 +203,7 @@
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
   </Style>
 
-  <!-- Zamkniecie wyroznione na czerwono dopiero pod kursorem. -->
+  <!-- Zamknięcie wyróżnione na czerwono dopiero pod kursorem. -->
   <Style Selector="Button.window.close:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="#FFE0453A" />
   </Style>
@@ -237,7 +237,7 @@
     <Setter Property="CornerRadius" Value="6" />
   </Style>
 
-  <!-- Barwy przeniesione z systemu macOS, zeby wariant byl rozpoznawalny. -->
+  <!-- Barwy z systemu macOS, żeby wariant był rozpoznawalny. -->
   <Style Selector="Button.traffic.close Border.dot">
     <Setter Property="Background" Value="#FFFF5F57" />
   </Style>
@@ -274,8 +274,8 @@
   <!-- ======================= Przycisk rozwijania panelu ======================= -->
 
   <!--
-    Odsylacz. Barwa akcentu i podkreslenie pod kursorem, bez tla i bez obwodki: ma wygladac
-    na adres, nie na przycisk, bo prowadzi poza program.
+    Odsyłacz: barwa akcentu i podkreślenie pod kursorem, bez tła i obwódki, bo prowadzi
+    poza program.
   -->
   <Style Selector="Button.link">
     <Setter Property="Padding" Value="0" />
@@ -404,17 +404,17 @@
     <Setter Property="Fill" Value="{DynamicResource AccentBrush}" />
   </Style>
 
-  <!-- Wariant rozciagniety na cala szerokosc: lista urzadzen wyjsciowych. -->
+  <!-- Wariant na całą szerokość: lista urządzeń wyjściowych. -->
   <Style Selector=":is(Button).option.wide">
     <Setter Property="Padding" Value="10,7,12,7" />
     <Setter Property="FontWeight" Value="Normal" />
   </Style>
 
-  <!-- ======================= Okno ustawien ======================= -->
+  <!-- ======================= Okno ustawień ======================= -->
 
   <!--
-    Sekcja to karta na tle pulpitu. Ten sam zabieg co w panelu korektora: delikatne szklo
-    i cienka ramka wystarcza, zeby oddzielic grupy ustawien bez rysowania linii i naglowkow.
+    Sekcja to karta jak w panelu korektora: delikatne szkło i cienka ramka oddzielają grupy
+    ustawień bez linii i nagłówków.
   -->
   <Style Selector="Border.section">
     <Setter Property="Background" Value="{DynamicResource GlassBrush}" />
@@ -434,7 +434,7 @@
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
   </Style>
 
-  <!-- Objasnienie pod ustawieniem: zawija sie, bo bywa dluzsze niz szerokosc okna. -->
+  <!-- Objaśnienie pod ustawieniem: zawija się, bo bywa dłuższe niż szerokość okna. -->
   <Style Selector="TextBlock.setting-hint">
     <Setter Property="FontSize" Value="11" />
     <Setter Property="LineHeight" Value="16" />
@@ -442,7 +442,7 @@
     <Setter Property="Foreground" Value="{DynamicResource Text3Brush}" />
   </Style>
 
-  <!-- Wylaczone ustawienie zostaje widoczne, ale wyraznie przygaszone. -->
+  <!-- Wyłączone ustawienie zostaje widoczne, ale wyraźnie przygaszone. -->
   <Style Selector=":is(Panel).setting:disabled">
     <Setter Property="Opacity" Value="0.45" />
   </Style>
@@ -489,10 +489,9 @@
   <!-- ======================= Ikony ======================= -->
 
   <!--
-    Ikony sa rysowane w ukladzie 16x16 (przyciski okna w 10x10) i skalowane przez Viewbox.
-    Stretch="None" jest tu istotne: bez niego kazda sciezka rozciagnelaby sie do wlasnego
-    prostokata otaczajacego, przez co ikony o roznej ilosci "tuszu" mialyby rozne proporcje
-    i nie dawaloby sie ich nakladac na siebie.
+    Ikony rysowane w układzie 16x16 (przyciski okna w 10x10) i skalowane przez Viewbox.
+    Pułapka: bez Stretch="None" każda ścieżka rozciągnęłaby się do własnego prostokąta
+    otaczającego i ikony miałyby różne proporcje.
   -->
   <Style Selector="Path.fill">
     <Setter Property="Stretch" Value="None" />
@@ -605,7 +604,7 @@
     <Setter Property="Foreground" Value="{DynamicResource Text2Brush}" />
   </Style>
 
-  <!-- Wiersz odtwarzanego utworu: pogrubiony tytul i jasniejszy czas. -->
+  <!-- Wiersz odtwarzanego utworu: pogrubiony tytuł i jaśniejszy czas. -->
   <Style Selector="Grid.current TextBlock.row-title">
     <Setter Property="FontWeight" Value="Bold" />
   </Style>
@@ -614,7 +613,7 @@
     <Setter Property="Foreground" Value="{DynamicResource Text2Brush}" />
   </Style>
 
-  <!-- Domyslny pasek przewijania znika; jego role przejmuje ThinScrollBar. -->
+  <!-- Domyślny pasek przewijania znika; jego rolę przejmuje ThinScrollBar. -->
   <Style Selector="ScrollViewer.hidden-bars">
     <Setter Property="VerticalScrollBarVisibility" Value="Hidden" />
     <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />

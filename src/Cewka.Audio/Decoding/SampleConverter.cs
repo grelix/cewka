@@ -3,12 +3,8 @@ using Cewka.Audio.Interop;
 namespace Cewka.Audio.Decoding;
 
 /// <summary>
-/// Channel mapping and sample-rate conversion for the managed decoders.
-/// <para>
-/// miniaudio does this internally for the formats it decodes itself; Vorbis and Opus come
-/// out of managed libraries at their native format and need the same treatment applied
-/// afterwards. Reusing miniaudio's resampler keeps both paths sounding the same.
-/// </para>
+/// Mapowanie kanałów i zmiana częstotliwości dla dekoderów zarządzanych, resamplerem
+/// miniaudio, żeby wszystkie ścieżki brzmiały tak samo.
 /// </summary>
 internal sealed unsafe class SampleConverter : IDisposable
 {

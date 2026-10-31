@@ -279,16 +279,12 @@ public sealed class PlaylistFileTests : IDisposable
     }
 
     /// <summary>
-    /// Nasycenie przy ustawieniu zalecanym musi być dokładną jednością, a nie wartością bliską
-    /// jedności: barwy wyciągane z okładki mają wtedy wychodzić identycznie jak przed
-    /// wprowadzeniem tego ustawienia.
+    /// Nasycenie przy ustawieniu zalecanym i intensywnym ma dokładnie zadane wartości.
     /// </summary>
     [Fact]
     public void ZalecanaPrzejelaWartoscDawnejSubtelnej()
     {
-        // Skala zjechała w dół w 0.8.0: tło było w praktyce mocniejsze, niż potrzeba. Wartości
-        // wpisane tu wprost, bo to one są rozstrzygnięciem — przypadkowa zmiana którejkolwiek
-        // przesunęłaby wygląd wszystkich okien naraz.
+        // Wartości wpisane wprost, bo przypadkowa zmiana przesunęłaby wygląd wszystkich okien.
         Assert.Equal(0.72, ColourPreferences.Saturation(ColourIntensity.Recommended));
         Assert.Equal(1.28, ColourPreferences.Saturation(ColourIntensity.Intense));
     }
@@ -321,16 +317,12 @@ public sealed class PlaylistFileTests : IDisposable
     }
 
     /// <summary>
-    /// Siła plam tła nie jest już stała — każda plama waha się między progami — więc jedność
-    /// musi wypadać w środku zakresu ustawienia zalecanego. Inaczej tło byłoby średnio
-    /// jaśniejsze albo ciemniejsze niż to, z jakim program był projektowany.
+    /// Każda plama waha się między progami, więc zakres ustawienia zalecanego ma leżeć
+    /// symetrycznie wokół swojego środka.
     /// </summary>
     [Fact]
     public void ZakresZalecanyLezySymetrycznieWokolSwojegoSrodka()
     {
-        // Do 0.7.20 środkiem zalecanej była jedność, czyli siła, z jaką tło zaprojektowano.
-        // Od 0.8.0 zalecana przejęła wartość dawnej subtelnej i jedność przestała być wartością
-        // wyróżnioną — sprawdzana jest więc symetria wokół zadanego środka, a nie wokół jedynki.
         var (minimum, maximum) = ColourPreferences.BackdropRange(ColourIntensity.Recommended);
 
         Assert.Equal(0.78, (minimum + maximum) / 2, precision: 10);

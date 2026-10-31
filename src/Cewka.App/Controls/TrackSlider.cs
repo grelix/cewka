@@ -10,9 +10,8 @@ using Avalonia.Rendering;
 namespace Cewka.App.Controls;
 
 /// <summary>
-/// The horizontal bar used for both seeking and volume: a rounded track, a filled
-/// portion and a round thumb. Written from scratch rather than restyling
-/// <see cref="Slider"/>, whose template carries far more structure than this needs.
+/// Poziomy pasek przewijania i głośności: zaokrąglony tor, wypełnienie i okrągły uchwyt.
+/// Własny, bo szablon <see cref="Slider"/> ma znacznie więcej struktury, niż trzeba.
 /// </summary>
 public sealed class TrackSlider : Control, ICustomHitTest
 {

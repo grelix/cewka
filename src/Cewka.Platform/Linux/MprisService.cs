@@ -15,17 +15,12 @@ public enum MediaCommand
 }
 
 /// <summary>
-/// The player as seen by a Linux desktop: <c>org.mpris.MediaPlayer2</c> on the session bus.
+/// Odtwarzacz widziany przez pulpit Linuksa: <c>org.mpris.MediaPlayer2</c> na szynie sesji.
+/// Przez MPRIS pulpit przekazuje też klawisze multimedialne, więc własne przechwytywanie
+/// klawiszy, jak w Windows, byłoby tu szkodliwe.
 ///
-/// <para>MPRIS jest w Linuksie odpowiednikiem panelu multimediów systemu Windows, a przy okazji
-/// jedyną drogą, którą środowiska graficzne przekazują klawisze multimedialne. Klawiatura trafia
-/// najpierw do pulpitu, a ten woła po szynie odtwarzacz, który akurat gra — dlatego osobne
-/// przechwytywanie klawiszy, jak w systemie Windows, jest tu niepotrzebne i byłoby szkodliwe.</para>
-///
-/// <para><b>Wątek i stan.</b> Połączenie należy w całości do jednego wątku utworzonego tutaj.
-/// Interfejs nie sięga do niego wprost: podmienia niezmienne zdjęcie stanu, które wątek szyny
-/// odczytuje, odpowiadając na pytania o właściwości. Dzięki temu nie ma ani jednej blokady
-/// dzielonej między wątkiem interfejsu a szyną.</para>
+/// <para>Połączenie należy do jednego wątku utworzonego tutaj. Interfejs podmienia tylko
+/// niezmienne zdjęcie stanu, które ten wątek odczytuje, więc obie strony obywają się bez blokad.</para>
 /// </summary>
 [SupportedOSPlatform("linux")]
 public sealed unsafe class MprisService : IMediaPanel
@@ -38,7 +33,7 @@ public sealed unsafe class MprisService : IMediaPanel
 
     private const string NoTrack = MprisRules.NoTrack;
 
-    /// <summary>Immutable picture of what is playing, swapped whole rather than edited in place.</summary>
+    /// <summary>Niezmienne zdjęcie tego, co gra; podmieniane w całości.</summary>
     private sealed record Snapshot(
         string Title,
         string Artist,

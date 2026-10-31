@@ -10,12 +10,8 @@ namespace Cewka.Platform;
 internal sealed partial class HandoffJsonContext : JsonSerializerContext;
 
 /// <summary>
-/// Where the one-copy machinery keeps its two things: the file whose lock decides who is
-/// running, and the address on which that copy listens.
-/// <para>
-/// Ścieżki są podawane jawnie, żeby sprawdzenia mogły uruchamiać ten mechanizm w katalogu
-/// tymczasowym, nie ruszając prawdziwych ustawień ani działającego programu.
-/// </para>
+/// Plik blokady, który rozstrzyga, która kopia działa, i adres, na którym ta kopia słucha.
+/// Podawane jawnie, żeby testy mogły pracować w katalogu tymczasowym.
 /// </summary>
 /// <param name="Name">Nazwa potoku w przestrzeni nazw jądra Windows; pod Linuksem nieużywana.</param>
 /// <param name="LockFile">Plik, którego wyłączna blokada oznacza rolę działającej kopii.</param>
@@ -28,18 +24,14 @@ public sealed record InstanceAddress(string Name, string LockFile, string Socket
 }
 
 /// <summary>
-/// Keeps a single running copy of the application and hands paths over to it.
+/// Pilnuje, żeby działała jedna kopia programu, i przekazuje jej ścieżki z kolejnych uruchomień.
+/// Eksplorator uruchamia program osobno dla każdego zaznaczonego pliku; pierwsza kopia zostaje,
+/// następne oddają jej ścieżki i kończą pracę. O pierwszeństwie decyduje wyłączna blokada pliku,
+/// którą jądro zwalnia także po awarii procesu.
 ///
-/// <para>Skojarzenie plików sprawia, że otwarcie albumu z eksploratora uruchamia program raz dla
-/// każdego zaznaczonego pliku. Pierwsza kopia zostaje, a każda następna oddaje jej swoje ścieżki
-/// i natychmiast kończy pracę, więc nie powstaje kilkanaście okien walczących o urządzenie
-/// dźwiękowe. O pierwszeństwie rozstrzyga wyłączna blokada pliku w katalogu ustawień; jądro
-/// zwalnia ją także wtedy, gdy program zginie bez pożegnania.</para>
-///
-/// <para>Pułapka: muteks nazwany .NET-u żyje pod Linuksem w <c>/tmp/.dotnet/shm/session&lt;SID&gt;</c>,
-/// osobno dla każdej sesji POSIX, a menedżer plików uruchamia każdą kopię we własnej sesji.
-/// Każda uznałaby się za pierwszą. Tego nie wyłapie sprawdzenie w jednym procesie; po zmianach
-/// w tym pliku pod Linuksem uruchomić kopię, potem <c>setsid program plik.mp3</c> i policzyć
+/// <para>Pułapka: muteks nazwany .NET żyje pod Linuksem osobno dla każdej sesji POSIX, a menedżer
+/// plików uruchamia każdą kopię we własnej sesji. Test w jednym procesie tego nie wykryje; po
+/// zmianach tutaj uruchomić pod Linuksem kopię, potem <c>setsid program plik.mp3</c> i policzyć
 /// procesy. Ma zostać jeden.</para>
 /// </summary>
 public sealed class SingleInstance : IDisposable
@@ -51,9 +43,8 @@ public sealed class SingleInstance : IDisposable
     private const int MaxPendingMessages = 256;
 
     /// <summary>
-    /// How many times start-up may go round. Rola zmienia właściciela dokładnie między
-    /// sprawdzeniem blokady a połączeniem tylko wtedy, gdy poprzednia kopia właśnie kończyła
-    /// pracę — kilka podejść wystarczy, żeby to przeczekać.
+    /// Liczba podejść przy starcie. Rola zmienia właściciela między sprawdzeniem blokady
+    /// a połączeniem tylko wtedy, gdy poprzednia kopia akurat się zamyka.
     /// </summary>
     private const int Attempts = 3;
 
@@ -107,13 +98,9 @@ public sealed class SingleInstance : IDisposable
     }
 
     /// <summary>
-    /// Takes the role of the one running copy, or hands the paths over to whoever holds it.
-    ///
-    /// <para>Nieudane przekazanie przy zajętej blokadzie znaczy, że poprzednia kopia zniknęła
-    /// dokładnie w tej chwili. Wtedy trzeba wrócić po rolę, a nie otwierać okno bez nasłuchu —
-    /// taka kopia nie odebrałaby już niczego i każde następne uruchomienie mnożyłoby okna.
-    /// Gdy mechanizm jest niedostępny, kolejne podejścia nic nie zmienią, a każde kosztuje
-    /// sekundę czekania na połączenie, więc program rusza od razu.</para>
+    /// Bierze rolę działającej kopii albo oddaje ścieżki tej, która ją ma.
+    /// Nieudane przekazanie przy zajętej blokadzie znaczy, że poprzednia kopia właśnie zniknęła;
+    /// wtedy trzeba wrócić po rolę, bo okno bez nasłuchu mnożyłoby okna przy każdym uruchomieniu.
     /// </summary>
     public static Claim Start(InstanceAddress address, IReadOnlyList<string> paths)
     {
@@ -192,14 +179,10 @@ public sealed class SingleInstance : IDisposable
         IsLockConflict(ex.HResult, OperatingSystem.IsWindows(), OperatingSystem.IsLinux());
 
     /// <summary>
-    /// Whether the error code .NET puts in <see cref="Exception.HResult"/> means that another
-    /// process holds the lock.
-    /// <para>
-    /// Brak katalogu, system plików tylko do odczytu czy błąd wejścia-wyjścia to też
-    /// <see cref="IOException"/>, ale wtedy nikt blokady nie trzyma i nie ma komu oddawać ścieżek.
-    /// W Windows rozstrzyga naruszenie współdzielenia albo blokady, na Uniksie EWOULDBLOCK
-    /// z <c>flock</c>, które .NET podaje jako surowy numer błędu.
-    /// </para>
+    /// Czy kod błędu z <see cref="Exception.HResult"/> oznacza blokadę trzymaną przez inny proces.
+    /// Brak katalogu czy system plików tylko do odczytu też dają <see cref="IOException"/>, ale
+    /// wtedy nie ma komu oddawać ścieżek. Na Uniksie .NET podaje EWOULDBLOCK z <c>flock</c> jako
+    /// surowy numer błędu.
     /// </summary>
     internal static bool IsLockConflict(int hresult, bool windows, bool linux)
     {
@@ -308,7 +291,7 @@ public sealed class SingleInstance : IDisposable
     }
 
     /// <summary>
-    /// Reads one message, giving up after <see cref="HandoffChannel.ReadTimeout"/>. Bez limitu
+    /// Czyta jedną wiadomość, najdłużej przez <see cref="HandoffChannel.ReadTimeout"/>. Bez limitu
     /// nadawca wstrzymany w połowie (debuger, skaner antywirusowy) trzymałby kanał bez końca.
     /// </summary>
     private string[] ReadMessage(Stream stream)
@@ -353,7 +336,7 @@ public sealed class SingleInstance : IDisposable
         _channel.Dispose();
         _listener.Join(500);
 
-        // Zwolnienie blokady. Gdyby tu nie doszło — bo program zginął — zrobi to jądro.
+        // Po awarii procesu blokadę zwolni jądro.
         _lock.Dispose();
         _stop.Dispose();
     }

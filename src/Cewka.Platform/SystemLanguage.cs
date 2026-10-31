@@ -5,12 +5,10 @@ namespace Cewka.Platform;
 /// <summary>
 /// Odczytuje język interfejsu ustawiony w systemie.
 ///
-/// <para>Pułapka: program jest budowany z <c>InvariantGlobalization=true</c>, bez biblioteki
-/// ICU. W tym trybie <c>CultureInfo.CurrentUICulture</c> jest zawsze kulturą niezmienną, więc
-/// odczyt przez <c>CultureInfo</c> nie dopasowałby żadnego języka. Stąd odczyt wprost od
-/// systemu: w Windowsie z listy preferowanych języków wyświetlania (nie z formatu regionalnego,
-/// który często jest inny niż język interfejsu), w Linuksie ze zmiennych środowiskowych według
-/// reguł gettext.</para>
+/// <para>Pułapka: przy <c>InvariantGlobalization=true</c> <c>CultureInfo.CurrentUICulture</c>
+/// jest zawsze kulturą niezmienną. Dlatego odczyt idzie wprost od systemu: w Windows z listy
+/// preferowanych języków wyświetlania (format regionalny bywa inny), pod Linuksem ze zmiennych
+/// środowiskowych według reguł gettext.</para>
 /// </summary>
 public static class SystemLanguage
 {

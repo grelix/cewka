@@ -20,7 +20,7 @@
 
     <Panel>
 
-      <!-- ============ Warstwa 0: zywe tlo zbudowane z barw okladki ============ -->
+      <!-- ============ Warstwa 0: żywe tło z barw okładki ============ -->
       <c:LiveBackdrop x:Name="Backdrop"
                       Palette="{Binding Palette}"
                       MinimumStrength="{Binding BackdropMinimum}"
@@ -33,10 +33,10 @@
       <!-- ============ Warstwa 1: przyciemnienie ============ -->
       <Border Background="{DynamicResource ScrimBrush}" />
 
-      <!-- ============ Warstwa 2: tresc ============ -->
+      <!-- ============ Warstwa 2: treść ============ -->
       <DockPanel>
 
-        <!-- Pasek tytulu: po prawej polecenia i przyciski okna, po lewej nic albo przyciski okna. -->
+        <!-- Pasek tytułu: po prawej polecenia i przyciski okna, po lewej nic albo przyciski okna. -->
         <Border x:Name="TitleBar"
                 DockPanel.Dock="Top"
                 Height="47"
@@ -45,8 +45,8 @@
                 BorderThickness="0,0,0,1">
           <Panel>
 
-            <!-- Nazwa zawsze na srodku okna, niezaleznie od tego, po ktorej stronie
-                 stoja przyciski okna. -->
+            <!-- Nazwa zawsze na środku okna, bez względu na to, po której stronie
+                 stoją przyciski okna. -->
             <TextBlock Text="{l:Translate AppName}" FontSize="13" FontWeight="Bold"
                        LetterSpacing="0.13" IsHitTestVisible="False"
                        HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -61,7 +61,7 @@
                           VerticalAlignment="Center">
 
                 <!--
-                  Dwa przelaczniki, bo dwa obszary wlacza sie niezaleznie: suwaki to pas dolny
+                  Dwa przełączniki dla dwóch niezależnych obszarów: suwaki to pas dolny
                   z korektorem i efektami, lista to kolejka po prawej.
                 -->
                 <ToggleButton x:Name="PanelToggle" Classes="icon" Width="30" Height="30"
@@ -87,7 +87,7 @@
                   </Viewbox>
                 </ToggleButton>
 
-                <!-- Ikona pokazuje tryb biezacy: slonce, ksiezyc albo kolo w polowie wypelnione. -->
+                <!-- Ikona pokazuje bieżący tryb: słońce, księżyc albo koło w połowie wypełnione. -->
                 <Button x:Name="ThemeButton" Classes="icon" Width="30" Height="30"
                         Click="OnToggleTheme"
                         ToolTip.Tip="{Binding ThemeTooltip}"
@@ -141,28 +141,27 @@
         <Grid x:Name="Body" ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
 
             <!--
-              Blok odtwarzania srodkowany w pozostalej przestrzeni. CentreHost zajmuje cala
-              wolna wysokosc i po niej kod dobiera rozmiar plyty.
+              Blok odtwarzania wyśrodkowany w pozostałej przestrzeni. CentreHost zajmuje całą
+              wolną wysokość, a według niej kod dobiera rozmiar płyty.
 
-              ClipToBounds jako zabezpieczenie ostatniej instancji: zawartosc ma sie miescic sama,
-              ale gdyby kiedys przestala, ma zostac obcieta na swojej krawedzi, a nie narysowac sie
-              na kolejce.
+              ClipToBounds na wszelki wypadek: zawartość, która się nie zmieści, zostaje obcięta
+              na swojej krawędzi zamiast rysować się na kolejce.
             -->
             <Panel x:Name="CentreHost" Grid.Row="0" Grid.Column="0">
               <StackPanel x:Name="CentreArea" VerticalAlignment="Center" ClipToBounds="True">
 
-                <!-- Odtwarzany utwor. Tlo przezroczyste lapie kursor dla poswiaty plyty. -->
+                <!-- Odtwarzany utwór. Przezroczyste tło łapie kursor dla poświaty płyty. -->
                 <Grid x:Name="NowPlaying" ColumnDefinitions="Auto,*" ColumnSpacing="48"
                       Margin="40,38,40,18"
                       Background="Transparent"
                       HorizontalAlignment="Stretch"
                       PointerMoved="OnDiscPointerMoved" PointerExited="OnDiscPointerExited">
 
-                  <!-- Plyta -->
+                  <!-- Płyta -->
                   <Panel x:Name="DiscHost" Grid.Column="0" Width="300" Height="300">
 
-                    <!-- Cien pod plyta: miekki gradient zamiast rozmycia, ktore liczyloby sie
-                         od nowa przy kazdej klatce obrotu. -->
+                    <!-- Cień pod płytą: miękki gradient, bo rozmycie liczyłoby się od nowa
+                         przy każdej klatce obrotu. -->
                     <Ellipse Margin="0,0,0,-22" Height="64" VerticalAlignment="Bottom"
                              IsHitTestVisible="False">
                       <Ellipse.Fill>
@@ -182,7 +181,7 @@
                                  RingBrush="{DynamicResource DiscRingBrush}"
                                  HoleBrush="{DynamicResource DeskBrush}" />
 
-                    <!-- Refleks swietlny, nieruchomy wzgledem obracajacej sie plyty -->
+                    <!-- Refleks świetlny, nieruchomy względem obracającej się płyty -->
                     <Ellipse IsHitTestVisible="False">
                       <Ellipse.Fill>
                         <LinearGradientBrush StartPoint="5.9%,26.5%" EndPoint="94.1%,73.5%">
@@ -211,8 +210,8 @@
                                  FontSize="9.5" LetterSpacing="0.57" />
                     </Border>
 
-                    <!-- Bez jawnej wysokosci wiersza: narzucona wartosc obcinala dolne
-                         wydluzenia liter przy wiekszych rozmiarach czcionki. -->
+                    <!-- Bez jawnej wysokości wiersza, bo narzucona obcina dolne wydłużenia
+                         liter przy większych rozmiarach pisma. -->
                     <TextBlock x:Name="TrackTitle" Text="{Binding Title}"
                                FontSize="42" FontWeight="Bold"
                                LetterSpacing="-0.84" TextTrimming="CharacterEllipsis" />
@@ -221,8 +220,7 @@
                                IsVisible="{Binding HasArtistLine}"
                                TextTrimming="CharacterEllipsis" />
 
-                    <!-- Widoczne tylko wtedy, gdy nie udalo sie otworzyc wyjscia dzwieku. Okno zostaje,
-                         bo kolejka, ustawienia i sam powod nadal warte sa pokazania. -->
+                    <!-- Widoczne tylko wtedy, gdy nie udało się otworzyć wyjścia dźwięku. -->
                     <Border IsVisible="{Binding HasAudioFailure}"
                             Margin="0,10,0,0" Padding="12,9" CornerRadius="9"
                             HorizontalAlignment="Left" MaxWidth="640"
@@ -242,7 +240,7 @@
                       </StackPanel>
                     </Border>
 
-                    <!-- Nowsze wydanie. Zostaje na ekranie, bo opisuje stan, nie zdarzenie. -->
+                    <!-- Nowsze wydanie. Opisuje stan, więc zostaje na ekranie. -->
                     <Border IsVisible="{Binding HasUpdateNotice}"
                             Margin="0,10,0,0" Padding="12,9" CornerRadius="9"
                             HorizontalAlignment="Left" MaxWidth="640"
@@ -258,7 +256,7 @@
                       </StackPanel>
                     </Border>
 
-                    <!-- Komunikat o wykonanej czynnosci; gasnie sam po kilku sekundach. -->
+                    <!-- Komunikat o wykonanej czynności; gaśnie sam po kilku sekundach. -->
                     <Border IsVisible="{Binding HasNotice}"
                             Margin="0,10,0,0" Padding="12,9" CornerRadius="9"
                             HorizontalAlignment="Left" MaxWidth="640"
@@ -269,8 +267,7 @@
                                  AutomationProperties.LiveSetting="Polite" />
                     </Border>
 
-                    <!-- Widoczne tylko przy pustej kolejce: bez tego pierwsze uruchomienie
-                         nie podpowiada, w jaki sposob dodac muzyke. -->
+                    <!-- Widoczne tylko przy pustej kolejce: podpowiada, jak dodać muzykę. -->
                     <StackPanel IsVisible="{Binding IsQueueEmpty}" Spacing="10" Margin="0,10,0,0">
                       <WrapPanel Orientation="Horizontal" ItemSpacing="10" LineSpacing="8">
                         <Button Classes="pill primary" Click="OnOpenFiles"
@@ -282,7 +279,7 @@
                                  TextWrapping="Wrap" />
                     </StackPanel>
 
-                    <!-- Pasek postepu -->
+                    <!-- Pasek postępu -->
                     <StackPanel x:Name="ProgressBlock" Spacing="7" Margin="0,22,0,0">
                       <Panel Height="44">
                         <c:WaveformView x:Name="Wave" Stroke="{DynamicResource Text2Brush}"
@@ -351,8 +348,8 @@
                           </Viewbox>
                         </Button>
 
-                        <!-- Trzy stany: bez powtarzania, kolejka, jeden utwor. Ikona z jedynka
-                             odroznia ostatni od pozostalych, bo sam akcent tego nie pokaze. -->
+                        <!-- Trzy stany: bez powtarzania, kolejka, jeden utwór. Ostatni odróżnia
+                             ikona z jedynką, bo sam akcent tego nie pokaże. -->
                         <Button Classes="icon" Classes.active="{Binding RepeatEnabled}"
                                 Width="36" Height="36"
                                 Click="OnToggleRepeat" ToolTip.Tip="{Binding RepeatTooltip}"
@@ -369,7 +366,7 @@
                           </Panel>
                         </Button>
 
-                        <!-- Dodanie plikow do kolejki; ostatni w rzedzie, bo nie nalezy do transportu -->
+                        <!-- Dodanie plików do kolejki; ostatni w rzędzie, bo nie należy do transportu -->
                         <Button Classes="icon" Width="32" Height="32"
                                 Click="OnOpenFiles" ToolTip.Tip="{l:Translate TooltipOpenFiles}"
                                 AutomationProperties.Name="{l:Translate TooltipOpenFiles}">
@@ -416,7 +413,7 @@
               </StackPanel>
             </Panel>
 
-          <!-- Klikniecie obok nakladanej kolejki zamyka ja. -->
+          <!-- Kliknięcie obok nakładanej kolejki zamyka ją. -->
           <Border x:Name="QueueDismiss" Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Grid.ColumnSpan="2"
                   ZIndex="1"
                   Background="Transparent" IsVisible="False"
@@ -548,7 +545,7 @@
             </DockPanel>
           </Border>
 
-            <!-- Pas dolny: korektor i efekty. W niskim oknie przewija sie zamiast sciskac odtwarzacz. -->
+            <!-- Pas dolny: korektor i efekty. W niskim oknie przewija się, żeby nie ściskać odtwarzacza. -->
             <Border x:Name="PanelHost" Grid.Row="1" Grid.Column="0"
                     IsVisible="{Binding PanelOpen}"
                     Background="{DynamicResource GlassBrush}"
@@ -558,8 +555,8 @@
                             HorizontalScrollBarVisibility="Disabled"
                             VerticalScrollBarVisibility="Auto">
                 <!--
-                  Trzy do dwoch, czyli 60 % na korektor i 40 % na efekty. Proporcja zamiast
-                  liczby pikseli, bo szerokosc pasa zalezy od tego, czy obok stoi kolejka.
+                  Trzy do dwóch, czyli 60 % na korektor i 40 % na efekty. Proporcja, bo szerokość
+                  pasa zależy od tego, czy obok stoi kolejka.
                 -->
                 <Grid x:Name="PanelGrid">
                   <Grid.ColumnDefinitions>
@@ -683,7 +680,7 @@
                     </DockPanel>
                   </Border>
 
-                  <!-- Efekty dzwiekowe -->
+                  <!-- Efekty dźwiękowe -->
                   <Border Grid.Column="1" Padding="24,18,26,22">
                     <DockPanel>
 
@@ -705,8 +702,7 @@
                             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
 
                               <!--
-                                Przelacznik stoi poza obszarem wygaszanym: to on wlacza efekt, wiec
-                                nie moze przygasac razem z tym, co wylaczyl.
+                                Przełącznik stoi poza obszarem przygaszanym, bo to on włącza efekt.
                               -->
                               <c:GlassSwitch Grid.Column="0" VerticalAlignment="Center"
                                              IsChecked="{Binding Enabled, Mode=TwoWay}"
@@ -716,7 +712,7 @@
                                              ToolTip.Tip="{Binding Description}"
                                              AutomationProperties.Name="{Binding Label}" />
 
-                              <!-- Nazwa nad suwakiem: w jednym wierszu suwak bylby zbyt krotki, zeby nim trafic. -->
+                              <!-- Nazwa nad suwakiem, bo w jednym wierszu suwak byłby za krótki. -->
                               <StackPanel Grid.Column="1" Spacing="4" Opacity="{Binding RowOpacity}">
                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                   <TextBlock Grid.Column="0" Text="{Binding Label}"

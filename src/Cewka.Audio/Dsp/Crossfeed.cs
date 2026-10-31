@@ -1,24 +1,15 @@
 namespace Cewka.Audio.Dsp;
 
 /// <summary>
-/// Crossfeed: domieszka sygnału z kanału przeciwnego, przytłumiona w górze pasma.
+/// Crossfeed do słuchawek: domieszka kanału przeciwnego przytłumiona w górze pasma, jak przy
+/// odsłuchu z głośników, gdy dźwięk obchodzi głowę.
 ///
-/// <para>Nagrania stereo miksuje się z myślą o głośnikach, przy których każde ucho
-/// słyszy oba kanały — z opóźnieniem i przytłumieniem wysokich tonów, bo dźwięk musi obejść
-/// głowę. W słuchawkach ta droga nie istnieje i rozdział kanałów jest zupełny. Partie
-/// spanoramowane do skraju — częste w nagraniach z lat sześćdziesiątych i siedemdziesiątych —
-/// siedzą wtedy „w głowie" i po dłuższym słuchaniu męczą. Ten stopień przywraca brakującą drogę.</para>
+/// <para>Do każdego kanału dodawana jest różnica kanałów po filtrze dolnoprzepustowym; jego
+/// opóźnienie fazowe, około ćwierć milisekundy, odpowiada obejściu głowy. Materiał wspólny
+/// obu kanałom nie ma różnicy, więc środek przechodzi bez zmiany.</para>
 ///
-/// <para>Do każdego kanału dodawana jest różnica kanałów przepuszczona przez filtr
-/// dolnoprzepustowy odpowiadający cieniowi akustycznemu głowy; opóźnienie fazowe tego filtru,
-/// około ćwierć milisekundy, odpowiada czasowi obejścia głowy. Niskie tony stają się więc
-/// w części wspólne, wysokie pozostają rozdzielone. Materiał wspólny obu kanałom nie ma różnicy,
-/// więc przechodzi bez zmiany: wokal na środku nie traci góry ani poziomu.</para>
-///
-/// <para>Nastawy odpowiadają bibliotece bs2b Borisa Michajłowa (licencja MIT): częstotliwość
-/// graniczna 650–700 Hz i różnica poziomów w basie między drogą bezpośrednią a skrośną od 15 dB
-/// przy słabym ustawieniu do 4,5 dB przy pełnym, najmocniejszej z nastaw bs2b. Sam kod jest
-/// napisany od nowa, bez zaciągania biblioteki natywnej.</para>
+/// <para>Nastawy jak w bs2b (licencja MIT): częstotliwość graniczna 650–700 Hz i różnica
+/// poziomów w basie od 15 dB do 4,5 dB. Kod napisany od nowa.</para>
 /// </summary>
 public sealed class Crossfeed : IAudioProcessor
 {

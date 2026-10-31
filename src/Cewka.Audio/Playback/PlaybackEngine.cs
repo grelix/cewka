@@ -6,16 +6,14 @@ using Cewka.Audio.Dsp;
 namespace Cewka.Audio.Playback;
 
 /// <summary>
-/// Drives playback: owns the device, the decode thread and the queue.
+/// Steruje odtwarzaniem: ma urządzenie, wątek dekodujący i kolejkę.
 ///
-/// <para>Jeden wątek dekodujący napełnia bufor pierścieniowy, a wywołanie zwrotne urządzenia
-/// wyłącznie z niego czyta i przepuszcza próbki przez tor przetwarzania. Granice utworów
-/// zapisywane są jako znaczniki pozycji w tym samym buforze, dzięki czemu przejście do
-/// kolejnego utworu nie wymaga przerwy. Wątek dekodujący wyprzedza odtwarzanie o pół
-/// sekundy, co wystarcza, by zdążył otworzyć następny plik.</para>
+/// <para>Wątek dekodujący wyprzedza odtwarzanie o pół sekundy i napełnia bufor pierścieniowy,
+/// z którego czyta wywołanie zwrotne urządzenia. Granice utworów są znacznikami pozycji w tym
+/// samym buforze, więc przejście do następnego utworu jest bez przerwy.</para>
 ///
-/// <para>Wątek dźwiękowy nie alokuje, nie czeka na blokady i nie zgłasza zdarzeń: przejścia
-/// przez granice sygnalizuje flagami, które odbiera wątek dekodujący.</para>
+/// <para>Pułapka: wątek dźwiękowy nie alokuje, nie czeka na blokady i nie zgłasza zdarzeń;
+/// przejście przez granicę sygnalizuje flagą, którą odbiera wątek dekodujący.</para>
 /// </summary>
 public sealed class PlaybackEngine : IDisposable
 {
@@ -301,12 +299,9 @@ public sealed class PlaybackEngine : IDisposable
     }
 
     /// <summary>
-    /// Moves playback to another output device without restarting the application.
-    ///
-    /// <para>Nowe urządzenie może pracować z inną częstotliwością i liczbą kanałów, a od nich
-    /// zależy rozmiar bufora, długość wyciszenia, współczynniki filtrów i pozycja liczona
-    /// w ramkach, więc tor buduje się od nowa. Utwór wraca na swoje miejsce razem z pozycją,
-    /// a wstrzymany pozostaje wstrzymany.</para>
+    /// Przenosi odtwarzanie na inne urządzenie. Tor buduje się od nowa, bo od częstotliwości
+    /// i liczby kanałów zależą bufor, filtry i pozycja w ramkach; utwór wraca na swoje miejsce,
+    /// a wstrzymany pozostaje wstrzymany.
     /// </summary>
     public void SwitchDevice(string? deviceName)
     {
@@ -334,7 +329,7 @@ public sealed class PlaybackEngine : IDisposable
     }
 
     /// <summary>
-    /// Stops the decode thread and closes the device, leaving the queue intact.
+    /// Zatrzymuje wątek dekodujący i zamyka urządzenie, zostawiając kolejkę.
     /// Z <paramref name="keepPlace"/> utwór i pozycja zostają jako przewinięcie, które wykona
     /// następna sesja, a stan przechodzi w pauzę; koniec kolejki zostaje końcem.
     ///

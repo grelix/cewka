@@ -24,7 +24,7 @@ internal static class OpusSample
         using var file = File.Create(path);
         var writer = new OpusOggWriteStream(encoder, file, null, SampleRate);
 
-        // Dwa tony rozlozone miedzy kanaly, zeby bylo widac, czy nie zamienily sie miejscami.
+        // Dwa tony w różnych kanałach, żeby było widać, czy kanały nie zamieniły się miejscami.
         var samples = new float[SampleRate * Channels * Seconds];
         for (var i = 0; i < SampleRate * Seconds; i++)
         {

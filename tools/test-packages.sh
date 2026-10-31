@@ -1,17 +1,17 @@
 #!/bin/bash
-# Probna instalacja pakietow w kontenerach trzech rodzin dystrybucji.
+# Próbna instalacja pakietów w kontenerach trzech rodzin dystrybucji.
 #
 #   .deb          ubuntu:24.04
 #   .rpm          fedora:latest
 #   .pkg.tar.zst  archlinux:latest
 #
-# Kazdy kontener: instalacja, sprawdzenie plikow i wpisu w menu, sprawdzenie zaleznosci,
-# uruchomienie programu pod serwerem X bez ekranu, odinstalowanie bez pozostalosci.
+# W każdym kontenerze: instalacja, sprawdzenie plików, wpisu w menu i zależności,
+# uruchomienie programu pod serwerem X bez ekranu, odinstalowanie bez pozostałości.
 #
 # Wymaga: docker
-# Uzycie:  ./tools/test-packages.sh [katalog-pakietow] [katalog-materialu]
+# Użycie:  ./tools/test-packages.sh [katalog-pakietów] [katalog-materiału]
 #
-# Pakiety musza juz istniec — najpierw ./tools/publish-linux.sh i ./tools/build-packages.sh
+# Pakiety muszą już istnieć; najpierw ./tools/publish-linux.sh i ./tools/build-packages.sh
 
 set -euo pipefail
 
@@ -30,8 +30,7 @@ if [ -z "$WERSJA" ]; then
     exit 1
 fi
 
-# Instalowane sa pakiety biezacej wersji po pelnej nazwie. Wzorzec z gwiazdka obejmowalby
-# tez pakiety starszych wersji lezace w tym samym katalogu.
+# Pakiety bieżącej wersji po pełnej nazwie; wzorzec z gwiazdką objąłby też starsze.
 DEB="cewka_${WERSJA}_amd64.deb"
 RPM="cewka-${WERSJA}-1.x86_64.rpm"
 PACMAN="cewka-${WERSJA}-1-x86_64.pkg.tar.zst"
@@ -50,8 +49,7 @@ if [ ! -f "$UTWOR" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Czesc wspolna, identyczna dla wszystkich trzech dystrybucji. Rozni je wylacznie
-# menedzer pakietow, wiec tylko on jest wstrzykiwany z zewnatrz.
+# Część wspólna dla trzech dystrybucji; z zewnątrz przychodzi tylko menedżer pakietów.
 # ---------------------------------------------------------------------------
 WSPOLNE='
 echo "--- pliki ---"
@@ -75,9 +73,7 @@ fi
 echo "zaleznosci pliku uruchomieniowego odnalezione (biblioteki z pakunku sprawdza uruchomienie)"
 
 echo "--- uruchomienie ---"
-# Kontener nie ma karty dzwiekowej, a blad otwarcia urzadzenia nie jest wada pakietu:
-# program go przechwytuje i dziala dalej. CEWKA_NULL_AUDIO=1 prosi o puste wyjscie silnika;
-# silnik jeszcze jej nie obsluguje, wiec na razie zmienna niczego nie zmienia.
+# Kontener nie ma karty dźwiękowej, więc CEWKA_NULL_AUDIO=1 włącza puste wyjście silnika.
 set +e
 CEWKA_NULL_AUDIO=1 timeout 20 xvfb-run -a /usr/bin/cewka /material/probka-dluga.wav >/tmp/dziennik.txt 2>&1
 KOD=$?
@@ -91,8 +87,8 @@ if [ "${KOD}" != "124" ]; then
     exit 1
 fi
 
-# Program przechwytuje bledy wyjscia dzwieku i dziala dalej, wiec sam czas zycia procesu
-# nie dowodzi, ze biblioteki z pakunku sie zaladowaly. Te wpisy oznaczaja wade pakietu.
+# Pułapka: program przechwytuje błędy wyjścia dźwięku, więc sam czas życia procesu nie dowodzi,
+# że biblioteki się załadowały. Te wpisy w dzienniku oznaczają wadę pakietu.
 if grep -E "DllNotFoundException|BadImageFormatException|EntryPointNotFoundException|Unhandled exception|GLIBC_[0-9.]+. not found" /tmp/dziennik.txt; then
     echo "BLAD: dziennik zdradza brakujaca lub niezgodna biblioteke"
     exit 1
@@ -140,9 +136,8 @@ sprawdz "Debian i Ubuntu" "ubuntu:24.04" \
     "apt-get install -y -qq /pakiety/$DEB" \
     'apt-get remove -y -qq cewka >/dev/null'
 
-# Obraz Fedory bez numeru wydania. Przypiety numer bylby czytelniejszy, ale wydania Fedory
-# zyja okolo trzynastu miesiecy i po wycofaniu ich repozytoria wedruja do archiwum — proba
-# zaczelaby sie wtedy wywracac na instalacji zaleznosci, a nie na tym, co ma sprawdzac.
+# Obraz Fedory bez numeru wydania, bo repozytoria wycofanego wydania trafiają do archiwum
+# i instalacja zależności przestałaby działać.
 sprawdz "Fedora" "fedora:latest" \
     'dnf install -y -q desktop-file-utils xorg-x11-server-Xvfb >/dev/null' \
     "dnf install -y -q /pakiety/$RPM" \

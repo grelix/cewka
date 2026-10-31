@@ -6,12 +6,7 @@ using Cewka.App.ViewModels;
 namespace Cewka.App.Controls;
 
 /// <summary>
-/// A row of mutually exclusive buttons, used throughout the settings window.
-/// <para>
-/// The same shape already appears in the main window on the limiter and normalisation
-/// switches, so the settings do not introduce a second visual language for the same job:
-/// every value of a setting is on screen at once and one press changes it.
-/// </para>
+/// Rząd wzajemnie wykluczających się przycisków w oknie ustawień.
 /// </summary>
 public partial class SegmentBar : UserControl
 {
@@ -30,8 +25,8 @@ public partial class SegmentBar : UserControl
     {
         base.OnPropertyChanged(change);
 
-        // Lista przypisywana wprost, a nie wiazaniem do wlasnej wlasnosci: krocej i bez
-        // przeszukiwania drzewa przy kazdym odswiezeniu.
+        // Lista przypisywana wprost, bez wiązania, żeby nie przeszukiwać drzewa przy każdym
+        // odświeżeniu.
         if (change.Property == GroupProperty && Options is not null)
             Options.ItemsSource = Group?.Options;
     }

@@ -5,13 +5,7 @@ using Avalonia.Media.Imaging;
 namespace Cewka.App.Services;
 
 /// <summary>
-/// Pulls a handful of representative colours out of an album cover, for the animated
-/// background to be built from.
-/// <para>
-/// The previous approach blurred the cover itself into a large bitmap. This produces the
-/// same impression — the window takes on the colour of whatever is playing — from four
-/// colours instead of a 192-pixel bitmap, and unlike a still image it can move.
-/// </para>
+/// Wyciąga z okładki kilka barw, z których powstaje ruchome tło.
 /// </summary>
 public static class CoverPalette
 {
@@ -29,8 +23,7 @@ public static class CoverPalette
     /// to a neutral set when the image cannot be read.
     /// </summary>
     /// <param name="saturation">
-    /// Multiplier from the user's colour-intensity setting. One leaves the result exactly as it
-    /// was before the setting existed.
+    /// Mnożnik z ustawienia intensywności barw; jedność zostawia wynik bez zmian.
     /// </param>
     public static Color[] Extract(IImage? cover, bool darkTheme, double saturation = 1.0)
     {
@@ -107,12 +100,8 @@ public static class CoverPalette
     }
 
     /// <summary>
-    /// Buckets the pixels into a coarse RGB grid and returns the busiest buckets.
-    /// <para>
-    /// Near-black and near-white are skipped: almost every cover has plenty of both, and a
-    /// background built from them would be the same grey wash for every album — which is
-    /// precisely the problem this replaces.
-    /// </para>
+    /// Dzieli piksele na zgrubną siatkę RGB i zwraca najliczniejsze przegródki. Prawie czarne
+    /// i prawie białe są pomijane, bo ma je niemal każda okładka i tło byłoby zawsze szare.
     /// </summary>
     private static Color[] Reduce(byte[] pixels, bool darkTheme, double saturation)
     {
@@ -164,26 +153,17 @@ public static class CoverPalette
         Math.Max(colour.R, Math.Max(colour.G, colour.B)) - Math.Min(colour.R, Math.Min(colour.G, colour.B)) < GreyChroma;
 
     /// <summary>
-    /// Keeps the hue the cover gave and rewrites the rest.
-    /// <para>
-    /// Saturation is lifted because averaging inside a bucket pulls colours towards grey.
-    /// Lightness is moved into a band that suits the theme: deep colours behind light text,
-    /// pastels behind dark text. Without this the same palette would either disappear on a
-    /// light background or swallow the text on it.
-    /// </para>
+    /// Zachowuje odcień z okładki, resztę ustawia na nowo. Nasycenie rośnie, bo uśrednianie
+    /// w przegródce ciągnie barwy ku szarości; jasność trafia w pasmo motywu: barwy głębokie pod
+    /// jasnym tekstem, pastele pod ciemnym.
     /// </summary>
     private static Color Enrich(Color colour, bool darkTheme, double intensity)
     {
         var hsl = colour.ToHsl();
 
-        // Motyw jasny dostaje mocniejsze nasycenie i niższy zakres jasności niż wcześniej:
-        // pastele rozjaśnione do 0,86 zlewały się z tłem pulpitu i barwa okładki ledwie się
-        // przebijała. Dolna granica 0,55 zostawia jeszcze zapas kontrastu dla ciemnego tekstu.
-        //
-        // Ustawienie intensywności mnoży zarówno nasycenie, jak i jego górną granicę. Mnożenie
-        // samej wartości przy nieruchomej granicy nie dałoby nic przy ustawieniu intensywnym:
-        // barwy z wyraźnych okładek już dziś dobijają do tego pułapu. Twarde 0,95 zostaje jako
-        // ostateczny hamulec — powyżej barwa przestaje wyglądać na wziętą ze zdjęcia.
+        // W motywie jasnym górna granica jasności 0,78, bo jaśniejsze pastele zlewają się z tłem;
+        // dolna 0,55 zostawia zapas kontrastu dla ciemnego tekstu. Intensywność mnoży nasycenie
+        // i jego pułap, inaczej przy wyraźnych okładkach nie dawałaby nic; 0,95 to twardy hamulec.
         var ceiling = Math.Min(0.95, (darkTheme ? 0.85 : 0.74) * intensity);
         var saturation = Math.Clamp((hsl.S * 1.5 + 0.10) * intensity, 0, ceiling);
         var lightness = darkTheme
