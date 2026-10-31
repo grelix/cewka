@@ -1,9 +1,9 @@
 namespace Cewka.Audio.Decoding;
 
 /// <summary>
-/// Przyczyna, dla której pliku nie udało się otworzyć ani zdekodować. Interfejs zamienia ją
-/// na tekst ze słownika, a szczegóły techniczne (tekst wyjątku biblioteki, HRESULT, GError)
-/// trafiają wyłącznie do dziennika.
+/// Przyczyna, dla której pliku nie udało się otworzyć ani zdekodować. Kod służy do lokalizacji
+/// komunikatu; do tego czasu na ekranie widać opis zastępczy z <see cref="DecoderFailures.Describe"/>.
+/// Szczegóły techniczne (tekst wyjątku biblioteki, HRESULT, GError) trafiają wyłącznie do dziennika.
 /// </summary>
 public enum DecoderFailure
 {
@@ -36,7 +36,7 @@ public enum DecoderFailure
 public static class DecoderFailures
 {
     /// <summary>
-    /// Opis zastępczy, używany dopóki interfejs nie podstawi tekstu ze słownika.
+    /// Opis zastępczy, który interfejs pokazuje, dopóki komunikaty nie pochodzą ze słownika.
     /// Nie zawiera szczegółów technicznych.
     /// </summary>
     public static string Describe(DecoderFailure reason) => reason switch

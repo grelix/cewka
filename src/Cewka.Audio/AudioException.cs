@@ -19,6 +19,9 @@ public sealed class AudioException : Exception
         Reason = reason;
     }
 
-    /// <summary>Kod przyczyny błędu dekodowania, z którego interfejs buduje tekst ze słownika.</summary>
+    /// <summary>
+    /// Kod przyczyny błędu dekodowania, przeznaczony do lokalizacji komunikatu.
+    /// <see cref="Exception.Message"/> niesie polski opis zastępczy z <see cref="DecoderFailures.Describe"/>.
+    /// </summary>
     public DecoderFailure Reason { get; }
 }
