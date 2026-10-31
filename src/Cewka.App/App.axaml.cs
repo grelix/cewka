@@ -127,10 +127,25 @@ public partial class App : Application
 
     private void AttachSingleInstance()
     {
-        if (Instance is null) return;
+        // Ścieżki przysłane w trakcie budowania okna czekały w kanale; trafiają do kolejki
+        // dopiero po jego otwarciu, bo Post wykona się już w pętli komunikatów.
+        Instance?.Attach(paths => Dispatcher.UIThread.Post(() => OnPathsHandedOver(paths)));
+    }
 
-        Instance.PathsReceived += paths => Dispatcher.UIThread.Post(() => OnPathsHandedOver(paths));
-        Instance.StartListening();
+    private static bool _closing;
+
+    /// <summary>
+    /// Gives up the role of the running copy as the window starts closing, before the queue is
+    /// saved. Kopia uruchomiona w tej chwili otwiera wtedy własne okno, zamiast oddać ścieżki
+    /// programowi, który już ich nie przyjmie.
+    /// </summary>
+    internal static void ReleaseSingleInstance()
+    {
+        _closing = true;
+
+        var instance = Instance;
+        Instance = null;
+        instance?.Dispose();
     }
 
     /// <summary>
@@ -143,7 +158,7 @@ public partial class App : Application
     /// </summary>
     private static void OnPathsHandedOver(string[] paths)
     {
-        if (_mainWindow is null) return;
+        if (_mainWindow is null || _closing) return;
 
         _mainWindow.ReceivePaths(paths);
 

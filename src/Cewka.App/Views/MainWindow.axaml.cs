@@ -276,6 +276,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(WindowClosingEventArgs e)
     {
+        App.ReleaseSingleInstance();
         _rotation.Stop();
         PersistGeometry();
         _viewModel.SaveQueueState();

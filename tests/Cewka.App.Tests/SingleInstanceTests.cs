@@ -118,34 +118,107 @@ public sealed class SingleInstanceTests : IDisposable
         var all = new List<string>();
         var complete = new ManualResetEventSlim();
 
-        instance.PathsReceived += paths =>
+        instance.Attach(paths =>
         {
             lock (all)
             {
                 all.AddRange(paths);
                 if (all.Count == copies) complete.Set();
             }
-        };
+        });
 
-        instance.StartListening();
-
-        var refused = 0;
-        var start = new ManualResetEventSlim();
-
-        var senders = Enumerable.Range(0, copies).Select(i => new Thread(() =>
-        {
-            start.Wait();
-            if (!SingleInstance.TryHandOff(address, [$"/muzyka/{i:00}.mp3"])) Interlocked.Increment(ref refused);
-        })).ToArray();
-
-        foreach (var sender in senders) sender.Start();
-        start.Set();
-        foreach (var sender in senders) sender.Join();
-
-        Assert.Equal(0, refused);
+        Assert.Equal(0, SendConcurrently(address, copies));
         Assert.True(complete.Wait(Patience), $"doszło {all.Count} z {copies} ścieżek");
 
         lock (all) Assert.Equal(copies, all.Distinct().Count());
+    }
+
+    /// <summary>
+    /// Pierwsza kopia buduje okno przez kilka sekund, a kopie uruchomione w tym czasie nie mogą
+    /// czekać na odbiorcę: ich ścieżki mają poczekać w kanale, a one same zakończyć pracę.
+    /// </summary>
+    [Fact]
+    public void SciezkiPrzedPodpieciemOdbiorcyCzekajaWKanale()
+    {
+        const int copies = 12;
+        var address = Temporary();
+
+        using var instance = SingleInstance.TryAcquire(address);
+        Assert.NotNull(instance);
+
+        Assert.Equal(0, SendConcurrently(address, copies));
+
+        var all = new List<string>();
+        var complete = new ManualResetEventSlim();
+
+        // Wiadomości mogą jeszcze płynąć w chwili podpięcia odbiorcy; żadna nie może przepaść.
+        Thread.Sleep(200);
+        instance.Attach(paths =>
+        {
+            lock (all)
+            {
+                all.AddRange(paths);
+                if (all.Count == copies) complete.Set();
+            }
+        });
+
+        Assert.True(complete.Wait(Patience), $"doszło {all.Count} z {copies} ścieżek");
+        lock (all) Assert.Equal(copies, all.Distinct().Count());
+    }
+
+    /// <summary>
+    /// Nadawca, który się połączył i zamilkł (wstrzymany proces, skaner antywirusowy), nie może
+    /// zablokować kanału pozostałym.
+    /// </summary>
+    [Fact]
+    public void MilczacyNadawcaNieBlokujeKanalu()
+    {
+        var address = Temporary();
+
+        using var instance = SingleInstance.TryAcquire(address);
+        Assert.NotNull(instance);
+
+        var received = Listen(instance);
+
+        using var silent = ConnectSilently(address);
+
+        Assert.True(SingleInstance.TryHandOff(address, ["/muzyka/utwor.mp3"]));
+        Assert.Equal(["/muzyka/utwor.mp3"], Await(received));
+    }
+
+    /// <summary>
+    /// Gdy blokady nie da się założyć wcale, nikt jej nie trzyma i nie ma komu oddawać ścieżek.
+    /// Program ma ruszyć od razu, a nie po trzech sekundach prób połączenia.
+    /// </summary>
+    [Fact]
+    public void StartRuszaOdRazuGdyBlokadaNiedostepna()
+    {
+        var address = Temporary();
+        var missing = Path.Combine(Path.GetDirectoryName(address.LockFile)!, "brak", "instance.lock");
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var claim = SingleInstance.Start(address with { LockFile = missing }, ["/muzyka/utwor.mp3"]);
+
+        Assert.Null(claim.Instance);
+        Assert.False(claim.HandedOver);
+        Assert.True(clock.Elapsed < TimeSpan.FromMilliseconds(500), $"start trwał {clock.ElapsedMilliseconds} ms");
+    }
+
+    /// <summary>Zamknięta kopia przestaje przyjmować ścieżki, więc następna przejmuje rolę.</summary>
+    [Fact]
+    public void PoZwolnieniuRoliNiktNiePrzyjmujeSciezek()
+    {
+        var address = Temporary();
+
+        var instance = SingleInstance.TryAcquire(address);
+        Assert.NotNull(instance);
+        instance.Dispose();
+
+        var claim = SingleInstance.Start(address, ["/muzyka/utwor.mp3"]);
+
+        using var next = claim.Instance;
+        Assert.False(claim.HandedOver);
+        Assert.NotNull(next);
     }
 
     [Fact]
@@ -241,10 +314,48 @@ public sealed class SingleInstanceTests : IDisposable
     {
         var arrived = new TaskCompletionSource<string[]>();
 
-        instance.PathsReceived += paths => arrived.TrySetResult(paths);
-        instance.StartListening();
+        instance.Attach(paths => arrived.TrySetResult(paths));
 
         return arrived.Task;
+    }
+
+    /// <summary>Uruchamia nadawców w tej samej chwili; zwraca liczbę odrzuconych.</summary>
+    private static int SendConcurrently(InstanceAddress address, int copies)
+    {
+        var refused = 0;
+        var start = new ManualResetEventSlim();
+
+        var senders = Enumerable.Range(0, copies).Select(i => new Thread(() =>
+        {
+            start.Wait();
+            if (!SingleInstance.TryHandOff(address, [$"/muzyka/{i:00}.mp3"])) Interlocked.Increment(ref refused);
+        })).ToArray();
+
+        foreach (var sender in senders) sender.Start();
+        start.Set();
+        foreach (var sender in senders) sender.Join();
+
+        return refused;
+    }
+
+    /// <summary>Łączy się z kanałem i nic nie wysyła.</summary>
+    private static IDisposable ConnectSilently(InstanceAddress address)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var pipe = new System.IO.Pipes.NamedPipeClientStream(
+                ".", address.Name, System.IO.Pipes.PipeDirection.Out, System.IO.Pipes.PipeOptions.CurrentUserOnly);
+
+            pipe.Connect(1000);
+            return pipe;
+        }
+
+        var socket = new System.Net.Sockets.Socket(
+            System.Net.Sockets.AddressFamily.Unix, System.Net.Sockets.SocketType.Stream,
+            System.Net.Sockets.ProtocolType.Unspecified);
+
+        socket.Connect(new System.Net.Sockets.UnixDomainSocketEndPoint(address.SocketFile));
+        return socket;
     }
 
     private static string[] Await(Task<string[]> received)
