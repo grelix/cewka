@@ -1,3 +1,5 @@
+using Cewka.Audio.Playback;
+
 namespace Cewka.App.ViewModels;
 
 /// <summary>One row of the playback queue.</summary>
@@ -79,6 +81,32 @@ public sealed class QueueItemViewModel : ObservableObject
             if (!Set(ref _unsupportedReason, value)) return;
             Raise(nameof(Tooltip));
         }
+    }
+
+    /// <summary>Wiersz jest wyszarzony z powodu chwilowego błędu, a nie formatu pliku.</summary>
+    private bool _failureIsTemporary;
+
+    /// <summary>
+    /// Oznacza wiersz po nieudanym otwarciu albo odtworzeniu. Format nieobsługiwany zostaje
+    /// oznaczony na stałe; inne przyczyny (brak dysku, plik zajęty) znikają po udanym odtworzeniu.
+    /// </summary>
+    /// <param name="formatDescription">Opis z wykrywania formatu; używany tylko przy formacie nieobsługiwanym.</param>
+    /// <param name="otherwise">Tekst dla pozostałych przyczyn.</param>
+    public void ShowFailure(TrackFailureReason reason, string? formatDescription, string otherwise)
+    {
+        _failureIsTemporary = reason != TrackFailureReason.UnsupportedFormat;
+        UnsupportedReason = _failureIsTemporary ? otherwise : formatDescription ?? otherwise;
+        IsUnsupported = true;
+    }
+
+    /// <summary>Utwór zagrał: oznaczenie chwilowego błędu przestaje obowiązywać.</summary>
+    public void ClearTemporaryFailure()
+    {
+        if (!_failureIsTemporary) return;
+
+        _failureIsTemporary = false;
+        IsUnsupported = false;
+        UnsupportedReason = null;
     }
 
     /// <summary>Path normally; the reason instead when the file cannot be played.</summary>

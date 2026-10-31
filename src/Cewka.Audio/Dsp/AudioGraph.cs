@@ -111,16 +111,32 @@ public sealed class AudioGraph
     }
 
     /// <summary>
-    /// Called from the decode thread as a track is opened. Picks up the track's gain so the
-    /// change is already smoothed in by the time its audio reaches the output.
+    /// Ustawia od razu wzmocnienie utworu, który już gra. Na zmianę ustawień wyrównania;
+    /// przy zmianie utworu wzmocnienie zmienia wątek dźwiękowy przez <see cref="ApplyTrackGain"/>.
     /// </summary>
-    public void OnTrackChanged(QueueEntry entry)
+    public void OnTrackChanged(QueueEntry entry) => ApplyTrackGain(TrackGainFor(entry), snap: false);
+
+    /// <summary>
+    /// Wzmocnienie utworu ze źródła, niezależnie od tego, czy wyrównanie jest włączone.
+    /// Wołane przez wątek dekodujący przy otwieraniu pliku, bo źródło może czytać plik.
+    /// </summary>
+    public TrackGain? TrackGainFor(QueueEntry entry) => GainSource?.GetTrackGain(entry);
+
+    /// <summary>
+    /// Ustawia wzmocnienie wyrównania i poziom programu w chwili, gdy utwór dociera do wyjścia.
+    /// Wątek dźwiękowy: bez alokacji. Ustawione przy otwarciu pliku objęłyby końcówkę
+    /// poprzedniego utworu, która w tej chwili jeszcze czeka w buforze.
+    /// </summary>
+    /// <param name="gain">Wartość z <see cref="TrackGainFor"/>; null, gdy nieznana.</param>
+    /// <param name="snap">True po opróżnieniu bufora: nowy utwór zaczyna się od właściwego poziomu, bez dochodzenia do niego.</param>
+    public void ApplyTrackGain(TrackGain? gain, bool snap)
     {
-        var gain = NormalisationEnabled ? GainSource?.GetTrackGain(entry) : null;
+        var applied = NormalisationEnabled ? gain : null;
 
         // Utwór bez znanego wzmocnienia gra tak, jak go nagrano; przyjmuje się poziom odniesienia.
-        Normalisation.TargetDecibels = gain?.GainDecibels ?? 0;
-        Volatile.Write(ref _programmeLevelDb, gain?.ProgrammeLevelDecibels ?? 0);
+        Normalisation.TargetDecibels = applied?.GainDecibels ?? 0;
+        Volatile.Write(ref _programmeLevelDb, applied?.ProgrammeLevelDecibels ?? 0);
+        if (snap) Normalisation.SnapToTarget();
     }
 
     public void Reset()

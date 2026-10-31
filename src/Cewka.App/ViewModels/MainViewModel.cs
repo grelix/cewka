@@ -114,7 +114,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         UpdateEffects();
 
         _engine.TrackChanged += index => Dispatcher.UIThread.Post(() => OnTrackChanged(index));
-        _engine.TrackFailed += (index, reason) => Dispatcher.UIThread.Post(() => OnTrackFailed(index, reason));
+        _engine.TrackFailed += (index, failure) => Dispatcher.UIThread.Post(() => OnTrackFailed(index, failure));
         _engine.QueueFinished += () => Dispatcher.UIThread.Post(() => IsPlaying = false);
 
         _title = Strings.Current["NoTrack"];
@@ -607,30 +607,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Points the engine at the chosen device. A name that no longer matches anything — the
     /// headset was unplugged since it was chosen — falls back to the system default rather than
-    /// leaving the application silent.
+    /// leaving the application silent; the engine resolves the name when it opens the device.
     /// </summary>
-    private void ApplyOutputDevice()
-    {
-        var index = -1;
-        var name = _settings.Current.OutputDevice;
-
-        if (!string.IsNullOrEmpty(name))
-        {
-            try
-            {
-                var match = AudioDeviceList.Enumerate()
-                    .FirstOrDefault(device => device.Name == name);
-
-                if (match is not null) index = match.Index;
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[cewka] odczyt listy urządzeń: {ex.Message}");
-            }
-        }
-
-        _engine.SwitchDevice(index);
-    }
+    private void ApplyOutputDevice() => _engine.SwitchDevice(_settings.Current.OutputDevice);
 
     // ---------- Jakość przetwarzania ----------
 
@@ -1472,6 +1451,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (_current is not null) _current.IsCurrent = false;
         _current = Queue[index];
         _current.IsCurrent = true;
+        _current.ClearTemporaryFailure();
 
         var entry = _engine.Queue.ElementAtOrDefault(index);
         if (entry?.Metadata is { } metadata)
@@ -1497,12 +1477,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public int CurrentIndex => _current is null ? -1 : Queue.IndexOf(_current);
 
-    private void OnTrackFailed(int index, string reason)
+    /// <summary>
+    /// Surowy opis wyjątku nie trafia do interfejsu. Do czasu osobnych tekstów dla każdej
+    /// przyczyny pozostałe błędy opisuje ogólny komunikat odtwarzania.
+    /// </summary>
+    private void OnTrackFailed(int index, TrackFailure failure)
     {
         if (index < 0 || index >= Queue.Count) return;
 
-        Queue[index].IsUnsupported = true;
-        Queue[index].UnsupportedReason = reason;
+        Queue[index].ShowFailure(failure.Reason, failure.Detail, Strings.Current["AudioFailure"]);
     }
 
     /// <summary>Okładka czytana jest z pliku dopiero dla bieżącego utworu, poza wątkiem interfejsu.</summary>

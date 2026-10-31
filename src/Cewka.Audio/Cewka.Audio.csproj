@@ -18,6 +18,7 @@
     <ProjectReference Include="..\Cewka.Platform\Cewka.Platform.csproj" />
   </ItemGroup>
 
+  <!-- Testy podstawiaja atrape wyjscia i dekodera przez skladowe wewnetrzne. -->
   <ItemGroup>
     <InternalsVisibleTo Include="Cewka.Audio.Tests" />
   </ItemGroup>

@@ -23,14 +23,16 @@ mkdir -p "${OUT_DIR}"
 # -fPIC          kod niezalezny od polozenia, wymagany dla bibliotek wspoldzielonych
 # -O2            optymalizacja
 # -fvisibility   domyslnie ukryte symbole; eksportowane sa tylko oznaczone w kodzie
-# -fstack-protector-strong  kontrola przepelnienia bufora na stosie, niezaleznie od domyslnych
-#                ustawien kompilatora w danej dystrybucji; biblioteka dekoduje niezaufane pliki
+# -fstack-protector-strong  kontrola przepelnienia stosu niezaleznie od domyslnych ustawien
+#                kompilatora w danej dystrybucji; biblioteka dekoduje niezaufane pliki
 # -z relro,now,noexecstack  tablice przemieszczen tylko do odczytu, stos bez prawa wykonania
+# CFLAGS i LDFLAGS   flagi dystrybucji (makepkg, dpkg); _FORTIFY_SOURCE przychodzi z nich
 # -lpthread -lm -ldl  wymagane przez miniaudio
-"${CC}" -shared -fPIC -O2 -fvisibility=hidden -fstack-protector-strong \
-    -Wl,-z,relro,-z,now,-z,noexecstack \
+# shellcheck disable=SC2086
+"${CC}" ${CFLAGS:-} -shared -fPIC -O2 -fvisibility=hidden -fstack-protector-strong \
     -o "${OUT_DIR}/libcewka_audio.so" \
     "${SCRIPT_DIR}/cewka_audio.c" \
+    ${LDFLAGS:-} -Wl,-z,relro,-z,now,-z,noexecstack \
     -lpthread -lm -ldl
 
 echo "[ok] Zbudowano: ${OUT_DIR}/libcewka_audio.so"

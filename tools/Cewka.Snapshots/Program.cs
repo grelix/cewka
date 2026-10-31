@@ -10,6 +10,7 @@ using Cewka.App.Models;
 using Cewka.App.Services;
 using Cewka.App.ViewModels;
 using Cewka.App.Views;
+using Cewka.Audio.Devices;
 using Cewka.Platform;
 
 // "Cewka.App" is both a namespace and the Application subclass inside it,
@@ -198,6 +199,10 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // Zrzuty i sprawdziany odtwarzają materiał, ale nie mogą grać przez głośniki ani
+        // zależeć od tego, czy maszyna ma kartę dźwiękową.
+        AudioDevice.UseNullOutput = true;
+
         var pozycyjne = new List<string>();
         string? materialDo = null;
         string? odniesienieW = null;
