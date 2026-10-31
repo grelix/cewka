@@ -115,14 +115,19 @@ public partial class MainWindow : Window
     }
 
     /// <param name="systemFrame">Ramka i narożniki systemowe (Windows) zamiast własnych.</param>
-    internal MainWindow(bool systemFrame)
+    internal MainWindow(bool systemFrame) : this(systemFrame, new MainViewModel(App.Settings))
+    {
+    }
+
+    /// <param name="viewModel">Model widoku podany z zewnątrz, np. na silniku testowym.</param>
+    internal MainWindow(bool systemFrame, MainViewModel viewModel)
     {
         // InitializeComponent, not AvaloniaXamlLoader.Load: only the generated method
         // assigns the x:Name backing fields, and every piece of behaviour below depends
         // on them (disc rotation, queue scroll bar, responsive layout).
         InitializeComponent();
 
-        _viewModel = new MainViewModel(App.Settings);
+        _viewModel = viewModel;
         DataContext = _viewModel;
 
         _rotation = new RenderLoop(this, OnRotationFrame);
@@ -136,6 +141,14 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DropEvent, OnDrop);
 
+        // Spacja i strzałki przed kontrolką z fokusem: inaczej przycisk kliknięty myszą
+        // przechwytuje Spację i powtarza swoje działanie.
+        AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(KeyUpEvent, OnPreviewKeyUp, RoutingStrategies.Tunnel);
+
+        AttachQueueInput();
+        _viewModel.DeviceSelectionRequested += () => OpenSettings(settings => settings.Audio);
+
         PositionChanged += (_, _) => RememberNormalBounds();
         CentreHost.SizeChanged += (_, _) => ApplyResponsiveLayout();
         TrackInfo.SizeChanged += (_, _) => ApplyResponsiveLayout();
@@ -144,7 +157,7 @@ public partial class MainWindow : Window
         {
             switch (e.PropertyName)
             {
-                case nameof(MainViewModel.CurrentIndex): SyncQueueSelection(); break;
+                case nameof(MainViewModel.CurrentIndex): RevealCurrent(); break;
                 case nameof(MainViewModel.QueueOpen): OnQueueOpenChanged(); break;
                 case nameof(MainViewModel.PanelOpen): ApplyResponsiveLayout(); break;
                 case nameof(MainViewModel.IsPlaying): UpdateRotationLoop(); break;
@@ -170,8 +183,7 @@ public partial class MainWindow : Window
         if (App.StartupPaths.Length > 0) _viewModel.OpenFromOutside(App.StartupPaths);
         else _viewModel.RestoreQueueState();
 
-        if (QueueList is not null)
-            QueueList.SelectedItem = _viewModel.Queue.FirstOrDefault(item => item.IsCurrent);
+        RevealCurrent();
 
         // Bez oczekiwania na wynik: uruchomienie programu nie ma zalezec od tego, czy siec
         // odpowiada. Przy wylaczonym ustawieniu — a tak jest domyslnie — nic sie nie dzieje.
@@ -714,17 +726,6 @@ public partial class MainWindow : Window
         return true;
     }
 
-    /// <summary>
-    /// Only a selection the user made should start a track. Without this guard, following
-    /// the current track with the highlight would itself restart playback.
-    /// </summary>
-    private bool _updatingSelection;
-
-    private void OnQueueSelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (_updatingSelection) return;
-        if (QueueList?.SelectedItem is QueueItemViewModel item) _viewModel.PlayItem(item);
-    }
 
     // ================= Przyciski =================
 
@@ -736,43 +737,30 @@ public partial class MainWindow : Window
 
     private void OnSeekCommitted(object? sender, double value) => _viewModel.CommitScrub(value);
 
-    private void OnNext(object? sender, RoutedEventArgs e)
+    private void OnNext(object? sender, RoutedEventArgs e) => _viewModel.Next();
+
+    private void OnPrevious(object? sender, RoutedEventArgs e) => _viewModel.Previous();
+
+    /// <summary>
+    /// Przewija listę do granego wiersza bez ruszania zaznaczenia. Nie wtedy, gdy lista ma
+    /// fokus: przeglądanej z klawiatury nie przesuwa się spod ręki.
+    /// </summary>
+    private void RevealCurrent()
     {
-        _viewModel.Next();
-        SyncQueueSelection();
+        if (QueueList is null || !_viewModel.QueueOpen || QueueList.IsKeyboardFocusWithin) return;
+
+        if (_viewModel.Queue.FirstOrDefault(item => item.IsCurrent) is { } current) QueueList.ScrollIntoView(current);
     }
-
-    private void OnPrevious(object? sender, RoutedEventArgs e)
-    {
-        _viewModel.Previous();
-        SyncQueueSelection();
-    }
-
-    private void SyncQueueSelection()
-    {
-        if (QueueList is null) return;
-
-        _updatingSelection = true;
-        try
-        {
-            QueueList.SelectedItem = _viewModel.Queue.FirstOrDefault(item => item.IsCurrent);
-        }
-        finally
-        {
-            _updatingSelection = false;
-        }
-    }
-
-    private void OnToggleShuffle(object? sender, RoutedEventArgs e) =>
-        _viewModel.ShuffleEnabled = !_viewModel.ShuffleEnabled;
 
     private void OnToggleRepeat(object? sender, RoutedEventArgs e) => _viewModel.CycleRepeat();
 
-    private void OnToggleLimiter(object? sender, RoutedEventArgs e) =>
-        _viewModel.LimiterEnabled = !_viewModel.LimiterEnabled;
+    private void OnToggleMute(object? sender, RoutedEventArgs e) => _viewModel.ToggleMute();
 
-    private void OnToggleNormalisation(object? sender, RoutedEventArgs e) =>
-        _viewModel.NormalisationEnabled = !_viewModel.NormalisationEnabled;
+    private void OnResetEqualiser(object? sender, RoutedEventArgs e) => _viewModel.ResetEqualiser();
+
+    private void OnRetryAudio(object? sender, RoutedEventArgs e) => _viewModel.RetryAudio();
+
+    private void OnChooseDevice(object? sender, RoutedEventArgs e) => _viewModel.RequestDeviceSelection();
 
     private void OnToggleTheme(object? sender, RoutedEventArgs e)
     {
@@ -792,22 +780,26 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnOpenSettings(object? sender, RoutedEventArgs e) => OpenSettings();
 
-    internal void OpenSettings()
+    /// <param name="section">Sekcja do pokazania, np. Dźwięk po poleceniu „Wybierz urządzenie”.</param>
+    internal void OpenSettings(Func<SettingsViewModel, SettingsSection>? section = null)
     {
-        if (_settingsWindow is not null)
+        if (_settingsWindow is null)
+        {
+            _settingsWindow = new SettingsWindow(new SettingsViewModel(App.Settings, _viewModel))
+            {
+                PlaybackShortcuts = HandlePlaybackShortcut,
+            };
+
+            _settingsWindow.PlaceBeside(this);
+            _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+            _settingsWindow.Show(this);
+        }
+        else
         {
             _settingsWindow.Activate();
-            return;
         }
 
-        _settingsWindow = new SettingsWindow(new SettingsViewModel(App.Settings, _viewModel))
-        {
-            PlaybackShortcuts = HandlePlaybackShortcut,
-        };
-
-        _settingsWindow.PlaceBeside(this);
-        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
-        _settingsWindow.Show(this);
+        if (section is not null) _settingsWindow.ShowSection(section);
     }
 
     // ================= Dodawanie plików =================
@@ -986,8 +978,6 @@ public partial class MainWindow : Window
             case MediaKey.Previous: _viewModel.Previous(); break;
             case MediaKey.Stop: _viewModel.Pause(); break;
         }
-
-        SyncQueueSelection();
     }
 
     /// <summary>
@@ -1006,29 +996,133 @@ public partial class MainWindow : Window
             case MediaCommand.Next: _viewModel.Next(); break;
             case MediaCommand.Previous: _viewModel.Previous(); break;
         }
-
-        SyncQueueSelection();
     }
 
     // ================= Operacje na kolejce =================
 
-    private void OnQueueRemove(object? sender, RoutedEventArgs e)
+    /// <summary>
+    /// Mysz i klawiatura listy kolejki. Naciśnięcie wiersza obsługuje sam wiersz (zaznaczenie),
+    /// więc początek przeciągania łapie faza tunelowania, a resztę także zdarzenia już obsłużone.
+    /// </summary>
+    private void AttachQueueInput()
     {
-        if (QueueList?.SelectedItem is QueueItemViewModel item) _viewModel.RemoveFromQueue(item);
+        QueueList.AddHandler(PointerPressedEvent, OnQueuePointerPressed, RoutingStrategies.Tunnel);
+        QueueList.AddHandler(PointerMovedEvent, OnQueuePointerMoved, RoutingStrategies.Bubble, handledEventsToo: true);
+        QueueList.AddHandler(PointerReleasedEvent, OnQueuePointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
+        QueueList.AddHandler(KeyDownEvent, OnQueueKeyDown, RoutingStrategies.Tunnel);
+        QueueList.AddHandler(ContextRequestedEvent, OnQueueContextRequested, RoutingStrategies.Tunnel);
+        QueueList.DoubleTapped += OnQueueDoubleTapped;
+        QueueMenu.Opening += (_, _) => UpdateQueueMenu();
     }
 
+    private QueueItemViewModel? SelectedRow => QueueList.SelectedItem as QueueItemViewModel;
+
+    /// <summary>Wiersz pod wskazanym elementem albo nic, gdy to puste miejsce listy.</summary>
+    private static QueueItemViewModel? RowAt(object? source) =>
+        (source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as QueueItemViewModel;
+
+    private void OnQueueDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (RowAt(e.Source) is not { } row) return;
+
+        _viewModel.PlayItem(row);
+        e.Handled = true;
+    }
+
+    /// <summary>Enter, Delete i Alt+strzałki działają tylko na liście z fokusem.</summary>
+    private void OnQueueKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (SelectedRow is not { } row) return;
+
+        var none = e.KeyModifiers == KeyModifiers.None;
+        var alt = e.KeyModifiers == KeyModifiers.Alt;
+
+        switch (e.Key)
+        {
+            case Key.Enter when none: _viewModel.PlayItem(row); break;
+            case Key.Delete when none: RemoveSelected(); break;
+            case Key.Up when alt: MoveSelected(-1); break;
+            case Key.Down when alt: MoveSelected(1); break;
+            default: return;
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>Menu kontekstowe działa na wierszu pod kursorem, a nie na wcześniej zaznaczonym.</summary>
+    private void OnQueueContextRequested(object? sender, ContextRequestedEventArgs e)
+    {
+        if (!e.TryGetPosition(QueueList, out _)) return;
+
+        QueueList.SelectedItem = RowAt(e.Source);
+    }
+
+    private void UpdateQueueMenu()
+    {
+        var index = SelectedRow is { } row ? _viewModel.Queue.IndexOf(row) : -1;
+
+        QueuePlayItem.IsEnabled = index >= 0;
+        QueueRemoveItem.IsEnabled = index >= 0;
+        QueueMoveUpItem.IsEnabled = index > 0;
+        QueueMoveDownItem.IsEnabled = index >= 0 && index < _viewModel.Queue.Count - 1;
+    }
+
+    private void OnQueuePlay(object? sender, RoutedEventArgs e)
+    {
+        if (SelectedRow is { } row) _viewModel.PlayItem(row);
+    }
+
+    private void OnQueueRemove(object? sender, RoutedEventArgs e) => RemoveSelected();
+
     private void OnQueueClear(object? sender, RoutedEventArgs e) => _viewModel.ClearQueue();
+
+    private void OnQueueUndo(object? sender, RoutedEventArgs e) => _viewModel.UndoQueue();
 
     private void OnQueueMoveUp(object? sender, RoutedEventArgs e) => MoveSelected(-1);
 
     private void OnQueueMoveDown(object? sender, RoutedEventArgs e) => MoveSelected(1);
 
+    /// <summary>Usuwa zaznaczony wiersz; zaznaczenie przechodzi na wiersz, który zajął jego miejsce.</summary>
+    private void RemoveSelected()
+    {
+        if (SelectedRow is not { } row) return;
+
+        var index = _viewModel.Queue.IndexOf(row);
+        var focused = QueueList.IsKeyboardFocusWithin;
+
+        _viewModel.RemoveFromQueue(row);
+        SelectRow(Math.Min(index, _viewModel.Queue.Count - 1), focused);
+    }
+
     private void MoveSelected(int delta)
     {
-        if (QueueList?.SelectedItem is not QueueItemViewModel item) return;
+        if (SelectedRow is not { } row) return;
 
-        var from = _viewModel.Queue.IndexOf(item);
-        _viewModel.MoveInQueue(from, from + delta);
+        var from = _viewModel.Queue.IndexOf(row);
+        var to = from + delta;
+        if (to < 0 || to >= _viewModel.Queue.Count) return;
+
+        var focused = QueueList.IsKeyboardFocusWithin;
+        _viewModel.MoveInQueue(from, to);
+        SelectRow(to, focused);
+    }
+
+    /// <summary>Zaznacza wiersz i, jeśli lista miała fokus, przenosi go na ten wiersz.</summary>
+    private void SelectRow(int index, bool focus)
+    {
+        if (index < 0)
+        {
+            QueueList.SelectedItem = null;
+            if (focus) QueueList.Focus(NavigationMethod.Directional);
+            return;
+        }
+
+        QueueList.SelectedIndex = index;
+        QueueList.ScrollIntoView(index);
+        if (!focus) return;
+
+        QueueList.UpdateLayout();
+        if (QueueList.ContainerFromIndex(index) is { } container) container.Focus(NavigationMethod.Directional);
     }
 
     // ---------- Zmiana kolejności przeciąganiem ----------
@@ -1042,7 +1136,6 @@ public partial class MainWindow : Window
 
     private void OnQueuePointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (QueueList is null) return;
         if (!e.GetCurrentPoint(QueueList).Properties.IsLeftButtonPressed) return;
 
         _dragOrigin = e.GetPosition(QueueList);
@@ -1052,7 +1145,7 @@ public partial class MainWindow : Window
 
     private void OnQueuePointerMoved(object? sender, PointerEventArgs e)
     {
-        if (_dragSourceIndex < 0 || QueueList is null) return;
+        if (_dragSourceIndex < 0) return;
         if (!e.GetCurrentPoint(QueueList).Properties.IsLeftButtonPressed) return;
 
         if (!_dragging &&
@@ -1065,7 +1158,7 @@ public partial class MainWindow : Window
 
     private void OnQueuePointerReleased(object? sender, PointerReleasedEventArgs e)
     {
-        if (QueueList is not null) QueueList.Cursor = Cursor.Default;
+        QueueList.Cursor = Cursor.Default;
 
         var source = _dragSourceIndex;
         var dragged = _dragging;
@@ -1073,17 +1166,17 @@ public partial class MainWindow : Window
         _dragSourceIndex = -1;
         _dragging = false;
 
-        if (!dragged || source < 0 || QueueList is null) return;
+        if (!dragged || source < 0) return;
 
         var target = IndexAt(e.GetPosition(QueueList));
-        if (target >= 0 && target != source)
+        if (target < 0) target = _viewModel.Queue.Count - 1;
+
+        if (target != source)
         {
             _viewModel.MoveInQueue(source, target);
 
             // Przeciagniety wiersz zostaje zaznaczony, zeby nie zgubic go z oczu.
-            _updatingSelection = true;
-            try { QueueList.SelectedIndex = target; }
-            finally { _updatingSelection = false; }
+            QueueList.SelectedIndex = target;
         }
 
         e.Handled = true;
@@ -1092,16 +1185,12 @@ public partial class MainWindow : Window
     /// <summary>Finds the queue row under a point, or −1 when the point is past the last one.</summary>
     private int IndexAt(Point position)
     {
-        if (QueueList is null) return -1;
-
         for (var i = 0; i < _viewModel.Queue.Count; i++)
         {
             if (QueueList.ContainerFromIndex(i) is not Control container) continue;
 
-            var bounds = container.Bounds;
-            var top = container.TranslatePoint(new Point(0, 0), QueueList)?.Y ?? bounds.Y;
-
-            if (position.Y >= top && position.Y <= top + bounds.Height) return i;
+            var top = container.TranslatePoint(new Point(0, 0), QueueList)?.Y ?? container.Bounds.Y;
+            if (position.Y >= top && position.Y <= top + container.Bounds.Height) return i;
         }
 
         return -1;
@@ -1110,10 +1199,36 @@ public partial class MainWindow : Window
     // ================= Skroty klawiszowe =================
 
     /// <summary>
-    /// Cztery zestawy uzgodnione przy planowaniu: transport, glosnosc, interfejs i pliki.
-    /// Obsluga siedzi na oknie, a nie na poszczegolnych kontrolkach, zeby dzialala niezaleznie
-    /// od tego, co ma wlasnie ognisko - z jednym wyjatkiem: gdy ognisko ma suwak lub fader,
-    /// strzalki naleza do niego.
+    /// Spacja i strzałki w fazie tunelowania, czyli przed przyciskiem, który dostał fokus po
+    /// kliknięciu. Wyjątek: lista kolejki, fader i suwak z fokusem, które same używają strzałek;
+    /// klawisz, którego nie zużyją, i tak dochodzi potem do <see cref="OnKeyDown"/>.
+    /// </summary>
+    private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Handled || e.Key is not (Key.Space or Key.Left or Key.Right or Key.Up or Key.Down)) return;
+        if (KeepsArrowKeys(FocusManager?.GetFocusedElement())) return;
+
+        HandlePlaybackShortcut(e);
+    }
+
+    /// <summary>Puszczenie Spacji też nie dociera do przycisku, bo ten klika właśnie przy puszczeniu.</summary>
+    private void OnPreviewKeyUp(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.None && !KeepsArrowKeys(FocusManager?.GetFocusedElement()))
+            e.Handled = true;
+    }
+
+    private bool KeepsArrowKeys(IInputElement? focused) => focused switch
+    {
+        EqFader or TextBox => true,
+        TrackSlider slider => slider.Focusable,
+        Visual visual => ReferenceEquals(visual.FindAncestorOfType<ListBox>(includeSelf: true), QueueList),
+        _ => false,
+    };
+
+    /// <summary>
+    /// Skróty okna. Litery działają tylko bez modyfikatorów, żeby kombinacje systemu i pulpitu
+    /// (Ctrl+Q, Alt+Spacja) trafiały tam, dokąd należą.
     /// </summary>
     protected override void OnKeyDown(KeyEventArgs e)
     {
@@ -1123,28 +1238,33 @@ public partial class MainWindow : Window
         // Transport i głośność wspólne z oknem ustawień, z tymi samymi modyfikatorami.
         if (HandlePlaybackShortcut(e)) return;
 
-        var control = e.KeyModifiers.HasFlag(KeyModifiers.Control);
-        var shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        var modifiers = e.KeyModifiers;
+        var none = modifiers == KeyModifiers.None;
+        var control = modifiers == KeyModifiers.Control;
 
         switch (e.Key)
         {
             // --- pliki ---
-            case Key.O when control && shift: OnOpenFolder(this, new RoutedEventArgs()); break;
+            case Key.O when modifiers == (KeyModifiers.Control | KeyModifiers.Shift): OnOpenFolder(this, new RoutedEventArgs()); break;
             case Key.O when control: OnOpenFiles(this, new RoutedEventArgs()); break;
 
+            // --- odtwarzanie ---
+            case Key.S when none: _viewModel.ShuffleEnabled = !_viewModel.ShuffleEnabled; break;
+            case Key.R when none: _viewModel.CycleRepeat(); break;
+
             // --- interfejs ---
-            case Key.Q: _viewModel.TogglePanel(); break;
-            case Key.L: _viewModel.ToggleQueue(); break;
-            case Key.T: OnToggleTheme(this, new RoutedEventArgs()); break;
-            case Key.F11: ToggleFullScreen(); break;
+            case Key.Q when none: _viewModel.TogglePanel(); break;
+            case Key.L when none: _viewModel.ToggleQueue(); break;
+            case Key.T when none: OnToggleTheme(this, new RoutedEventArgs()); break;
+            case Key.F11 when none: ToggleFullScreen(); break;
             case Key.OemComma when control: OpenSettings(); break;
 
             // Esc najpierw zamyka nakładaną kolejkę, potem kończy pełny ekran.
-            case Key.Escape when QueueOverlayOpen: _viewModel.QueueOpen = false; break;
-            case Key.Escape when WindowState == WindowState.FullScreen: ToggleFullScreen(); break;
+            case Key.Escape when none && QueueOverlayOpen: _viewModel.QueueOpen = false; break;
+            case Key.Escape when none && WindowState == WindowState.FullScreen: ToggleFullScreen(); break;
 
             // --- kolejka ---
-            case Key.Delete: OnQueueRemove(this, new RoutedEventArgs()); break;
+            case Key.Z when control && _viewModel.CanUndoQueue: _viewModel.UndoQueue(); break;
 
             default: return;
         }
@@ -1154,7 +1274,7 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// Skróty odtwarzania i głośności, które przyjmuje także okno ustawień: Spacja, strzałki,
-    /// Ctrl+strzałki i M. Skróty interfejsu (Q, L, Delete) dotyczą tylko tego okna.
+    /// Ctrl+strzałki i M. Skróty interfejsu dotyczą tylko tego okna.
     /// </summary>
     internal bool HandlePlaybackShortcut(KeyEventArgs e)
     {
@@ -1165,8 +1285,8 @@ public partial class MainWindow : Window
         switch (e.Key)
         {
             case Key.Space when none: _viewModel.TogglePlay(); break;
-            case Key.Right when control: _viewModel.Next(); SyncQueueSelection(); break;
-            case Key.Left when control: _viewModel.Previous(); SyncQueueSelection(); break;
+            case Key.Right when control: _viewModel.Next(); break;
+            case Key.Left when control: _viewModel.Previous(); break;
             case Key.Right when none: _viewModel.SeekRelative(_viewModel.SeekStep); break;
             case Key.Left when none: _viewModel.SeekRelative(-_viewModel.SeekStep); break;
             case Key.Up when none: _viewModel.AdjustVolume(0.05); break;
@@ -1178,7 +1298,6 @@ public partial class MainWindow : Window
         e.Handled = true;
         return true;
     }
-
     // ================= Sterowanie oknem bez ramki systemowej =================
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)

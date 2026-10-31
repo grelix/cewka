@@ -1,4 +1,4 @@
-﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
   <!--
@@ -60,5 +60,6 @@
   <!-- Głośność -->
   <StreamGeometry x:Key="IconSpeaker">M2.4 6h2.4L8.4 3v10L4.8 10H2.4z</StreamGeometry>
   <StreamGeometry x:Key="IconSpeakerWavesStroke">M10.8 5.6a3.6 3.6 0 0 1 0 4.8M12.8 3.8a6 6 0 0 1 0 8.4</StreamGeometry>
+  <StreamGeometry x:Key="IconSpeakerMutedStroke">M10.8 6 14.4 9.8M14.4 6 10.8 9.8</StreamGeometry>
 
 </ResourceDictionary>

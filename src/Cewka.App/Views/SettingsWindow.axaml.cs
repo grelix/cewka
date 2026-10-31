@@ -190,8 +190,17 @@ public partial class SettingsWindow : Window
 
     private void OnSectionClick(object? sender, RoutedEventArgs e)
     {
-        if (sender is not Button { DataContext: SettingsSection section }) return;
+        if (sender is Control { DataContext: SettingsSection section }) Select(section);
+    }
 
+    /// <summary>Pokazuje wskazaną sekcję, np. Dźwięk po poleceniu „Wybierz urządzenie”.</summary>
+    internal void ShowSection(Func<SettingsViewModel, SettingsSection> pick)
+    {
+        if (_viewModel is not null) Select(pick(_viewModel));
+    }
+
+    private void Select(SettingsSection section)
+    {
         _viewModel?.SelectSection(section);
 
         // Przewiniecie nalezy do porzuconej zakladki; bez tego kolejna otwieralaby sie

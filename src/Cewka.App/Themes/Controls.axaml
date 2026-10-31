@@ -107,6 +107,19 @@
     <Setter Property="Background" Value="{DynamicResource AccentSoftHiBrush}" />
   </Style>
 
+  <!-- Przełącznik bez tła w stanie włączonym (losowa kolejność): stan pokazuje barwa znaku. -->
+  <Style Selector="ToggleButton.icon.flat:checked /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style Selector="ToggleButton.icon.flat:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Glass2Brush}" />
+  </Style>
+
+  <Style Selector="ToggleButton.icon.flat:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource GlassHiBrush}" />
+  </Style>
+
   <!-- Kropka na przycisku pasa: przetwarzanie włączone, choć pasa nie widać. -->
   <Style Selector="Ellipse.indicator">
     <Setter Property="Width" Value="6" />
@@ -333,6 +346,18 @@
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
   </Style>
 
+  <!-- Wariant mniejszy, w wierszu nagłówka obok przełączników. -->
+  <Style Selector="Button.pill.small">
+    <Setter Property="Height" Value="24" />
+    <Setter Property="Padding" Value="11,0" />
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="FontSize" Value="11.5" />
+  </Style>
+
+  <Style Selector="Button.pill.small /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="CornerRadius" Value="12" />
+  </Style>
+
   <!-- Wezwanie główne przy pustej kolejce: jedyne wejście dla nowej osoby, więc wyraźniejsze. -->
   <Style Selector="Button.pill.primary">
     <Setter Property="Height" Value="34" />
@@ -349,7 +374,7 @@
 
   <!-- ======================= Opcje korektora ======================= -->
 
-  <Style Selector="Button.option">
+  <Style Selector=":is(Button).option">
     <Setter Property="Padding" Value="8,6,11,6" />
     <Setter Property="CornerRadius" Value="8" />
     <Setter Property="Background" Value="Transparent" />
@@ -360,34 +385,34 @@
     <Setter Property="Cursor" Value="Hand" />
   </Style>
 
-  <Style Selector="Button.option /template/ ContentPresenter#PART_ContentPresenter">
+  <Style Selector=":is(Button).option /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="CornerRadius" Value="8" />
     <Setter Property="Background" Value="Transparent" />
   </Style>
 
-  <Style Selector="Button.option:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+  <Style Selector=":is(Button).option:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource GlassBrush}" />
   </Style>
 
-  <Style Selector="Button.option.on /template/ ContentPresenter#PART_ContentPresenter">
+  <Style Selector=":is(Button).option.on /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Glass2Brush}" />
   </Style>
 
-  <Style Selector="Button.option.on">
+  <Style Selector=":is(Button).option.on">
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
   </Style>
 
   <!-- Kropka stanu przy nazwie opcji -->
-  <Style Selector="Button.option Ellipse">
+  <Style Selector=":is(Button).option Ellipse">
     <Setter Property="Fill" Value="{DynamicResource TrackBrush}" />
   </Style>
 
-  <Style Selector="Button.option.on Ellipse">
+  <Style Selector=":is(Button).option.on Ellipse">
     <Setter Property="Fill" Value="{DynamicResource AccentBrush}" />
   </Style>
 
   <!-- Wariant rozciagniety na cala szerokosc: lista urzadzen wyjsciowych. -->
-  <Style Selector="Button.option.wide">
+  <Style Selector=":is(Button).option.wide">
     <Setter Property="Padding" Value="10,7,12,7" />
     <Setter Property="FontWeight" Value="Normal" />
   </Style>
@@ -433,7 +458,7 @@
     <Setter Property="Opacity" Value="0.4" />
   </Style>
 
-  <Style Selector="Button.option:disabled">
+  <Style Selector=":is(Button).option:disabled">
     <Setter Property="Opacity" Value="0.45" />
   </Style>
 
