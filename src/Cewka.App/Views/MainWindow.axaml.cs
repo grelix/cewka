@@ -186,11 +186,11 @@ public partial class MainWindow : Window
 
         // Ścieżki z wiersza poleceń mają pierwszeństwo przed kolejką z poprzedniej sesji:
         // „Otwórz za pomocą” ma zagrać wskazany plik. Otwarcia niedokończone przy poprzednim
-        // zamknięciu są starsze, więc dokańczają się przed nim.
+        // zamknięciu dopisują się za nim, bez odtwarzania.
         if (App.StartupPaths.Length > 0)
         {
-            _viewModel.ResumeUnfinishedOpens();
             _viewModel.OpenFromOutside(App.StartupPaths);
+            _viewModel.ResumeUnfinishedOpens();
         }
         else
         {

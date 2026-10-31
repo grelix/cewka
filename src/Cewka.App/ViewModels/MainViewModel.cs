@@ -1937,13 +1937,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void ResumeUnfinishedOpens() => ResumeOpens(QueueStateStore.Load(_queueFile));
 
     /// <summary>
-    /// Otwiera zwykłą drogą, w tle, w kolejności przybycia i z zapisaną akcją, ale bez uruchamiania
-    /// odtwarzania. Z zapisu kolejki znikają przy najbliższym zapisie po dołożeniu.
+    /// Otwiera zwykłą drogą, w tle i w kolejności przybycia, ale zawsze tylko dopisuje na koniec
+    /// kolejki: nie zastępuje jej, nie przestawia bieżącego utworu i nie uruchamia odtwarzania,
+    /// bo to, co gra po starcie, wybrał już użytkownik. Z zapisu kolejki znikają przy najbliższym
+    /// zapisie po dołożeniu.
     /// </summary>
     private void ResumeOpens(QueueState? state)
     {
         foreach (var open in state?.PendingOpens ?? [])
-            Open(open.Paths, open.Action ?? AddOpen, resumed: true);
+            Open(open.Paths, AppendOpen, resumed: true);
     }
 
     private void RestoreQueue(QueueState? state)

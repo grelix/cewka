@@ -356,6 +356,56 @@ public sealed class QueueSessionTests
         Assert.Null(after.PendingOpens);
     });
 
+    /// <summary>
+    /// Otwarcie dokańczane po starcie, gdy użytkownik zdążył już włączyć przywróconą kolejkę, tylko
+    /// dopisuje pliki: nie zatrzymuje grania, nie zastępuje kolejki i nie przestawia bieżącego utworu.
+    /// </summary>
+    [Theory]
+    [InlineData("Replace", FileOpenAction.Append)]
+    [InlineData("Outside", FileOpenAction.AppendAndPlay)]
+    [InlineData("Outside", FileOpenAction.ReplaceAndPlay)]
+    public void DokanczaneOtwarcieNieRuszaGranejKolejki(string savedAction, FileOpenAction setting) => Ui.Run(() =>
+    {
+        using var release = new ManualResetEventSlim();
+        using var h = new PlayerHarness(settings => settings.FileOpenAction = setting);
+        var playing = h.Track("a");
+        var folder = Path.Combine(h.Directory, "album");
+        Directory.CreateDirectory(folder);
+        var inFolder = h.Track(Path.Combine("album", "b"));
+
+        QueueStateStore.Save(new QueueState
+        {
+            Paths = [playing],
+            CurrentIndex = 0,
+            PendingOpens = [new PendingOpenState { Paths = [folder], Action = savedAction }],
+        }, h.QueueFile);
+
+        MainViewModel.FolderExpanding = path =>
+        {
+            if (path == folder) release.Wait(TimeSpan.FromSeconds(10));
+        };
+
+        try
+        {
+            h.Player.RestoreQueueState();
+            h.Player.TogglePlay();
+            Assert.True(h.Player.IsPlaying);
+        }
+        finally
+        {
+            MainViewModel.FolderExpanding = null;
+            release.Set();
+        }
+
+        Assert.True(h.PumpUntil(() => h.Player.Queue.Count == 2));
+        Assert.True(h.Player.IsPlaying);
+        Assert.Equal([playing, inFolder], h.Engine.QueuePaths.ToArray());
+        Assert.Equal(0, h.Engine.CurrentIndex);
+
+        h.Player.SaveQueueState();
+        Assert.Equal(0, QueueStateStore.Load(h.QueueFile)!.CurrentIndex);
+    });
+
     private static void Save(PlayerHarness h, List<string> paths, int current, double seconds) =>
         QueueStateStore.Save(new QueueState { Paths = paths, CurrentIndex = current, PositionSeconds = seconds }, h.QueueFile);
 }
