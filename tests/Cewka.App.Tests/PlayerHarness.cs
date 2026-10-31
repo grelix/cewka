@@ -74,6 +74,37 @@ internal sealed class PlayerHarness : IDisposable
         return path;
     }
 
+    /// <summary>
+    /// Jak <see cref="Track"/>, ale długość z tagów zgadza się z dźwiękiem. Plik ma tę długość
+    /// naprawdę, więc zapisany jest jako 8 kHz, mono, 8 bitów, żeby był mały.
+    /// </summary>
+    public string TrackWithTaggedLength(string name, double seconds = 60)
+    {
+        var path = System.IO.Path.Combine(Directory, name + ".wav");
+        using (var writer = new BinaryWriter(File.Create(path)))
+        {
+            const int rate = 8000;
+            var dataBytes = (int)(seconds * rate);
+            writer.Write("RIFF"u8);
+            writer.Write(36 + dataBytes);
+            writer.Write("WAVE"u8);
+            writer.Write("fmt "u8);
+            writer.Write(16);
+            writer.Write((short)1);
+            writer.Write((short)1);
+            writer.Write(rate);
+            writer.Write(rate);
+            writer.Write((short)1);
+            writer.Write((short)8);
+            writer.Write("data"u8);
+            writer.Write(dataBytes);
+            writer.Write(Enumerable.Repeat((byte)0x80, dataBytes).ToArray());
+        }
+
+        _lengths[path] = seconds;
+        return path;
+    }
+
     private static void WriteWav(string path)
     {
         using var writer = new BinaryWriter(File.Create(path));

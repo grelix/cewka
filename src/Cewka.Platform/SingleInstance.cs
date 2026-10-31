@@ -55,6 +55,7 @@ public sealed class SingleInstance : IDisposable
     private readonly object _gate = new();
     private readonly List<string[]> _pending = [];
     private Action<string[]>? _receiver;
+    private bool _stopped;
     private bool _disposed;
 
     /// <summary>
@@ -264,13 +265,13 @@ public sealed class SingleInstance : IDisposable
             try
             {
                 using var connection = _channel.Accept(_stop.Token);
-                if (connection is null) return;
+                if (connection is null) break;
 
                 Deliver(ReadMessage(connection));
             }
             catch (OperationCanceledException) when (_stop.IsCancellationRequested)
             {
-                return;
+                break;
             }
             catch (OperationCanceledException)
             {
@@ -280,12 +281,47 @@ public sealed class SingleInstance : IDisposable
             }
             catch (Exception ex)
             {
-                if (_stop.IsCancellationRequested) return;
+                if (_stop.IsCancellationRequested) break;
 
                 Console.Error.WriteLine($"[cewka] przekazanie ścieżek nie powiodło się: {ex.Message}");
 
                 // Pauza chroni przed pętlą pełnego obciążenia, gdyby kanał był trwale zepsuty.
-                if (_stop.Token.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(250))) return;
+                if (_stop.Token.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(250))) break;
+            }
+        }
+
+        DeliverPending();
+    }
+
+    /// <summary>
+    /// Odbiera nadawców połączonych przed zamknięciem nasłuchu. Pod Linuksem ich wysyłanie
+    /// skończyło się już sukcesem, więc nikt inny tych ścieżek nie otworzy.
+    /// </summary>
+    private void DeliverPending()
+    {
+        while (true)
+        {
+            Stream? connection;
+
+            try
+            {
+                connection = _channel.TakePending();
+            }
+            catch (Exception)
+            {
+                // Kanał zamknięty, bo zamykanie nie czekało dłużej na ten wątek.
+                return;
+            }
+
+            if (connection is null) return;
+
+            try
+            {
+                using (connection) Deliver(ReadMessage(connection));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[cewka] przekazanie ścieżek nie powiodło się: {ex.Message}");
             }
         }
     }
@@ -293,11 +329,11 @@ public sealed class SingleInstance : IDisposable
     /// <summary>
     /// Czyta jedną wiadomość, najdłużej przez <see cref="HandoffChannel.ReadTimeout"/>. Bez limitu
     /// nadawca wstrzymany w połowie (debuger, skaner antywirusowy) trzymałby kanał bez końca.
+    /// Zamknięcie nasłuchu jej nie przerywa, bo pod Linuksem nadawca uznał już przekazanie za udane.
     /// </summary>
-    private string[] ReadMessage(Stream stream)
+    private static string[] ReadMessage(Stream stream)
     {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
-        timeout.CancelAfter(HandoffChannel.ReadTimeout);
+        using var timeout = new CancellationTokenSource(HandoffChannel.ReadTimeout);
 
         var header = new byte[4];
         if (!ReadExactly(stream, header, timeout.Token)) return [];
@@ -325,16 +361,30 @@ public sealed class SingleInstance : IDisposable
         }
     }
 
+    /// <summary>
+    /// Przestaje przyjmować ścieżki, ale rolę zostawia do <see cref="Dispose"/>. Ścieżki nadawców
+    /// połączonych wcześniej docierają do odbiorcy przed powrotem. Kopia uruchomiona później
+    /// nie połączy się i ponawia próby przejęcia roli.
+    /// </summary>
+    public void StopListening()
+    {
+        if (_stopped) return;
+        _stopped = true;
+
+        // Przerywa samo czekanie na połączenie. Wiadomości już wysłane wątek doczytuje,
+        // a nadawca zawieszony w połowie zatrzyma zamykanie najwyżej na czas odczytu.
+        _stop.Cancel();
+        _listener.Join(HandoffChannel.ReadTimeout + TimeSpan.FromMilliseconds(500));
+
+        _channel.Dispose();
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
 
-        _stop.Cancel();
-
-        // Zamknięcie kanału zdejmuje wątek stojący na przyjęciu połączenia.
-        _channel.Dispose();
-        _listener.Join(500);
+        StopListening();
 
         // Po awarii procesu blokadę zwolni jądro.
         _lock.Dispose();
