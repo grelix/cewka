@@ -3,20 +3,15 @@ namespace Cewka.Audio.Dsp;
 /// <summary>
 /// Kompensacja głośności: podbicie basu i skrajnej góry tym mocniejsze, im ciszej gra muzyka.
 ///
-/// <para><b>Po co.</b> Czułość ucha zmienia się z poziomem. Przy cichym słuchaniu bas i najwyższe
-/// tony słabną wyraźnie szybciej niż środek pasma — opisują to krzywe jednakowej głośności
-/// znormalizowane w ISO 226. Dlatego wzmacniacze miały kiedyś przycisk „loudness". Ten stopień
-/// robi to samo, tyle że wielkość korekty wynika z rzeczywistego poziomu odsłuchu, a nie
-/// z jednego ustalonego z góry przybliżenia.</para>
+/// <para>Czułość ucha zmienia się z poziomem. Przy cichym słuchaniu bas i najwyższe tony słabną
+/// wyraźnie szybciej niż środek pasma, co opisują krzywe jednakowej głośności z ISO 226. Wielkość
+/// korekty wynika z rzeczywistego poziomu odsłuchu: z położenia suwaka głośności i z poziomu,
+/// na jakim gra program. Po normalizacji każdy utwór gra na poziomie docelowym, więc samo
+/// wzmocnienie normalizacji nie mówi nic o głośności odsłuchu; liczy się tylko to, o ile poziom
+/// docelowy odbiega od poziomu odniesienia ReplayGain.</para>
 ///
-/// <para><b>Skąd wiadomo, jak cicho gra.</b> Z dwóch rzeczy naraz: z położenia suwaka głośności
-/// oraz z wzmocnienia, które nadała normalizacja EBU R128. To drugie jest tu istotne i stanowi
-/// przewagę nad rozwiązaniami sterowanymi samym suwakiem: ciche nagranie, któremu normalizacja
-/// dodała sześć decybeli, gra <em>głośniej</em>, niż wynikałoby z suwaka, i nie powinno dostać
-/// pełnego podbicia basu.</para>
-///
-/// <para>Wartość odniesienia to suwak na maksimum przy zerowym wzmocnieniu normalizacji. Powyżej
-/// niej nic się nie dzieje — stopień wyłącznie dodaje przy ściszaniu, nigdy nie odejmuje.</para>
+/// <para>Wartość odniesienia to suwak na maksimum przy programie na poziomie odniesienia. Powyżej
+/// niej nic się nie dzieje: stopień wyłącznie dodaje przy ściszaniu, nigdy nie odejmuje.</para>
 /// </summary>
 public sealed class Loudness : IAudioProcessor
 {
@@ -34,7 +29,7 @@ public sealed class Loudness : IAudioProcessor
 
     /// <summary>
     /// Ograniczenia. Bez nich przy suwaku na kilku procentach korekta sięgnęłaby kilkunastu
-    /// decybeli i zamiast wyrównywać słyszenie, zamieniłaby nagranie w dudnienie.
+    /// decybeli i zamieniłaby nagranie w dudnienie.
     /// </summary>
     private const double MaximumLowDb = 10;
     private const double MaximumHighDb = 4;
@@ -42,20 +37,26 @@ public sealed class Loudness : IAudioProcessor
     /// <summary>Poniżej tej zmiany współczynniki zostają w spokoju.</summary>
     private const double RecomputeThresholdDb = 0.02;
 
+    /// <summary>Poniżej tej różnicy udział siły przyciągany jest do celu.</summary>
+    private const double FractionSnap = 1e-3;
+
+    private const double SmoothingSeconds = 0.05;
+
     private Biquad[,] _sections = new Biquad[0, 0];
+    private readonly bool[] _shelfRunning = new bool[2];
 
     private int _sampleRate = 48000;
     private int _channels = 2;
-    private double _smoothingPerBuffer = 0.5;
 
     private double _targetDeficitDb;
     private double _currentDeficitDb;
+    private double _currentFraction;
     private double _appliedLowDb = -1;
     private double _appliedHighDb = -1;
 
     private double _strength = 100;
 
-    /// <summary>Gdy wyłączona, sygnał przechodzi bez zmiany ani jednej próbki.</summary>
+    /// <summary>Po wyłączeniu podbicie wygasa płynnie, a potem sygnał przechodzi bez zmiany ani jednej próbki.</summary>
     public bool Enabled { get; set; }
 
     /// <summary>Siła działania w procentach: 100 to pełna korekta, 50 to jej połowa.</summary>
@@ -66,17 +67,20 @@ public sealed class Loudness : IAudioProcessor
     }
 
     /// <summary>
-    /// Bieżący ubytek poziomu względem odniesienia, w decybelach. Ustawiane raz na bufor
-    /// przez <see cref="AudioGraph"/>, które jako jedyne widzi i suwak, i normalizację.
+    /// Ustawia poziom odsłuchu. Wołane raz na bufor przez <see cref="AudioGraph"/>.
     /// </summary>
-    public void SetListeningLevel(double volumeDb, double normalisationDb)
+    /// <param name="volumeDb">Położenie suwaka głośności, w decybelach.</param>
+    /// <param name="programmeLevelDb">O ile program gra głośniej od poziomu odniesienia ReplayGain.</param>
+    public void SetListeningLevel(double volumeDb, double programmeLevelDb)
     {
-        var deficit = -(volumeDb + normalisationDb);
+        var deficit = -(volumeDb + programmeLevelDb);
         _targetDeficitDb = Math.Clamp(deficit, 0, 40);
     }
 
     /// <summary>Podbicie basu, jakie stopień właśnie stosuje. Do pokazania w interfejsie.</summary>
     public double CurrentBassBoostDb => _appliedLowDb < 0 ? 0 : _appliedLowDb;
+
+    private double TargetFraction => Enabled ? _strength / 100.0 : 0;
 
     public void Prepare(int sampleRate, int channels)
     {
@@ -88,63 +92,77 @@ public sealed class Loudness : IAudioProcessor
         for (var shelf = 0; shelf < 2; shelf++)
         for (var channel = 0; channel < channels; channel++)
             _sections[shelf, channel] = Biquad.Identity();
-
-        const double assumedBufferSeconds = 0.01;
-        _smoothingPerBuffer = 1 - Math.Exp(-assumedBufferSeconds / 0.05);
+        Array.Clear(_shelfRunning);
 
         _currentDeficitDb = _targetDeficitDb;
+        _currentFraction = TargetFraction;
         _appliedLowDb = -1;
-        UpdateCoefficients(force: true);
+        UpdateCoefficients(0, force: true);
     }
 
     public void Process(Span<float> buffer, int frames)
     {
-        if (!Enabled || _strength <= 0) return;
+        if (TargetFraction <= 0 && _currentFraction <= 0) return;
 
-        UpdateCoefficients(force: false);
-
-        // Przy odniesieniu obie półki są dokładnie przepustem; liczenie ich byłoby stratą czasu.
-        if (_appliedLowDb < RecomputeThresholdDb && _appliedHighDb < RecomputeThresholdDb) return;
+        UpdateCoefficients(frames, force: false);
 
         for (var shelf = 0; shelf < 2; shelf++)
         {
             var gain = shelf == 0 ? _appliedLowDb : _appliedHighDb;
-            if (gain < RecomputeThresholdDb) continue;
+
+            // Przy odniesieniu półka jest przepustem; liczenie jej byłoby stratą czasu.
+            if (gain < RecomputeThresholdDb)
+            {
+                _shelfRunning[shelf] = false;
+                continue;
+            }
 
             for (var channel = 0; channel < _channels; channel++)
             {
                 ref var section = ref _sections[shelf, channel];
+
+                // Stan zatrzymany przy pominięciu pochodzi sprzed wielu buforów.
+                if (!_shelfRunning[shelf]) section.Reset();
+
                 for (var frame = 0; frame < frames; frame++)
                 {
                     var index = frame * _channels + channel;
                     buffer[index] = section.Process(buffer[index]);
                 }
+
+                section.Sanitise();
             }
+
+            _shelfRunning[shelf] = true;
         }
     }
 
-    private void UpdateCoefficients(bool force)
+    private void UpdateCoefficients(int frames, bool force)
     {
-        // Ubytek zmienia się przy każdym ruchu suwaka głośności, a skok współczynników filtru
-        // słychać jako trzask — stąd wygładzanie, tak samo jak w korektorze.
-        if (!force && Math.Abs(_targetDeficitDb - _currentDeficitDb) < RecomputeThresholdDb)
-        {
-            if (_appliedLowDb >= 0) return;
-        }
+        // Skok współczynników filtru słychać jako trzask, dlatego i ubytek, i siła dochodzą
+        // do celu wykładniczo, ze stałą czasową liczoną w sekundach.
+        var targetFraction = TargetFraction;
 
-        _currentDeficitDb = force
-            ? _targetDeficitDb
-            : _currentDeficitDb + (_targetDeficitDb - _currentDeficitDb) * _smoothingPerBuffer;
+        if (!force && _appliedLowDb >= 0
+                   && Math.Abs(_targetDeficitDb - _currentDeficitDb) < RecomputeThresholdDb
+                   && Math.Abs(targetFraction - _currentFraction) < FractionSnap) return;
 
+        var step = force ? 1 : 1 - Math.Exp(-frames / (_sampleRate * SmoothingSeconds));
+
+        _currentDeficitDb += (_targetDeficitDb - _currentDeficitDb) * step;
         if (Math.Abs(_targetDeficitDb - _currentDeficitDb) < RecomputeThresholdDb)
             _currentDeficitDb = _targetDeficitDb;
 
-        var fraction = _strength / 100.0;
-        var low = Math.Min(MaximumLowDb, LowSlope * _currentDeficitDb) * fraction;
-        var high = Math.Min(MaximumHighDb, HighSlope * _currentDeficitDb) * fraction;
+        _currentFraction += (targetFraction - _currentFraction) * step;
+        if (Math.Abs(targetFraction - _currentFraction) < FractionSnap)
+            _currentFraction = targetFraction;
+
+        var low = Math.Min(MaximumLowDb, LowSlope * _currentDeficitDb) * _currentFraction;
+        var high = Math.Min(MaximumHighDb, HighSlope * _currentDeficitDb) * _currentFraction;
 
         if (!force && Math.Abs(low - _appliedLowDb) < RecomputeThresholdDb
-                   && Math.Abs(high - _appliedHighDb) < RecomputeThresholdDb) return;
+                   && Math.Abs(high - _appliedHighDb) < RecomputeThresholdDb
+                   && _currentFraction != 0) return;
 
         _appliedLowDb = low;
         _appliedHighDb = high;

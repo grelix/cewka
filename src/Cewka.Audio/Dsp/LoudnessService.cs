@@ -87,21 +87,24 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
     /// </summary>
     public bool AlwaysAnalyse { get; set; }
 
-    public double? GetGainDecibels(QueueEntry entry)
+    public TrackGain? GetTrackGain(QueueEntry entry)
     {
         entry.EnsureMetadata();
+
+        // Po wyrównaniu utwór gra na poziomie docelowym, niezależnie od tego, jak go nagrano.
+        var level = TargetLufs - ReferenceLufs;
 
         // 1. Tagi — najtańsze i zwykle najlepsze źródło. Wpisane w nich wzmocnienie odnosi się
         //    do poziomu ReplayGain, więc inny poziom docelowy trzeba do niego doliczyć.
         if (!AlwaysAnalyse)
         {
             var tagged = entry.Metadata?.ReplayGainTrack;
-            if (tagged is not null) return tagged + (TargetLufs - ReferenceLufs);
+            if (tagged is not null) return new TrackGain(tagged.Value + level, level);
         }
 
         // 2. Wcześniejsza analiza.
         if (TryGetCached(entry.Path, out var record))
-            return TargetLufs - record.IntegratedLufs;
+            return new TrackGain(TargetLufs - record.IntegratedLufs, level);
 
         // 3. Do kolejki; ten odsłuch zagra bez wyrównania.
         Enqueue(entry.Path);

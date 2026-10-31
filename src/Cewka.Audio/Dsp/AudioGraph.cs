@@ -2,7 +2,15 @@ using Cewka.Audio.Playback;
 
 namespace Cewka.Audio.Dsp;
 
-/// <summary>Supplies a normalisation gain for a queue entry, in decibels.</summary>
+/// <summary>Wzmocnienie wyrównania dla utworu i poziom, na jakim utwór po nim zagra.</summary>
+/// <param name="GainDecibels">Wzmocnienie do nałożenia, w decybelach.</param>
+/// <param name="ProgrammeLevelDecibels">
+/// O ile utwór po wyrównaniu gra głośniej od poziomu odniesienia ReplayGain. Zwykle różnica
+/// między poziomem docelowym a odniesieniem, mniejsza, gdy wzmocnienie ograniczył szczyt.
+/// </param>
+public readonly record struct TrackGain(double GainDecibels, double ProgrammeLevelDecibels);
+
+/// <summary>Supplies a normalisation gain for a queue entry.</summary>
 public interface ITrackGainSource
 {
     /// <summary>
@@ -10,7 +18,7 @@ public interface ITrackGainSource
     /// thread as a track is opened, so it must return promptly — anything slow belongs in
     /// the background.
     /// </summary>
-    double? GetGainDecibels(QueueEntry entry);
+    TrackGain? GetTrackGain(QueueEntry entry);
 }
 
 /// <summary>
@@ -27,6 +35,7 @@ public interface ITrackGainSource
 public sealed class AudioGraph
 {
     private int _channels = 2;
+    private double _programmeLevelDb;
 
     /// <summary>Gain from ReplayGain tags or from loudness analysis.</summary>
     public GainStage Normalisation { get; } = new(smoothingSeconds: 0.05);
@@ -82,9 +91,9 @@ public sealed class AudioGraph
     {
         Normalisation.Process(buffer, frames);
 
-        // Kompensacja jako jedyna potrzebuje wiedzieć, jak głośno naprawdę gra muzyka, a widok
-        // na obie składowe — suwak i wzmocnienie normalizacji — ma tylko ten obiekt.
-        Loudness.SetListeningLevel(Volume.TargetDecibels, Normalisation.TargetDecibels);
+        // Kompensacja potrzebuje wiedzieć, jak głośno naprawdę gra muzyka, a widok na obie
+        // składowe, suwak i poziom programu, ma tylko ten obiekt.
+        Loudness.SetListeningLevel(Volume.TargetDecibels, Volatile.Read(ref _programmeLevelDb));
         Loudness.Process(buffer, frames);
 
         Equaliser.Process(buffer, frames);
@@ -104,14 +113,11 @@ public sealed class AudioGraph
     /// </summary>
     public void OnTrackChanged(QueueEntry entry)
     {
-        if (!NormalisationEnabled)
-        {
-            Normalisation.TargetDecibels = 0;
-            return;
-        }
+        var gain = NormalisationEnabled ? GainSource?.GetTrackGain(entry) : null;
 
-        var gain = GainSource?.GetGainDecibels(entry);
-        Normalisation.TargetDecibels = gain ?? 0;
+        // Utwór bez znanego wzmocnienia gra tak, jak go nagrano; przyjmuje się poziom odniesienia.
+        Normalisation.TargetDecibels = gain?.GainDecibels ?? 0;
+        Volatile.Write(ref _programmeLevelDb, gain?.ProgrammeLevelDecibels ?? 0);
     }
 
     public void Reset()

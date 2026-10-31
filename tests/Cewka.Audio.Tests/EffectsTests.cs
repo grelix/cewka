@@ -85,7 +85,7 @@ public class EffectsTests
     {
         var loudness = new Loudness { Enabled = true, Strength = 100 };
         loudness.Prepare(SampleRate, Channels);
-        loudness.SetListeningLevel(volumeDb: 0, normalisationDb: 0);
+        loudness.SetListeningLevel(volumeDb: 0, programmeLevelDb: 0);
 
         var original = Sine(50, 0.5, 4096);
         var processed = (float[])original.Clone();
@@ -107,17 +107,17 @@ public class EffectsTests
     }
 
     /// <summary>
-    /// Wzmocnienie, jakie nadała normalizacja, odejmuje się od ubytku. Ciche nagranie podbite
-    /// o dziesięć decybeli gra głośniej, niż mówi suwak, i nie powinno dostać pełnej korekty.
+    /// Program grający głośniej od poziomu odniesienia (na przykład przy wyższym poziomie
+    /// docelowym normalizacji) zmniejsza ubytek i z nim korektę.
     /// </summary>
     [Fact]
-    public void LoudnessAccountsForTheNormalisationGain()
+    public void LoudnessAccountsForTheProgrammeLevel()
     {
-        var withoutGain = MeasureLoudnessBoost(volumeDb: -20, strength: 100, normalisationDb: 0);
-        var withGain = MeasureLoudnessBoost(volumeDb: -20, strength: 100, normalisationDb: 10);
+        var atReference = MeasureLoudnessBoost(volumeDb: -20, strength: 100, programmeLevelDb: 0);
+        var louder = MeasureLoudnessBoost(volumeDb: -20, strength: 100, programmeLevelDb: 10);
 
-        Assert.True(withGain < withoutGain - 1.0,
-            $"normalizacja nie wpłynęła na korektę: {withoutGain:F2} dB bez niej, {withGain:F2} dB z nią");
+        Assert.True(louder < atReference - 1.0,
+            $"poziom programu nie wpłynął na korektę: {atReference:F2} dB przy odniesieniu, {louder:F2} dB głośniej");
     }
 
     /// <summary>Suwak siły skaluje wyliczone podbicie wprost proporcjonalnie.</summary>
@@ -326,11 +326,11 @@ public class EffectsTests
     /// Doprowadza kompensację do stanu ustalonego przy zadanym poziomie i zwraca podbicie
     /// zmierzone na 50 Hz, w decybelach.
     /// </summary>
-    private static double MeasureLoudnessBoost(double volumeDb, double strength, double normalisationDb = 0)
+    private static double MeasureLoudnessBoost(double volumeDb, double strength, double programmeLevelDb = 0)
     {
         var loudness = new Loudness { Enabled = true, Strength = strength };
         loudness.Prepare(SampleRate, Channels);
-        loudness.SetListeningLevel(volumeDb, normalisationDb);
+        loudness.SetListeningLevel(volumeDb, programmeLevelDb);
 
         // Ubytek dochodzi do celu przez wygładzanie liczone raz na bufor, więc trzeba przepuścić
         // kilkadziesiąt buforów, zanim pomiar cokolwiek znaczy.
