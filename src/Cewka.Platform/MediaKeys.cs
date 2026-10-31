@@ -50,7 +50,7 @@ public static unsafe class MediaKeys
     private static nint _hook;
     private static volatile bool _playing;
 
-    /// <summary>Raised on the hook's own thread, never on the interface thread.</summary>
+    /// <summary>Raised on the hook's own thread.</summary>
     public static event Action<MediaKey>? Pressed;
 
     /// <summary>False on systems where the keys are delivered some other way.</summary>
@@ -85,7 +85,11 @@ public static unsafe class MediaKeys
 
         lock (Gate)
         {
-            if (_thread is not null) return IsInstalled;
+            if (_thread is not null)
+            {
+                if (_thread.IsAlive) return IsInstalled;
+                _thread = null;
+            }
 
             using var ready = new ManualResetEventSlim();
             var thread = new Thread(() =>
@@ -119,16 +123,19 @@ public static unsafe class MediaKeys
         {
             if (_thread is null) return;
 
-            // Zaczep zdejmuje wątek, który go założył, po wyjściu z pętli komunikatów.
+            // Zaczep zdejmuje wątek, który go założył, po wyjściu z pętli komunikatów. Wątek,
+            // który nie zdążył skończyć, zostaje zapamiętany, żeby Install nie założył obok
+            // drugiego zaczepu.
             Native.PostThreadMessageW(_threadId, WmQuit, 0, 0);
-            _thread.Join(TimeSpan.FromSeconds(1));
-            _thread = null;
+            if (_thread.Join(TimeSpan.FromSeconds(1))) _thread = null;
         }
     }
 
     [SupportedOSPlatform("windows")]
     private static void Run(ManualResetEventSlim ready)
     {
+        nint hook;
+
         try
         {
             // Kolejka komunikatów wątku powstaje przy pierwszym zapytaniu o nią. Bez niej
@@ -139,7 +146,7 @@ public static unsafe class MediaKeys
             _threadId = Native.GetCurrentThreadId();
             Filter.Reset();
 
-            var hook = Native.SetWindowsHookExW(
+            hook = Native.SetWindowsHookExW(
                 WhKeyboardLowLevel, &OnKeyboardEvent, Native.GetModuleHandleW(null), 0);
 
             if (hook == nint.Zero)
@@ -171,9 +178,9 @@ public static unsafe class MediaKeys
         }
         finally
         {
-            Native.UnhookWindowsHookEx(_hook);
-            Volatile.Write(ref _hook, nint.Zero);
-            Filter.Reset();
+            // Własny uchwyt: _hook mógł już przejąć zaczep założony po tym.
+            Native.UnhookWindowsHookEx(hook);
+            if (Interlocked.CompareExchange(ref _hook, nint.Zero, hook) == hook) Filter.Reset();
         }
     }
 
