@@ -51,6 +51,7 @@ internal sealed class GStreamerDecoder : ManagedDecoderBase
     private int _pendingOffset;
     private bool _endOfStream;
     private DecoderFailure _failure = DecoderFailure.DamagedFile;
+    private (int Rate, int Channels)? _formatChange;
 
     public GStreamerDecoder(string path, int outputSampleRate, int outputChannels, BitrateMeter? meter = null)
     {
@@ -190,7 +191,19 @@ internal sealed class GStreamerDecoder : ManagedDecoderBase
 
             while (produced < frames)
             {
+                if (_formatChange is { } change)
+                {
+                    // Próbki w nowym formacie nie mogą trafić do bufora za próbkami w starym.
+                    if (produced > 0) break;
+
+                    _formatChange = null;
+                    Reconfigure(change.Rate, change.Channels, ChannelLayouts.Wave(change.Channels));
+                    CountPendingFrames();
+                    return 0;
+                }
+
                 if (_pendingFrames == 0 && !PullSample()) break;
+                if (_formatChange is not null) continue;
 
                 var take = Math.Min(frames - produced, _pendingFrames);
                 var samples = take * SourceChannels;
@@ -242,25 +255,30 @@ internal sealed class GStreamerDecoder : ManagedDecoderBase
             if (waiting.Elapsed > StallLimit) return EndStream("potok nie oddał próbek w ciągu 10 s");
         }
 
-        // Format próbki ustala konwerter; zmiana w środku strumienia dałaby błędnie odczytane bajty.
-        if (SourceChannels > 0 &&
-            (!TryReadFormat(_sample, out var rate, out var channels) ||
-             rate != SourceSampleRate || channels != SourceChannels))
+        // Przed pierwszym Configure format nie jest jeszcze znany i nie ma z czym porównywać.
+        if (SourceChannels > 0)
         {
-            ReleaseSample();
-            return EndStream("format próbek zmienił się w trakcie strumienia");
+            if (!TryReadFormat(_sample, out var rate, out var channels))
+            {
+                ReleaseSample();
+                return EndStream("próbka bez częstotliwości lub liczby kanałów");
+            }
+
+            // Bufor jest już w nowym formacie; ReadSource przebuduje konwerter, zanim go przekaże.
+            if (rate != SourceSampleRate || channels != SourceChannels) _formatChange = (rate, channels);
         }
 
         var buffer = Gst.SampleGetBuffer(_sample);
         if (buffer == nint.Zero || !Gst.BufferMap(buffer, out _map, Gst.MapRead))
         {
             ReleaseSample();
+            _formatChange = null;
             return EndStream("nie udało się odczytać bufora próbek");
         }
 
         _mapped = true;
         _pendingOffset = 0;
-        CountPendingFrames();
+        if (_formatChange is null) CountPendingFrames();
         TryReadDuration();
 
         return true;

@@ -28,6 +28,9 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
     private int _pendingBytes;
     private bool _endOfStream;
 
+    private uint _channelMask;
+    private (int Rate, int Channels, uint Mask)? _formatChange;
+
     public MediaFoundationDecoder(string path, int outputSampleRate, int outputChannels, BitrateMeter? meter = null)
     {
         _path = path;
@@ -51,6 +54,7 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
             if (!ReadOutputFormat(reader, out var sourceRate, out var sourceChannels, out var mask))
                 throw Failure("odczyt formatu wyjściowego", 0);
 
+            _channelMask = mask;
             Configure(sourceRate, sourceChannels, outputSampleRate, outputChannels, meter,
                 ChannelLayouts.FromWaveMask(mask, sourceChannels));
 
@@ -143,16 +147,27 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
         if (_reader is null) return 0;
 
         var written = 0;
-        var bytesPerFrame = SourceChannels * sizeof(float);
 
         while (written < frames)
         {
+            if (_formatChange is { } change)
+            {
+                // Próbki w nowym formacie nie mogą trafić do bufora za próbkami w starym.
+                if (written > 0) break;
+
+                _formatChange = null;
+                _channelMask = change.Mask;
+                Reconfigure(change.Rate, change.Channels, ChannelLayouts.FromWaveMask(change.Mask, change.Channels));
+                return 0;
+            }
+
             if (_pendingBytes == 0)
             {
                 if (_endOfStream || !PullSample()) break;
                 continue;
             }
 
+            var bytesPerFrame = SourceChannels * sizeof(float);
             var available = _pendingBytes / bytesPerFrame;
             var take = Math.Min(frames - written, available);
             if (take <= 0) { _pendingBytes = 0; continue; }
@@ -191,16 +206,20 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
             return false;
         }
 
-        // Konwerter jest ustawiony na format z otwarcia; bajty w innym formacie dałyby
-        // dźwięk o złej wysokości albo pomieszane kanały, więc taki strumień się kończy.
-        if ((flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) != 0 &&
-            (!ReadOutputFormat(_reader!, out var rate, out var channels, out _) ||
-             rate != SourceSampleRate || channels != SourceChannels))
+        // Ta próbka jest już w nowym formacie; ReadSource przebuduje konwerter, zanim ją przekaże.
+        if ((flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) != 0)
         {
-            DecoderFailures.Log("Media Foundation: format próbek zmienił się w trakcie strumienia.");
-            _endOfStream = true;
-            if (sample is not null) Marshal.ReleaseComObject(sample);
-            return false;
+            if (!ReadOutputFormat(_reader!, out var rate, out var channels, out var mask))
+            {
+                DecoderFailures.Log("Media Foundation: nie odczytano nowego formatu próbek.");
+                _endOfStream = true;
+                if (sample is not null) Marshal.ReleaseComObject(sample);
+                return false;
+            }
+
+            _formatChange = rate != SourceSampleRate || channels != SourceChannels || mask != _channelMask
+                ? (rate, channels, mask)
+                : null;
         }
 
         // Brak próbki bez końca strumienia zdarza się przy zmianie formatu w środku pliku.
