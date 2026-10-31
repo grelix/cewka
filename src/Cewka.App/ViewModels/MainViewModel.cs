@@ -139,6 +139,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _refresh.Start();
 
         _noticeTimer.Tick += (_, _) => ShowNotice(string.Empty);
+
+        _queueSave.Tick += (_, _) =>
+        {
+            _queueSave.Stop();
+            SaveQueueState();
+        };
     }
 
     // ---------- Utwór ----------
@@ -289,7 +295,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public bool ShuffleEnabled
     {
         get => _engine.Shuffle;
-        set { _engine.Shuffle = value; Raise(); }
+        set { _engine.Shuffle = value; Raise(); TouchQueue(); }
     }
 
     /// <summary>True for either repeat mode; drives the accent colour on the button.</summary>
@@ -321,6 +327,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         };
 
         RaiseRepeat();
+        TouchQueue();
     }
 
     private void RaiseRepeat()
@@ -983,6 +990,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Raise(nameof(QueueSummary));
         Raise(nameof(IsQueueEmpty));
         _ = FillMetadataInBackgroundAsync();
+        TouchQueue();
     }
 
     /// <summary>
@@ -1233,9 +1241,33 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     // ---------- Trwałość kolejki ----------
 
+    /// <summary>
+    /// Odstęp zapisu po zmianie kolejki. Seria zmian (przeciąganie, usuwanie kilku wpisów)
+    /// daje jeden zapis, a awaria albo zabicie procesu nie gubi zmian z całej sesji.
+    /// </summary>
+    private readonly DispatcherTimer _queueSave = new() { Interval = TimeSpan.FromSeconds(2) };
+
+    /// <summary>Co tyle w trakcie gry zapisywana jest pozycja w utworze.</summary>
+    private static readonly TimeSpan PositionSaveInterval = TimeSpan.FromSeconds(30);
+
+    private DateTime _lastPositionSave = DateTime.UtcNow;
+
+    /// <summary>Zapis kolejki jest zamówiony i czeka na zegar.</summary>
+    internal bool QueueSavePending => _queueSave.IsEnabled;
+
+    /// <summary>Zamawia zapis kolejki za chwilę.</summary>
+    private void TouchQueue()
+    {
+        _queueSave.Stop();
+        _queueSave.Start();
+    }
+
     /// <summary>Writes the queue and position so the next run resumes where this one stopped.</summary>
     public void SaveQueueState()
     {
+        _queueSave.Stop();
+        _lastPositionSave = DateTime.UtcNow;
+
         // Dopóki nic nie zagrało, silnik nie zna pozycji z poprzedniej sesji; czeka ona
         // w _resume i to ją trzeba zapisać, inaczej samo otwarcie i zamknięcie programu ją kasuje.
         var armed = _resume.IsArmed;
@@ -1499,6 +1531,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var playing = _engine.State == PlaybackState.Playing;
         if (playing != _isPlaying) IsPlaying = playing;
 
+        if (playing && DateTime.UtcNow - _lastPositionSave > PositionSaveInterval) SaveQueueState();
+
         RefreshBitrateBadge();
 
         // Stan zasilania zmienia się rzadko, a odczyt jest wywołaniem systemowym; pięć sekund
@@ -1565,6 +1599,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         PublishToMediaPanel();
         Raise(nameof(CurrentIndex));
+        TouchQueue();
     }
 
     public int CurrentIndex => _current is null ? -1 : Queue.IndexOf(_current);
@@ -1798,6 +1833,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         App.Theme.Changed -= _themeWatcher;
+        _queueSave.Stop();
         _refresh.Stop();
         _noticeTimer.Stop();
         _covers.Cancel();

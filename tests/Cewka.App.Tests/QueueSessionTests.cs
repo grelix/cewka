@@ -170,6 +170,23 @@ public sealed class QueueSessionTests
         Assert.Empty(h.Player.Queue);
     });
 
+    [Fact]
+    public void ZmianaKolejkiZamawiaZapisBezZamykaniaOkna() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        Assert.False(h.Player.QueueSavePending);
+
+        h.Player.OpenPaths([h.Track("a"), h.Track("b")], replace: false);
+        Assert.True(h.Player.QueueSavePending);
+
+        h.Player.SaveQueueState();
+        Assert.False(h.Player.QueueSavePending);
+        Assert.Equal(2, QueueStateStore.Load(h.QueueFile)!.Paths.Count);
+
+        h.Player.CycleRepeat();
+        Assert.True(h.Player.QueueSavePending);
+    });
+
     private static void Save(PlayerHarness h, List<string> paths, int current, double seconds) =>
         QueueStateStore.Save(new QueueState { Paths = paths, CurrentIndex = current, PositionSeconds = seconds }, h.QueueFile);
 }
