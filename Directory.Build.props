@@ -23,7 +23,7 @@
       Jedyne miejsce z numerem wersji. AssemblyVersion i FileVersion wyprowadza z niego SDK,
       a pkgver w packaging/arch/PKGBUILD pilnuje tools/sprawdz-wersje.sh.
     -->
-    <Version>0.8.1</Version>
+    <Version>0.9.0</Version>
   </PropertyGroup>
 
   <!--
