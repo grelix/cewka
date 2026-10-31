@@ -18,6 +18,9 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // Raz, przed oboma odbiorcami: działającą już kopią i własnym oknem.
+        args = CommandLinePaths.ToAbsolute(args);
+
         SingleInstance? instance = null;
 
         if (SettingsStore.ReadSingleInstanceFlag())

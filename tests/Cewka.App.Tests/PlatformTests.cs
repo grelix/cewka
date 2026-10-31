@@ -6,6 +6,34 @@ namespace Cewka.App.Tests;
 /// <summary>Sprawdzenia warstwy systemowej, które nie wymagają okna ani urządzenia dźwiękowego.</summary>
 public sealed class PlatformTests
 {
+    // ---------- Ścieżki z wiersza poleceń ----------
+
+    /// <summary>
+    /// <c>cewka utwor.mp3</c> w katalogu z muzyką ma trafić do działającej kopii jako pełna
+    /// ścieżka, bo tamta kopia ma inny katalog bieżący.
+    /// </summary>
+    [Fact]
+    public void SciezkiWzgledneStajaSiePelne()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "muzyka");
+
+        var result = CommandLinePaths.ToAbsolute(["utwor.mp3", ".", Path.Combine("album", "a.flac")], root);
+
+        Assert.Equal(
+            [Path.Combine(root, "utwor.mp3"), root, Path.Combine(root, "album", "a.flac")],
+            result);
+    }
+
+    [Fact]
+    public void SciezkiPelneIAdresyZostajaBezZmian()
+    {
+        var full = Path.Combine(Path.GetTempPath(), "a.mp3");
+
+        var result = CommandLinePaths.ToAbsolute([full, "file:///home/u/a.mp3", ""], "/inny/katalog");
+
+        Assert.Equal([full, "file:///home/u/a.mp3", ""], result);
+    }
+
     // ---------- Klawisze multimedialne ----------
 
     /// <summary>Gdy panel systemowy działa, Windows sam kieruje klawisze do sesji odtwarzania.</summary>
