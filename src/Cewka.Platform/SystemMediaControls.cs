@@ -16,24 +16,15 @@ public enum MediaPanelStatus
 }
 
 /// <summary>
-/// The Windows media panel: the overlay that appears on pressing a media key, and the entry in
-/// the volume flyout showing what is playing.
+/// Panel multimediów Windows: nakładka po naciśnięciu klawisza multimedialnego i wpis
+/// w wysuwanym panelu głośności. Wywołania idą wprost przez binarny interfejs WinRT, bez
+/// platformy docelowej <c>-windows</c> i pakietu Windows SDK.
 ///
-/// <para><b>Dlaczego interop pisany ręcznie.</b> Zwykłą drogą do tego interfejsu jest zmiana
-/// platformy docelowej na wariant z sufiksem <c>-windows</c>, co wciąga pakiet referencyjny
-/// Windows SDK — kilkadziesiąt megabajtów zależności dla jednej funkcji w programie, który poza
-/// nią jest w pełni wieloplatformowy. Tutaj wywołania idą wprost przez binarny interfejs WinRT,
-/// tak samo jak dekoder Media Foundation w warstwie dźwięku.</para>
-///
-/// <para><b>Skąd identyfikatory i kolejność metod.</b> Odczytane z metadanych systemowych
-/// (<c>C:\Windows\System32\WinMetadata\Windows.Media.winmd</c>), nie z pamięci ani z przykładów
-/// w sieci. Pomyłka w numerze pozycji w tablicy wirtualnej nie daje błędu kompilacji — wywołuje
-/// zupełnie inną funkcję, więc każda z nich jest tu wypisana razem z numerem, pod którym stoi.</para>
-///
-/// <para>Jedyną wartością, której nie ma w metadanych, jest identyfikator interfejsu pomostowego
-/// <c>ISystemMediaTransportControlsInterop</c> — istnieje wyłącznie w nagłówkach języka C. Jego
-/// poprawność sprawdza się sama: przy złym identyfikatorze zapytanie o interfejs zwraca błąd,
-/// panel po prostu nie powstaje, a program działa dalej bez niego.</para>
+/// <para>Pułapka: identyfikatory i pozycje metod pochodzą z
+/// <c>C:\Windows\System32\WinMetadata\Windows.Media.winmd</c>. Zły numer pozycji w tablicy
+/// wirtualnej kompiluje się i wywołuje inną funkcję, dlatego każda pozycja ma tu swoją stałą.
+/// Identyfikatora <c>ISystemMediaTransportControlsInterop</c> nie ma w metadanych, tylko
+/// w nagłówkach C; przy złym panel po prostu nie powstaje.</para>
 /// </summary>
 public sealed unsafe class SystemMediaControls : IMediaPanel
 {
@@ -41,7 +32,7 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
 
     private static readonly Guid IidUnknown = new("00000000-0000-0000-c000-000000000046");
 
-    /// <summary>Only value here not present in the metadata; see the class remarks.</summary>
+    /// <summary>Jedyny identyfikator spoza metadanych; patrz opis klasy.</summary>
     private static readonly Guid IidInterop = new("ddb0472d-c911-4a1f-86d9-dc3d71a95f5a");
 
     private static readonly Guid IidControls = new("99fa3ff4-1742-42a6-902e-087d41f965ec");

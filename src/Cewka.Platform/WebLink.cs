@@ -3,22 +3,15 @@ using System.Diagnostics;
 namespace Cewka.Platform;
 
 /// <summary>
-/// Otwiera adres w przeglądarce ustawionej w systemie.
-///
-/// <para>W Windowsie i w Linuksie robi to ta sama droga: <see cref="ProcessStartInfo"/>
-/// z <c>UseShellExecute</c>, które w Linuksie sprowadza się do <c>xdg-open</c>. Program nie
-/// osadza żadnej przeglądarki i nie pobiera niczego sam — oddaje adres pulpitowi.</para>
+/// Otwiera adres w przeglądarce ustawionej w systemie (<c>UseShellExecute</c>, pod Linuksem
+/// <c>xdg-open</c>).
 /// </summary>
 public static class WebLink
 {
     /// <summary>
     /// Otwiera adres, jeśli jest adresem http albo https. Zwraca informację o powodzeniu.
-    ///
-    /// <para><b>Dlaczego sprawdzenie schematu.</b> Wartość idzie do powłoki systemu, która
-    /// wykonałaby również <c>file:</c> czy nazwę programu. Adresy pochodzą tutaj z metadanych
-    /// zestawu i z odpowiedzi serwisu GitHuba, czyli z dwóch miejsc, których program nie
-    /// kontroluje w całości — a to wystarczający powód, żeby nie podawać powłoce niczego,
-    /// czego się wcześniej nie obejrzało.</para>
+    /// Powłoka wykonałaby też <c>file:</c> czy nazwę programu, a adresy przychodzą między innymi
+    /// z odpowiedzi serwisu GitHuba.
     /// </summary>
     public static bool Open(string? address)
     {

@@ -14,26 +14,19 @@ internal interface IHandoffListener : IDisposable
 }
 
 /// <summary>
-/// Carries paths from a copy that is starting to the copy that is already running.
+/// Przenosi ścieżki z kopii, która startuje, do kopii już działającej.
+/// W Windows to potok nazwany; przestrzeń nazw potoków jest wspólna dla wszystkich zalogowanych,
+/// więc obie strony przyjmują tylko bieżącego użytkownika. Pod Linuksem potok .NET byłby gniazdem
+/// we wspólnym <c>TMPDIR</c>, dlatego gniazdo zakładane jest w katalogu jednego użytkownika.
 ///
-/// <para><b>Dlaczego dwa rozwiązania.</b> W Windows potok nazwany żyje w przestrzeni nazw
-/// jądra i nie zależy od żadnego katalogu. Przestrzeń ta jest jednak wspólna dla wszystkich
-/// zalogowanych, więc obie strony potoku przyjmują tylko bieżącego użytkownika: inaczej obca
-/// osoba mogłaby zająć nazwę i odbierać ścieżki otwieranych plików. W Linuksie potok nazwany
-/// .NET-u jest gniazdem dziedziny Uniksa w katalogu z <c>TMPDIR</c>, wspólnym dla wszystkich
-/// i zależnym od środowiska uruchomienia. Dlatego pod Linuksem gniazdo zakładamy sami,
-/// w katalogu należącym do jednego użytkownika.</para>
-///
-/// <para>Menedżer plików potrafi uruchomić kopię na każdy zaznaczony plik naraz. Gniazdo
-/// trzyma czekające połączenia w kolejce jądra; potok w Windows takiej kolejki nie ma, więc
-/// kolejna instancja potoku powstaje zaraz po przyjęciu połączenia, jeszcze przed odczytem
-/// wiadomości.</para>
+/// <para>Pułapka: potok nie ma kolejki połączeń jak gniazdo, więc następna instancja potoku
+/// powstaje zaraz po przyjęciu połączenia, jeszcze przed odczytem wiadomości.</para>
 /// </summary>
 internal static class HandoffChannel
 {
     /// <summary>
-    /// How long a sender keeps trying. Wystarczy na szparę między zdobyciem blokady a otwarciem
-    /// kanału; dłuższe czekanie tylko opóźniałoby otwarcie własnego okna, gdy nikogo nie ma.
+    /// Jak długo nadawca próbuje się połączyć. Wystarcza na szparę między zdobyciem blokady
+    /// a otwarciem kanału; dłużej opóźniałoby własne okno, gdy nikt nie słucha.
     /// </summary>
     private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(1);
 
@@ -41,8 +34,7 @@ internal static class HandoffChannel
     internal static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(2);
 
     /// <summary>
-    /// Waiting connections the kernel holds. Zaznaczenie całego albumu uruchamia kopię na każdy
-    /// plik, więc kolejka musi pomieścić kilkadziesiąt naraz.
+    /// Kolejka połączeń w jądrze. Zaznaczenie całego albumu uruchamia kopię na każdy plik.
     /// </summary>
     private const int Backlog = 64;
 
@@ -63,8 +55,8 @@ internal static class HandoffChannel
 
     private static void SendThroughPipe(string name, byte[] payload)
     {
-        // CurrentUserOnly sprawdza właściciela potoku, zanim cokolwiek zostanie wysłane:
-        // potok założony przez innego użytkownika kończy się wyjątkiem, a nie wyciekiem ścieżek.
+        // CurrentUserOnly sprawdza właściciela potoku przed wysłaniem: potok innego
+        // użytkownika kończy się wyjątkiem.
         using var client = new NamedPipeClientStream(".", name, PipeDirection.Out, PipeOptions.CurrentUserOnly);
         client.Connect((int)ConnectTimeout.TotalMilliseconds);
 
@@ -89,7 +81,7 @@ internal static class HandoffChannel
         {
             _name = name;
 
-            // Pierwsza instancja musi założyć potok, a nie dołączyć do cudzego o tej nazwie.
+            // Pierwsza instancja nie może dołączyć do cudzego potoku o tej nazwie.
             _ready = Create(name, PipeOptions.FirstPipeInstance);
         }
 
@@ -204,9 +196,8 @@ internal static class HandoffChannel
             _path = path;
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
-            // Po awarii zostaje plik gniazda i sam zablokowałby założenie nowego. Wolno go
-            // usunąć: o roli tej kopii rozstrzygnęła już blokada pliku, więc pod tym adresem
-            // na pewno nikt nie nasłuchuje.
+            // Plik gniazda po awarii blokowałby założenie nowego. Rolę rozstrzygnęła już
+            // blokada pliku, więc pod tym adresem nikt nie słucha.
             Usun(path);
 
             _socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);

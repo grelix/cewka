@@ -5,16 +5,11 @@ using System.Text;
 namespace Cewka.Platform.Linux;
 
 /// <summary>
-/// The part of libdbus needed to expose one object on the session bus.
+/// Część <c>libdbus-1</c> potrzebna do wystawienia jednego obiektu na szynie sesji. Biblioteka
+/// jest na każdym pulpicie Linuksa, więc obywa się bez dodatkowej zależności.
 ///
-/// <para><b>Dlaczego bezpośrednio.</b> To samo rozstrzygnięcie, co przy Media Foundation,
-/// panelu multimediów systemu Windows i rejestrze: biblioteka <c>libdbus-1</c> jest obecna
-/// wszędzie tam, gdzie MPRIS w ogóle ma znaczenie, czyli na każdym pulpicie Linuksa. Wciąganie
-/// zależności dla jednego obiektu na szynie byłoby nieproporcjonalne.</para>
-///
-/// <para><b>Wątek.</b> Połączenie nie jest bezpieczne wątkowo. Wszystkie wywołania poniżej
-/// wykonuje wyłącznie wątek utworzony przez <see cref="MprisService"/>; stan przekazywany jest
-/// do niego przez podmianę niezmiennego zdjęcia, a nie przez blokady.</para>
+/// <para>Pułapka: połączenie nie jest bezpieczne wątkowo. Wszystko poniżej woła wyłącznie wątek
+/// utworzony przez <see cref="MprisService"/>.</para>
 /// </summary>
 [SupportedOSPlatform("linux")]
 internal static unsafe class DBus
