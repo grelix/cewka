@@ -90,4 +90,71 @@ public sealed class AppClosingTests
             mainWindow.SetValue(null, previous);
         }
     });
+
+    /// <summary>
+    /// Folder przekazany tuż przed zamknięciem albo plik przekazany, gdy wcześniejsze otwieranie
+    /// jeszcze trwa, nie mogą czekać na przeglądanie w tle, które skończy się po zapisie kolejki.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SciezkaWymagajacaPrzegladaniaTrafiaDoZapisanejKolejki(bool earlierOpenPending) => Ui.Run(() =>
+    {
+        var directory = TestEnvironment.NewDirectory();
+        var address = new InstanceAddress(
+            "Cewka.test." + Guid.NewGuid().ToString("N"),
+            Path.Combine(directory, "instance.lock"),
+            Path.Combine(directory, "instance.sock"));
+
+        var mainWindow = typeof(App).GetField("_mainWindow", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var previous = mainWindow.GetValue(null);
+
+        var h = new PlayerHarness();
+        var window = new MainWindow(false, h.Player);
+        window.Show();
+        mainWindow.SetValue(null, window);
+
+        App.Instance = SingleInstance.TryAcquire(address);
+        Assert.NotNull(App.Instance);
+
+        try
+        {
+            typeof(App).GetMethod("AttachSingleInstance", BindingFlags.NonPublic | BindingFlags.Instance)!
+                .Invoke(Avalonia.Application.Current, null);
+
+            var track = h.Track("a");
+            var folder = Path.Combine(h.Directory, "album");
+            Directory.CreateDirectory(folder);
+            var inFolder = Path.Combine(folder, "b.wav");
+            File.Copy(track, inFolder);
+
+            string expected;
+            if (earlierOpenPending)
+            {
+                // Dokończenie wcześniejszego otwierania czeka w dyspozytorze, którego nikt nie pompuje.
+                _ = h.Player.OpenFromOutside([folder]);
+                expected = track;
+                Assert.True(SingleInstance.TryHandOff(address, [track]));
+            }
+            else
+            {
+                expected = inFolder;
+                Assert.True(SingleInstance.TryHandOff(address, [folder]));
+            }
+
+            Thread.Sleep(200);
+            window.Close();
+
+            Assert.Contains(expected, QueueStateStore.Load(h.QueueFile)?.Paths.ToArray() ?? []);
+        }
+        finally
+        {
+            if (window.IsVisible) window.Close();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+            App.ReleaseSingleInstance();
+            typeof(App).GetField("_closing", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, false);
+            mainWindow.SetValue(null, previous);
+        }
+    });
 }

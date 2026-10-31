@@ -1020,11 +1020,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// zamroziłby okno. Kolejne otwarcia czekają na poprzednie, więc dwa szybkie upuszczenia
     /// nie zamienią się kolejnością.
     /// </summary>
-    private Task Open(IEnumerable<string> paths, Action<List<string>> apply)
+    /// <param name="now">
+    /// Przeglądanie od razu, na wątku interfejsu: przy zamykaniu okna kolejka zapisuje się
+    /// zaraz potem, a otwieranie w tle skończyłoby się już po zapisie.
+    /// </param>
+    private Task Open(IEnumerable<string> paths, Action<List<string>> apply, bool now = false)
     {
         var list = paths.ToList();
 
-        if (_openChain.IsCompleted && !list.Any(Directory.Exists))
+        if (now || (_openChain.IsCompleted && !list.Any(Directory.Exists)))
         {
             var files = ExpandToAudioFiles(list, out _);
             if (files.Count > 0) apply(files);
@@ -1068,7 +1072,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <para>Wybór plików w programie (<c>Ctrl+O</c>) idzie inną drogą, bo tam dodanie jest już
     /// rozstrzygnięte.</para>
     /// </summary>
-    public Task OpenFromOutside(IEnumerable<string> paths) => Open(paths, files =>
+    /// <param name="now">Przy zamykaniu okna: bez przeglądania w tle, zob. <see cref="Open"/>.</param>
+    public Task OpenFromOutside(IEnumerable<string> paths, bool now = false) => Open(paths, files =>
     {
         switch (_settings.Current.FileOpenAction)
         {
@@ -1107,7 +1112,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
                 break;
         }
-    });
+    }, now);
 
     // ---------- Awaria wyjścia dźwięku ----------
 

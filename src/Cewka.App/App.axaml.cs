@@ -196,7 +196,7 @@ public partial class App : Application
 
         if (_mainWindow is null) return false;
 
-        foreach (var paths in messages) _mainWindow.ReceivePaths(paths);
+        foreach (var paths in messages) _mainWindow.ReceivePaths(paths, closing: _closing);
         return messages.Length > 0;
     }
 
