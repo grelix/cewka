@@ -29,6 +29,9 @@ public sealed class FocusRing : Control
     {
         IsHitTestVisible = false;
         Margin = new Thickness(-(Gap + Thickness));
+
+        // Pierścień leży poza kontrolką, więc nie może być przycinany do jej granic.
+        AdornerLayer.SetIsClipEnabled(this, false);
     }
 
     public IBrush? Brush { get => GetValue(BrushProperty); set => SetValue(BrushProperty, value); }

@@ -307,6 +307,9 @@ public sealed class ControlInputTests
                 var layer = AdornerLayer.GetAdornerLayer(button)!;
                 var ring = layer.Children.OfType<FocusRing>().Single();
                 Assert.Same(button, AdornerLayer.GetAdornedElement(ring));
+
+                // Pierścień wystaje poza kontrolkę, więc przycięty do jej granic zostałby z niego sam narożnik.
+                Assert.False(AdornerLayer.GetIsClipEnabled(ring));
                 Assert.True(window.TryFindResource("FocusRingBrush", window.ActualThemeVariant, out var brush));
                 Assert.Same(brush, ring.Brush);
                 Assert.True(ring.Bounds.Width >= button.Bounds.Width + 2 * (FocusRing.Gap + FocusRing.Thickness) - 0.5);

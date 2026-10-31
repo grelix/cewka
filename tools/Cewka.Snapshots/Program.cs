@@ -39,7 +39,8 @@ internal static class Program
         ColourIntensity Intensity = ColourIntensity.Recommended,
         bool QueueOpen = true,
         PlaceholderPalette Palette = PlaceholderPalette.BlueViolet,
-        bool QueueOverlay = false);
+        bool QueueOverlay = false,
+        string? Focus = null);
 
     private static readonly Shot[] Shots =
     [
@@ -94,6 +95,9 @@ internal static class Program
         new("minimum-panel-jasny", 760, 520, ThemeVariant.Light, true, QueueOpen: false),
         new("minimum-zwiniety", 760, 520, ThemeVariant.Dark, false, QueueOpen: false),
 
+        // Najdluzsze etykiety naglowka korektora (Zurucksetzen, Auto-Limiter) przy oknie minimalnym.
+        new("minimum-panel-niemiecki", 760, 520, ThemeVariant.Dark, true, Language: "de", QueueOpen: false),
+
         // Interfejs po angielsku: sprawdzenie, ze przelaczenie jezyka faktycznie dociera
         // do wszystkich napisow, a nie tylko do tych zlozonych na nowo.
         new("angielski", 1180, 680, ThemeVariant.Dark, true, Language: "en"),
@@ -105,6 +109,14 @@ internal static class Program
         new("barwy-intensywne", 1180, 680, ThemeVariant.Dark, true, Intensity: ColourIntensity.Intense),
         new("barwy-subtelne-jasny", 1180, 680, ThemeVariant.Light, true, Intensity: ColourIntensity.Subtle),
         new("barwy-intensywne-jasny", 1180, 680, ThemeVariant.Light, true, Intensity: ColourIntensity.Intense),
+
+        // Fokus z klawiatury: pierscien wokol przycisku, fadera i wiersza kolejki w obu motywach.
+        new("fokus-odtwarzanie-ciemny", 1200, 680, ThemeVariant.Dark, true, Focus: "PlayButton"),
+        new("fokus-odtwarzanie-jasny", 1200, 680, ThemeVariant.Light, true, Focus: "PlayButton"),
+        new("fokus-fader-ciemny", 1200, 680, ThemeVariant.Dark, true, Focus: "EqFader"),
+        new("fokus-fader-jasny", 1200, 680, ThemeVariant.Light, true, Focus: "EqFader"),
+        new("fokus-kolejka-ciemny", 1200, 680, ThemeVariant.Dark, true, Focus: "QueueRow"),
+        new("fokus-przelacznik-jasny", 1200, 680, ThemeVariant.Light, true, Focus: "PanelToggle"),
     ];
 
     /// <summary>
@@ -1060,6 +1072,8 @@ internal static class Program
             },
             beforeCapture: () =>
             {
+                if (shot.Focus is not null) FocusForCapture(window, shot);
+
                 MeasureQueueOverlap(window);
 
                 if (!shot.PanelOpen) return;
@@ -1067,6 +1081,29 @@ internal static class Program
                 var offset = Math.Abs(MeasureHeadingOffset(window));
                 if (offset > _worstHeadingOffset) _worstHeadingOffset = offset;
             });
+    }
+
+    /// <summary>Fokus z klawiatury na wskazanej kontrolce, żeby zrzut pokazał pierścień fokusu.</summary>
+    private static void FocusForCapture(MainWindow window, Shot shot)
+    {
+        var descendants = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window);
+        InputElement? target = shot.Focus switch
+        {
+            "EqFader" => descendants.OfType<EqFader>().Skip(3).FirstOrDefault(),
+            "QueueRow" => window.FindControl<ListBox>("QueueList")?.ContainerFromIndex(0),
+            var name => window.FindControl<Control>(name!),
+        };
+
+        if (target is null) throw new InvalidOperationException($"brak kontrolki do fokusu: {shot.Focus}");
+
+        target.Focus(NavigationMethod.Tab);
+
+        for (var i = 0; i < 3; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            window.Measure(new Size(shot.Width, shot.Height));
+            window.Arrange(new Rect(0, 0, shot.Width, shot.Height));
+        }
     }
 
     /// <summary>Largest heading misalignment seen in this run, in device-independent pixels.</summary>

@@ -81,6 +81,11 @@
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
   </Style>
 
+  <!-- Wyłączony przycisk-ikona wyraźnie przygaszony. -->
+  <Style Selector=":is(Button).icon:disabled">
+    <Setter Property="Opacity" Value="0.4" />
+  </Style>
+
   <!-- Wariant o pelnej jasnosci (transport, przewijanie utworow) -->
   <Style Selector=":is(Button).icon.strong">
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
@@ -344,18 +349,6 @@
 
   <Style Selector="Button.pill:pointerover">
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
-  </Style>
-
-  <!-- Wariant mniejszy, w wierszu nagłówka obok przełączników. -->
-  <Style Selector="Button.pill.small">
-    <Setter Property="Height" Value="24" />
-    <Setter Property="Padding" Value="11,0" />
-    <Setter Property="CornerRadius" Value="12" />
-    <Setter Property="FontSize" Value="11.5" />
-  </Style>
-
-  <Style Selector="Button.pill.small /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="CornerRadius" Value="12" />
   </Style>
 
   <!-- Wezwanie główne przy pustej kolejce: jedyne wejście dla nowej osoby, więc wyraźniejsze. -->
