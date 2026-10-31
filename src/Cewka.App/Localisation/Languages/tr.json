@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Kaldırmayı geri al",
   "QueueUndoClear": "Temizlemeyi geri al",
   "QueueUndoReplace": "Liste yüklemeyi geri al",
+  "QueueNowPlaying": "Çalınıyor: {0}",
   "AboutShortcuts": "Klavye kısayolları",
   "KeySpace": "Boşluk",
   "KeyCtrl": "Ctrl",

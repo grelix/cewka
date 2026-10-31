@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Cofnij usunięcie",
   "QueueUndoClear": "Cofnij wyczyszczenie",
   "QueueUndoReplace": "Cofnij wczytanie listy",
+  "QueueNowPlaying": "Odtwarzany: {0}",
   "AboutShortcuts": "Skróty klawiszowe",
   "KeySpace": "Spacja",
   "KeyCtrl": "Ctrl",

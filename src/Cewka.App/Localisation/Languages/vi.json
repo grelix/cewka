@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Hoàn tác xóa",
   "QueueUndoClear": "Hoàn tác xóa hàng đợi",
   "QueueUndoReplace": "Hoàn tác tải danh sách",
+  "QueueNowPlaying": "Đang phát: {0}",
   "AboutShortcuts": "Phím tắt",
   "KeySpace": "Phím cách",
   "KeyCtrl": "Ctrl",

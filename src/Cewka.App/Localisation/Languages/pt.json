@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Desfazer remoção",
   "QueueUndoClear": "Desfazer limpeza",
   "QueueUndoReplace": "Desfazer carregamento da lista",
+  "QueueNowPlaying": "Reproduzindo: {0}",
   "AboutShortcuts": "Atalhos de teclado",
   "KeySpace": "Espaço",
   "KeyCtrl": "Ctrl",

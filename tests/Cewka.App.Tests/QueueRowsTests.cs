@@ -42,6 +42,27 @@ public sealed class QueueRowsTests
     });
 
     [Fact]
+    public void NazwaGranegoWierszaMowiOOdtwarzaniu() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        h.Player.OpenPaths([h.Track("a"), h.Track("b")]);
+        Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 0));
+        var (first, second) = (h.Player.Queue[0], h.Player.Queue[1]);
+        var changed = new List<string?>();
+        second.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        var plain = second.AccessibleName;
+        Assert.Equal(string.Format(Strings.Current["QueueNowPlaying"], $"{first.Title}, {first.Artist}, {first.Duration}"), first.AccessibleName);
+
+        h.Player.PlayItem(second);
+        Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 1));
+
+        Assert.Contains(nameof(QueueItemViewModel.AccessibleName), changed);
+        Assert.Equal(string.Format(Strings.Current["QueueNowPlaying"], plain), second.AccessibleName);
+        Assert.Equal($"{first.Title}, {first.Artist}, {first.Duration}", first.AccessibleName);
+    });
+
+    [Fact]
     public void UsuniecieOstatniegoWierszaBezOdtwarzaniaZmieniaTytul() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();

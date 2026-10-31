@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Annuler la suppression",
   "QueueUndoClear": "Annuler le vidage",
   "QueueUndoReplace": "Annuler le chargement de la liste",
+  "QueueNowPlaying": "En cours de lecture : {0}",
   "AboutShortcuts": "Raccourcis clavier",
   "KeySpace": "Espace",
   "KeyCtrl": "Ctrl",

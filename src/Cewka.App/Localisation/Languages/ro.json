@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Anulează eliminarea",
   "QueueUndoClear": "Anulează golirea",
   "QueueUndoReplace": "Anulează încărcarea listei",
+  "QueueNowPlaying": "Se redă: {0}",
   "AboutShortcuts": "Comenzi rapide de la tastatură",
   "KeySpace": "Spațiu",
   "KeyCtrl": "Ctrl",

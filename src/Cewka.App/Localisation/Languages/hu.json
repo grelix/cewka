@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Eltávolítás visszavonása",
   "QueueUndoClear": "Ürítés visszavonása",
   "QueueUndoReplace": "Lista betöltésének visszavonása",
+  "QueueNowPlaying": "Most szól: {0}",
   "AboutShortcuts": "Billentyűparancsok",
   "KeySpace": "Szóköz",
   "KeyCtrl": "Ctrl",

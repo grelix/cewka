@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Annulla rimozione",
   "QueueUndoClear": "Annulla svuotamento",
   "QueueUndoReplace": "Annulla caricamento elenco",
+  "QueueNowPlaying": "In riproduzione: {0}",
   "AboutShortcuts": "Scorciatoie da tastiera",
   "KeySpace": "Spazio",
   "KeyCtrl": "Ctrl",

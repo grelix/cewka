@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Entfernen rückgängig machen",
   "QueueUndoClear": "Leeren rückgängig machen",
   "QueueUndoReplace": "Laden der Liste rückgängig machen",
+  "QueueNowPlaying": "Wird wiedergegeben: {0}",
   "AboutShortcuts": "Tastenkürzel",
   "KeySpace": "Leertaste",
   "KeyCtrl": "Strg",

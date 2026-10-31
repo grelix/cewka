@@ -1,3 +1,4 @@
+using Cewka.App.Localisation;
 using Cewka.Audio.Playback;
 
 namespace Cewka.App.ViewModels;
@@ -46,8 +47,18 @@ public sealed class QueueItemViewModel : ObservableObject
         set { if (Set(ref _duration, value)) Raise(nameof(AccessibleName)); }
     }
 
-    /// <summary>Nazwa wiersza dla czytnika ekranu: tytuł, wykonawca i czas trwania.</summary>
-    public string AccessibleName => $"{_title}, {_artist}, {_duration}";
+    /// <summary>
+    /// Nazwa wiersza dla czytnika ekranu: tytuł, wykonawca i czas trwania, a przy granym utworze
+    /// także to, że gra, bo kropka i pogrubienie są tylko na ekranie.
+    /// </summary>
+    public string AccessibleName
+    {
+        get
+        {
+            var name = $"{_title}, {_artist}, {_duration}";
+            return _isCurrent ? string.Format(Strings.Current["QueueNowPlaying"], name) : name;
+        }
+    }
 
     public double DurationSeconds { get; set; }
 
@@ -60,6 +71,7 @@ public sealed class QueueItemViewModel : ObservableObject
             if (!Set(ref _isCurrent, value)) return;
             Raise(nameof(NumberOpacity));
             Raise(nameof(MarkerOpacity));
+            Raise(nameof(AccessibleName));
         }
     }
 

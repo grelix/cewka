@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Vrátit odebrání",
   "QueueUndoClear": "Vrátit vymazání",
   "QueueUndoReplace": "Vrátit načtení seznamu",
+  "QueueNowPlaying": "Přehrává se: {0}",
   "AboutShortcuts": "Klávesové zkratky",
   "KeySpace": "Mezerník",
   "KeyCtrl": "Ctrl",

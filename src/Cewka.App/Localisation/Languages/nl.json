@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Verwijderen ongedaan maken",
   "QueueUndoClear": "Leegmaken ongedaan maken",
   "QueueUndoReplace": "Laden van lijst ongedaan maken",
+  "QueueNowPlaying": "Wordt afgespeeld: {0}",
   "AboutShortcuts": "Sneltoetsen",
   "KeySpace": "Spatie",
   "KeyCtrl": "Ctrl",

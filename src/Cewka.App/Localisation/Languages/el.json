@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Αναίρεση αφαίρεσης",
   "QueueUndoClear": "Αναίρεση εκκαθάρισης",
   "QueueUndoReplace": "Αναίρεση φόρτωσης λίστας",
+  "QueueNowPlaying": "Αναπαράγεται: {0}",
   "AboutShortcuts": "Συντομεύσεις πληκτρολογίου",
   "KeySpace": "Διάστημα",
   "KeyCtrl": "Ctrl",

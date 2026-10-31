@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Скасувати видалення",
   "QueueUndoClear": "Скасувати очищення",
   "QueueUndoReplace": "Скасувати завантаження списку",
+  "QueueNowPlaying": "Відтворюється: {0}",
   "AboutShortcuts": "Клавіатурні скорочення",
   "KeySpace": "Пробіл",
   "KeyCtrl": "Ctrl",

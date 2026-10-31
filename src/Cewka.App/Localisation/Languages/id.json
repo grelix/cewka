@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Batalkan penghapusan",
   "QueueUndoClear": "Batalkan pengosongan",
   "QueueUndoReplace": "Batalkan pemuatan daftar",
+  "QueueNowPlaying": "Sedang diputar: {0}",
   "AboutShortcuts": "Pintasan papan ketik",
   "KeySpace": "Spasi",
   "KeyCtrl": "Ctrl",

@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Undo removal",
   "QueueUndoClear": "Undo clearing",
   "QueueUndoReplace": "Undo playlist load",
+  "QueueNowPlaying": "Now playing: {0}",
   "AboutShortcuts": "Keyboard shortcuts",
   "KeySpace": "Space",
   "KeyCtrl": "Ctrl",

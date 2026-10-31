@@ -259,6 +259,7 @@
   "QueueUndoRemove": "Отменить удаление",
   "QueueUndoClear": "Отменить очистку",
   "QueueUndoReplace": "Отменить загрузку списка",
+  "QueueNowPlaying": "Воспроизводится: {0}",
   "AboutShortcuts": "Сочетания клавиш",
   "KeySpace": "Пробел",
   "KeyCtrl": "Ctrl",
