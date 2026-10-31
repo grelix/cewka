@@ -18,6 +18,10 @@
     <ProjectReference Include="..\Cewka.Platform\Cewka.Platform.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Cewka.Audio.Tests" />
+  </ItemGroup>
+
   <!--
     Biblioteka natywna budowana skryptami z katalogu native/. Zachowanie ukladu
     runtimes/{rid}/native pozwala publikacji jednoplikowej spakowac wlasciwy wariant

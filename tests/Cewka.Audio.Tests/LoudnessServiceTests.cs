@@ -118,18 +118,36 @@ public sealed class LoudnessServiceTests : IDisposable
         Assert.Equal(-20 * Math.Log10(0.5) - 1, gain!.Value.GainDecibels, precision: 6);
     }
 
-    /// <summary>Wpis sprzed pomiaru szczytu nie podbija utworu, dopóki analiza go nie uzupełni.</summary>
+    /// <summary>
+    /// Wpis sprzed pomiaru szczytu nie podbija utworu i trafia do ponownej analizy. Po niej
+    /// wzmocnienie rośnie do granicy wyznaczonej szczytem.
+    /// </summary>
     [Fact]
-    public void CachedRecordWithoutPeakIsNotBoosted()
+    public void CachedRecordWithoutPeakIsNotBoostedUntilRemeasured()
     {
         var file = CreateFile("old.flac");
-        using var service = ServiceWithCache(file, integratedLufs: -30, samplePeak: null);
+        var measured = new List<string>();
+        using var announced = new ManualResetEventSlim();
+
+        using var service = ServiceWithCache(file, integratedLufs: -30, samplePeak: null, measure: (path, _) =>
+        {
+            lock (measured) measured.Add(path);
+            return new LoudnessMeasurement(-30, 0.5);
+        });
+        service.Measured += (_, _) => announced.Set();
 
         var gain = service.GetTrackGain(new QueueEntry { Path = file });
 
         Assert.NotNull(gain);
         Assert.Equal(0, gain!.Value.GainDecibels, precision: 6);
         Assert.Equal(-12, gain.Value.ProgrammeLevelDecibels, precision: 6);
+
+        Assert.True(announced.Wait(TimeSpan.FromSeconds(5)), "plik nie trafił do analizy");
+        lock (measured) Assert.Equal([file], measured);
+
+        var remeasured = service.GetTrackGain(new QueueEntry { Path = file });
+        Assert.NotNull(remeasured);
+        Assert.Equal(-20 * Math.Log10(0.5) - 1, remeasured!.Value.GainDecibels, precision: 6);
     }
 
     /// <summary>Zamknięcie przerywa trwający pomiar, zamiast czekać na koniec długiego pliku.</summary>
@@ -139,42 +157,45 @@ public sealed class LoudnessServiceTests : IDisposable
         using var started = new ManualResetEventSlim();
         var cancelled = false;
 
+        // Oczekiwanie w Dispose dłuższe niż pomiar: wątek kończy się w nim tylko wtedy, gdy pomiar
+        // dostał sygnał przerwania.
         var service = new LoudnessService(Path.Combine(_directory, "loudness.json"), (_, token) =>
         {
             started.Set();
             cancelled = token.WaitHandle.WaitOne(TimeSpan.FromSeconds(10));
             token.ThrowIfCancellationRequested();
             return new LoudnessMeasurement(-20, 0.5);
-        });
+        }, shutdownWait: TimeSpan.FromSeconds(30));
 
         service.GetTrackGain(new QueueEntry { Path = CreateFile("long.flac") });
         Assert.True(started.Wait(TimeSpan.FromSeconds(5)), "pomiar się nie zaczął");
 
-        var clock = System.Diagnostics.Stopwatch.StartNew();
+        service.Dispose();
         service.Dispose();
 
         Assert.True(cancelled, "pomiar nie dostał sygnału przerwania");
-        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(1.5), $"zamykanie trwało {clock.Elapsed.TotalSeconds:F1} s");
+        Assert.True(service.WaitForWorker(TimeSpan.Zero), "wątek analizy przeżył zamknięcie");
     }
 
     /// <summary>
     /// Pomiar, który nie sprawdza przerwania i kończy się po czasie oczekiwania w Dispose,
     /// nie może sięgnąć po zwolnioną kolejkę: wyjątek w wątku tła zakończyłby proces.
-    /// Wynik spóźnionego pomiaru nie jest już ogłaszany.
+    /// Wynik spóźnionego pomiaru nie jest już ogłaszany, a kolejny plik nie jest mierzony.
     /// </summary>
     [Fact]
     public void MeasurementOutlivingDisposeEndsQuietly()
     {
         using var started = new ManualResetEventSlim();
-        using var finished = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var calls = 0;
 
         var service = new LoudnessService(Path.Combine(_directory, "loudness.json"), (_, _) =>
         {
+            Interlocked.Increment(ref calls);
             started.Set();
-            Thread.Sleep(2600);
-            finished.Set();
+            release.Wait();
             return new LoudnessMeasurement(-20, 0.5);
-        });
+        }, shutdownWait: TimeSpan.FromMilliseconds(50));
 
         var announced = false;
         service.Measured += (_, _) => announced = true;
@@ -184,10 +205,13 @@ public sealed class LoudnessServiceTests : IDisposable
         Assert.True(started.Wait(TimeSpan.FromSeconds(5)), "pomiar się nie zaczął");
 
         service.Dispose();
-        Assert.True(finished.Wait(TimeSpan.FromSeconds(5)), "pomiar się nie skończył");
-        Thread.Sleep(300);
+        Assert.False(service.WaitForWorker(TimeSpan.Zero), "pomiar skończył się przed zamknięciem");
+
+        release.Set();
+        Assert.True(service.WaitForWorker(TimeSpan.FromSeconds(5)), "wątek analizy się nie skończył");
 
         Assert.False(announced);
+        Assert.Equal(1, calls);
     }
 
     // ---------- pomocnicze ----------
@@ -199,7 +223,8 @@ public sealed class LoudnessServiceTests : IDisposable
         return path;
     }
 
-    private LoudnessService ServiceWithCache(string file, double integratedLufs, double? samplePeak)
+    private LoudnessService ServiceWithCache(string file, double integratedLufs, double? samplePeak,
+        Func<string, CancellationToken, LoudnessMeasurement?>? measure = null)
     {
         var info = new FileInfo(file);
         var record = new Dictionary<string, object?>
@@ -213,6 +238,8 @@ public sealed class LoudnessServiceTests : IDisposable
 
         var cache = Path.Combine(_directory, "loudness.json");
         File.WriteAllText(cache, JsonSerializer.Serialize(new[] { record }));
-        return new LoudnessService(cache) { TargetLufs = -18 };
+        var service = measure is null ? new LoudnessService(cache) : new LoudnessService(cache, measure);
+        service.TargetLufs = -18;
+        return service;
     }
 }

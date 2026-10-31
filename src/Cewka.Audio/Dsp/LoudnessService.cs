@@ -61,7 +61,9 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
     private readonly CancellationTokenSource _stopping = new();
     private readonly Func<string, CancellationToken, LoudnessMeasurement?> _measure;
     private readonly Thread _worker;
+    private readonly TimeSpan _shutdownWait;
     private volatile bool _dirty;
+    private int _disposed;
 
     public LoudnessService() : this(Path.Combine(AppPaths.CacheDirectory, "loudness.json"))
     {
@@ -73,9 +75,17 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
 
     /// <summary>Z własnym pomiarem w miejsce dekodowania pliku; do testów.</summary>
     public LoudnessService(string cachePath, Func<string, CancellationToken, LoudnessMeasurement?> measure)
+        : this(cachePath, measure, TimeSpan.FromSeconds(2))
+    {
+    }
+
+    /// <param name="shutdownWait">Jak długo Dispose czeka na koniec trwającego pomiaru.</param>
+    internal LoudnessService(string cachePath, Func<string, CancellationToken, LoudnessMeasurement?> measure,
+        TimeSpan shutdownWait)
     {
         _cachePath = cachePath;
         _measure = measure;
+        _shutdownWait = shutdownWait;
         Load();
 
         _worker = new Thread(WorkerLoop)
@@ -316,18 +326,25 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
         }
     }
 
+    /// <summary>Czeka na koniec wątku analizy; do testów.</summary>
+    internal bool WaitForWorker(TimeSpan timeout) => _worker.Join(timeout);
+
     public void Dispose()
     {
-        if (_stopping.IsCancellationRequested) return;
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
         _stopping.Cancel();
         _pending.CompleteAdding();
 
-        // Kolekcja zwalniana tylko po faktycznym końcu wątku. Wątek, który jeszcze mierzy plik
-        // niesprawdzający przerwania, sięgnąłby po nią i padł z wyjątkiem kończącym proces.
-        var finished = _worker.Join(2000);
+        // Kolekcja i źródło przerwania zwalniane tylko po faktycznym końcu wątku. Wątek, który
+        // jeszcze mierzy plik niesprawdzający przerwania, sięgnąłby po nie i padł z wyjątkiem
+        // kończącym proces.
+        var finished = _worker.Join(_shutdownWait);
 
         if (_dirty) Save();
-        if (finished) _pending.Dispose();
+        if (!finished) return;
+
+        _pending.Dispose();
+        _stopping.Dispose();
     }
 }
