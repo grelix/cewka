@@ -87,6 +87,11 @@ public sealed class AudioGraph
     /// <summary>Runs on the audio thread for every buffer.</summary>
     public void Process(Span<float> buffer, int frames)
     {
+        // Jedna próbka NaN albo nieskończona z uszkodzonego pliku zatrułaby stan filtrów na stałe.
+        var samples = buffer[..(frames * _channels)];
+        for (var i = 0; i < samples.Length; i++)
+            if (!float.IsFinite(samples[i])) samples[i] = 0;
+
         Normalisation.Process(buffer, frames);
 
         // Kompensacja potrzebuje wiedzieć, jak głośno naprawdę gra muzyka, a widok na obie

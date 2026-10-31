@@ -127,8 +127,17 @@ public sealed class SpectrumAnalyser : IAudioProcessor
 
     private static float Normalise(float value) => Math.Clamp(MathF.Sqrt(value) * 1.6f, 0f, 1f);
 
-    private static void Publish(ref float field, float value) =>
+    private static void Publish(ref float field, float value)
+    {
+        // NaN raz zapisany zostałby na zawsze: każde porównanie z nim jest fałszywe.
+        if (float.IsNaN(value) || float.IsNaN(field))
+        {
+            field = 0;
+            return;
+        }
+
         field = value > field ? value : field + (value - field) * Decay;
+    }
 
     /// <summary>
     /// In-place iterative radix-2 FFT. Small and self-contained: pulling in a maths library

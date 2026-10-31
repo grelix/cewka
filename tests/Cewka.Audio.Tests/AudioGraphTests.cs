@@ -47,4 +47,50 @@ public class AudioGraphTests
 
         Assert.InRange(Peak(buffer, skipFrames: 9600), 0.85, 0.9);
     }
+
+    /// <summary>
+    /// Jedna próbka NaN z uszkodzonego pliku nie może wyciszyć odtwarzania: kolejne bufory
+    /// grają normalnie, a fala na ekranie nie zamiera.
+    /// </summary>
+    [Fact]
+    public void NaNInTheInputDoesNotPoisonTheChain()
+    {
+        var graph = new AudioGraph();
+        graph.Equaliser.SetGain(0, 6);
+        graph.Equaliser.SetGain(5, 6);
+        graph.Loudness.Enabled = true;
+        graph.Volume.Target = 0.5f;
+        graph.Prepare(SampleRate, Channels);
+
+        var damaged = Sine(1000, 0.25, 4800, SampleRate);
+        damaged[1000] = float.NaN;
+        damaged[2001] = float.PositiveInfinity;
+        ProcessInBlocks(graph, damaged, 480);
+
+        var after = Sine(1000, 0.25, SampleRate, SampleRate);
+        ProcessInBlocks(graph, after, 480);
+
+        Assert.True(AllFinite(damaged));
+        Assert.True(Goertzel(after, 0, 1000, SampleRate, skipFrames: 9600) > 0.1);
+        Assert.True(float.IsFinite(graph.Analyser.Level) && graph.Analyser.Level > 0);
+    }
+
+    /// <summary>Analizator sam w sobie też wraca do pracy po próbce NaN.</summary>
+    [Fact]
+    public void AnalyserRecoversFromNaN()
+    {
+        var analyser = new SpectrumAnalyser();
+        analyser.Prepare(SampleRate, Channels);
+
+        // Próbka NaN w każdym oknie analizy.
+        var damaged = Sine(1000, 0.5, 4800, SampleRate);
+        for (var frame = 100; frame < 4800; frame += 200) damaged[frame * Channels] = float.NaN;
+        ProcessInBlocks(analyser, damaged, 480);
+
+        var clean = Sine(1000, 0.5, 9600, SampleRate);
+        ProcessInBlocks(analyser, clean, 480);
+
+        Assert.True(float.IsFinite(analyser.Level) && analyser.Level > 0);
+        Assert.True(float.IsFinite(analyser.MidBand) && analyser.MidBand > 0);
+    }
 }
