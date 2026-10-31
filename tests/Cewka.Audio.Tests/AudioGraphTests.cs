@@ -75,6 +75,36 @@ public class AudioGraphTests
         Assert.True(float.IsFinite(graph.Analyser.Level) && graph.Analyser.Level > 0);
     }
 
+    /// <summary>
+    /// Po przewinięciu silnik czyści tor. W linii opóźnienia limitera, która pracuje także po
+    /// jego wyłączeniu, ani w filtrach nie może zostać stary dźwięk: cisza na wejściu daje
+    /// dokładną ciszę na wyjściu od pierwszej próbki.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ResetLeavesNoStaleAudioInTheChain(bool limiterEnabled)
+    {
+        var graph = new AudioGraph();
+        graph.Equaliser.SetGain(0, 6);
+        graph.Loudness.Enabled = true;
+        graph.VirtualBass.Enabled = true;
+        graph.StereoWidth.Enabled = true;
+        graph.Crossfeed.Enabled = true;
+        graph.Limiter.Enabled = limiterEnabled;
+        graph.Prepare(SampleRate, Channels);
+
+        var loud = Sine(1000, 0.9, 4800, SampleRate);
+        ProcessInBlocks(graph, loud, 480);
+
+        graph.Reset();
+
+        var silence = new float[480 * Channels];
+        graph.Process(silence, 480);
+
+        Assert.All(silence, sample => Assert.Equal(0f, sample));
+    }
+
     /// <summary>Analizator sam w sobie też wraca do pracy po próbce NaN.</summary>
     [Fact]
     public void AnalyserRecoversFromNaN()
