@@ -32,6 +32,19 @@
     #define CEWKA_API __attribute__((visibility("default")))
 #endif
 
+/*
+    Wersja zestawu funkcji. Ta sama stala jest w NativeAudio.AbiVersion; zmienia sie przy kazdej
+    zmianie sygnatur lub znaczenia eksportow. Biblioteka nie jest w repozytorium, wiec stara
+    kopia moze trafic do nowego programu, a wywolanie funkcji o innej sygnaturze konczy sie
+    awaria procesu zamiast bledu.
+*/
+#define CEWKA_ABI_VERSION 2
+
+CEWKA_API int cewka_abi_version(void)
+{
+    return CEWKA_ABI_VERSION;
+}
+
 /* ============================================================================
    Kontekst i wyliczanie urzadzen
    ============================================================================ */
@@ -140,7 +153,7 @@ CEWKA_API int cewka_devices_is_default(int index)
 typedef void (*cewka_data_cb)(void* pUser, float* pFrames, ma_uint32 frameCount);
 
 /* Zdarzenia urzadzenia przekazywane do warstwy zarzadzanej. */
-#define CEWKA_DEVICE_LOST 1
+#define CEWKA_DEVICE_STOPPED_UNREQUESTED 1
 
 typedef void (*cewka_notify_cb)(void* pUser, int event);
 
@@ -168,10 +181,12 @@ static void cewka__device_data(ma_device* pDevice, void* pOutput, const void* pI
 }
 
 /*
-    Zatrzymanie, ktorego nie zlecila aplikacja, oznacza utrate urzadzenia: odlaczenie
-    sluchawek, uniewaznienie strumienia przez sterownik. Dla urzadzenia wybranego jawnie
-    miniaudio nie przekierowuje strumienia, wiec bez tej wiadomosci warstwa zarzadzana
-    uwazalaby, ze nadal gra.
+    Zatrzymanie, ktorego nie zlecila aplikacja: odlaczenie sluchawek, uniewaznienie strumienia
+    przez sterownik albo przekierowanie strumienia na nowe urzadzenie domyslne, po ktorym
+    miniaudio samo uruchamia je ponownie. Rozroznia je warstwa zarzadzana, sprawdzajac po
+    chwili cewka_device_is_started. Zgloszenie moze tez nie przyjsc wcale (nieudane zatrzymanie
+    po odlaczeniu urzadzenia wybranego jawnie), dlatego warstwa zarzadzana sprawdza stan
+    rowniez okresowo.
 
     Pulapka: wywolanie przychodzi z watku roboczego miniaudio, wiec odbiorca nie moze tu
     zamykac ani zatrzymywac urzadzenia.
@@ -186,7 +201,7 @@ static void cewka__device_notification(const ma_device_notification* pNotificati
     if (pNotification->type == ma_device_notification_type_stopped && !self->stopRequested) {
         cewka_notify_cb notify = self->notify;
         if (notify != NULL) {
-            notify(self->user, CEWKA_DEVICE_LOST);
+            notify(self->user, CEWKA_DEVICE_STOPPED_UNREQUESTED);
         }
     }
 }
@@ -620,13 +635,46 @@ static void cewka__ensure_mp3_seek_table(cewka_decoder* self)
     mp3->pSeekPoints    = points;
 }
 
+/*
+    Pulapka: ma_decoder_seek_to_pcm_frame aktualizuje kursor dekodera tylko przy powodzeniu,
+    a zaplecze (dr_mp3, dr_flac) moglo sie w tym czasie przesunac. Po porazce kursor bierze sie
+    wiec z zaplecza, przeliczony na ramki wyjsciowe.
+*/
+static void cewka__sync_cursor_with_backend(cewka_decoder* self)
+{
+    ma_uint64 backendCursor = 0;
+    ma_uint32 backendRate = 0;
+
+    if (self->decoder.pBackend == NULL) {
+        return;
+    }
+
+    if (ma_data_source_get_cursor_in_pcm_frames(self->decoder.pBackend, &backendCursor) != MA_SUCCESS ||
+        ma_data_source_get_data_format(self->decoder.pBackend, NULL, NULL, &backendRate, NULL, 0) != MA_SUCCESS) {
+        return;
+    }
+
+    if (backendRate == 0 || backendRate == self->decoder.outputSampleRate) {
+        self->decoder.readPointerInPCMFrames = backendCursor;
+    } else {
+        self->decoder.readPointerInPCMFrames =
+            ma_calculate_frame_count_after_resampling(self->decoder.outputSampleRate, backendRate, backendCursor);
+    }
+}
+
 CEWKA_API int cewka_decoder_seek(void* handle, ma_uint64 frameIndex)
 {
     if (handle == NULL) return (int)MA_INVALID_ARGS;
 
     cewka_decoder* self = (cewka_decoder*)handle;
     cewka__ensure_mp3_seek_table(self);
-    return (int)ma_decoder_seek_to_pcm_frame(&self->decoder, frameIndex);
+
+    ma_result result = ma_decoder_seek_to_pcm_frame(&self->decoder, frameIndex);
+    if (result != MA_SUCCESS) {
+        cewka__sync_cursor_with_backend(self);
+    }
+
+    return (int)result;
 }
 
 /* Polozenie dekodera w ramkach wyjsciowych; po nieudanym przewinieciu mowi, gdzie naprawde stoi. */
