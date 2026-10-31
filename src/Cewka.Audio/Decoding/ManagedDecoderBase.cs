@@ -15,6 +15,7 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
     private int _pendingOffset;
     private int _pendingFrames;
     private bool _endOfStream;
+    private bool _reconfigured;
 
     private BitrateMeter? _meter;
 
@@ -29,8 +30,13 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
     public abstract bool CanSeek { get; }
     public int InstantaneousBitrate => _meter?.Kilobits ?? 0;
 
-    /// <summary>Called by the subclass once the underlying reader knows the source format.</summary>
-    protected void Configure(int sourceRate, int sourceChannels, int targetRate, int targetChannels, BitrateMeter? meter = null)
+    /// <summary>
+    /// Called by the subclass once the underlying reader knows the source format.
+    /// <paramref name="layout"/> names the speaker of each source channel, which the downmix needs.
+    /// </summary>
+    protected void Configure(
+        int sourceRate, int sourceChannels, int targetRate, int targetChannels, BitrateMeter? meter,
+        IReadOnlyList<Speaker> layout)
     {
         _meter = meter;
         _meter?.Configure(targetRate);
@@ -41,12 +47,33 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
         Channels = targetChannels;
 
         _converter = new SampleConverter(
-            sourceChannels, sourceRate, targetChannels, targetRate, AudioQuality.ResamplerFilterOrder);
+            sourceChannels, sourceRate, targetChannels, targetRate, AudioQuality.ResamplerFilterOrder, layout);
+    }
+
+    /// <summary>
+    /// Przebudowuje konwerter, gdy źródło zmieniło format w trakcie strumienia. HE-AAC z niejawnym
+    /// SBR podaje przy otwarciu częstotliwość rdzenia, a pierwsza próbka przychodzi w podwójnej.
+    /// Wolno wywołać tylko z <see cref="ReadSource"/>, zanim do bufora trafiła jakakolwiek ramka;
+    /// <see cref="ReadSource"/> zwraca wtedy zero, a klasa bazowa pyta ponownie z buforem
+    /// dobranym do nowej liczby kanałów. Pozycja i długość liczone są w ramkach wyjściowych,
+    /// więc zostają bez zmian.
+    /// </summary>
+    protected void Reconfigure(int sourceRate, int sourceChannels, IReadOnlyList<Speaker> layout)
+    {
+        var previous = _converter;
+        _converter = new SampleConverter(
+            sourceChannels, sourceRate, Channels, SampleRate, previous.FilterOrder, layout);
+        previous.Dispose();
+
+        SourceSampleRate = sourceRate;
+        SourceChannels = sourceChannels;
+        _reconfigured = true;
     }
 
     /// <summary>
     /// Fills <paramref name="destination"/> with at most <paramref name="frames"/> source frames
-    /// and returns how many were written. Zero means the stream has ended.
+    /// and returns how many were written. Zero means the stream has ended, unless
+    /// <see cref="Reconfigure"/> was called during this read.
     /// </summary>
     protected abstract int ReadSource(Span<float> destination, int frames);
 
@@ -69,9 +96,12 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
                 var need = (int)Math.Clamp(_converter.RequiredSourceFrames(wanted - produced), 1, MaxSourceFramesPerPull);
                 EnsureSourceCapacity(need);
 
+                _reconfigured = false;
                 var got = ReadSource(_source.AsSpan(0, need * SourceChannels), need);
                 if (got <= 0)
                 {
+                    if (_reconfigured) continue;
+
                     _endOfStream = true;
                     break;
                 }

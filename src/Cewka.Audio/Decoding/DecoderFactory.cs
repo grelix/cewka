@@ -23,6 +23,18 @@ public static class DecoderFactory
             ? SystemCodecs.UnavailableReason ?? AudioFileFormatDetector.DescribeUnsupported(format)
             : AudioFileFormatDetector.DescribeUnsupported(format);
 
+    /// <summary>Kod przyczyny dla formatu, którego nie da się odtworzyć na tym komputerze.</summary>
+    public static DecoderFailure ClassifyUnsupported(AudioFileFormat format) => format switch
+    {
+        AudioFileFormat.Unknown => DecoderFailure.UnrecognisedFormat,
+        AudioFileFormat.Wma => DecoderFailure.OutOfScopeFormat,
+        _ when SystemCodecs.Handles(format) && !SystemCodecs.IsAvailable => DecoderFailure.SystemCodecsUnavailable,
+        _ => DecoderFailure.Unspecified,
+    };
+
+    private static AudioException Unsupported(AudioFileFormat format) =>
+        new(ClassifyUnsupported(format), DescribeUnsupported(format));
+
     /// <summary>
     /// Opens <paramref name="path"/> and converts it to <paramref name="outputSampleRate"/>
     /// and <paramref name="outputChannels"/>.
@@ -31,7 +43,7 @@ public static class DecoderFactory
     public static IAudioDecoder Open(string path, int outputSampleRate, int outputChannels)
     {
         var format = AudioFileFormatDetector.Detect(path);
-        if (!IsSupported(format)) throw new AudioException(DescribeUnsupported(format));
+        if (!IsSupported(format)) throw Unsupported(format);
 
         // Kodeki systemowe czytaja plik po sciezce, wiec omijaja strumien zliczajacy;
         // dla nich chwilowa przeplywnosc nie jest mierzona.
@@ -75,6 +87,6 @@ public static class DecoderFactory
             AudioFileFormat.Opus =>
                 new OpusDecoder(stream, ownsStream, outputSampleRate, outputChannels, meter),
 
-            _ => throw new AudioException(AudioFileFormatDetector.DescribeUnsupported(format)),
+            _ => throw Unsupported(format),
         };
 }

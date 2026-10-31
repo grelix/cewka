@@ -1,3 +1,5 @@
+using Cewka.Audio.Decoding;
+
 namespace Cewka.Audio;
 
 /// <summary>
@@ -10,4 +12,16 @@ public sealed class AudioException : Exception
     public AudioException(string message) : base(message) { }
 
     public AudioException(string message, Exception inner) : base(message, inner) { }
+
+    public AudioException(DecoderFailure reason, string message, Exception? inner = null)
+        : base(message, inner)
+    {
+        Reason = reason;
+    }
+
+    /// <summary>
+    /// Kod przyczyny błędu dekodowania, przeznaczony do lokalizacji komunikatu.
+    /// <see cref="Exception.Message"/> niesie polski opis zastępczy z <see cref="DecoderFailures.Describe"/>.
+    /// </summary>
+    public DecoderFailure Reason { get; }
 }

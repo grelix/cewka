@@ -27,9 +27,6 @@ public sealed class TrackMetadata
     /// <summary>Codec name as reported by the tag reader, for example <c>FLAC</c>.</summary>
     public string? Codec { get; init; }
 
-    /// <summary>Embedded cover art, in whatever format the file stored it.</summary>
-    public byte[]? CoverArt { get; init; }
-
     /// <summary>Track gain from ReplayGain tags, in decibels.</summary>
     public double? ReplayGainTrack { get; init; }
 

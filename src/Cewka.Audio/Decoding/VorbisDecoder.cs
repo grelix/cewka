@@ -21,10 +21,12 @@ internal sealed class VorbisDecoder : ManagedDecoderBase
         }
         catch (Exception ex)
         {
-            throw new AudioException($"Plik Ogg Vorbis jest uszkodzony lub nieczytelny — {ex.Message}", ex);
+            DecoderFailures.Log($"NVorbis nie otworzył pliku: {ex.Message}");
+            throw DecoderFailures.Create(DecoderFailure.DamagedFile, ex);
         }
 
-        Configure(_reader.SampleRate, _reader.Channels, outputSampleRate, outputChannels, meter);
+        Configure(_reader.SampleRate, _reader.Channels, outputSampleRate, outputChannels, meter,
+            ChannelLayouts.Vorbis(_reader.Channels));
 
         TotalFrames = _reader.TotalSamples <= 0
             ? 0

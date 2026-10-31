@@ -38,7 +38,7 @@ public static class SystemCodecs
     public static IAudioDecoder Open(string path, int outputSampleRate, int outputChannels, BitrateMeter? meter)
     {
         if (!IsAvailable)
-            throw new AudioException(UnavailableReason ?? "Brak kodeków systemowych.");
+            throw DecoderFailures.Create(DecoderFailure.SystemCodecsUnavailable);
 
         if (OperatingSystem.IsWindows())
             return new MediaFoundationDecoder(path, outputSampleRate, outputChannels, meter);
@@ -46,7 +46,7 @@ public static class SystemCodecs
         if (OperatingSystem.IsLinux())
             return new GStreamerDecoder(path, outputSampleRate, outputChannels, meter);
 
-        throw new AudioException(UnavailableReason ?? "Brak kodeków systemowych.");
+        throw DecoderFailures.Create(DecoderFailure.SystemCodecsUnavailable);
     }
 
     private static Availability Detect()
