@@ -10,9 +10,11 @@ public sealed class GainStage : IAudioProcessor
 {
     private readonly double _smoothingSeconds;
 
+    private const double SnapDistance = 1e-6;
+
     private int _channels = 2;
     private double _coefficient = 0.5;
-    private float _current = 1;
+    private double _current = 1;
     private float _target = 1;
 
     public GainStage(double smoothingSeconds = 0.02) => _smoothingSeconds = smoothingSeconds;
@@ -40,16 +42,34 @@ public sealed class GainStage : IAudioProcessor
 
     public void Process(Span<float> buffer, int frames)
     {
-        // Nothing to do when the gain is at unity and not moving.
-        if (Math.Abs(_current - 1f) < 1e-6f && Math.Abs(_target - 1f) < 1e-6f) return;
+        var target = _target;
+
+        // Wartość bieżąca w double, bo w float przyrost ginął w zaokrągleniu przed dojściem do
+        // celu. Przyciąganie pozwala szybkiej ścieżce zadziałać, a przy celu zero nie zostawia
+        // mnożnika w liczbach subnormalnych.
+        if (Math.Abs(target - _current) < SnapDistance) _current = target;
+
+        if (_current == target)
+        {
+            // Nothing to do when the gain is at unity and not moving.
+            if (target == 1f) return;
+            if (target == 0f)
+            {
+                buffer[..(frames * _channels)].Clear();
+                return;
+            }
+        }
 
         for (var frame = 0; frame < frames; frame++)
         {
-            _current += (float)((_target - _current) * _coefficient);
+            _current += (target - _current) * _coefficient;
 
+            var gain = (float)_current;
             var baseIndex = frame * _channels;
-            for (var c = 0; c < _channels; c++) buffer[baseIndex + c] *= _current;
+            for (var c = 0; c < _channels; c++) buffer[baseIndex + c] *= gain;
         }
+
+        if (Math.Abs(target - _current) < SnapDistance) _current = target;
     }
 
     /// <summary>Jumps straight to the target, for use at a track change.</summary>

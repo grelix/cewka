@@ -68,10 +68,10 @@ internal static class Signals
     }
 
     /// <summary>Największa różnica między sąsiednimi próbkami jednego kanału: miara skoku w przebiegu.</summary>
-    public static double LargestStep(float[] buffer, int channel)
+    public static double LargestStep(float[] buffer, int channel, int fromFrame = 0)
     {
         var largest = 0.0;
-        for (var frame = 1; frame < buffer.Length / Channels; frame++)
+        for (var frame = fromFrame + 1; frame < buffer.Length / Channels; frame++)
         {
             var step = Math.Abs(buffer[frame * Channels + channel] - buffer[(frame - 1) * Channels + channel]);
             largest = Math.Max(largest, step);
@@ -97,6 +97,17 @@ internal static class Signals
 
     public static void ProcessInBlocks(AudioGraph graph, float[] buffer, int blockFrames) =>
         ProcessInBlocks(graph.Process, buffer, blockFrames);
+
+    /// <summary>Przetwarza w miejscu ramki od <paramref name="fromFrame"/> do <paramref name="toFrame"/> całego sygnału.</summary>
+    public static void ProcessRange(IAudioProcessor processor, float[] buffer, int fromFrame, int toFrame,
+        int blockFrames = 480)
+    {
+        for (var start = fromFrame; start < toFrame; start += blockFrames)
+        {
+            var count = Math.Min(blockFrames, toFrame - start);
+            processor.Process(buffer.AsSpan(start * Channels, count * Channels), count);
+        }
+    }
 
     public static void ProcessInBlocks(BlockProcessor process, float[] buffer, int blockFrames)
     {
