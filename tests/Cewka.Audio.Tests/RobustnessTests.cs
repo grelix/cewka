@@ -40,16 +40,16 @@ public class RobustnessTests
     }
 
     /// <summary>
-    /// Cały łańcuch ze wszystkimi stopniami włączonymi pracuje przy każdym spotykanym
-    /// próbkowaniu: wynik skończony i w skali, a pasmo korektora 1 kHz podbija swoją częstotliwość
-    /// o nastawione 6 dB.
+    /// Cały łańcuch ze wszystkimi stopniami włączonymi jest stabilny przy każdym spotykanym
+    /// próbkowaniu. Limiter jest wyłączony, a sygnał cichy, więc końcowe obcięcie do skali nie
+    /// działa i nie może ukryć rozbiegającego się filtru.
     /// </summary>
     [Theory]
     [InlineData(16000)]
     [InlineData(32000)]
     [InlineData(44100)]
     [InlineData(96000)]
-    public void WholeChainWorksAtEverySampleRate(int sampleRate)
+    public void WholeChainStaysBoundedAtEverySampleRate(int sampleRate)
     {
         var graph = new AudioGraph();
         graph.Equaliser.SetGain(5, 6);
@@ -61,23 +61,71 @@ public class RobustnessTests
         graph.Crossfeed.Enabled = true;
         graph.DynamicRange.Enabled = true;
         graph.DynamicRange.Strength = 50;
-        graph.Volume.TargetDecibels = -20;
+        graph.Limiter.Enabled = false;
         graph.Prepare(sampleRate, Channels);
 
         var random = new Random(42);
-        var noise = new float[sampleRate * Channels];
-        for (var i = 0; i < noise.Length; i++) noise[i] = (float)(random.NextDouble() - 0.5);
+        var noise = new float[2 * sampleRate * Channels];
+        for (var i = 0; i < noise.Length; i++) noise[i] = (float)(0.1 * (random.NextDouble() - 0.5));
         ProcessInBlocks(graph, noise, 512);
 
+        var peak = Peak(noise, skipFrames: sampleRate / 2);
         Assert.True(AllFinite(noise));
-        Assert.True(Peak(noise) <= 1.0);
+        Assert.InRange(peak, 0.02, 0.5);
+    }
 
-        var equaliser = new Equaliser();
-        equaliser.SetGain(5, 6);
-        equaliser.Prepare(sampleRate, Channels);
+    /// <summary>Pasmo korektora 1 kHz w łańcuchu podbija swoją częstotliwość o nastawione 6 dB.</summary>
+    [Theory]
+    [InlineData(16000)]
+    [InlineData(32000)]
+    [InlineData(44100)]
+    [InlineData(96000)]
+    public void EqualiserBandHitsItsGainInTheChain(int sampleRate)
+    {
+        var graph = new AudioGraph();
+        graph.Equaliser.SetGain(5, 6);
+        graph.Prepare(sampleRate, Channels);
+
         var tone = Sine(1000, 0.1, sampleRate, sampleRate);
-        ProcessInBlocks(equaliser, tone, 512);
+        ProcessInBlocks(graph, tone, 512);
+
         Assert.InRange(Db(Goertzel(tone, 0, 1000, sampleRate, sampleRate / 5) / 0.1), 5.7, 6.3);
+    }
+
+    /// <summary>
+    /// Przy niskim próbkowaniu półka poszerzenia i filtr crossfeedu nadal działają: boki
+    /// w górze pasma rosną, a bas z jednego kanału przechodzi do drugiego.
+    /// </summary>
+    [Theory]
+    [InlineData(16000)]
+    [InlineData(32000)]
+    [InlineData(48000)]
+    public void StereoStagesWorkInTheChainAtEverySampleRate(int sampleRate)
+    {
+        var widened = new AudioGraph();
+        widened.StereoWidth.Enabled = true;
+        widened.StereoWidth.Strength = 100;
+        widened.Volume.TargetDecibels = -12;
+        widened.Prepare(sampleRate, Channels);
+
+        var side = SideOnly(3000, 0.25, sampleRate, sampleRate);
+        ProcessInBlocks(widened, side, 512);
+        var sideGainDb = Db(Goertzel(side, 0, 3000, sampleRate, sampleRate / 5) / 0.25) + 12;
+        Assert.InRange(sideGainDb, 4.0, 5.3);
+
+        var crossed = new AudioGraph();
+        crossed.Crossfeed.Enabled = true;
+        crossed.Crossfeed.Strength = 100;
+        crossed.Prepare(sampleRate, Channels);
+
+        var left = new float[sampleRate * Channels];
+        for (var frame = 0; frame < sampleRate; frame++)
+            left[frame * Channels] = (float)(0.25 * Math.Sin(2 * Math.PI * 60 * frame / sampleRate));
+        ProcessInBlocks(crossed, left, 512);
+
+        var separationDb = Db(Goertzel(left, 0, 60, sampleRate, sampleRate / 5) /
+                              Goertzel(left, 1, 60, sampleRate, sampleRate / 5));
+        Assert.InRange(separationDb, 4.0, 5.2);
     }
 
     /// <summary>Półka powyżej 0,45 częstotliwości próbkowania jest przepustem, nie wzmocnieniem całego pasma.</summary>
