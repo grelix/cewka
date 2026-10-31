@@ -556,7 +556,10 @@ public class PlaybackEngineTests
         using var gate = new ManualResetEventSlim(true);
         SyntheticDecoder? stuck = null;
 
-        var a = h.Track("a", 10, A, d => stuck ??= new SyntheticDecoder(d.TotalFrames, A, d.Channels, d.SampleRate) { Gate = gate });
+        // Zawiesza się tylko pierwszy dekoder; nowa sesja może otworzyć ten sam plik od nowa.
+        var a = h.Track("a", 10, A, d => stuck is null
+            ? stuck = new SyntheticDecoder(d.TotalFrames, A, d.Channels, d.SampleRate) { Gate = gate }
+            : d);
         var b = h.Track("b", 10, B);
 
         h.Engine.SetQueue([a, b]);
