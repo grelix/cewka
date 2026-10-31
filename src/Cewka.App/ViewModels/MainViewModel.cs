@@ -2050,9 +2050,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     private void OnTrackChanged(int index)
     {
-        // Numer ze zdarzenia powstał na innym wątku i mógł się zestarzeć po edycji kolejki.
-        var live = _engine.CurrentIndex;
-        if (live >= 0) index = live;
+        // Numer ze zdarzenia powstał na innym wątku i mógł się zestarzeć; rozstrzyga stan silnika
+        // teraz. Gdy nic nie jest bieżące, zdarzenie dotyczy utworu, który już nie gra.
+        index = _engine.CurrentIndex;
 
         if (index < 0 || index >= Queue.Count) return;
         if (_engine.Queue.ElementAtOrDefault(index) is not { } entry) return;

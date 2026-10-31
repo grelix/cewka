@@ -48,6 +48,69 @@ public sealed class QueueSessionTests
     });
 
     [Fact]
+    public void ZaleglaZmianaUtworuPoUsunieciuGrajacegoNieOznaczaInnegoWiersza() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        h.Player.OpenPaths([h.Track("a"), h.Track("b"), h.Track("c")]);
+        Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 0));
+
+        QueueTrackChangeWithoutPumping(h, () => h.Player.MoveInQueue(2, 1));
+        h.Player.RemoveFromQueue(h.Player.Queue[0]);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        AssertNothingCurrent(h);
+    });
+
+    [Fact]
+    public void ZaleglaZmianaUtworuPoWczytaniuListyNieOznaczaWiersza() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        h.Player.OpenPaths([h.Track("a"), h.Track("b"), h.Track("c")]);
+        Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 0));
+
+        var list = Path.Combine(h.Directory, "lista.m3u8");
+        File.WriteAllText(list, $"#EXTM3U\n{h.Track("d")}\n{h.Track("e")}\n");
+
+        QueueTrackChangeWithoutPumping(h, () => h.Player.MoveInQueue(2, 1));
+        h.Player.LoadPlaylist(list);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        AssertNothingCurrent(h);
+    });
+
+    /// <summary>
+    /// Wykonuje zmianę kolejki i czeka, aż zgłoszenie silnika trafi do dyspozytora, ale go nie
+    /// obsługuje. Własny odbiorca jest dopisany po modelu widoku, więc jego sygnał oznacza, że
+    /// zadanie modelu już czeka w kolejce.
+    /// </summary>
+    private static void QueueTrackChangeWithoutPumping(PlayerHarness h, Action change)
+    {
+        // Bez zwalniania: spóźnione zgłoszenie z puli wątków może jeszcze wywołać Set.
+        var raised = new ManualResetEventSlim();
+        Action<int> signal = _ => raised.Set();
+        h.Engine.TrackChanged += signal;
+
+        try
+        {
+            change();
+            Assert.True(raised.Wait(5000));
+        }
+        finally
+        {
+            h.Engine.TrackChanged -= signal;
+        }
+    }
+
+    private static void AssertNothingCurrent(PlayerHarness h)
+    {
+        Assert.Equal(-1, h.Engine.CurrentIndex);
+        Assert.Equal(-1, h.Player.CurrentIndex);
+        Assert.DoesNotContain(h.Player.Queue, row => row.IsCurrent);
+        Assert.Equal(Idle, h.Player.Title);
+        Assert.Equal(string.Empty, h.Player.FormatBadge);
+    }
+
+    [Fact]
     public void ZapisBezOdtwarzaniaZachowujePrzywroconaPozycje() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
