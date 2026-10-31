@@ -278,24 +278,31 @@ public sealed class WindowLayoutTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void OknoZapisaneNaOdlaczonymEkranieMiesciSieNaPozostalym(bool maximized)
+    [InlineData(2500, 1400, false)]
+    [InlineData(2500, 1400, true)]
+    [InlineData(1000, 700, false)]
+    public void OknoZapisaneNaOdlaczonymEkranieStajeNaSrodkuGlownego(int savedWidth, int savedHeight, bool maximized)
     {
         Ui.Run(() =>
         {
-            var probe = new Window();
-            var area = probe.Screens.All.First().WorkingArea;
+            // Daleko poza każdym ekranem, jak monitor odłączony od ostatniego uruchomienia.
             App.Settings.Current.WindowControls = WindowControlsPosition.Right;
             App.Settings.Current.Window = new WindowGeometry
             {
-                X = area.Right, Y = 0, Width = 2500, Height = 1400, Maximized = maximized,
+                X = 100_000, Y = 0, Width = savedWidth, Height = savedHeight, Maximized = maximized,
             };
 
             var window = new MainWindow();
 
             try
             {
+                var primary = window.Screens.Primary!;
+                var area = primary.WorkingArea;
+                var width = (int)(window.Width * primary.Scaling);
+                var height = (int)(window.Height * primary.Scaling);
+                Assert.InRange(window.Position.X, area.X + (area.Width - width) / 2 - 1, area.X + (area.Width - width) / 2 + 1);
+                Assert.InRange(window.Position.Y, area.Y + (area.Height - height) / 2 - 1, area.Y + (area.Height - height) / 2 + 1);
+
                 window.Show();
                 Dispatcher.UIThread.RunJobs();
                 if (maximized)
