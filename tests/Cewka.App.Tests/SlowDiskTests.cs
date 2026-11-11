@@ -1160,6 +1160,27 @@ public sealed class SlowDiskTests
         Assert.Equal(RepeatMode.Queue, saved.ReadRepeat());
     });
 
+    /// <summary>
+    /// Plik przekazany przy starcie, którego sprawdzenie kończy się, zanim otwarcie dojdzie do czekania:
+    /// otwarcie znika wtedy z listy oczekujących jeszcze w trakcie wywołania, a start nie może na tym
+    /// polegać. Tak padł program uruchomiony z plikiem w próbnej instalacji na GitHubie.
+    /// </summary>
+    [Fact]
+    public void StartZPlikiemSprawdzonymOdRazuOtwieraGoIZastepujePoprzedniaKolejke() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        var a = h.Track("a");
+        var b = h.Track("b");
+        var c = h.Track("c");
+        Save(h, [a, b], 1, 30);
+        h.Player.RunExpansion = work => Task.FromResult(work());
+
+        var starting = h.Player.OpenAtStart([c]);
+
+        Assert.True(h.PumpUntil(() => starting.IsCompleted, OpenTimeout));
+        Assert.Equal([c], h.Engine.QueuePaths.ToArray());
+    });
+
     /// <summary>Otwarcie niedokończone przy poprzednim zamknięciu staje za przywróconą kolejką, a nie zamiast niej.</summary>
     [Fact]
     public void StartZeSciezkaBezPlikowDokanczaOtwarcieZaKolejka() => Ui.Run(() =>

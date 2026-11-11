@@ -20,11 +20,16 @@ public class NextIndexTests
         h.Engine.Shuffle = true;
         h.Engine.Repeat = RepeatMode.Queue;
         h.Engine.SetQueue(Tracks(h, 6), startIndex: 0);
-        h.PumpUntil(() => h.TrackChanges.Contains(0) && h.Engine.PlaybackOrder.CurrentPosition >= 0);
+
+        // Stan silnika, a nie zgłoszenie zmiany utworu: zgłoszenie idzie przez pulę wątków, a pompowanie
+        // w tym czasie przesuwało odtwarzanie dalej, aż bieżący wpis bywał ostatnim w rundzie.
+        h.PumpUntil(() => h.Engine.CurrentIndex == 0 && h.Engine.PlaybackOrder.CurrentPosition >= 0);
 
         // Wszystko za bieżącym wpisem jest błędne, więc następny pochodzi już z kolejnej rundy.
         var before = h.Engine.PlaybackOrder;
         var position = before.CurrentPosition;
+        Assert.True(position >= 0 && position + 2 < before.Entries.Count,
+            $"bieżący wpis na miejscu {position} z {before.Entries.Count}, numer {h.Engine.CurrentIndex}");
         foreach (var entry in before.Entries.Skip(position + 2)) entry.OpenFailure = TrackFailureReason.DamagedFile;
         var current = before.Entries[position + 1];
         h.Engine.PlayIndex(h.Engine.Queue.ToList().IndexOf(current));

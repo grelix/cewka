@@ -2284,7 +2284,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// niedostępnym dysku sieciowym samo sprawdzenie istnienia potrafi trwać kilkanaście sekund.
     /// </param>
     /// <param name="resumed">Otwarcie z poprzedniego uruchomienia: dokłada bez uruchamiania odtwarzania.</param>
-    private Task Open(IEnumerable<string> paths, string action, bool now = false, bool resumed = false)
+    private Task Open(IEnumerable<string> paths, string action, bool now = false, bool resumed = false) =>
+        Open(paths, action, out _, now, resumed);
+
+    /// <param name="opened">
+    /// Utworzone otwarcie. Z listy oczekujących potrafi zniknąć jeszcze przed powrotem stąd, gdy
+    /// sprawdzanie skończy się od razu, więc kto go potrzebuje, bierze je stąd, a nie z listy.
+    /// </param>
+    private Task Open(IEnumerable<string> paths, string action, out PendingOpen opened, bool now = false, bool resumed = false)
     {
         // Otwarcie plików w radiu: akcja odtwarzająca przełącza na pliki, samo dopisanie zostawia radio z komunikatem.
         if (_radioMode && !resumed)
@@ -2309,6 +2316,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         var pending = new PendingOpen(ExpandInBackground(list, action), request, apply);
+        opened = pending;
 
         _pendingOpens.Add(pending);
 
@@ -2325,9 +2333,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     private Task<(List<string> Files, string? Unreadable)> ExpandInBackground(List<string> paths, string action) =>
-        Task.Run(() => action == PlaylistOpen
+        RunExpansion(() => action == PlaylistOpen
             ? (ReadPlaylist(paths[0]).Paths.ToList(), (string?)null)
             : (ExpandToAudioFiles(paths, out var unreadable), unreadable));
+
+    /// <summary>
+    /// Uruchamia sprawdzanie ścieżek poza wątkiem interfejsu. Testy podstawiają wykonanie od razu,
+    /// czyli przypadek, w którym pula wątków skończy sprawdzanie, zanim otwarcie dojdzie do czekania.
+    /// </summary>
+    internal Func<Func<(List<string> Files, string? Unreadable)>, Task<(List<string> Files, string? Unreadable)>> RunExpansion { get; set; } =
+        work => Task.Run(work);
 
     /// <summary>Dokłada wynik sprawdzania; przy przywracaniu kolejka przestaje czekać także wtedy, gdy nic nie zostało.</summary>
     private void ApplyExpanded(PendingOpen pending, List<string> files)
@@ -3410,9 +3425,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         var state = QueueStateStore.Load(_queueFile);
 
-        OpenFromOutside(paths);
+        Open(paths, OutsideOpen, out var opened);
 
-        if (_settings.Current.RestoreSession) RestoreQueue(state, _pendingOpens[^1].Expansion);
+        if (_settings.Current.RestoreSession) RestoreQueue(state, opened.Expansion);
 
         ResumeOpens(state);
         return _openChain;
