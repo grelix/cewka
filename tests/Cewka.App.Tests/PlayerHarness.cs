@@ -69,6 +69,11 @@ internal sealed class PlayerHarness : IDisposable
             }),
             RadioFile, radioCatalog ?? DefaultRadioCatalog, radioLogos);
         Player.Radio.StepDelay = TimeSpan.Zero;
+
+        // Tryb automatyczny efektów nie pyta maszyny o baterię i animacje systemu (Windows Server ma je
+        // wyłączone); testy ograniczania ruchu podstawiają własną odpowiedź.
+        Player.AutomaticReduction = () => false;
+        Player.UpdateEffects();
     }
 
     public string RadioFile => System.IO.Path.Combine(Directory, "radio.json");

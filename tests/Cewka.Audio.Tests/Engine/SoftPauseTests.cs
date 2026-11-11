@@ -43,13 +43,17 @@ public class SoftPauseTests
         PlayWithFullBuffer(h, h.Track("a", 10, A));
 
         h.Output.ClearSamples();
-        h.Output.StartAutoPump(independentOfSystemClock: true);
         h.Engine.Pause();
 
         // Stan jest pauzą od razu; wątek interfejsu nie czeka na wyciszenie.
         Assert.Equal(PlaybackState.Paused, h.Engine.State);
         Assert.True(h.Engine.IsSoftPausing);
 
+        // Rampa wyciszenia liczy się w ramkach, a zatrzymanie wyjścia w czasie zegarowym. Ramki rampy
+        // pompuje test sam, zanim ten czas minie: wątek naśladujący urządzenie nie nadąża za zegarem
+        // na obciążonej maszynie i wyjście stawało, zanim rampa zeszła do zera.
+        h.PumpPeriods((int)(EngineHarness.Frames(0.25) / 128) + 1);
+        h.Output.StartAutoPump(independentOfSystemClock: true);
         EngineHarness.WaitUntil(() => !h.Engine.IsSoftPausing);
         h.Output.StopAutoPump();
 

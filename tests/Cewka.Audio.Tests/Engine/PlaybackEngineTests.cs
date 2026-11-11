@@ -727,6 +727,8 @@ public class PlaybackEngineTests
         Assert.Equal(EngineHarness.Frames(0.3), EngineHarness.CountFrames(h.Output.Samples, B));
         Assert.Single(h.Opened, name => name == "a.wav");
 
+        // Zgłoszenia błędów idą przez pulę wątków, niezależnie od zgłoszenia końca kolejki.
+        EngineHarness.WaitUntil(() => !h.Failures.IsEmpty);
         var failure = Assert.Single(h.Failures);
         Assert.Equal(0, failure.Index);
         Assert.Equal(TrackFailureReason.PlaybackInterrupted, failure.Failure.Reason);
@@ -745,7 +747,9 @@ public class PlaybackEngineTests
 
         h.Engine.SetQueue([x, y]);
         h.PumpUntil(() => h.Finished > 0);
+        EngineHarness.WaitUntil(() => h.Failures.Count >= 2);
 
+        // Po końcu kolejki wątek dekodujący ma czas na ewentualne ponowne próby; żadnej nie ma być.
         h.PumpPeriods(20);
         Thread.Sleep(300);
 
@@ -768,8 +772,9 @@ public class PlaybackEngineTests
 
         h.PumpUntil(() => h.Opened.Count(name => name == "a.wav") >= 2);
 
+        // Zgłoszenie błędu idzie przez pulę wątków i może przyjść już po ponownym otwarciu pierwszego wpisu.
+        EngineHarness.WaitUntil(() => h.Failures.Any(f => f.Index == 1));
         Assert.Equal(0, h.Finished);
-        Assert.Contains(h.Failures, f => f.Index == 1);
     }
 
     /// <summary>
@@ -785,6 +790,7 @@ public class PlaybackEngineTests
 
         h.Engine.SetQueue([a]);
         h.PumpUntil(() => h.Finished > 0);
+        EngineHarness.WaitUntil(() => !h.Failures.IsEmpty);
 
         var failure = Assert.Single(h.Failures);
         Assert.Equal(TrackFailureReason.FileUnavailable, failure.Failure.Reason);

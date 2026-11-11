@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text;
 using Cewka.Audio.Streaming;
+using Cewka.Audio.Tests.Live;
 using Xunit;
 
 namespace Cewka.Audio.Tests.Streaming.Hls;
@@ -87,7 +88,7 @@ public sealed class HlsStreamTests
         return [.. all];
     }
 
-    [Fact]
+    [AacDecoderFact]
     public async Task MasterLeadsToTheAudioVariantAndVideoIsNeverFetched()
     {
         var audio = Adts(20);
@@ -111,7 +112,7 @@ public sealed class HlsStreamTests
         Assert.Equal(["/master.m3u8", "/audio.m3u8", "/s.ts"], site.Paths);
     }
 
-    [Fact]
+    [AacDecoderFact]
     public async Task PlaylistOfAStationWithoutMasterPlaysDirectly()
     {
         var audio = Adts(20);
@@ -127,7 +128,7 @@ public sealed class HlsStreamTests
         Assert.Equal(audio, await ReadAsync(opened, int.MaxValue));
     }
 
-    [Fact]
+    [AacDecoderFact]
     public async Task EverySegmentOfAGrowingPlaylistPlaysOnceAndInOrder()
     {
         byte[][] segments = [Adts(10), Adts(10, 10), Adts(10, 20), Adts(10, 30)];
@@ -154,7 +155,7 @@ public sealed class HlsStreamTests
         Assert.Equal(expected, await ReadAsync(opened, expected.Length));
     }
 
-    [Fact]
+    [AacDecoderFact]
     public async Task LivePlaylistStartsNearItsEnd()
     {
         var audio = Adts(10);
@@ -174,7 +175,7 @@ public sealed class HlsStreamTests
         Assert.Equal(["/live.m3u8", "/s7.ts", "/s8.ts", "/s9.ts"], site.Paths);
     }
 
-    [Fact]
+    [AacDecoderFact]
     public async Task LongTargetDurationIsNotAStall()
     {
         await using var site = new Site(path => path == "/live.m3u8"
@@ -186,7 +187,7 @@ public sealed class HlsStreamTests
         Assert.Equal(TimeSpan.FromSeconds(90), opened.StallTimeout);
     }
 
-    [Fact]
+    [AacDecoderFact]
     public async Task PackedAudioLosesItsTagInEverySegment()
     {
         var tag = new byte[10 + 300];
@@ -302,7 +303,7 @@ public sealed class HlsStreamTests
         Assert.Equal(1, local.ConnectionCount);
     }
 
-    [Fact]
+    [AacDecoderFact]
     public async Task SegmentThatVanishedDuringPlayIsATransientFailure()
     {
         var audio = Adts(20);
@@ -322,7 +323,7 @@ public sealed class HlsStreamTests
         Assert.Equal(LiveFailureReason.NotFound, failure.Failure.Reason);
     }
 
-    [Fact]
+    [AacDecoderFact]
     public async Task ReloadThatFailsIsATransientFailure()
     {
         var loads = 0;

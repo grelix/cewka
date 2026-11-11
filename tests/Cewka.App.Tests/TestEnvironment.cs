@@ -29,6 +29,9 @@ internal static class TestEnvironment
 
         // Testy układu sceny liczą kadr na całym ekranie; margines ma własne testy.
         ScreenMargin.Default = SceneMargin.None;
+
+        // Kraj startowy radia nie zależy od regionu maszyny; testy regionu podstawiają go same.
+        Cewka.App.ViewModels.RadioViewModel.RegionProvider = () => null;
     }
 
     /// <summary>Nowy, pusty katalog na pliki jednego testu.</summary>
@@ -60,8 +63,15 @@ public static class TestApp
 /// </summary>
 public static class Ui
 {
-    private static readonly Lazy<HeadlessUnitTestSession> Session =
-        new(() => HeadlessUnitTestSession.StartNew(typeof(TestApp), AvaloniaTestIsolationLevel.PerAssembly));
+    private static readonly Lazy<HeadlessUnitTestSession> Session = new(() =>
+    {
+        var session = HeadlessUnitTestSession.StartNew(typeof(TestApp), AvaloniaTestIsolationLevel.PerAssembly);
+
+        // Aplikacja bierze przy starcie język systemu. Testy zakładają polski niezależnie od maszyny;
+        // testy innych języków przełączają go na czas testu.
+        session.Dispatch(() => Localisation.Strings.Current.SetLanguage("pl"), CancellationToken.None).GetAwaiter().GetResult();
+        return session;
+    });
 
     public static void Run(Action action) =>
         Session.Value.Dispatch(action, CancellationToken.None).GetAwaiter().GetResult();
