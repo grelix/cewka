@@ -423,7 +423,10 @@ public class PlaybackEngineTests
         var b = h.Track("b", 10, B);
 
         h.Engine.SetQueue([a, b]);
-        h.PumpUntil(() => h.Engine.Position > TimeSpan.FromSeconds(0.1));
+
+        // Zgłoszenie startu pierwszego wpisu idzie przez pulę wątków; liczone przed nim, przyszłoby
+        // po PlayIndex i wyglądało jak zmiana na inny wpis.
+        h.PumpUntil(() => h.Engine.Position > TimeSpan.FromSeconds(0.1) && h.TrackChanges.Contains(0));
 
         var before = h.TrackChanges.Count;
         h.Engine.PlayIndex(1);

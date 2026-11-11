@@ -76,6 +76,13 @@ public class PlaybackEngineLiveEndToEndTests
     private static LiveSource Station(FakeRadioServer server) =>
         new("s1", "Stacja", [server.Url()], AllowLocalAddress: true);
 
+    /// <summary>
+    /// Atrapa wyjścia pompuje szybciej niż czas rzeczywisty, więc na obciążonej maszynie bufor potrafi
+    /// opróżnić się, zanim dane przyjdą z gniazda, i silnik chwilowo buforuje. Dane są już wysłane, więc
+    /// stacja wraca do grania; test czeka na to zamiast sprawdzać stan z jednej chwili.
+    /// </summary>
+    private static void PumpUntilPlaying(Rig rig) => rig.Harness.PumpUntil(() => rig.Engine.LiveState == LiveState.Playing);
+
     private static async Task SendAndHold(Stream stream, string head, byte[] body, CancellationToken ct)
     {
         await stream.RespondAsync(head, body, ct);
@@ -100,7 +107,7 @@ public class PlaybackEngineLiveEndToEndTests
         Assert.Equal("Wykonawca - Utwór", rig.Engine.LiveTitle);
         Assert.Equal("Wykonawca - Utwór", rig.Titles.Single());
         Assert.Equal(LiveCodec.Mp3, rig.Engine.LiveCodec);
-        Assert.Equal(LiveState.Playing, rig.Engine.LiveState);
+        PumpUntilPlaying(rig);
         Assert.Contains(LiveState.Playing, rig.States);
         Assert.Equal("Stacja", rig.Engine.LiveInfo!.IcyName);
         Assert.True(rig.Engine.LiveInfo.HasMetadata);
@@ -222,7 +229,7 @@ public class PlaybackEngineLiveEndToEndTests
 
         Assert.True(Signals.AllFinite(h.Output.Samples));
         Assert.Equal(0, rig.Failed);
-        Assert.Equal(LiveState.Playing, rig.Engine.LiveState);
+        PumpUntilPlaying(rig);
         Assert.Empty(h.Failures);
     }
 
