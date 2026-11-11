@@ -35,6 +35,21 @@ public class LoudnessAnalyserTests
         Assert.InRange(measured!.Value, levelDbfs - 0.3, levelDbfs + 0.3);
     }
 
+    /// <summary>Okno pamięta tylko najnowsze bloki: wcześniejszy głośny fragment przestaje się liczyć.</summary>
+    [Fact]
+    public void WindowForgetsTheOldestBlocks()
+    {
+        var analyser = new LoudnessAnalyser(SampleRate, Channels, maxBlocks: 50);
+
+        FeedSine(analyser, frequency: 1000, amplitude: Math.Pow(10, -10.0 / 20), seconds: 10);
+        Assert.Equal(50, analyser.BlockCount);
+
+        FeedSine(analyser, frequency: 1000, amplitude: Math.Pow(10, -30.0 / 20), seconds: 10);
+
+        Assert.Equal(50, analyser.BlockCount);
+        Assert.InRange(analyser.ComputeIntegratedLoudness()!.Value, -30.5, -29.5);
+    }
+
     /// <summary>Silence has no measurable loudness; the absolute gate must reject every block.</summary>
     [Fact]
     public void SilenceHasNoMeasurableLoudness()

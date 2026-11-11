@@ -55,5 +55,12 @@ internal sealed class SyntheticDecoder(long totalFrames, float value, int channe
         if (!IgnoreSeeks) _position = Math.Clamp(frame, 0, TotalFrames);
     }
 
-    public void Dispose() => DisposeCount++;
+    /// <summary>Wołane przy zamknięciu, np. żeby zatrzymać wątek dekodujący w tej chwili.</summary>
+    public Action? Disposing { get; init; }
+
+    public void Dispose()
+    {
+        DisposeCount++;
+        Disposing?.Invoke();
+    }
 }

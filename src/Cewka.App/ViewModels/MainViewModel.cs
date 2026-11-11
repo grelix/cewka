@@ -1,10 +1,13 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
+using System.Runtime.CompilerServices;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using Cewka.App.Controls;
 using Cewka.App.Localisation;
 using Cewka.App.Models;
+using Cewka.App.Radio;
 using Cewka.App.Services;
 using Cewka.Audio;
 using Cewka.Audio.Decoding;
@@ -12,6 +15,7 @@ using Cewka.Audio.Devices;
 using Cewka.Audio.Dsp;
 using Cewka.Audio.Metadata;
 using Cewka.Audio.Playback;
+using Cewka.Audio.Streaming;
 using Cewka.Platform;
 
 namespace Cewka.App.ViewModels;
@@ -41,7 +45,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private IReadOnlyList<Color> _palette = [];
     private bool _usingPlaceholderCover = true;
     private bool _panelOpen;
-    private bool _queueOpen;
+    private bool _queuePinned;
     private bool _isPlaying;
     private bool _isSeeking;
     private double _progress;
@@ -52,33 +56,38 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _formatBadge = string.Empty;
 
     public MainViewModel(SettingsStore settings)
-        : this(settings, new PlaybackEngine(), new LoudnessService(), AppPaths.QueueFile)
+        : this(settings, new PlaybackEngine(), new LoudnessService(), AppPaths.QueueFile, radioLogos: RadioLogoService.CreateDefault())
     {
     }
 
-    /// <summary>Dla testów: silnik, pomiar głośności i plik kolejki podane z zewnątrz.</summary>
-    internal MainViewModel(SettingsStore settings, PlaybackEngine engine, LoudnessService loudness, string queueFile)
+    /// <summary>Dla testów: silnik, pomiar głośności, plik kolejki i sprawdzanie ścieżek podane z zewnątrz.</summary>
+    internal MainViewModel(
+        SettingsStore settings, PlaybackEngine engine, LoudnessService loudness, string queueFile, PathProbe? paths = null,
+        string? radioFile = null, Func<RadioCatalog>? radioCatalog = null, RadioLogoService? radioLogos = null)
     {
         _settings = settings;
+        _paths = paths ?? PathProbe.Disk;
         _queueFile = queueFile;
         _queueWriter = new QueueStateWriter(queueFile);
         var s = settings.Current;
 
-        _panelOpen = s.PanelOpen;
-        _queueOpen = s.QueueOpen;
+        _queuePinned = s.QueuePinned;
 
         // Jakość konwersji i rozmiar bufora czytane są przy tworzeniu dekodera i urządzenia,
         // więc muszą stać na miejscu, zanim cokolwiek powstanie.
         AudioQuality.ResamplerFilterOrder = AudioPreferences.FilterOrder(s.ResamplerQuality);
 
         _loudness = loudness;
+        _loudness.Measured += OnLoudnessMeasured;
         _loudness.TargetLufs = AudioPreferences.Lufs(s.LoudnessTarget);
         _loudness.AlwaysAnalyse = s.AlwaysAnalyse;
 
         _engine = engine;
+        _engine.LiveUrlGuard ??= RadioBlocklist.UrlGuard;
         _engine.PreferredPeriodSize = AudioPreferences.PeriodFrames(s.OutputLatency);
         _engine.Graph.GainSource = _loudness;
         _engine.Graph.NormalisationEnabled = s.NormalisationEnabled;
+        _engine.SoftPause = SoftPauseLength(s.SoftPause);
         _engine.Graph.Limiter.Enabled = s.LimiterEnabled;
         _engine.Graph.Equaliser.Enabled = s.EqualiserEnabled;
         _engine.Graph.Equaliser.Preamp = s.Preamp;
@@ -120,14 +129,62 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SoundEffects = BuildSoundEffects(s);
 
         Queue = [];
+        Queue.CollectionChanged += (_, _) => MarkQueueRowStale();
 
         ApplyOutputDevice();
         UpdateEffects();
 
         _engine.TrackChanged += index => Dispatcher.UIThread.Post(() => OnTrackChanged(index));
         _engine.TrackFailed += (index, failure) => Dispatcher.UIThread.Post(() => OnTrackFailed(index, failure));
-        _engine.QueueFinished += () => Dispatcher.UIThread.Post(() => IsPlaying = false);
+        _engine.QueueFinished += () => Dispatcher.UIThread.Post(() =>
+        {
+            QueueEnded = true;
+            IsPlaying = false;
+        });
         _engine.DeviceLost += () => Dispatcher.UIThread.Post(OnDeviceLost);
+
+        Radio = new RadioViewModel(
+            _engine, settings, radioFile ?? AppPaths.RadioFile, TryPlayback, ShowNotice, radioCatalog, logos: radioLogos);
+        Radio.StageLogoChanged += () =>
+        {
+            SampleRadioLogo();
+            if (_radioMode)
+            {
+                PublishToMediaPanel();
+                RefreshPalettes();
+            }
+        };
+        Radio.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(RadioViewModel.Heading) && _radioMode) PublishToMediaPanel();
+            if (e.PropertyName is nameof(RadioViewModel.Heading) or nameof(RadioViewModel.Subline))
+            {
+                Raise(nameof(ShownTitle));
+                Raise(nameof(ShownLine));
+                Raise(nameof(HasShownLine));
+                Raise(nameof(SceneLine));
+                Raise(nameof(HasSceneLine));
+            }
+
+            if (e.PropertyName is nameof(RadioViewModel.Heading) or nameof(RadioViewModel.Subline)
+                or nameof(RadioViewModel.StateText) or nameof(RadioViewModel.ErrorText) or nameof(RadioViewModel.HasError)
+                or nameof(RadioViewModel.HasStation))
+            {
+                Raise(nameof(SceneCaptionIsLive));
+                Raise(nameof(SceneLiveCaption));
+            }
+
+            if (e.PropertyName == nameof(RadioViewModel.CurrentStation) && _radioMode)
+                MarkQueueRowStale();
+            else if (e.PropertyName == nameof(RadioViewModel.Badge) && _radioMode)
+            {
+                FormatBadge = Radio.Badge;
+            }
+        };
+        Radio.StepCompleted += SyncPlaying;
+        Radio.Failed += () => IsPlaying = false;
+        _radioMode = s.Source == SourceMode.Radio && s.RadioEnabled;
+        if (_radioMode) Radio.Activate();
 
         _title = Strings.Current["NoTrack"];
         _artistLine = string.Empty;
@@ -159,6 +216,152 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public Bitmap? Cover { get => _cover; private set => Set(ref _cover, value); }
 
+    /// <summary>
+    /// Obraz na płycie sceny. Scena jest zawsze ciemna, więc przy okładce domyślnej w jasnym motywie
+    /// to jej ciemny wariant, ten sam, z którego powstaje rozmyte tło sceny, a przy zamkniętej scenie
+    /// nic; poza tym ta sama bitmapa co <see cref="Cover"/>.
+    /// </summary>
+    public Bitmap? SceneCover { get => _sceneCover; private set => Set(ref _sceneCover, value); }
+
+    private Bitmap? _sceneCover;
+
+    /// <summary>
+    /// Obraz wizualizacji Okładka: duży dekod, gdy jest, a do czasu jego ukończenia i przy braku
+    /// okładki ten sam obraz co <see cref="SceneCover"/>. Zmienia się razem z okładką jednym powiadomieniem.
+    /// </summary>
+    public Bitmap? SceneCoverArt => _sceneLarge ?? _sceneCover;
+
+    /// <summary>Największa wysokość dużego dekodu okładki w pikselach.</summary>
+    internal const int MaxSceneCoverSize = 1440;
+
+    private int _sceneCoverSize = 1080;
+
+    /// <summary>
+    /// Wysokość dużego dekodu okładki: wysokość ekranu, najwyżej <see cref="MaxSceneCoverSize"/>.
+    /// Widok podaje ją przy wejściu do sceny.
+    /// </summary>
+    internal int SceneCoverSize
+    {
+        get => _sceneCoverSize;
+        set => _sceneCoverSize = Math.Clamp(value, 1, MaxSceneCoverSize);
+    }
+
+    /// <summary>Odczyt i dekod okładki pliku do podanej wysokości; testy podają własny.</summary>
+    internal Func<string, int, Bitmap?> ReadLargeCover { get; set; } = DecodeLargeCover;
+
+    private Bitmap? _sceneLarge;
+    private string? _largePath;
+    private CoverLoader<Bitmap>? _largeCovers;
+
+    /// <summary>Ostatnie zamówienie dużego dekodu; testy czekają na jego koniec.</summary>
+    internal Task LargeCoverTask { get; private set; } = Task.CompletedTask;
+
+    /// <summary>Duża okładka jest w pamięci.</summary>
+    internal bool HasLargeCover => _sceneLarge is not null;
+
+    private static Bitmap? DecodeLargeCover(string path, int height)
+    {
+        try
+        {
+            if (MetadataReader.ReadCover(path) is not { } bytes) return null;
+
+            using var stream = new MemoryStream(bytes);
+            return Bitmap.DecodeToHeight(stream, height, BitmapInterpolationMode.HighQuality);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cewka] duża okładka: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>Duży dekod ma sens tylko przy otwartej scenie, wizualizacji Okładka i prawdziwej okładce.</summary>
+    private bool WantsLargeCover =>
+        _isSceneOpen && !_disposed && SceneVisual == SceneVisual.Cover && !_usingPlaceholderCover && _shownEntry is not null;
+
+    /// <summary>
+    /// Zamawia duży dekod okładki bieżącego utworu albo zwalnia go, gdy nie jest już potrzebny.
+    /// Dekod trwa w tle; do jego ukończenia scena pokazuje zwykłą okładkę sceny.
+    /// </summary>
+    private void UpdateLargeCover()
+    {
+        if (!WantsLargeCover)
+        {
+            _largeCovers?.Cancel();
+            _largePath = null;
+            DropLargeCover(delayed: false);
+            return;
+        }
+
+        var path = _shownEntry!.Path;
+        if (_largePath == path) return;
+
+        _largePath = path;
+        _largeCovers ??= new CoverLoader<Bitmap>(p => ReadLargeCover(p, _sceneCoverSize), bitmap => bitmap.Dispose());
+        LargeCoverTask = _largeCovers.LoadAsync(path, bitmap =>
+        {
+            if (bitmap is null) return;
+
+            if (!WantsLargeCover || _largePath != path)
+            {
+                bitmap.Dispose();
+                return;
+            }
+
+            _sceneLarge = bitmap;
+            Raise(nameof(SceneCoverArt));
+        });
+    }
+
+    /// <summary>
+    /// Odpina dużą okładkę i zwalnia ją. Przy zmianie utworu zwolnienie jest odroczone, bo poprzedni
+    /// obraz jeszcze znika z ekranu w przenikaniu; przy wyjściu ze sceny natychmiast.
+    /// </summary>
+    private void DropLargeCover(bool delayed, bool raise = true)
+    {
+        var old = _sceneLarge;
+        if (old is null) return;
+
+        _sceneLarge = null;
+        if (raise) Raise(nameof(SceneCoverArt));
+
+        if (delayed) DispatcherTimer.RunOnce(old.Dispose, TimeSpan.FromSeconds(2));
+        else old.Dispose();
+    }
+
+    /// <summary>
+    /// Scena jest otwarta. Ciemny wariant okładki domyślnej, potrzebny scenie w jasnym oknie,
+    /// rysuje się dopiero przy jej otwarciu i zwalnia przy zamknięciu razem z tłem z niego.
+    /// </summary>
+    public bool IsSceneOpen
+    {
+        get => _isSceneOpen;
+        set
+        {
+            if (_isSceneOpen == value) return;
+
+            _isSceneOpen = value;
+            if (value) RefreshBattery();
+            UpdateNextUp();
+
+            // W ciemnym oknie i przy prawdziwej okładce scena ma obraz okna: nie ma czego rysować ani zwalniać.
+            if (_usingPlaceholderCover && !(App.Theme.IsDark && _cover is not null)) ShowScenePlaceholder();
+
+            RefreshSceneEnvelope();
+            UpdateLargeCover();
+        }
+    }
+
+    private bool _isSceneOpen;
+
+    /// <summary>
+    /// Rozmyta okładka pod plamami sceny, mała, bo i tak jest rozmyta; zmienia się razem
+    /// z <see cref="Cover"/>.
+    /// </summary>
+    public Bitmap? SceneBackdrop { get => _sceneBackdrop; private set => Set(ref _sceneBackdrop, value); }
+
+    private Bitmap? _sceneBackdrop;
+
     /// <summary>Colours drawn from the cover, driving the animated background.</summary>
     public IReadOnlyList<Color> Palette
     {
@@ -171,7 +374,34 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string Title { get => _title; private set => Set(ref _title, value); }
+    /// <summary>
+    /// Barwy plam nad rozmytą okładką sceny: jasne odcienie dominujących barw okładki, przy
+    /// czarno-białej szarości. Nie zależą od motywu ani od intensywności barw.
+    /// </summary>
+    public IReadOnlyList<Color> SceneBlobs
+    {
+        get => _sceneBlobs;
+        private set
+        {
+            if (_sceneBlobs.SequenceEqual(value)) return;
+            Set(ref _sceneBlobs, value);
+        }
+    }
+
+    private IReadOnlyList<Color> _sceneBlobs = [];
+
+    /// <summary>Ścieżka pliku bieżącego utworu (wpisu, którego tytuł i okładka są na ekranie); pusta, gdy nic nie gra.</summary>
+    public string CurrentFilePath => _shownEntry?.Path ?? string.Empty;
+
+    public string Title
+    {
+        get => _title;
+        private set
+        {
+            if (!Set(ref _title, value)) return;
+            Raise(nameof(ShownTitle));
+        }
+    }
 
     public string ArtistLine
     {
@@ -180,14 +410,83 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             if (!Set(ref _artistLine, value)) return;
             Raise(nameof(HasArtistLine));
+            Raise(nameof(ShownLine));
+            Raise(nameof(HasShownLine));
         }
     }
+
+    /// <summary>Duży wiersz „Teraz gra”: utwór z pliku albo, w radiu, tytuł z metadanych lub nazwa stacji.</summary>
+    public string ShownTitle => _radioMode ? Radio.Heading : _title;
+
+    /// <summary>Drugi wiersz: album i wykonawca z pliku albo, w radiu, stan połączenia i stacja.</summary>
+    public string ShownLine => _radioMode ? Radio.Subline : _artistLine;
+
+    public bool HasShownLine => !string.IsNullOrWhiteSpace(ShownLine);
 
     /// <summary>
     /// Fałsz, gdy plik nie ma wykonawcy, albumu ani roku do pokazania; wiersz znika wtedy
     /// zamiast wypełniacza.
     /// </summary>
     public bool HasArtistLine => !string.IsNullOrWhiteSpace(_artistLine);
+
+    /// <summary>
+    /// Wykonawca bieżącego utworu albo, gdy go brak, wykonawca albumu; pusty, gdy tagi nie
+    /// podają żadnego. Scena pokazuje go w osobnym wierszu.
+    /// </summary>
+    public string Artist
+    {
+        get => _artist;
+        private set
+        {
+            if (!Set(ref _artist, value)) return;
+            Raise(nameof(HasArtist));
+            Raise(nameof(SceneLine));
+            Raise(nameof(HasSceneLine));
+        }
+    }
+
+    public bool HasArtist => !string.IsNullOrWhiteSpace(_artist);
+
+    /// <summary>Drugi wiersz Sceny: wykonawca z pliku albo, w radiu, wykonawca i stacja przy tytule z metadanych.</summary>
+    public string SceneLine => _radioMode ? (Radio.HasTrackTitle ? Radio.Subline : string.Empty) : _artist;
+
+    public bool HasSceneLine => !string.IsNullOrWhiteSpace(SceneLine);
+
+    /// <summary>Album w Scenie tylko dla plików; stacja nie ma albumu.</summary>
+    public bool HasSceneAlbum => HasAlbum && !_radioMode;
+
+    /// <summary>
+    /// Napis pod kreską Sceny w radiu: błąd, stan łączenia albo „Na żywo”; pusty dla plików i bez stacji.
+    /// </summary>
+    public string SceneLiveCaption
+    {
+        get
+        {
+            if (!_radioMode || !Radio.HasStation) return string.Empty;
+            if (Radio.HasError) return Radio.ErrorText;
+            return Radio.StateText.Length > 0 ? Radio.StateText : Strings.Current["RadioLive"];
+        }
+    }
+
+    /// <summary>Napis pod kreską Sceny to „Na żywo”, a nie błąd ani stan łączenia; tylko wtedy stoi przed nim kropka.</summary>
+    public bool SceneCaptionIsLive => _radioMode && Radio.HasStation && !Radio.HasError && Radio.StateText.Length == 0;
+
+    /// <summary>Album bieżącego utworu; pusty, gdy tagi go nie podają.</summary>
+    public string Album
+    {
+        get => _album;
+        private set
+        {
+            if (!Set(ref _album, value)) return;
+            Raise(nameof(HasAlbum));
+            Raise(nameof(HasSceneAlbum));
+        }
+    }
+
+    public bool HasAlbum => !string.IsNullOrWhiteSpace(_album);
+
+    private string _artist = string.Empty;
+    private string _album = string.Empty;
 
     public string FormatBadge
     {
@@ -196,8 +495,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             if (!Set(ref _formatBadge, value)) return;
             Raise(nameof(HasFormatBadge));
+            Raise(nameof(ShowsTrackQuality));
         }
     }
+
+    /// <summary>
+    /// Etykieta jakości stoi w wierszu wykonawcy tylko przy plikach; w radiu ten wiersz opisuje stację,
+    /// a etykieta stoi za napisem „Na żywo”.
+    /// </summary>
+    public bool ShowsTrackQuality => HasFormatBadge && !_radioMode;
 
     /// <summary>
     /// The badge is removed rather than filled with a dash when nothing is playing, and stays
@@ -216,6 +522,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _settings.Touch();
 
         Raise(nameof(HasFormatBadge));
+        Raise(nameof(ShowsTrackQuality));
     }
 
     // ---------- Odtwarzanie ----------
@@ -226,9 +533,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         private set
         {
             if (!Set(ref _isPlaying, value)) return;
-            if (value) WakeRefresh();
+            if (value)
+            {
+                WakeRefresh();
+                QueueEnded = false;
+            }
 
             Raise(nameof(IsPaused));
+            Raise(nameof(ShowsPauseIcon));
+            Raise(nameof(ShowsStopIcon));
             Raise(nameof(PlayPauseTooltip));
             _mediaPanel?.SetStatus(value ? MediaPanelStatus.Playing : MediaPanelStatus.Paused);
             MediaKeys.Playing = value;
@@ -238,7 +551,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public bool IsPaused => !_isPlaying;
 
     /// <summary>Podpowiedź i nazwa przycisku odtwarzania: to, co zrobi jego naciśnięcie.</summary>
-    public string PlayPauseTooltip => Strings.Current[_isPlaying ? "TooltipPause" : "TooltipPlay"];
+    public string PlayPauseTooltip =>
+        Strings.Current[_isPlaying ? (_radioMode ? "TooltipStopLive" : "TooltipPause") : "TooltipPlay"];
+
+    /// <summary>W radiu pauza to zatrzymanie (rozłączenie), więc przycisk pokazuje kwadrat, nie dwie kreski.</summary>
+    public bool ShowsPauseIcon => _isPlaying && !_radioMode;
+
+    public bool ShowsStopIcon => _isPlaying && _radioMode;
 
     /// <summary>Amplitude driving the waveform, taken from the live signal analysis.</summary>
     public float WaveLevel => _engine.Graph.Analyser.Level;
@@ -368,7 +687,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public bool ShuffleEnabled
     {
         get => _engine.Shuffle;
-        set { _engine.Shuffle = value; Raise(); TouchQueue(); }
+        set { _engine.Shuffle = value; Raise(); TouchQueue(); UpdateNextUp(); MarkQueueRowStale(); }
     }
 
     /// <summary>True for either repeat mode; drives the accent colour on the button.</summary>
@@ -400,6 +719,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         };
 
         RaiseRepeat();
+        UpdateNextUp();
         TouchQueue();
     }
 
@@ -414,7 +734,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     // ---------- Obszary okna ----------
 
     /// <summary>
-    /// Pas dolny: korektor i efekty, rozwijany niezależnie od kolumny kolejki.
+    /// Okno „Korektor i efekty” jest otwarte. Okno główne otwiera je i zamyka według tej wartości,
+    /// a zamknięcie okna ją zeruje. Po uruchomieniu okno jest zamknięte.
     /// </summary>
     public bool PanelOpen
     {
@@ -422,30 +743,76 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         set
         {
             if (!Set(ref _panelOpen, value)) return;
-            _settings.Current.PanelOpen = value;
-            _settings.Touch();
             Raise(nameof(ShowProcessingDot));
         }
     }
 
-    /// <summary>Kolumna kolejki po prawej stronie okna.</summary>
-    public bool QueueOpen
+    /// <summary>
+    /// Panel kolejki (w radiu: stacji) przypięty: kolumna po prawej stronie okna albo, w wąskim oknie,
+    /// nakładka. Nieprzypięty panel wysuwa się z uchwytu przy krawędzi i chowa po zjechaniu kursorem.
+    /// </summary>
+    public bool QueuePinned
     {
-        get => _queueOpen;
-        set => SetQueueOpen(value, remember: true);
+        get => _queuePinned;
+        set => SetQueuePinned(value, remember: true);
     }
 
     /// <summary>
-    /// Pokazuje albo chowa kolejkę. Bez <paramref name="remember"/> ustawienia zachowują zamiar
-    /// użytkownika: kolejka schowana przez zbyt wąskie okno wraca przy następnym starcie.
+    /// Przypina albo odpina panel. Bez <paramref name="remember"/> ustawienia zachowują zamiar
+    /// użytkownika: panel odpięty przez zbyt wąskie okno wraca przy następnym starcie.
     /// </summary>
-    public void SetQueueOpen(bool value, bool remember)
+    public void SetQueuePinned(bool value, bool remember)
     {
-        if (!Set(ref _queueOpen, value, nameof(QueueOpen))) return;
+        if (!Set(ref _queuePinned, value, nameof(QueuePinned))) return;
         if (!remember) return;
 
-        _settings.Current.QueueOpen = value;
+        _settings.Current.QueuePinned = value;
         _settings.Touch();
+    }
+
+    /// <summary>Wysuwanie nieprzypiętego panelu: po najechaniu na uchwyt albo po jego kliknięciu.</summary>
+    public QueueReveal QueueReveal
+    {
+        get => _settings.Current.QueueReveal;
+        set => SetQueuePanelOption(QueueReveal, value, s => s.QueueReveal = value);
+    }
+
+    /// <summary>Czas chowania wysuniętego panelu po zjechaniu z niego kursorem.</summary>
+    public QueueHideDelay QueueHideDelay
+    {
+        get => _settings.Current.QueueHideDelay;
+        set => SetQueuePanelOption(QueueHideDelay, value, s => s.QueueHideDelay = value);
+    }
+
+    /// <summary>Zwłoka między najechaniem na uchwyt a wysunięciem panelu.</summary>
+    public QueueRevealDelay QueueRevealDelay
+    {
+        get => _settings.Current.QueueRevealDelay;
+        set => SetQueuePanelOption(QueueRevealDelay, value, s => s.QueueRevealDelay = value);
+    }
+
+    /// <summary>Szerokość panelu wybrana przeciąganiem krawędzi; <c>null</c> to domyślna dla okna.</summary>
+    public double? QueueWidth
+    {
+        get => _settings.Current.QueueWidth;
+        set
+        {
+            var width = value is { } chosen ? Math.Max(chosen, QueuePanelWidth.Minimum) : (double?)null;
+            if (Nullable.Equals(_settings.Current.QueueWidth, width)) return;
+
+            _settings.Current.QueueWidth = width;
+            _settings.Touch();
+            Raise();
+        }
+    }
+
+    private void SetQueuePanelOption<T>(T current, T value, Action<AppSettings> apply, [System.Runtime.CompilerServices.CallerMemberName] string? name = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(current, value)) return;
+
+        apply(_settings.Current);
+        _settings.Touch();
+        Raise(name);
     }
 
     /// <summary>
@@ -455,7 +822,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public bool ProcessingActive =>
         (EqualiserEnabled && CanResetEqualiser) || SoundEffects.Any(effect => effect.Enabled);
 
-    /// <summary>Kropka na przycisku pasa: przetwarzanie działa, a pasa nie widać.</summary>
+    /// <summary>Kropka na przycisku korektora: przetwarzanie działa, a okna korektora nie widać.</summary>
     public bool ShowProcessingDot => !PanelOpen && ProcessingActive;
 
     private void RaiseProcessing()
@@ -531,6 +898,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void RefreshTextForLanguage()
     {
         RebuildQueue();
+        Radio.RefreshLanguage();
+        Raise(nameof(ShownTitle));
+        Raise(nameof(ShownLine));
+        Raise(nameof(SourceFilesTooltip));
+        Raise(nameof(SourceRadioTooltip));
+        Raise(nameof(QueueHandleName));
         if (_current is null) Title = IdleTitle;
         RaiseRepeat();
         Raise(nameof(AudioFailure));
@@ -674,6 +1047,26 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         _mediaPanel.SetVolume(PanelVolume);
 
+        // Radio: stacja zamiast utworu, bez osi czasu; logo z pamięci podręcznej trafia do panelu (MPRIS).
+        if (_radioMode)
+        {
+            if (Radio.PanelInfo is not { } info)
+            {
+                _mediaPanel.Clear();
+                _mediaPanel.SetStatus(MediaPanelStatus.Closed);
+                return;
+            }
+
+            _mediaPanel.SetLive(true, Radio.StageLogoPath);
+            _mediaPanel.SetNavigation(Radio.CanStep);
+            _mediaPanel.SetTrack(info.Title, info.Artist, info.Album, TimeSpan.Zero);
+            _mediaPanel.SetStatus(_isPlaying ? MediaPanelStatus.Playing : MediaPanelStatus.Paused);
+            return;
+        }
+
+        _mediaPanel.SetLive(false, null);
+        _mediaPanel.SetNavigation(true);
+
         if (_current is null)
         {
             _mediaPanel.Clear();
@@ -741,6 +1134,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         _reducedEffects = reduced;
         Raise(nameof(ReducedEffects));
+        Raise(nameof(ActiveSceneVisual));
     }
 
     // ---------- Urządzenie wyjściowe ----------
@@ -887,6 +1281,50 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>Seconds the arrow keys move playback by.</summary>
+    /// <summary>Długość wyciszenia i podgłośnienia miękkiej pauzy.</summary>
+    public static readonly TimeSpan SoftPauseDuration = TimeSpan.FromMilliseconds(400);
+
+    private static TimeSpan SoftPauseLength(bool on) => on ? SoftPauseDuration : TimeSpan.Zero;
+
+    /// <summary>Pauza plików wycisza płynnie, a wznowienie podgłaśnia.</summary>
+    public bool SoftPause
+    {
+        get => _settings.Current.SoftPause;
+        set
+        {
+            if (_settings.Current.SoftPause == value) return;
+
+            _settings.Current.SoftPause = value;
+            _engine.SoftPause = SoftPauseLength(value);
+            _settings.Touch();
+            Raise();
+        }
+    }
+
+    /// <summary>Program uruchomiony w trybie radia od razu włącza ostatnią stację.</summary>
+    public bool RadioPlayAtStart
+    {
+        get => _settings.Current.RadioPlayAtStart;
+        set
+        {
+            if (_settings.Current.RadioPlayAtStart == value) return;
+
+            _settings.Current.RadioPlayAtStart = value;
+            _settings.Touch();
+            Raise();
+        }
+    }
+
+    /// <summary>
+    /// Po starcie w trybie radia, z włączonym <see cref="RadioPlayAtStart"/>, włącza ostatnią stację.
+    /// Bez wybranej stacji i przy otwieraniu plików z zewnątrz nic nie robi.
+    /// </summary>
+    public void PlayRadioAtStart()
+    {
+        if (!_radioMode || !_settings.Current.RadioPlayAtStart || !Radio.HasStation) return;
+        if (Radio.PlaySelected()) SyncPlaying();
+    }
+
     public int SeekStep
     {
         get => _settings.Current.SeekStep;
@@ -895,6 +1333,717 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (_settings.Current.SeekStep == value) return;
 
             _settings.Current.SeekStep = value;
+            _settings.Touch();
+            Raise();
+        }
+    }
+
+    // ---------- Pełny ekran ----------
+
+    /// <summary>
+    /// Wybrana wizualizacja sceny, zapamiętana między uruchomieniami. Widok rysuje płytę, okładkę
+    /// albo scenę nocną zależnie od tej wartości.
+    /// </summary>
+    public SceneVisual SceneVisual
+    {
+        get => _settings.Current.SceneVisual;
+        set
+        {
+            if (_settings.Current.SceneVisual == value) return;
+
+            _settings.Current.SceneVisual = value;
+            _settings.Touch();
+            Raise();
+            Raise(nameof(ActiveSceneVisual));
+            RefreshSceneEnvelope();
+            UpdateLargeCover();
+        }
+    }
+
+    /// <summary>Wizualizacje rysowane przez widok danych dźwięku: reagujące na dźwięk oraz Horyzont.</summary>
+    public static bool IsStageVisual(SceneVisual visual) => IsAudioVisual(visual) || visual == SceneVisual.Horizon;
+
+    /// <summary>Wizualizacje reagujące na dźwięk; w trybie ograniczonego ruchu są niedostępne.</summary>
+    public static bool IsAudioVisual(SceneVisual visual) =>
+        visual is SceneVisual.Spectrum or SceneVisual.Waveform or SceneVisual.Aurora;
+
+    /// <summary>
+    /// Wizualizacja faktycznie rysowana: przy ograniczonym ruchu wybór Widma, Fali albo Zorzy zastępuje
+    /// Płyta; to samo dla Zorzy bez GPU i na baterii. Zapamiętany wybór zostaje.
+    /// </summary>
+    public SceneVisual ActiveSceneVisual => IsVisualUsable(SceneVisual) ? SceneVisual : SceneVisual.Disc;
+
+    /// <summary>Czy wizualizację można teraz narysować: ruch, radio, a dla Zorzy także GPU i zasilanie sieciowe.</summary>
+    internal bool IsVisualUsable(SceneVisual visual) =>
+        !(_reducedEffects && IsAudioVisual(visual))
+        && IsVisualAvailable(visual, _radioMode)
+        && (visual != SceneVisual.Aurora || AuroraAllowed);
+
+    /// <summary>Horyzont potrzebuje pliku z końcem; stacja radiowa go nie ma, więc dostaje Płytę.</summary>
+    public static bool IsVisualAvailable(SceneVisual visual, bool radio) =>
+        visual != SceneVisual.Meters && !(radio && visual == SceneVisual.Horizon);
+
+    /// <summary>
+    /// Stan GPU poznany przy pierwszym rysowaniu sceny: true, gdy Skia ma kontekst GPU. Do czasu poznania
+    /// (null) Zorza jest niedostępna.
+    /// </summary>
+    internal bool? SceneGpu
+    {
+        get => _sceneGpu;
+        set
+        {
+            if (_sceneGpu == value) return;
+
+            _sceneGpu = value;
+            Raise(nameof(SceneGpuAvailable));
+            Raise(nameof(ActiveSceneVisual));
+        }
+    }
+
+    private bool? _sceneGpu;
+    private bool _sceneGpuPinned;
+
+    /// <summary>Wynik sondy sceny; ignorowany, gdy test ustawił stan jawnie przez <see cref="PinGpu"/>.</summary>
+    internal void ReportGpu(bool gpu)
+    {
+        if (!_sceneGpuPinned) SceneGpu = gpu;
+    }
+
+    /// <summary>Ustawia stan GPU na stałe; headless nie ma GPU, więc testy ustawiają go same.</summary>
+    internal void PinGpu(bool gpu)
+    {
+        _sceneGpuPinned = true;
+        SceneGpu = gpu;
+    }
+
+    /// <summary>GPU wykryty, więc karta Zorzy ma sens w Ustawieniach.</summary>
+    public bool SceneGpuAvailable => _sceneGpu == true;
+
+    /// <summary>Zorza potrzebuje GPU i zasilania sieciowego.</summary>
+    private bool AuroraAllowed => _sceneGpu == true && !_onBattery;
+
+    private bool _onBattery;
+
+    /// <summary>Odczyt zasilania; testy podstawiają własną odpowiedź.</summary>
+    internal Func<bool> BatteryProbe { get; set; } = () => PowerStatus.IsOnBattery;
+
+    private static readonly TimeSpan BatteryCheckInterval = TimeSpan.FromSeconds(60);
+    private DateTime _lastBatteryCheck = DateTime.UtcNow;
+
+    /// <summary>Odczytuje zasilanie; zmiana odświeża wybór rysowanej wizualizacji. Przy otwarciu sceny i co 60 s.</summary>
+    internal void RefreshBattery()
+    {
+        _lastBatteryCheck = DateTime.UtcNow;
+        var battery = BatteryProbe();
+        if (battery == _onBattery) return;
+
+        _onBattery = battery;
+        Raise(nameof(ActiveSceneVisual));
+    }
+
+    /// <summary>Obwiednia bieżącego pliku dla Horyzontu; null do czasu policzenia i w radiu.</summary>
+    public FileEnvelope? SceneEnvelope => _sceneEnvelope;
+
+    private FileEnvelope? _sceneEnvelope;
+
+    /// <summary>
+    /// Pobiera obwiednię bieżącego pliku z pamięci podręcznej analiz, a jeśli jej nie ma, zleca
+    /// policzenie w tle. Praca tylko przy otwartej scenie z Horyzontem; po innych wyborach obwiednia
+    /// jest zwalniana.
+    /// </summary>
+    internal void RefreshSceneEnvelope()
+    {
+        FileEnvelope? envelope = null;
+        if (_isSceneOpen && !_disposed && !_radioMode && SceneVisual == SceneVisual.Horizon &&
+            _shownEntry is { IsLive: false, Path.Length: > 0 } entry)
+            envelope = _loudness.RequestEnvelope(entry.Path);
+
+        if (ReferenceEquals(envelope, _sceneEnvelope)) return;
+
+        _sceneEnvelope = envelope;
+        Raise(nameof(SceneEnvelope));
+    }
+
+    private void OnLoudnessMeasured(string path, double gain)
+    {
+        // Wątek analizy: odświeżenie idzie przez wątek interfejsu.
+        if (!string.Equals(path, CurrentFilePath, StringComparison.OrdinalIgnoreCase)) return;
+
+        Dispatcher.UIThread.Post(RefreshSceneEnvelope);
+    }
+
+    /// <summary>Dane dźwięku dla wizualizacji sceny; testy podstawiają atrapę.</summary>
+    internal ISceneAudioSource SceneAudioData
+    {
+        get => _sceneAudio ??= new GraphSceneAudioSource(_engine.Graph.Scene);
+        set => _sceneAudio = value;
+    }
+
+    private ISceneAudioSource? _sceneAudio;
+
+    /// <summary>Kształt widma na scenie.</summary>
+    public SpectrumShape SceneSpectrumShape
+    {
+        get => _settings.Current.SpectrumShape;
+        set
+        {
+            if (_settings.Current.SpectrumShape == value) return;
+
+            _settings.Current.SpectrumShape = value;
+            _settings.Touch();
+            Raise();
+        }
+    }
+
+    /// <summary>Rodzaj fali na scenie.</summary>
+    public WaveformKind SceneWaveformKind
+    {
+        get => _settings.Current.WaveformKind;
+        set
+        {
+            if (_settings.Current.WaveformKind == value) return;
+
+            _settings.Current.WaveformKind = value;
+            _settings.Touch();
+            Raise();
+        }
+    }
+
+    /// <summary>Pierścień widma wokół płyty.</summary>
+    public bool SceneDiscRing
+    {
+        get => _settings.Current.DiscRing;
+        set
+        {
+            if (_settings.Current.DiscRing == value) return;
+
+            _settings.Current.DiscRing = value;
+            _settings.Touch();
+            Raise();
+        }
+    }
+
+    /// <summary>
+    /// Przechodzi o <paramref name="step"/> wizualizacji w przód albo w tył, cyklicznie; przy
+    /// ograniczonym ruchu pomija wizualizacje reagujące na dźwięk.
+    /// </summary>
+    public void CycleSceneVisual(int step)
+    {
+        var count = Enum.GetValues<SceneVisual>().Length;
+        var direction = step < 0 ? -1 : 1;
+        var next = (int)SceneVisual;
+        for (var i = 0; i < count; i++)
+        {
+            next = (next + direction + count) % count;
+            var candidate = (SceneVisual)next;
+            if (IsVisualUsable(candidate) && IsInCycle(candidate)) break;
+        }
+
+        SceneVisual = (SceneVisual)next;
+    }
+
+    /// <summary>Czy pełny ekran pokazuje kartę następnego utworu.</summary>
+    public bool SceneShowNext
+    {
+        get => _settings.Current.SceneShowNext;
+        set
+        {
+            if (_settings.Current.SceneShowNext == value) return;
+
+            _settings.Current.SceneShowNext = value;
+            _settings.Touch();
+            Raise();
+            UpdateNextUp();
+        }
+    }
+
+    /// <summary>Ochrona ekranu OLED w scenie.</summary>
+    public bool SceneOledCare
+    {
+        get => _settings.Current.SceneOledCare;
+        set
+        {
+            if (_settings.Current.SceneOledCare == value) return;
+
+            _settings.Current.SceneOledCare = value;
+            _settings.Touch();
+            Raise();
+        }
+    }
+
+    /// <summary>Wielkość tekstu w scenie.</summary>
+    public SceneTextSize SceneTextSize
+    {
+        get => _settings.Current.SceneTextSize;
+        set
+        {
+            if (_settings.Current.SceneTextSize == value) return;
+
+            _settings.Current.SceneTextSize = value;
+            _settings.Touch();
+            Raise();
+        }
+    }
+
+    // ----- Wygląd sceny: napisy, wielkość płyty i efekty tła -----
+
+    /// <summary>Zapisuje zmienione ustawienie wyglądu sceny i powiadamia widok; bez zmiany nic nie robi.</summary>
+    private void SetSceneLook<T>(T current, T value, Action<AppSettings> apply, [CallerMemberName] string? name = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(current, value)) return;
+
+        apply(_settings.Current);
+        _settings.Touch();
+        Raise(name);
+    }
+
+    public SceneTextPosition SceneTextPosition
+    {
+        get => _settings.Current.SceneTextPosition;
+        set => SetSceneLook(SceneTextPosition, value, s => s.SceneTextPosition = value);
+    }
+
+    public bool SceneTextCentred
+    {
+        get => _settings.Current.SceneTextCentred;
+        set => SetSceneLook(SceneTextCentred, value, s => s.SceneTextCentred = value);
+    }
+
+    public SceneTextInset SceneTextInset
+    {
+        get => _settings.Current.SceneTextInset;
+        set => SetSceneLook(SceneTextInset, value, s => s.SceneTextInset = value);
+    }
+
+    public SceneArtSize SceneArtSize
+    {
+        get => _settings.Current.SceneArtSize;
+        set => SetSceneLook(SceneArtSize, value, s => s.SceneArtSize = value);
+    }
+
+    public bool SceneBlobsOn
+    {
+        get => _settings.Current.SceneBlobs;
+        set => SetSceneLook(SceneBlobsOn, value, s => s.SceneBlobs = value);
+    }
+
+    public SceneEffectStrength SceneBlobsStrength
+    {
+        get => _settings.Current.SceneBlobsStrength;
+        set => SetSceneLook(SceneBlobsStrength, value, s => s.SceneBlobsStrength = value);
+    }
+
+    public bool SceneGlowOn
+    {
+        get => _settings.Current.SceneGlow;
+        set => SetSceneLook(SceneGlowOn, value, s => s.SceneGlow = value);
+    }
+
+    public SceneEffectStrength SceneGlowStrength
+    {
+        get => _settings.Current.SceneGlowStrength;
+        set => SetSceneLook(SceneGlowStrength, value, s => s.SceneGlowStrength = value);
+    }
+
+    public bool SceneTintOn
+    {
+        get => _settings.Current.SceneTint;
+        set => SetSceneLook(SceneTintOn, value, s => s.SceneTint = value);
+    }
+
+    public SceneEffectStrength SceneTintStrength
+    {
+        get => _settings.Current.SceneTintStrength;
+        set => SetSceneLook(SceneTintStrength, value, s => s.SceneTintStrength = value);
+    }
+
+    public bool SceneParticlesOn
+    {
+        get => _settings.Current.SceneParticles;
+        set => SetSceneLook(SceneParticlesOn, value, s => s.SceneParticles = value);
+    }
+
+    public SceneEffectStrength SceneParticlesStrength
+    {
+        get => _settings.Current.SceneParticlesStrength;
+        set => SetSceneLook(SceneParticlesStrength, value, s => s.SceneParticlesStrength = value);
+    }
+
+    /// <summary>Tempo obrotu płyty, w oknie i w scenie.</summary>
+    public DiscSpin DiscSpin
+    {
+        get => _settings.Current.DiscSpin;
+        set => SetSceneLook(DiscSpin, value, s => s.DiscSpin = value);
+    }
+
+    /// <summary>Mnożnik prędkości obrotu: 15, 9 albo 5 sekund na obrót; zero, gdy płyta stoi.</summary>
+    public double DiscSpinFactor => DiscSpin switch
+    {
+        DiscSpin.Slow => 9.0 / 15.0,
+        DiscSpin.Fast => 9.0 / 5.0,
+        DiscSpin.Still => 0,
+        _ => 1,
+    };
+
+    /// <summary>Tempo ruchu tła w oknie i w scenie.</summary>
+    public BackdropMotion BackdropMotion
+    {
+        get => _settings.Current.BackdropMotion;
+        set => SetSceneLook(BackdropMotion, value, s => s.BackdropMotion = value);
+    }
+
+    /// <summary>Mnożnik tempa ruchu tła.</summary>
+    public double BackdropMotionFactor => BackdropMotion == BackdropMotion.Slow ? 0.5 : 1;
+
+    /// <summary>Opadanie słupków widma w scenie.</summary>
+    public SpectrumResponse SpectrumResponse
+    {
+        get => _settings.Current.SpectrumResponse;
+        set => SetSceneLook(SpectrumResponse, value, s => s.SpectrumResponse = value);
+    }
+
+    /// <summary>Mnożnik czasu opadania słupków i szczytów widma.</summary>
+    public double SpectrumFallFactor => SpectrumResponse switch
+    {
+        SpectrumResponse.Smooth => 1.8,
+        SpectrumResponse.Fast => 0.5,
+        _ => 1,
+    };
+
+    /// <summary>Wizualizacja jest w cyklu klawisza V. Płyta jest w nim zawsze.</summary>
+    public bool IsInCycle(SceneVisual visual) =>
+        visual == SceneVisual.Disc || !_settings.Current.SceneCycleOff.Contains(visual);
+
+    /// <summary>Włącza albo wyłącza wizualizację w cyklu klawisza V; Płyty nie da się wyłączyć.</summary>
+    public void SetInCycle(SceneVisual visual, bool on)
+    {
+        if (visual == SceneVisual.Disc || IsInCycle(visual) == on) return;
+
+        var off = _settings.Current.SceneCycleOff;
+        if (on) off.Remove(visual);
+        else off.Add(visual);
+        _settings.Touch();
+        Raise(nameof(SceneCycleOff));
+    }
+
+    /// <summary>Wizualizacje pomijane przez klawisz V; zmiana podnosi powiadomienie o tej nazwie.</summary>
+    public IReadOnlyList<SceneVisual> SceneCycleOff => _settings.Current.SceneCycleOff;
+
+    /// <summary>Klucz ekranu, na którym otwiera się scena; <c>null</c> to ekran okna.</summary>
+    public string? SceneScreen
+    {
+        get => _settings.Current.SceneScreen;
+        set
+        {
+            if (_settings.Current.SceneScreen == value) return;
+
+            _settings.Current.SceneScreen = value;
+            _settings.Touch();
+            Raise();
+        }
+    }
+
+    /// <summary>Marginesy sceny według kluczy ekranów; zmiana zgłasza tę właściwość.</summary>
+    public IReadOnlyDictionary<string, SceneMargin> SceneMargins => _settings.Current.SceneMargins;
+
+    /// <summary>Margines sceny na ekranie o danym kluczu.</summary>
+    public SceneMargin GetSceneMargin(string? screenKey) => ScreenMargin.For(_settings.Current.SceneMargins, screenKey);
+
+    /// <summary>Zapisuje margines ekranu od razu; scena otwarta na nim przelicza kadr.</summary>
+    public void SetSceneMargin(string? screenKey, SceneMargin margin)
+    {
+        var margins = _settings.Current.SceneMargins ??= new();
+        var key = screenKey ?? string.Empty;
+        if (margins.TryGetValue(key, out var current) && current == margin) return;
+        if (!margins.ContainsKey(key) && margin == ScreenMargin.Default) return;
+
+        margins[key] = margin;
+        _settings.Touch();
+        Raise(nameof(SceneMargins));
+    }
+
+    // ---------- Karta „Następny” i koniec kolejki w scenie ----------
+
+    /// <summary>Na ile przed końcem utworu pojawia się karta następnego.</summary>
+    internal static readonly TimeSpan NextUpLead = TimeSpan.FromSeconds(15);
+
+    /// <summary>Wysokość odczytu okładki karty: 8% wysokości sceny, z zapasem na ekrany o dużej gęstości.</summary>
+    private const int NextUpCoverSize = 192;
+
+    private QueueItemViewModel? _nextUpItem;
+    private string _nextUpTitle = string.Empty;
+    private string _nextUpArtist = string.Empty;
+    private Bitmap? _nextUpCover;
+    private CoverLoader<Bitmap>? _nextUpCovers;
+    private bool _queueEnded;
+
+    /// <summary>Karta następnego utworu jest widoczna.</summary>
+    public bool HasNextUp => _nextUpItem is not null && !_radioMode;
+
+    public string NextUpTitle => _nextUpTitle;
+
+    public string NextUpArtist => _nextUpArtist;
+
+    public bool HasNextUpArtist => _nextUpArtist.Length > 0;
+
+    /// <summary>Okładka następnego utworu; null, gdy jej nie ma albo jeszcze się wczytuje.</summary>
+    public Bitmap? NextUpCover => _nextUpCover;
+
+    /// <summary>Ostatnie zamówienie okładki karty; testy czekają na jego koniec.</summary>
+    internal Task NextUpCoverTask { get; private set; } = Task.CompletedTask;
+
+    /// <summary>Kolejka doszła do końca i nic nie gra; do ruszenia odtwarzania.</summary>
+    public bool QueueEnded
+    {
+        get => _queueEnded && !_radioMode;
+        private set => Set(ref _queueEnded, value);
+    }
+
+    /// <summary>Odtwarza kolejkę od pierwszego wpisu.</summary>
+    public void RestartQueue()
+    {
+        if (WaitsForRestore(RestartQueue)) return;
+        if (Queue.Count == 0) return;
+
+        _resume.Discard();
+        if (TryPlayback(() => _engine.PlayIndex(0))) SyncPlaying();
+    }
+
+    /// <summary>
+    /// Ustala, czy karta jest potrzebna i dla którego wpisu. Zmiana stanu to jedyne powiadomienie:
+    /// odświeżanie w pauzie albo bez zmiany nic nie wysyła, więc scena nie dostaje powodu do klatki.
+    /// </summary>
+    private void UpdateNextUp()
+    {
+        QueueItemViewModel? item = null;
+
+        if (_isSceneOpen && SceneShowNext && !_disposed)
+        {
+            var duration = _engine.Duration;
+            if (duration > TimeSpan.Zero && duration - _engine.Position <= NextUpLead)
+            {
+                var index = _engine.NextIndex;
+                if (index >= 0 && index < Queue.Count) item = Queue[index];
+            }
+        }
+
+        var title = item?.Title ?? string.Empty;
+        var artist = item?.Artist ?? string.Empty;
+        var sameItem = ReferenceEquals(item, _nextUpItem);
+        if (sameItem && title == _nextUpTitle && artist == _nextUpArtist) return;
+
+        _nextUpItem = item;
+        _nextUpTitle = title;
+        _nextUpArtist = artist;
+
+        if (!sameItem) ReplaceNextUpCover(item);
+
+        Raise(nameof(HasNextUp));
+        Raise(nameof(NextUpTitle));
+        Raise(nameof(NextUpArtist));
+        Raise(nameof(HasNextUpArtist));
+    }
+
+    private void ReplaceNextUpCover(QueueItemViewModel? item)
+    {
+        _nextUpCovers?.Cancel();
+
+        var old = _nextUpCover;
+        if (old is not null)
+        {
+            _nextUpCover = null;
+            Raise(nameof(NextUpCover));
+
+            // Poprzednia okładka jeszcze znika z ekranu.
+            DispatcherTimer.RunOnce(old.Dispose, TimeSpan.FromSeconds(2));
+        }
+
+        if (item is null) return;
+
+        var path = item.Path;
+        _nextUpCovers ??= new CoverLoader<Bitmap>(p => ReadLargeCover(p, NextUpCoverSize), bitmap => bitmap.Dispose());
+        NextUpCoverTask = _nextUpCovers.LoadAsync(path, bitmap =>
+        {
+            if (bitmap is null) return;
+
+            if (_disposed || _nextUpItem?.Path != path)
+            {
+                bitmap.Dispose();
+                return;
+            }
+
+            _nextUpCover = bitmap;
+            Raise(nameof(NextUpCover));
+        });
+    }
+
+    // ---------- Rząd okładek kolejki w scenie ----------
+
+    /// <summary>Wysokość odczytu miniatury rzędu: 16% wysokości sceny, z zapasem na ekrany o dużej gęstości.</summary>
+    private const int QueueRowCoverSize = 256;
+
+    private bool _queueRowActive;
+    private bool _queueRowFlushPosted;
+    private bool _queueRowDirty;
+    private string? _queueRowStation;
+    private long _queueRowRevision;
+    private long _queueRowVersion;
+    private int _queueRowCurrent;
+
+    /// <summary>Rząd ma co pokazać: kolejka nie jest pusta i nie gra źródło na żywo.</summary>
+    public bool CanShowQueueRow => _radioMode ? Radio.SceneStations().List.Count > 0 : Queue.Count > 0 && !_engine.IsLive;
+
+    /// <summary>Rośnie, gdy widok ma pobrać nową listę rzędu; zgłaszane tylko przy otwartym rzędzie.</summary>
+    public long QueueRowRevision => _queueRowRevision;
+
+    /// <summary>Widok ma otwarty rząd; przy zamkniętym nic tu nie kosztuje.</summary>
+    internal bool QueueRowActive
+    {
+        get => _queueRowActive;
+        set
+        {
+            _queueRowActive = value;
+            _queueRowDirty = false;
+        }
+    }
+
+    /// <summary>
+    /// Lista rzędu w kolejności odtwarzania i numer bieżącego wpisu. Wiersz, którego model jeszcze nie
+    /// ma, bo kolejka silnika zmieniła się przed chwilą, dojdzie przy następnym odświeżeniu.
+    /// </summary>
+    internal (IReadOnlyList<CoverRowItem> Items, int Current) BuildQueueRow()
+    {
+        if (_radioMode) return BuildStationRow();
+
+        _queueRowDirty = false;
+        _queueRowCurrent = _engine.CurrentIndex;
+
+        var snapshot = _engine.PlaybackOrder;
+        _queueRowVersion = snapshot.Version;
+
+        var rows = new Dictionary<QueueEntry, QueueItemViewModel>(Queue.Count);
+        foreach (var row in Queue)
+            if (row.Entry is { } entry) rows[entry] = row;
+
+        var items = new List<CoverRowItem>(snapshot.Entries.Count);
+        var current = -1;
+
+        for (var i = 0; i < snapshot.Entries.Count; i++)
+        {
+            var entry = snapshot.Entries[i];
+            if (!rows.TryGetValue(entry, out var row)) continue;
+
+            if (i == snapshot.CurrentPosition) current = items.Count;
+
+            var path = row.Path;
+            items.Add(new CoverRowItem(entry, row.Title, ArtistOf(entry.Metadata) ?? string.Empty,
+                row.DurationSeconds > 0 ? row.Duration : null,
+                () => ReadLargeCover(path, QueueRowCoverSize)));
+        }
+
+        return (items, current);
+    }
+
+    /// <summary>
+    /// Rząd Sceny w radiu: stacje z listy, z której uruchomiono bieżącą, z logo z pamięci podręcznej
+    /// (bez połączeń sieciowych); stacja bez zapisanego logo ma obraz zastępczy rzędu.
+    /// </summary>
+    private (IReadOnlyList<CoverRowItem> Items, int Current) BuildStationRow()
+    {
+        _queueRowDirty = false;
+        _queueRowStation = Radio.CurrentStation?.Id;
+        var (list, current) = Radio.SceneStations();
+        var logos = Radio.LogosAllowed ? Radio.Logos : null;
+
+        var items = list.Select(station => new CoverRowItem(
+            station.Id,
+            Radio.DisplayNameOf(station),
+            string.Empty,
+            null,
+            () => ReadStationLogo(logos, station))).ToList();
+
+        return (items, current);
+    }
+
+    private static Bitmap? ReadStationLogo(RadioLogoService? logos, RadioStation station)
+    {
+        if (logos?.TryGetCached(station) is not { } logo) return null;
+
+        // Rząd przejmuje obraz i sam go zwalnia; mały obraz listy niepotrzebny.
+        logo.List.Dispose();
+        return logo.Stage;
+    }
+
+    /// <summary>Odtwarza wpis rzędu po jego tożsamości, bo numer mógł się już zmienić.</summary>
+    internal void PlayQueueRowItem(object id)
+    {
+        if (_radioMode)
+        {
+            var (list, _) = Radio.SceneStations();
+            if (id is string stationId && list.FirstOrDefault(s => s.Id == stationId) is { } station
+                && Radio.Play(station, list))
+                SyncPlayingState();
+            return;
+        }
+
+        if (id is QueueEntry entry && RowFor(entry) is { } row) PlayItem(row);
+    }
+
+    /// <summary>Spirala dla wpisów bez okładki, zawsze ciemna jak scena, w parze barw z płyty; właścicielem jest rząd.</summary>
+    internal Bitmap? RenderQueueRowPlaceholder()
+    {
+        try
+        {
+            return CoilCover.Render(_placeholderDraw.For(_settings.Current.PlaceholderPalette, _current?.Path), darkTheme: true);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cewka] spirala rzędu okładek: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>Zmiany przychodzą seriami (wczytanie kolejki to tysiące wierszy), więc widok dostaje jedno zgłoszenie.</summary>
+    private void MarkQueueRowStale()
+    {
+        if (!_queueRowActive || _queueRowFlushPosted) return;
+
+        _queueRowFlushPosted = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _queueRowFlushPosted = false;
+            if (!_queueRowActive || _disposed) return;
+
+            _queueRowRevision++;
+            Raise(nameof(QueueRowRevision));
+        }, DispatcherPriority.Background);
+    }
+
+    /// <summary>
+    /// Sprawdzane przy odświeżeniu: silnik zmienia kolejność także sam, np. układając następną rundę
+    /// losowania, a znaczniki wpisów dochodzą pojedynczo i ich zgłoszenie zbiera się tu w jedno.
+    /// </summary>
+    private void CheckQueueRow()
+    {
+        if (!_queueRowActive) return;
+
+        // W radiu rząd zależy tylko od bieżącej stacji; kolejka silnika nie ma z nim związku.
+        var stale = _radioMode
+            ? _queueRowDirty || Radio.CurrentStation?.Id != _queueRowStation
+            : _queueRowDirty || _engine.PlaybackOrderVersion != _queueRowVersion || _engine.CurrentIndex != _queueRowCurrent;
+
+        if (stale) MarkQueueRowStale();
+    }
+
+    /// <summary>Czy ekran nie wygasa podczas odtwarzania w scenie.</summary>
+    public bool KeepScreenAwake
+    {
+        get => _settings.Current.KeepScreenAwake;
+        set
+        {
+            if (_settings.Current.KeepScreenAwake == value) return;
+
+            _settings.Current.KeepScreenAwake = value;
             _settings.Touch();
             Raise();
         }
@@ -975,6 +2124,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Drives the opening prompt shown when there is nothing to play.</summary>
     public bool IsQueueEmpty => Queue.Count == 0;
 
+    /// <summary>
+    /// Podpowiedź dodawania muzyki. Kolejka sprawdzana jeszcze po starcie nie jest pusta,
+    /// tylko niegotowa, więc podpowiedź na nią czeka.
+    /// </summary>
+    public bool ShowsAddPrompt => !_radioMode && IsQueueEmpty && _unrestored is null;
+
     public string QueueSummary
     {
         get
@@ -1001,11 +2156,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private const string AppendOpen = "Append";
     private const string AddOpen = "Add";
     private const string OutsideOpen = "Outside";
+    private const string PlaylistOpen = "Playlist";
 
+    // Listę przez tę drogę dokańcza następne uruchomienie, więc tylko dopisuje; zastępuje kolejkę LoadPlaylist.
     private Action<List<string>> ApplyFor(string action) => action switch
     {
         ReplaceOpen => files => Load(files, replace: true),
-        AppendOpen => files => Load(files, replace: false),
+        AppendOpen or PlaylistOpen => files => Load(files, replace: false),
         OutsideOpen => ApplyFromOutside,
         _ => files => Load(files, replace: IsQueueEmpty),
     };
@@ -1025,8 +2182,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// Wstawia pliki na miejsce kolejki i gra pierwszy. Przy zamykaniu okna pierwszy tylko czeka
-    /// jak wznowienie i tak trafia do zapisu, bo odtwarzanie otworzyłoby urządzenie do końca zamykania;
-    /// tak samo przy otwarciu z poprzedniego uruchomienia, bo start programu ma być cichy.
+    /// jak wznowienie i tak trafia do zapisu, bo odtwarzanie otworzyłoby urządzenie do końca zamykania.
     /// </summary>
     private void ReplaceQueue(List<string> files)
     {
@@ -1067,6 +2223,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private Task _openChain = Task.CompletedTask;
 
+    /// <summary>Kończy się po dołożeniu wszystkiego, co dotąd czekało na sprawdzenie w tle.</summary>
+    public Task OpensFinished => _openChain;
+
     /// <summary>Otwarcia przeglądane w tle i jeszcze niedołożone, w kolejności przybycia.</summary>
     private readonly List<PendingOpen> _pendingOpens = [];
 
@@ -1076,31 +2235,64 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     private readonly List<PendingOpenState> _unfinishedOpens = [];
 
+    /// <summary>
+    /// Zapis poprzedniej sesji, którego ścieżki sprawdzają się jeszcze w tle. Dopóki kolejka
+    /// nie wróci, to on trafia do zapisu kolejki, żeby jej nie stracić.
+    /// </summary>
+    private QueueState? _unrestored;
+
+    /// <summary>
+    /// Zapis poprzedniej sesji, z której część plików leży na niedostępnym dysku. Trafia do zapisu
+    /// kolejki bez zmian, dopóki użytkownik nie zmieni kolejki albo czegoś nie włączy; od tej
+    /// chwili kolejką jest to, co widać na ekranie.
+    /// </summary>
+    private QueueState? _keptSession;
+
+    /// <summary>Przywracanie nie skończyło się przed zamknięciem okna, więc otwarcia po nim też czekają.</summary>
+    private bool _restoreLeftUnfinished;
+
     private sealed class PendingOpen(
-        Task<(List<string> Files, string? Unreadable)> expansion, PendingOpenState request, Action<List<string>> apply)
+        Task<(List<string> Files, string? Unreadable)> expansion, PendingOpenState? request, Action<List<string>> apply)
     {
         public Task<(List<string> Files, string? Unreadable)> Expansion { get; } = expansion;
 
-        /// <summary>Surowe ścieżki i akcja, do zapisu, gdyby otwarcie nie zdążyło.</summary>
-        public PendingOpenState Request { get; } = request;
+        /// <summary>Surowe ścieżki i akcja, do zapisu, gdyby otwarcie nie zdążyło; brak przy przywracaniu kolejki.</summary>
+        public PendingOpenState? Request { get; } = request;
 
         public Action<List<string>> Apply { get; } = apply;
+
+        /// <summary>Kolejkę wyczyszczono przed końcem sprawdzania, więc wynik już nikogo nie obchodzi.</summary>
+        public bool Dropped { get; set; }
+
+        /// <summary>Kończy się z chwilą anulowania, żeby łańcuch otwarć nie czekał na sprawdzanie, które już nikogo nie obchodzi.</summary>
+        public TaskCompletionSource DroppedSignal { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Błąd sprawdzania albo dokładania wyniku.</summary>
+        public Exception? Failure { get; set; }
     }
 
     /// <summary>
-    /// Zamienia ścieżki na pliki dźwiękowe i przekazuje je dalej. Same pliki idą od razu;
-    /// foldery są przeglądane poza wątkiem interfejsu, bo duży katalog na wolnym dysku
-    /// zamroziłby okno. Dokładanie czeka na wcześniejsze otwarcia, więc dwa szybkie upuszczenia
-    /// nie zamienią się kolejnością.
+    /// Zamienia ścieżki na pliki dźwiękowe i przekazuje je dalej. Pliki i foldery sprawdza się
+    /// poza wątkiem interfejsu, bo niedostępny dysk sieciowy albo duży katalog zamroziłby okno.
+    /// Dokładanie czeka na wcześniejsze otwarcia, więc dwa szybkie upuszczenia nie zamienią się
+    /// kolejnością.
     /// </summary>
     /// <param name="now">
     /// Przy zamykaniu okna: kolejka zapisuje się zaraz potem, więc dokłada się przed powrotem,
-    /// po wcześniejszych otwarciach. Folder przegląda się w tle i czeka na niego najwyżej do
-    /// wspólnego terminu zamykania (<see cref="FinishPendingOpens"/>).
+    /// po wcześniejszych otwarciach. Ścieżki sprawdza się w tle i czeka na nie najwyżej do
+    /// wspólnego terminu zamykania (<see cref="FinishPendingOpens"/>), także same pliki: na
+    /// niedostępnym dysku sieciowym samo sprawdzenie istnienia potrafi trwać kilkanaście sekund.
     /// </param>
     /// <param name="resumed">Otwarcie z poprzedniego uruchomienia: dokłada bez uruchamiania odtwarzania.</param>
     private Task Open(IEnumerable<string> paths, string action, bool now = false, bool resumed = false)
     {
+        // Otwarcie plików w radiu: akcja odtwarzająca przełącza na pliki, samo dopisanie zostawia radio z komunikatem.
+        if (_radioMode && !resumed)
+        {
+            if (action is AppendOpen or PlaylistOpen) ShowNotice(Strings.Current["RadioFilesQueuedNotice"]);
+            else SetSource(SourceMode.Files);
+        }
+
         var list = paths.ToList();
         var request = new PendingOpenState { Paths = list, Action = action };
         var apply = ApplyFor(action);
@@ -1116,40 +2308,43 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             };
         }
 
-        if (now)
-        {
-            var folders = list.Any(Directory.Exists);
-            if (folders) _pendingOpens.Add(new PendingOpen(ExpandInBackground(list), request, apply));
-
-            FinishPendingOpens();
-            if (folders) return Task.CompletedTask;
-
-            // Plik nie wyprzedza w kolejce otwarcia odłożonego do następnego uruchomienia.
-            if (_unfinishedOpens.Count > 0) _unfinishedOpens.Add(request);
-            else ApplyNow(list, apply);
-
-            return Task.CompletedTask;
-        }
-
-        if (_pendingOpens.Count == 0 && !list.Any(Directory.Exists))
-        {
-            ApplyNow(list, apply);
-            return Task.CompletedTask;
-        }
-
-        var pending = new PendingOpen(ExpandInBackground(list), request, apply);
+        var pending = new PendingOpen(ExpandInBackground(list, action), request, apply);
 
         _pendingOpens.Add(pending);
+
+        if (now)
+        {
+            FinishPendingOpens();
+            return Task.CompletedTask;
+        }
+
+        // Do chwili dołożenia otwarcie żyje tylko w zapisie kolejki, a nic innego go nie zamówi.
+        TouchQueue();
+
         return _openChain = OpenAfterAsync(_openChain, pending);
     }
 
-    private static Task<(List<string> Files, string? Unreadable)> ExpandInBackground(List<string> paths) =>
-        Task.Run(() => (ExpandToAudioFiles(paths, out var unreadable), unreadable));
+    private Task<(List<string> Files, string? Unreadable)> ExpandInBackground(List<string> paths, string action) =>
+        Task.Run(() => action == PlaylistOpen
+            ? (ReadPlaylist(paths[0]).Paths.ToList(), (string?)null)
+            : (ExpandToAudioFiles(paths, out var unreadable), unreadable));
 
-    private static void ApplyNow(List<string> paths, Action<List<string>> apply)
+    /// <summary>Dokłada wynik sprawdzania; przy przywracaniu kolejka przestaje czekać także wtedy, gdy nic nie zostało.</summary>
+    private void ApplyExpanded(PendingOpen pending, List<string> files)
     {
-        var files = ExpandToAudioFiles(paths, out _);
-        if (files.Count > 0) apply(files);
+        if (pending.Request is null) ForgetRestore();
+
+        // Bez plików nic nie zmieni kolejki, a otwarcie ma zniknąć z jej zapisu.
+        if (files.Count > 0 || pending.Request is null) pending.Apply(files);
+        else TouchQueue();
+
+        if (pending.Request is null) RunCommandsAfterRestore();
+    }
+
+    private void ForgetRestore()
+    {
+        _unrestored = null;
+        Raise(nameof(ShowsAddPrompt));
     }
 
     private async Task OpenAfterAsync(Task previous, PendingOpen pending)
@@ -1158,18 +2353,23 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         try
         {
+            // Anulowane żądanie zwalnia łańcuch od razu, nie czekając na nieodpowiadający dysk.
+            if (await Task.WhenAny(pending.Expansion, pending.DroppedSignal.Task) != pending.Expansion) return;
+
             var (files, unreadable) = await pending.Expansion;
 
             // Zamykane okno mogło już dołożyć te pliki albo z nich zrezygnować.
             if (_disposed || !_pendingOpens.Remove(pending)) return;
 
-            if (files.Count > 0) pending.Apply(files);
+            ApplyExpanded(pending, files);
             if (unreadable is not null)
                 ShowNotice(string.Format(Strings.Current["FolderReadFailed"], FolderName(unreadable)));
         }
         catch (Exception ex)
         {
+            pending.Failure = ex;
             _pendingOpens.Remove(pending);
+            if (pending.Request is null) ForgetRestore();
             Console.Error.WriteLine($"[cewka] nie udało się dodać plików: {ex}");
         }
     }
@@ -1181,6 +2381,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// wspólnego dla wszystkich wywołań, bo zamykanie trzyma rolę działającej kopii, na którą
     /// czeka następna. Czego nie zdążono przejrzeć — razem z otwarciami po nim, żeby zachować
     /// kolejność — to trafia do zapisu kolejki i dokańcza się przy następnym uruchomieniu.
+    /// Tak samo przywracana kolejka: jej zapis zostaje bez zmian.
     /// </summary>
     public void FinishPendingOpens()
     {
@@ -1195,18 +2396,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             try
             {
                 var left = Math.Max(0, deadline - Environment.TickCount64);
-                if (_unfinishedOpens.Count > 0 || !pending.Expansion.Wait(TimeSpan.FromMilliseconds(left)))
+                if (_restoreLeftUnfinished || _unfinishedOpens.Count > 0 || !pending.Expansion.Wait(TimeSpan.FromMilliseconds(left)))
                 {
                     Console.Error.WriteLine("[cewka] otwarcie nie skończyło się przed zamknięciem okna; dokończy się przy następnym uruchomieniu");
-                    _unfinishedOpens.Add(pending.Request);
+
+                    if (pending.Request is null) _restoreLeftUnfinished = true;
+                    else _unfinishedOpens.Add(pending.Request);
+
                     continue;
                 }
 
-                var files = pending.Expansion.Result.Files;
-                if (files.Count > 0) pending.Apply(files);
+                ApplyExpanded(pending, pending.Expansion.Result.Files);
             }
             catch (Exception ex)
             {
+                if (pending.Request is null) ForgetRestore();
                 Console.Error.WriteLine($"[cewka] nie udało się dodać plików: {ex}");
             }
         }
@@ -1246,8 +2450,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 AppendRows();
                 _resume.Discard();
 
-                // Przy zamykaniu i przy otwarciu z poprzedniego uruchomienia pierwszy dołożony plik
-                // tylko czeka jak wznowienie, zob. ReplaceQueue.
+                // Przy zamykaniu pierwszy dołożony plik tylko czeka jak wznowienie, zob. ReplaceQueue.
                 if (HoldsPlayback) _resume.Arm(first, 0, Queue.Count);
                 else if (TryPlayback(() => _engine.PlayIndex(first))) SyncPlaying();
 
@@ -1359,8 +2562,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ShowNotice(Strings.Current["DeviceLostNotice"]);
     }
 
-    /// <summary>Wyłącznie dla testów: wołane przed przejrzeniem folderu, np. żeby je spowolnić.</summary>
-    internal static Action<string>? FolderExpanding;
+    private readonly PathProbe _paths;
 
     /// <summary>
     /// Foldery przeglądane są rekurencyjnie, z pominięciem plików nierozpoznanych. W każdym katalogu
@@ -1370,7 +2572,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <para>Folder, którego nie da się przejrzeć, jest pomijany, a pierwszy taki trafia do
     /// <paramref name="unreadable"/>. Nieczytelny podkatalog pomija się po cichu.</para>
     /// </summary>
-    private static List<string> ExpandToAudioFiles(IEnumerable<string> paths, out string? unreadable)
+    private List<string> ExpandToAudioFiles(IEnumerable<string> paths, out string? unreadable)
     {
         unreadable = null;
         var result = new List<string>();
@@ -1378,12 +2580,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         foreach (var path in paths)
         {
-            if (Directory.Exists(path))
+            if (_paths.DirectoryExists(path))
             {
                 try
                 {
-                    FolderExpanding?.Invoke(path);
-
                     var folder = new DirectoryInfo(path);
                     var real = IsLink(folder) ? folder.ResolveLinkTarget(returnFinalTarget: true)?.FullName : null;
                     WalkFolder(folder, real ?? folder.FullName, visited, result, root: true);
@@ -1394,7 +2594,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     unreadable ??= path;
                 }
             }
-            else if (File.Exists(path) && IsAudio(path))
+            else if (_paths.FileExists(path) && IsAudio(path))
             {
                 result.Add(path);
             }
@@ -1497,9 +2697,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void QueueChanged()
     {
+        _keptSession = null;
         SetUndo(null);
         Raise(nameof(QueueSummary));
         Raise(nameof(IsQueueEmpty));
+        Raise(nameof(ShowsAddPrompt));
         if (_current is null) Title = IdleTitle;
         TouchQueue();
     }
@@ -1540,6 +2742,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (_current is not null) _current.IsCurrent = true;
 
         Raise(nameof(CurrentIndex));
+        UpdateNextUp();
+        MarkQueueRowStale();
     }
 
     /// <summary>
@@ -1560,6 +2764,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 if (token != Volatile.Read(ref _metadataGeneration)) return;
 
+                BeforeBackgroundMetadataRead?.Invoke(entry);
                 try { entry.EnsureMetadata(); }
                 catch { continue; }
 
@@ -1567,6 +2772,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 {
                     if (token != _metadataGeneration || RowFor(entry) is not { } row) return;
                     ApplyMetadataToRow(row, entry);
+                    _queueRowDirty = true;
                 }, DispatcherPriority.Background);
             }
 
@@ -1576,6 +2782,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             }, DispatcherPriority.Background);
         });
     }
+
+    /// <summary>
+    /// Wołane w wątku tła tuż przed odczytem tagów wpisu. Program go nie ustawia; testy wstrzymują
+    /// nim odczyt, żeby kolejność „odczyt — zmiana kolejki” nie zależała od tempa maszyny.
+    /// </summary>
+    internal Action<QueueEntry>? BeforeBackgroundMetadataRead { get; set; }
 
     private QueueItemViewModel? RowFor(QueueEntry entry)
     {
@@ -1611,7 +2823,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var metadata = entry.Metadata;
         if (metadata is null) return string.Empty;
 
-        var artist = metadata.Artist ?? metadata.AlbumArtist;
+        var artist = ArtistOf(metadata);
         var parts = new List<string>();
 
         if (!string.IsNullOrWhiteSpace(artist) && !string.IsNullOrWhiteSpace(metadata.Album))
@@ -1624,6 +2836,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         return string.Join(" · ", parts);
     }
 
+    /// <summary>Wykonawca utworu, a gdy go brak, wykonawca albumu; jedna reguła dla wiersza okna i sceny.</summary>
+    private static string? ArtistOf(TrackMetadata? metadata) => metadata?.Artist ?? metadata?.AlbumArtist;
+
     public void PlayItem(QueueItemViewModel item)
     {
         var index = Queue.IndexOf(item);
@@ -1635,18 +2850,67 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public void Next()
     {
+        if (_radioMode)
+        {
+            Radio.StepDelayed(1);
+            return;
+        }
+
+        if (WaitsForRestore(Next)) return;
+
         _resume.Discard();
         if (TryPlayback(_engine.Next)) SyncPlaying();
     }
 
     public void Previous()
     {
+        if (_radioMode)
+        {
+            Radio.StepDelayed(-1);
+            return;
+        }
+
+        if (WaitsForRestore(Previous)) return;
+
         _resume.Discard();
         if (TryPlayback(_engine.Previous)) SyncPlaying();
     }
 
+    /// <summary>Polecenia naciśnięte, gdy kolejka dopiero wraca, w kolejności naciśnięcia.</summary>
+    private readonly List<Action> _commandsDuringRestore = [];
+
+    /// <summary>
+    /// Na niewróconej jeszcze kolejce polecenie nie ma czego grać, a przepaść też nie powinno.
+    /// Czeka więc na jej powrót, tak samo jak klawisz naciśnięty chwilę później.
+    /// </summary>
+    private bool WaitsForRestore(Action command)
+    {
+        if (_unrestored is null || Queue.Count > 0) return false;
+
+        _commandsDuringRestore.Add(command);
+        return true;
+    }
+
+    private void RunCommandsAfterRestore()
+    {
+        var commands = _commandsDuringRestore.ToList();
+        _commandsDuringRestore.Clear();
+
+        if (IsClosing || Queue.Count == 0) return;
+
+        foreach (var command in commands) command();
+    }
+
     public void TogglePlay()
     {
+        if (_radioMode)
+        {
+            ToggleRadioPlay();
+            return;
+        }
+
+        if (WaitsForRestore(TogglePlay)) return;
+
         // Pierwsze naciśnięcie po starcie wznawia utwór przywrócony z poprzedniej sesji.
         if (ResumeRestoredTrack()) return;
 
@@ -1659,15 +2923,151 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Stan przycisku wprost z silnika: „Poprzedni” w pauzie tylko przewija i nie wznawia gry.</summary>
     private void SyncPlaying() => IsPlaying = _engine.State == PlaybackState.Playing;
 
+    /// <summary>Jawne „Play”: nie przełącza, więc nie zatrzyma grającego. Przy przywracaniu czeka w kolejce poleceń.</summary>
+    public void Play()
+    {
+        if (WaitsForRestore(Play)) return;
+
+        if (!IsPlaying) TogglePlay();
+    }
+
+    /// <summary>
+    /// Przy przywracaniu pauza (i zatrzymanie) czeka w kolejce poleceń za wcześniejszym „Play”,
+    /// bo na pustym silniku zadziałałaby od razu, a wcześniejsze „Play” ruszyłoby muzykę po powrocie.
+    /// </summary>
     public void Pause()
     {
+        if (WaitsForRestore(Pause)) return;
+
         _engine.Pause();
         IsPlaying = false;
     }
 
     public void TogglePanel() => PanelOpen = !PanelOpen;
 
-    public void ToggleQueue() => QueueOpen = !QueueOpen;
+    /// <summary>Klawisz L, przycisk kolejki w menu, uchwyt i przypinka w stopce: przypina albo odpina panel.</summary>
+    public void ToggleQueue() => QueuePinned = !QueuePinned;
+
+    // ---------- Źródło dźwięku: pliki albo radio ----------
+
+    private bool _radioMode;
+
+    /// <summary>Lista stacji i to, co gra ze stacji; wczytywana dopiero przy pierwszym wejściu w radio.</summary>
+    public RadioViewModel Radio { get; }
+
+    public bool IsRadioMode => _radioMode;
+
+    public bool IsFilesMode => !_radioMode;
+
+    /// <summary>Losowo i powtarzanie w radiu są ukryte, a miejsce zostaje: rząd przycisków się nie przesuwa.</summary>
+    public double FilesOnlyOpacity => _radioMode ? 0 : 1;
+
+    /// <summary>Odczyt stanu gra / pauza prosto z silnika, po poleceniu wydanym poza modelem widoku.</summary>
+    public void SyncPlayingState() => SyncPlaying();
+
+    public string SourceFilesTooltip => Strings.Current["TooltipSourceFiles"];
+
+    public string SourceRadioTooltip => Strings.Current["TooltipSourceRadio"];
+
+    /// <summary>Nazwa i podpowiedź uchwytu panelu: kolejka przy plikach, stacje przy radiu.</summary>
+    public string QueueHandleName => Strings.Current[IsRadioMode ? "QueueHandleRadio" : "QueueHandleFiles"];
+
+    /// <summary>
+    /// Przełącza źródło jak w wieży: stan „gra / nie gra” się nie zmienia. Plik pauzuje w miejscu (silnik pamięta
+    /// pozycję), a rusza ostatnia stacja; po powrocie do plików stacja się rozłącza i ten sam utwór gra dalej.
+    /// </summary>
+    public void SetSource(SourceMode mode)
+    {
+        var radio = mode == SourceMode.Radio;
+        if (radio == _radioMode) return;
+        if (radio && !RadioAvailable) return;
+
+        var playing = _engine.State == PlaybackState.Playing;
+        Radio.CancelPendingStep();
+        _radioMode = radio;
+
+        if (radio)
+        {
+            Radio.Activate();
+            FormatBadge = Radio.Badge;
+            if (playing && !Radio.PlaySelected())
+            {
+                _engine.Pause();
+                playing = false;
+            }
+        }
+        else
+        {
+            if (_engine.IsLive) _engine.StopLive();
+            FormatBadge = _currentMetadata?.BuildBadge(null) ?? string.Empty;
+            // Pozycja z poprzedniej sesji, której nic jeszcze nie zużyło, rusza razem z plikiem.
+            if (playing && Queue.Count > 0 && !ResumeRestoredTrack()) TryPlayback(_engine.Play);
+        }
+
+        _settings.Current.Source = mode;
+        _settings.Touch();
+
+        SampleRadioLogo();
+        RefreshPalettes();
+        PublishToMediaPanel();
+        SyncPlaying();
+        Raise(nameof(IsRadioMode));
+        Raise(nameof(QueueHandleName));
+        Raise(nameof(ActiveSceneVisual));
+        RefreshSceneEnvelope();
+        Raise(nameof(IsFilesMode));
+        Raise(nameof(ShowsTrackQuality));
+        Raise(nameof(SceneLine));
+        Raise(nameof(HasSceneLine));
+        Raise(nameof(HasSceneAlbum));
+        Raise(nameof(SceneCaptionIsLive));
+        Raise(nameof(SceneLiveCaption));
+        Raise(nameof(HasNextUp));
+        Raise(nameof(QueueEnded));
+        Raise(nameof(CanShowQueueRow));
+        Raise(nameof(FilesOnlyOpacity));
+        Raise(nameof(ShowsAddPrompt));
+        Raise(nameof(ShownTitle));
+        Raise(nameof(ShownLine));
+        Raise(nameof(HasShownLine));
+        Raise(nameof(ShowsPauseIcon));
+        Raise(nameof(ShowsStopIcon));
+        Raise(nameof(PlayPauseTooltip));
+    }
+
+    /// <summary>Radio jest włączone w ustawieniach; wyłączone chowa przełącznik źródła i skróty.</summary>
+    public bool RadioAvailable => _settings.Current.RadioEnabled;
+
+    /// <summary>
+    /// Włącza albo wyłącza radio. Wyłączenie wraca do plików (stacja się rozłącza), zatrzymuje pobieranie logo
+    /// i chowa przełącznik źródła, a z nim skróty Ctrl+1 i Ctrl+2.
+    /// </summary>
+    public void SetRadioEnabled(bool enabled)
+    {
+        if (_settings.Current.RadioEnabled == enabled) return;
+
+        if (!enabled) SetSource(SourceMode.Files);
+        _settings.Current.RadioEnabled = enabled;
+        _settings.Touch();
+        Radio.ApplyLogoPolicy();
+        Raise(nameof(RadioAvailable));
+    }
+
+    public void ToggleSource() => SetSource(_radioMode ? SourceMode.Files : SourceMode.Radio);
+
+    /// <summary>W radiu pauza to zatrzymanie: „Odtwórz” łączy od bieżącego miejsca transmisji.</summary>
+    private void ToggleRadioPlay()
+    {
+        Radio.CancelPendingStep();
+        if (_engine.State == PlaybackState.Playing && !Radio.HasFailed)
+        {
+            _engine.Pause();
+            IsPlaying = false;
+            return;
+        }
+
+        if (Radio.PlaySelected()) SyncPlaying();
+    }
 
     // ---------- Operacje na kolejce ----------
 
@@ -1684,7 +3084,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var waiting = _resume.IsArmed && _resume.Index == index;
         var undo = new QueueUndo("QueueUndoRemove", [item.Path], index,
             wasCurrent || waiting,
-            waiting ? _resume.Seconds : wasCurrent ? _engine.Position.TotalSeconds : 0);
+            waiting ? _resume.Seconds : wasCurrent ? _engine.Position.TotalSeconds : 0,
+            item);
 
         _engine.RemoveAt(index);
         _resume.OnRemoved(index);
@@ -1724,12 +3125,28 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         var undo = Queue.Count > 0 ? SnapshotQueue("QueueUndoClear") : null;
 
+        DropPendingOpens();
+
         _engine.ClearQueue();
         _resume.Discard();
 
         RebuildQueue();
         ResetNowPlaying();
         SetUndo(undo);
+    }
+
+    /// <summary>
+    /// Otwarcia sprzed wyczyszczenia, czekające jeszcze na sprawdzenie, nie wracają po nim do kolejki.
+    /// Zostaje przywracana poprzednia sesja, bo tej nikt jeszcze nie widział.
+    /// </summary>
+    private void DropPendingOpens()
+    {
+        foreach (var pending in _pendingOpens.Where(pending => pending.Request is not null).ToList())
+        {
+            pending.Dropped = true;
+            pending.DroppedSignal.TrySetResult();
+            _pendingOpens.Remove(pending);
+        }
     }
 
     // ---------- Cofanie zmian kolejki ----------
@@ -1740,7 +3157,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     /// <param name="Index">Wiersz usunięty albo wiersz, od którego wznawiać.</param>
     /// <param name="Resume">Po cofnięciu wznowienie czeka na wierszu <paramref name="Index"/>.</param>
-    private sealed record QueueUndo(string LabelKey, IReadOnlyList<string> Paths, int Index, bool Resume, double Seconds);
+    /// <param name="Row">
+    /// Usunięty wiersz z jego wpisem. Cofnięcie wstawia ten sam wpis, więc utwór, który jeszcze
+    /// gra z bufora, nie zaczyna się od nowa.
+    /// </param>
+    private sealed record QueueUndo(
+        string LabelKey, IReadOnlyList<string> Paths, int Index, bool Resume, double Seconds,
+        QueueItemViewModel? Row = null);
 
     private QueueUndo? _undo;
 
@@ -1777,13 +3200,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (_undo is not { } undo) return;
         SetUndo(null);
 
-        if (undo.LabelKey == "QueueUndoRemove")
+        if (undo.LabelKey == "QueueUndoRemove" && undo.Row is { Entry: { } entry } row)
         {
-            _engine.Enqueue(undo.Paths);
-            AppendRows();
-            MoveInQueue(Queue.Count - 1, Math.Min(undo.Index, Queue.Count - 1));
+            var index = Math.Min(undo.Index, Queue.Count);
 
-            if (undo.Resume && _engine.CurrentIndex < 0) _resume.Arm(undo.Index, undo.Seconds, Queue.Count);
+            _engine.Restore(entry, index);
+            _resume.OnInserted(index);
+
+            // Znacznik bieżącego ustawia niżej silnik; wiersz mógł go mieć przed usunięciem.
+            // Tagi odczytane w tle, gdy wiersza nie było w kolejce, nie miały go gdzie wpisać.
+            row.IsCurrent = false;
+            Queue.Insert(index, row);
+            ApplyMetadataToRow(row, entry);
+            Renumber(index);
+            RestoreCurrentMarker();
+            QueueChanged();
+            if (entry.Metadata is null) _ = FillMetadataInBackgroundAsync([entry]);
+
+            if (undo.Resume && _engine.CurrentIndex < 0) _resume.Arm(index, undo.Seconds, Queue.Count);
             return;
         }
 
@@ -1811,10 +3245,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         Title = IdleTitle;
         ArtistLine = string.Empty;
+        Artist = string.Empty;
+        Album = string.Empty;
         FormatBadge = string.Empty;
         IsPlaying = _engine.State == PlaybackState.Playing;
 
         _shownEntry = null;
+        Raise(nameof(CurrentFilePath));
+        RefreshSceneEnvelope();
         _covers.Cancel();
         ShowCover(null);
         PublishToMediaPanel();
@@ -1829,6 +3267,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Moves the position by a number of seconds, forwards or back.</summary>
     public void SeekRelative(double seconds)
     {
+        if (_radioMode) return;
+
         var duration = _engine.Duration;
         if (duration <= TimeSpan.Zero) return;
 
@@ -1899,26 +3339,54 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // w _resume i to ją trzeba zapisać, inaczej samo otwarcie i zamknięcie programu ją kasuje.
         var armed = _resume.IsArmed;
 
+        // Gdy gra stacja, Position opisuje strumień; plik czeka w zakładce silnika i to jego miejsce się zapisuje.
+        var filePlace = _engine.IsLive ? _engine.FilePlaceBehindLive ?? (-1, 0) : ((int Index, double Seconds)?)null;
+
         // Otwarcia jeszcze niedołożone: odłożone przy zamykaniu i przeglądane w tle, żeby
         // nie przepadły przy nagłym końcu programu.
-        var opens = _unfinishedOpens.Concat(_pendingOpens.Select(pending => pending.Request)).ToList();
+        var opens = _unfinishedOpens
+            .Concat(_pendingOpens.Where(pending => pending.Request is not null).Select(pending => pending.Request!))
+            .ToList();
 
-        return new QueueState
+        var state = new QueueState
         {
             Paths = _engine.QueuePaths.ToList(),
-            CurrentIndex = armed ? _resume.Index : _engine.CurrentIndex,
-            PositionSeconds = armed ? _resume.Seconds : _engine.Position.TotalSeconds,
+            CurrentIndex = armed ? _resume.Index : filePlace?.Index ?? _engine.CurrentIndex,
+            PositionSeconds = armed ? _resume.Seconds : filePlace?.Seconds ?? _engine.Position.TotalSeconds,
             Shuffle = _engine.Shuffle,
             Repeat = _engine.Repeat.ToString(),
             PendingOpens = opens.Count > 0 ? opens : null,
         };
+
+        // Poprzednia sesja jeszcze nie wróciła. Otwarcie sprzed niej mogło już dołożyć pliki
+        // i wtedy bieżący wpis zostaje jego. Tryby wróciły od razu, więc są już w silniku.
+        if (_unrestored is { } unrestored)
+        {
+            if (state.Paths.Count == 0)
+            {
+                state.CurrentIndex = unrestored.CurrentIndex;
+                state.PositionSeconds = unrestored.PositionSeconds;
+            }
+
+            state.Paths.AddRange(unrestored.Paths);
+        }
+
+        if (_keptSession is { } kept)
+        {
+            state.Paths = kept.Paths;
+            state.CurrentIndex = kept.CurrentIndex;
+            state.PositionSeconds = kept.PositionSeconds;
+        }
+
+        return state;
     }
 
     /// <summary>
     /// Przywraca poprzednią kolejkę bez uruchamiania odtwarzania; pozycja czeka na pierwsze
     /// naciśnięcie odtwarzania. Potem dokańcza otwarcia niedokończone przy zamknięciu.
     /// </summary>
-    public void RestoreQueueState()
+    /// <returns>Zadanie kończy się po dołożeniu wszystkiego, co czekało na sprawdzenie w tle.</returns>
+    public Task RestoreQueueState()
     {
         var state = QueueStateStore.Load(_queueFile);
 
@@ -1928,55 +3396,114 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         // Otwarcia to jawne żądania, a nie poprzednia sesja, więc dokańczają się zawsze.
         ResumeOpens(state);
+        return _openChain;
     }
 
     /// <summary>
-    /// Dokańcza otwarcia niedokończone przy poprzednim zamknięciu, bez przywracania kolejki.
-    /// Na start ze ścieżkami z wiersza poleceń, które dokładają się po nich.
+    /// Start ze ścieżkami z wiersza poleceń. Mają one pierwszeństwo przed poprzednią kolejką, ale
+    /// tylko wtedy, gdy dają pliki: bez plików wraca ona tak jak przy zwykłym starcie, a dopóki
+    /// to nie jest rozstrzygnięte, czeka w zapisie. Otwarcia niedokończone przy poprzednim
+    /// zamknięciu dopisują się za tym wszystkim, bez odtwarzania.
     /// </summary>
-    public void ResumeUnfinishedOpens() => ResumeOpens(QueueStateStore.Load(_queueFile));
+    /// <returns>Zadanie kończy się po dołożeniu wszystkiego, co czekało na sprawdzenie w tle.</returns>
+    public Task OpenAtStart(IEnumerable<string> paths)
+    {
+        var state = QueueStateStore.Load(_queueFile);
+
+        OpenFromOutside(paths);
+
+        if (_settings.Current.RestoreSession) RestoreQueue(state, _pendingOpens[^1].Expansion);
+
+        ResumeOpens(state);
+        return _openChain;
+    }
 
     /// <summary>
     /// Otwiera zwykłą drogą, w tle i w kolejności przybycia, ale zawsze tylko dopisuje na koniec
     /// kolejki: nie zastępuje jej, nie przestawia bieżącego utworu i nie uruchamia odtwarzania,
-    /// bo to, co gra po starcie, wybrał już użytkownik. Z zapisu kolejki znikają przy najbliższym
+    /// bo to, co gra po starcie, wybrał już użytkownik. Dotyczy to także listy odtwarzania, która
+    /// zostaje listą, żeby znów przeczytać jej plik. Z zapisu kolejki znikają przy najbliższym
     /// zapisie po dołożeniu.
     /// </summary>
     private void ResumeOpens(QueueState? state)
     {
         foreach (var open in state?.PendingOpens ?? [])
-            Open(open.Paths, AppendOpen, resumed: true);
+            Open(open.Paths, open.Action == PlaylistOpen ? PlaylistOpen : AppendOpen, resumed: true);
     }
 
-    private void RestoreQueue(QueueState? state)
+    /// <param name="state">Zapis poprzedniej sesji.</param>
+    /// <param name="first">Otwarcie, które ma pierwszeństwo: gdy da pliki, poprzednia kolejka ustępuje mu miejsca.</param>
+    private void RestoreQueue(QueueState? state, Task<(List<string> Files, string? Unreadable)>? first = null)
     {
-        if (state is null || state.Paths.Count == 0) return;
+        if (state is null) return;
 
-        // Pliki mogły zniknąć między uruchomieniami. Numer bieżącego wpisu liczy się po
-        // odfiltrowaniu, żeby wskazywał ten sam plik; gdy zniknął on sam, wznowienia nie ma.
-        var existing = new List<string>(state.Paths.Count);
-        var resumeIndex = -1;
-
-        for (var i = 0; i < state.Paths.Count; i++)
-        {
-            if (!File.Exists(state.Paths[i])) continue;
-            if (i == state.CurrentIndex) resumeIndex = existing.Count;
-            existing.Add(state.Paths[i]);
-        }
-
-        if (existing.Count == 0) return;
-
-        _engine.Enqueue(existing);
+        // Tryby wracają od razu: sprawdzanie ścieżek potrafi trwać, a przełączenie w tym czasie
+        // jest już wyborem użytkownika, którego koniec przywracania nie może cofnąć.
         _engine.Shuffle = state.Shuffle;
         _engine.Repeat = state.ReadRepeat();
-
-        RebuildQueue();
         Raise(nameof(ShuffleEnabled));
         RaiseRepeat();
 
-        if (_current is null) Title = IdleTitle;
+        if (state.Paths.Count == 0) return;
 
-        _resume.Arm(resumeIndex, state.PositionSeconds, existing.Count);
+        // Pliki mogły zniknąć między uruchomieniami. Numer bieżącego wpisu liczy się po
+        // odfiltrowaniu, żeby wskazywał ten sam plik; gdy zniknął on sam, wznowienia nie ma.
+        var resumeIndex = -1;
+        var unreachable = false;
+        var expansion = Task.Run(async () =>
+        {
+            var existing = new List<string>(state.Paths.Count);
+
+            if (first is not null)
+            {
+                await Task.WhenAny(first).ConfigureAwait(false);
+                if (first.IsCompletedSuccessfully && first.Result.Files.Count > 0) return (existing, (string?)null);
+            }
+
+            for (var i = 0; i < state.Paths.Count; i++)
+            {
+                if (!_paths.FileExists(state.Paths[i]))
+                {
+                    unreachable = unreachable || IsFolderUnreachable(state.Paths[i]);
+                    continue;
+                }
+
+                if (i == state.CurrentIndex) resumeIndex = existing.Count;
+                existing.Add(state.Paths[i]);
+            }
+
+            return (existing, (string?)null);
+        });
+
+        _unrestored = state;
+        Raise(nameof(ShowsAddPrompt));
+
+        var pending = new PendingOpen(expansion, null, existing => ApplyRestored(state, existing, resumeIndex, unreachable));
+        _pendingOpens.Add(pending);
+        _openChain = OpenAfterAsync(_openChain, pending);
+    }
+
+    /// <summary>Plik zniknął razem z folderem: to raczej niedostępny dysk niż usunięty plik.</summary>
+    private bool IsFolderUnreachable(string path) =>
+        Path.GetDirectoryName(path) is { Length: > 0 } folder && !_paths.DirectoryExists(folder);
+
+    private void ApplyRestored(QueueState state, List<string> existing, int resumeIndex, bool unreachable)
+    {
+        if (existing.Count > 0)
+        {
+            // Przy włączonej losowości dołożone wpisy wchodzą w kolejność losową, a pierwsze
+            // odtworzenie stawia na jej początku utwór wznawiany.
+            _engine.Enqueue(existing);
+
+            RebuildQueue();
+
+            if (_current is null) Title = IdleTitle;
+
+            _resume.Arm(resumeIndex, state.PositionSeconds, existing.Count);
+        }
+
+        // Ustawiane po przebudowie wierszy, bo każda zmiana kolejki je zdejmuje.
+        _keptSession = unreachable && Queue.Count == existing.Count ? state : null;
     }
 
     // ---------- Komunikaty ----------
@@ -2092,10 +3619,57 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     ///
     /// <para>Odtwarzanie nie zaczyna się samo: pierwszy utwór czeka tak jak wznowienie
     /// z poprzedniej sesji, więc pierwsze naciśnięcie odtwarzania rusza od początku listy.</para>
+    ///
+    /// <para>Plik listy i jej ścieżki sprawdza się poza wątkiem interfejsu, a lista jest zwykłym
+    /// otwarciem w kolejce, więc nie zamieni się kolejnością z upuszczeniem. Gotowa w terminie
+    /// zamykania wstawia się przed zapisem; niegotowa trafia do zapisu kolejki, a następne
+    /// uruchomienie tylko dopisuje jej pliki na koniec, nie zastępując kolejki.</para>
     /// </summary>
-    public PlaylistLoad LoadPlaylist(string path)
+    /// <returns>
+    /// Wynik odczytu po dojściu kolejki otwarć do listy; null, gdy okno zaczęło się zamykać albo
+    /// kolejkę wyczyszczono, bo nie ma już czego zgłaszać. Błąd odczytu należy do wołającego,
+    /// a nie do otwarć czekających za listą.
+    /// </returns>
+    public Task<PlaylistLoad?> LoadPlaylist(string path)
     {
-        var load = PlaylistFile.Load(path);
+        var reading = Task.Run(() => ReadPlaylist(path));
+
+        var pending = new PendingOpen(
+            FilesOfAsync(reading),
+            new PendingOpenState { Paths = [path], Action = PlaylistOpen },
+            _ => ReplaceWithPlaylist(reading.Result));
+
+        _pendingOpens.Add(pending);
+        TouchQueue();
+        _openChain = OpenAfterAsync(_openChain, pending);
+
+        return PlaylistResultAsync(_openChain, reading, pending);
+    }
+
+    private PlaylistLoad ReadPlaylist(string path) => PlaylistFile.Load(path, null, _paths.FileExists);
+
+    /// <summary>Bez powrotu na wątek interfejsu, bo zamykanie okna czeka na ten wynik właśnie na nim.</summary>
+    private static async Task<(List<string> Files, string? Unreadable)> FilesOfAsync(Task<PlaylistLoad> reading)
+    {
+        var load = await reading.ConfigureAwait(false);
+        return (load.Paths.ToList(), null);
+    }
+
+    private async Task<PlaylistLoad?> PlaylistResultAsync(Task opened, Task<PlaylistLoad> reading, PendingOpen pending)
+    {
+        await opened;
+        if (_disposed || IsClosing || pending.Dropped) return null;
+
+        var load = await reading;
+
+        // Odczyt się udał, ale listy nie wstawiono, np. przez błąd urządzenia przy zatrzymaniu.
+        if (pending.Failure is { } failure) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(failure);
+
+        return load;
+    }
+
+    internal PlaylistLoad ReplaceWithPlaylist(PlaylistLoad load)
+    {
         if (load.Paths.Count == 0) return load;
 
         var undo = Queue.Count > 0 ? SnapshotQueue("QueueUndoReplace") : null;
@@ -2105,7 +3679,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _engine.Enqueue(load.Paths);
 
         RebuildQueue();
-        ResetNowPlaying();
+        if (!IsClosing) ResetNowPlaying();
 
         _resume.Arm(0, 0, load.Paths.Count);
         SetUndo(undo);
@@ -2192,11 +3766,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         if (playing && DateTime.UtcNow - _lastPositionSave > PositionSaveInterval) SaveQueueStateInBackground();
 
+        if (_radioMode) Radio.RefreshBadge();
         RefreshBitrateBadge();
+        UpdateNextUp();
+        CheckQueueRow();
 
         // Bez gry wartości stoją w miejscu: zegar zwalnia, a wraca do pełnego tempa przy
         // wznowieniu i przy przeciąganiu suwaka.
         _refresh.Interval = playing || _scrubbing ? RefreshInterval : IdleRefreshInterval;
+
+        if (_isSceneOpen && DateTime.UtcNow - _lastBatteryCheck >= BatteryCheckInterval) RefreshBattery();
 
         // Stan zasilania zmienia się rzadko, a odczyt jest wywołaniem systemowym; pięć sekund
         // wystarcza, żeby podłączenie zasilacza zauważyć, a nie kosztuje praktycznie nic.
@@ -2255,6 +3834,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (index < 0 || index >= Queue.Count) return;
         if (_engine.Queue.ElementAtOrDefault(index) is not { } entry) return;
 
+        _keptSession = null;
+
         var row = Queue[index];
         if (!ReferenceEquals(row, _current))
         {
@@ -2264,6 +3845,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         row.ClearTemporaryFailure();
+        UpdateNextUp();
+        MarkQueueRowStale();
 
         var metadata = entry.Metadata;
         var newTrack = !ReferenceEquals(entry, _shownEntry);
@@ -2271,11 +3854,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (newTrack || (metadata is not null && !ReferenceEquals(metadata, _currentMetadata)))
         {
             _shownEntry = entry;
+            Raise(nameof(CurrentFilePath));
+            RefreshSceneEnvelope();
             _currentMetadata = metadata;
             _shownBitrate = 0;
 
             Title = metadata?.Title ?? entry.Title;
             ArtistLine = BuildAlbumLine(entry);
+            Artist = ArtistOf(metadata) ?? string.Empty;
+            Album = metadata?.Album ?? string.Empty;
             FormatBadge = metadata?.BuildBadge(null) ?? string.Empty;
 
             // Duration read from the tags is usually more accurate than the decoder's estimate.
@@ -2334,7 +3921,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// i próbka do palety, wszystko poza wątkiem interfejsu. Spóźniony wynik jest zwalniany.
     /// </summary>
     private readonly CoverLoader<DecodedCover> _covers =
-        new(path => DecodeCover(MetadataReader.ReadCover(path)), cover => cover.Display.Dispose());
+        CreateCoverLoader(path => DecodeCover(MetadataReader.ReadCover(path)));
+
+    /// <summary>
+    /// Odczyt okładek, który spóźniony wynik zwalnia w całości: obraz płyty i rozmytą okładkę.
+    /// Testy podają własny odczyt, reguła zwalniania zostaje ta sama.
+    /// </summary>
+    internal static CoverLoader<DecodedCover> CreateCoverLoader(Func<string, DecodedCover?> read) =>
+        new(read, cover => cover.Discard());
 
     /// <summary>Ostatni zamówiony odczyt okładki; testy czekają na jego koniec.</summary>
     internal Task CoverTask { get; private set; } = Task.CompletedTask;
@@ -2347,7 +3941,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     private const int CoverDecodeWidth = 640;
 
-    /// <summary>Obraz do pokazania i próbka pikseli do palety; null, gdy okładki nie ma albo jest uszkodzona.</summary>
+    /// <summary>
+    /// Obraz do pokazania, próbka pikseli do palety i rozmyta wersja pod scenę; null, gdy okładki
+    /// nie ma albo jest uszkodzona.
+    /// </summary>
     internal static DecodedCover? DecodeCover(byte[]? bytes)
     {
         if (bytes is not { Length: > 0 }) return null;
@@ -2367,7 +3964,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 Console.Error.WriteLine($"[cewka] próbka okładki: {ex.Message}");
             }
 
-            return new DecodedCover(display, pixels);
+            Bitmap? backdrop = null;
+            try
+            {
+                backdrop = CoverBlur.FromEncoded(bytes);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[cewka] rozmycie okładki: {ex.Message}");
+            }
+
+            return new DecodedCover(display, pixels, backdrop);
         }
         catch (Exception ex)
         {
@@ -2380,31 +3987,120 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Próbka pikseli bieżącej okładki; palety przy zmianie motywu i intensywności liczą się z niej.</summary>
     private byte[]? _coverPixels;
 
-    private void ShowCover(DecodedCover? cover)
+    /// <summary>
+    /// Piksele, z których liczą się plamy sceny: próbka okładki, przy jej braku piksele rozmytej
+    /// okładki, a przy okładce domyślnej jej ciemna wersja zmniejszona do rozmycia.
+    /// </summary>
+    private byte[]? _scenePixels;
+
+    /// <summary>Pokazuje zdekodowaną okładkę; testy podają ją wprost, bez pliku.</summary>
+    internal void ShowCover(DecodedCover? cover)
     {
+        // Duża okładka poprzedniej okładki jest nieaktualna: odpinana bez powiadomienia, jedno
+        // powiadomienie o obrazie sceny wysyła ReplaceCover.
+        _largeCovers?.Cancel();
+        _largePath = null;
+        DropLargeCover(delayed: true, raise: false);
+
         if (cover is not null)
         {
             _usingPlaceholderCover = false;
             _coverPixels = cover.Pixels;
-            ReplaceCover(cover.Display);
+            _scenePixels = cover.Pixels ?? BackdropPixels(cover.Backdrop);
+            ReplaceCover(cover.Display, cover.Display, cover.Backdrop);
         }
         else
         {
             _usingPlaceholderCover = true;
             _coverPixels = null;
-            ReplaceCover(LoadPlaceholder());
+            ShowPlaceholder();
+        }
+
+        UpdateLargeCover();
+    }
+
+    /// <summary>
+    /// Podmienia obrazy na płycie okna i sceny oraz rozmytą okładkę sceny, przelicza barwy i zwalnia
+    /// poprzednie obrazy. Płyta sceny ma zwykle tę samą bitmapę co okno; zwalnia się ją raz.
+    /// </summary>
+    private void ReplaceCover(Bitmap? next, Bitmap? sceneCover, Bitmap? backdrop)
+    {
+        var previous = _cover;
+        var previousScene = _sceneCover;
+        var previousBackdrop = _sceneBackdrop;
+
+        Cover = next;
+        SceneCover = sceneCover;
+        SceneBackdrop = backdrop;
+        Raise(nameof(SceneCoverArt));
+        RefreshPalettes();
+
+        if (!ReferenceEquals(previous, next) && !ReferenceEquals(previous, sceneCover)) ReleaseSceneImage(previous);
+        if (!ReferenceEquals(previousScene, previous) && !ReferenceEquals(previousScene, next)
+            && !ReferenceEquals(previousScene, sceneCover)) ReleaseSceneImage(previousScene);
+        if (!ReferenceEquals(previousBackdrop, backdrop)) previousBackdrop?.Dispose();
+    }
+
+    /// <summary>
+    /// Zwalnia obraz zdjęty ze sceny. W wizualizacji Okładka poprzedni obraz jeszcze znika w przenikaniu
+    /// i warstwa może go przerysować, więc zwolnienie jest odroczone jak przy dużej okładce.
+    /// </summary>
+    private void ReleaseSceneImage(Bitmap? image)
+    {
+        if (image is null) return;
+
+        if (_isSceneOpen && !_disposed && SceneVisual == SceneVisual.Cover)
+            DispatcherTimer.RunOnce(image.Dispose, TimeSpan.FromSeconds(2));
+        else
+            image.Dispose();
+    }
+
+    /// <summary>
+    /// Piksele rozmytej okładki, gdy próbki do palety nie dało się pobrać; rozmycie nie zmienia
+    /// barw dominujących, a bitmapa ma tylko kilka tysięcy pikseli.
+    /// </summary>
+    private static byte[]? BackdropPixels(Bitmap? backdrop)
+    {
+        if (backdrop is null) return null;
+
+        try
+        {
+            return CoverPalette.ReadPixels(backdrop);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cewka] piksele rozmytej okładki: {ex.Message}");
+            return null;
         }
     }
 
-    /// <summary>Podmienia obraz na płycie, przelicza barwy i zwalnia poprzedni obraz.</summary>
-    private void ReplaceCover(Bitmap? next)
+    /// <summary>Okładka domyślna na płycie okna, jej ciemna wersja na płycie sceny i rozmyta pod sceną.</summary>
+    private void ShowPlaceholder()
     {
-        var previous = _cover;
+        var cover = LoadPlaceholder();
+        var sceneCover = ScenePlaceholderCover(cover);
+        var backdrop = ScenePlaceholder(sceneCover, out _scenePixels);
+        ReplaceCover(cover, sceneCover, backdrop);
+    }
 
-        Cover = next;
-        Palette = ExtractPalette();
+    /// <summary>
+    /// Płyta i tło sceny od nowa przy tej samej okładce domyślnej okna, po otwarciu albo zamknięciu
+    /// sceny. Okładka okna się nie zmienia, więc jego barwy i akcent zostają; liczą się tylko plamy sceny.
+    /// </summary>
+    private void ShowScenePlaceholder()
+    {
+        var previousScene = _sceneCover;
+        var previousBackdrop = _sceneBackdrop;
 
-        if (!ReferenceEquals(previous, next)) previous?.Dispose();
+        var sceneCover = ScenePlaceholderCover(_cover);
+        var backdrop = ScenePlaceholder(sceneCover, out _scenePixels);
+        SceneCover = sceneCover;
+        SceneBackdrop = backdrop;
+        Raise(nameof(SceneCoverArt));
+        SceneBlobs = CoverPalette.SceneBlobs(_radioMode ? _radioPixels : _scenePixels);
+
+        if (!ReferenceEquals(previousScene, _cover) && !ReferenceEquals(previousScene, sceneCover)) ReleaseSceneImage(previousScene);
+        if (!ReferenceEquals(previousBackdrop, backdrop)) previousBackdrop?.Dispose();
     }
 
     /// <summary>
@@ -2412,29 +4108,55 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public void OnThemeChanged()
     {
-        if (_usingPlaceholderCover) ReplaceCover(LoadPlaceholder());
-        else Palette = ExtractPalette();
+        if (_usingPlaceholderCover) ShowPlaceholder();
+        else RefreshPalettes();
+    }
+
+    /// <summary>Barwy tła okna i sceny z bieżącej okładki.</summary>
+    private void RefreshPalettes()
+    {
+        Palette = ExtractPalette(App.Theme.IsDark);
+        SceneBlobs = CoverPalette.SceneBlobs(_radioMode ? _radioPixels : _scenePixels);
     }
 
     /// <summary>
     /// Pulls the background colours out of whatever is currently on the record, at the strength
     /// the user chose.
     /// </summary>
-    private Color[] ExtractPalette()
+    private Color[] ExtractPalette(bool dark)
     {
-        var dark = App.Theme.IsDark;
-        var saturation = ColourPreferences.Saturation(_settings.Current.ColourIntensity);
-
         // Akcent liczony jest z palety pobranej w pełnej sile, a nie z tej, którą przyciemniło
         // ustawienie intensywności. Intensywność dotyczy tła; przełączniki i suwaki mają
         // pokazywać barwę okładki zawsze i w całości.
-        if (_coverPixels is { } pixels)
-        {
-            ApplyAccent(CoverPalette.FromPixels(pixels, dark, 1.0), dark);
-            return CoverPalette.FromPixels(pixels, dark, saturation);
-        }
+        ApplyAccent(VividPalette(dark), dark);
 
-        ApplyAccent(CoverPalette.Extract(Cover, dark, 1.0), dark);
+        return BackdropColours(dark);
+    }
+
+    /// <summary>Próbka pikseli logo bieżącej stacji; null, gdy logo nie ma.</summary>
+    private byte[]? _radioPixels;
+
+    private void SampleRadioLogo() => _radioPixels = Radio.StageLogo is { } logo ? CoverPalette.SampleImage(logo) : null;
+
+    /// <summary>
+    /// Barwy tła w trybie radia: z logo bieżącej stacji; stacja bez logo (albo z wyłączonym pobieraniem)
+    /// ma paletę domyślną, nigdy barwy poprzedniej stacji ani okładki pliku.
+    /// </summary>
+    private Color[] RadioColours(bool dark, double saturation) =>
+        _radioPixels is { } pixels ? CoverPalette.FromPixels(pixels, dark, saturation) : CoverPalette.Extract(null, dark, saturation);
+
+    private Color[] VividPalette(bool dark) =>
+        _radioMode ? RadioColours(dark, 1.0) :
+        _coverPixels is { } pixels ? CoverPalette.FromPixels(pixels, dark, 1.0) : CoverPalette.Extract(Cover, dark, 1.0);
+
+    /// <summary>Barwy plam tła dla motywu jasnego albo ciemnego, bez ruszania akcentu.</summary>
+    private Color[] BackdropColours(bool dark)
+    {
+        var saturation = ColourPreferences.Saturation(_settings.Current.ColourIntensity);
+
+        if (_radioMode) return RadioColours(dark, saturation);
+
+        if (_coverPixels is { } pixels) return CoverPalette.FromPixels(pixels, dark, saturation);
 
         // Przy okładce domyślnej barwy pary są znane dokładnie, więc nie ma po co odczytywać ich
         // z narysowanego obrazka.
@@ -2478,6 +4200,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Wstawia barwę akcentu do zasobów aplikacji. Wszystko, co sięga po nią przez
     /// <c>DynamicResource</c> — przełączniki, suwaki, wypełnienia — przemalowuje się samo.
+    /// Scena akcentu nie używa: jej jedyną barwą stanu włączonego jest biel.
     /// </summary>
     private static void ApplyAccent(IReadOnlyList<Color> vivid, bool darkTheme)
     {
@@ -2510,7 +4233,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _settings.Current.ColourIntensity = intensity;
         _settings.Touch();
 
-        Palette = ExtractPalette();
+        RefreshPalettes();
         Raise(nameof(BackdropMinimum));
         Raise(nameof(BackdropMaximum));
     }
@@ -2529,7 +4252,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         // Wybranie losowania ma dać skutek od razu, a nie dopiero przy następnym utworze.
         _placeholderDraw.Forget();
 
-        if (_usingPlaceholderCover) ReplaceCover(LoadPlaceholder());
+        if (_usingPlaceholderCover) ShowPlaceholder();
     }
 
     private readonly PlaceholderDraw _placeholderDraw = new();
@@ -2550,6 +4273,49 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         catch
         {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Okładka domyślna na płycie sceny. Scena jest zawsze ciemna, więc w jasnym motywie spirala
+    /// rysuje się drugi raz, w wersji ciemnej, z tą samą parą barw co na płycie okna. Ten wariant
+    /// powstaje tylko przy otwartej scenie: zamknięta nie ma w jasnym oknie ani płyty, ani tła.
+    /// </summary>
+    private Bitmap? ScenePlaceholderCover(Bitmap? cover)
+    {
+        if (App.Theme.IsDark && cover is not null) return cover;
+        if (!_isSceneOpen) return null;
+
+        try
+        {
+            return CoilCover.Render(_placeholderDraw.For(_settings.Current.PlaceholderPalette, _current?.Path), darkTheme: true);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cewka] ciemna okładka domyślna: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Rozmyta okładka domyślna pod sceną i piksele do barw plam, z tego samego obrazu co płyta
+    /// sceny, więc scena wygląda tak samo w każdym motywie okna.
+    /// </summary>
+    private static Bitmap? ScenePlaceholder(Bitmap? sceneCover, out byte[]? pixels)
+    {
+        pixels = null;
+        if (sceneCover is null) return null;
+
+        try
+        {
+            pixels = CoverBlur.Rasterise(sceneCover, out var size);
+            return CoverBlur.FromPixels(pixels, size);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cewka] rozmycie okładki domyślnej: {ex.Message}");
+            pixels = null;
             return null;
         }
     }
@@ -2581,8 +4347,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _refresh.Stop();
         _noticeTimer.Stop();
         _covers.Cancel();
+        _largeCovers?.Cancel();
+        DropLargeCover(delayed: false, raise: false);
+        _nextUpCovers?.Cancel();
+        _nextUpCover?.Dispose();
+        _nextUpCover = null;
+        Radio.Dispose();
         _engine.Dispose();
+        _loudness.Measured -= OnLoudnessMeasured;
         _loudness.Dispose();
         _cover?.Dispose();
+        if (!ReferenceEquals(_sceneCover, _cover)) _sceneCover?.Dispose();
+        _sceneBackdrop?.Dispose();
     }
 }

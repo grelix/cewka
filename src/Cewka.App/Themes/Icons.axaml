@@ -14,7 +14,12 @@
   <!-- Suwaki: pas dolny z korektorem i efektami. -->
   <StreamGeometry x:Key="IconFadersStroke">M3.5 2.5v11 M8 2.5v11 M12.5 2.5v11 M1.5 5.5h4 M6 9.5h4 M10.5 7h4</StreamGeometry>
 
+  <StreamGeometry x:Key="IconMenuStroke">M2.5,4.5 H13.5 M2.5,8 H13.5 M2.5,11.5 H13.5</StreamGeometry>
   <StreamGeometry x:Key="IconGearStroke">M6.74,2.95 L7.04,1.17 L8.96,1.17 L9.26,2.95 A5.2,5.2 0 0 1 10.68,3.54 L12.15,2.49 L13.51,3.85 L12.46,5.32 A5.2,5.2 0 0 1 13.05,6.74 L14.83,7.04 L14.83,8.96 L13.05,9.26 A5.2,5.2 0 0 1 12.46,10.68 L13.51,12.15 L12.15,13.51 L10.68,12.46 A5.2,5.2 0 0 1 9.26,13.05 L8.96,14.83 L7.04,14.83 L6.74,13.05 A5.2,5.2 0 0 1 5.32,12.46 L3.85,13.51 L2.49,12.15 L3.54,10.68 A5.2,5.2 0 0 1 2.95,9.26 L1.17,8.96 L1.17,7.04 L2.95,6.74 A5.2,5.2 0 0 1 3.54,5.32 L2.49,3.85 L3.85,2.49 L5.32,3.54 A5.2,5.2 0 0 1 6.74,2.95 Z M10.3,8 A2.3,2.3 0 1 1 5.7,8 A2.3,2.3 0 1 1 10.3,8 Z</StreamGeometry>
+
+  <!-- Pełny ekran: narożniki na zewnątrz; zamknięcie pełnego ekranu: narożniki do środka. -->
+  <StreamGeometry x:Key="IconFullScreenStroke">M1.8 5.6V1.8h3.8M10.4 1.8h3.8v3.8M14.2 10.4v3.8h-3.8M5.6 14.2H1.8v-3.8</StreamGeometry>
+  <StreamGeometry x:Key="IconFullScreenExitStroke">M5.6 1.8v3.8H1.8M14.2 5.6h-3.8V1.8M10.4 14.2v-3.8h3.8M1.8 10.4h3.8v3.8</StreamGeometry>
 
   <!-- Motyw: słońce (jasny), księżyc (ciemny), koło w połowie wypełnione (systemowy). -->
   <StreamGeometry x:Key="IconThemeStroke">M8,4.9 A3.1,3.1 0 1 1 8,11.1 A3.1,3.1 0 1 1 8,4.9 Z M8 1.2v1.6M8 13.2v1.6M1.2 8h1.6M13.2 8h1.6M3.3 3.3l1.1 1.1M11.6 11.6l1.1 1.1M12.7 3.3l-1.1 1.1M4.4 11.6l-1.1 1.1</StreamGeometry>
@@ -61,4 +66,18 @@
   <StreamGeometry x:Key="IconSpeakerMutedStroke">M10.8 6 14.4 9.8M14.4 6 10.8 9.8</StreamGeometry>
   <StreamGeometry x:Key="IconResetStroke">M3.1 8.4A4.9 4.9 0 1 0 4.5 4.5M4.4 1.7V4.6H7.3</StreamGeometry>
 
+  <!-- Radio: obudowa z gałką strojenia i głośnikiem, antena od lewej. -->
+  <StreamGeometry x:Key="IconRadioStroke">M2,6.2 H14 V13.4 H2 Z M3.6,6.2 L11.4,2.4 M5.4,9.8 A1.6,1.6 0 1 0 8.6,9.8 A1.6,1.6 0 1 0 5.4,9.8 M10.6,8.8 H12.2 M10.6,11 H12.2</StreamGeometry>
+
+  <!-- Serce ulubionych; to samo obrysowane i wypełnione. -->
+  <StreamGeometry x:Key="IconHeart">M8,13.6 C3.4,10.4 1.9,8 1.9,5.9 A3,3 0 0 1 8,4.4 A3,3 0 0 1 14.1,5.9 C14.1,8 12.6,10.4 8,13.6 Z</StreamGeometry>
+
+  <!-- Zatrzymanie: kwadrat. -->
+  <StreamGeometry x:Key="IconStop">M3.5,3.5 H12.5 V12.5 H3.5 Z</StreamGeometry>
+
+  <!-- Dodanie adresu: plus. -->
+  <StreamGeometry x:Key="IconPlusStroke">M8,3 V13 M3,8 H13</StreamGeometry>
+
+  <!-- Przypięcie panelu: pinezka z główką, kołnierzem i ostrzem. -->
+  <StreamGeometry x:Key="IconPinStroke">M5.2,1.8 H10.8 M6.4,1.8 V6.2 L4.2,8.9 H11.8 L9.6,6.2 V1.8 M8,8.9 V14.2</StreamGeometry>
 </ResourceDictionary>

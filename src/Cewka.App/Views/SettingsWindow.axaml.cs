@@ -1,10 +1,9 @@
-using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Chrome;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using Cewka.App.Controls;
-using Cewka.App.Models;
+using Avalonia.LogicalTree;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Cewka.App.ViewModels;
 using Cewka.Platform;
 
@@ -12,23 +11,12 @@ namespace Cewka.App.Views;
 
 /// <summary>
 /// Okno ustawień, bez ramki jak okno główne i niemodalne, bo urządzenie czy motyw wybiera się
-/// słuchając i patrząc. Z tego powodu przyjmuje skróty odtwarzania i staje obok okna głównego.
+/// słuchając i patrząc. Z tego powodu przyjmuje skróty odtwarzania. Za pierwszym razem staje na
+/// środku okna głównego, potem w zapamiętanym miejscu.
 /// </summary>
-public partial class SettingsWindow : Window
+public partial class SettingsWindow : AuxiliaryWindow
 {
-    /// <summary>Grab band along the window border for resizing, as in the main window.</summary>
-    private const double ResizeMargin = 6;
-
-    /// <summary>Odstęp od okna głównego przy ustawianiu obok niego.</summary>
-    private const double Gap = 12;
-
-    /// <summary>Zapas na niewidoczną ramkę systemową przy sprawdzaniu zapamiętanego położenia.</summary>
-    private const double FrameTolerance = 8;
-
     private SettingsViewModel? _viewModel;
-
-    /// <summary>Ramka systemowa w Windows, jak w oknie głównym.</summary>
-    private readonly bool _systemFrame;
 
     /// <summary>
     /// Required by the XAML runtime loader. The window is always created with a view model
@@ -37,16 +25,8 @@ public partial class SettingsWindow : Window
     public SettingsWindow()
     {
         InitializeComponent();
-        ApplyControlsPosition();
-
-        _systemFrame = OperatingSystem.IsWindows();
-        if (_systemFrame)
-        {
-            WindowDecorations = WindowDecorations.BorderOnly;
-            WindowDecorationProperties.SetElementRole(TitleBar, WindowDecorationsElementRole.TitleBar);
-            TitleBarRoles.Apply(TitleBar);
-            Shell.Classes.Add("square");
-        }
+        UseChrome(TitleBar, Shell, ControlsLeft, ControlsRight,
+            () => App.Settings.Current.SettingsWindow, geometry => App.Settings.Current.SettingsWindow = geometry);
 
         // Własny pasek przewijania, ten sam co przy kolejce; domyślny z motywu Fluent jest
         // szerszy i odstaje od reszty programu.
@@ -63,124 +43,108 @@ public partial class SettingsWindow : Window
         {
             if (e.PropertyName == nameof(SettingsViewModel.CurrentWindowControls)) ApplyControlsPosition();
         };
+
+        // Wyszukiwanie zna teksty stron z okna i pozycje list z modelu.
+        _viewModel.Search.Entries = () => PageEntries().Concat(viewModel.ModelSearchEntries());
+        _hitTimer.Tick += (_, _) => ClearHit();
+        AddHandler(KeyDownEvent, OnSearchKeys, RoutingStrategies.Tunnel);
     }
 
-    /// <summary>Obsługa skrótów odtwarzania z okna głównego; zwraca prawdę, gdy klawisz był skrótem.</summary>
-    public Func<KeyEventArgs, bool>? PlaybackShortcuts { get; init; }
+    // ================= Wyszukiwanie =================
 
-    private void ApplyControlsPosition()
-    {
-        var position = App.Settings.Current.WindowControls;
-        var onRight = position == WindowControlsPosition.Right;
-
-        ControlsLeft.Position = position;
-        ControlsRight.Position = position;
-
-        ControlsLeft.IsVisible = !onRight;
-        ControlsRight.IsVisible = onRight;
-    }
-
-    // ================= Położenie =================
+    private readonly DispatcherTimer _hitTimer = new() { Interval = TimeSpan.FromSeconds(1.6) };
+    private TextBlock? _hit;
 
     /// <summary>
-    /// Ustawia okno przed pokazaniem. Zapamiętane położenie wraca, jeśli okno mieści się na
-    /// którymś z ekranów. Inaczej okno staje obok głównego, gdy obok jest miejsce w obszarze
-    /// roboczym, a gdy go nie ma — przy krawędzi ekranu po stronie, gdzie wolnego miejsca jest więcej.
+    /// Hasła ze stron: nazwy ustawień i tytuły kart razem z opisem pod nimi. Strona wie, do której
+    /// podkategorii należy (Tag z kluczem); teksty są w drzewie także na niewidocznych stronach.
     /// </summary>
-    public void PlaceBeside(Window owner)
+    private IEnumerable<SettingsSearchEntry> PageEntries()
     {
-        if ((Screens.ScreenFromWindow(owner) ?? Screens.Primary) is not { } screen)
+        if (_viewModel is null || ContentArea.Content is not Panel pages) yield break;
+
+        foreach (var page in pages.Children.OfType<Control>())
         {
-            WindowStartupLocation = WindowStartupLocation.CenterOwner;
-            return;
+            if (page.Tag is not string key || _viewModel.Sections.FirstOrDefault(s => s.Key == key) is not { } section)
+                continue;
+
+            foreach (var label in page.GetLogicalDescendants().OfType<TextBlock>()
+                         .Where(t => t.Classes.Contains("setting-label") || t.Classes.Contains("section-title")))
+            {
+                if (string.IsNullOrWhiteSpace(label.Text)) continue;
+
+                var hints = label.Parent is Panel parent
+                    ? parent.Children.OfType<TextBlock>().Where(t => t.Classes.Contains("setting-hint")).Select(t => t.Text)
+                    : [];
+                yield return new SettingsSearchEntry(section, label.Text, string.Join(' ', hints), label);
+            }
         }
-
-        var scale = screen.Scaling;
-
-        // Na małym ekranie (np. 1366×768 przy 125%) okno o wysokości z projektu wystawałoby
-        // poza obszar roboczy i nigdy nie wróciłoby w zapamiętane miejsce.
-        Width = FitLength(Width, MinWidth, screen.WorkingArea.Width / scale);
-        Height = FitLength(Height, MinHeight, screen.WorkingArea.Height / scale);
-
-        var size = new PixelSize((int)Math.Ceiling(Width * scale), (int)Math.Ceiling(Height * scale));
-        var saved = App.Settings.Current.SettingsWindow;
-
-        if (saved is not null
-            && FitsOn(new PixelRect(new PixelPoint(saved.X, saved.Y), size),
-                      Screens.All.Select(s => s.WorkingArea), (int)(FrameTolerance * scale)))
-        {
-            Position = new PixelPoint(saved.X, saved.Y);
-            return;
-        }
-
-        var ownerRect = new PixelRect(owner.Position, PixelSize.FromSize(owner.ClientSize, owner.RenderScaling));
-        Position = Beside(ownerRect, size, screen.WorkingArea, (int)(Gap * scale));
     }
 
-    /// <summary>Długość okna przycięta do dostępnego miejsca, ale nie poniżej minimum.</summary>
-    internal static double FitLength(double length, double minimum, double available) =>
-        Math.Max(minimum, Math.Min(length, available));
-
-    /// <summary>
-    /// Okno leży na którymś z obszarów roboczych. Kilka pikseli zapasu obejmuje niewidoczną ramkę
-    /// systemową i okno przyciągnięte do krawędzi, które zaczyna się tuż poza obszarem.
-    /// </summary>
-    internal static bool FitsOn(PixelRect window, IEnumerable<PixelRect> areas, int tolerance) =>
-        areas.Any(area => new PixelRect(area.X - tolerance, area.Y - tolerance,
-                                        area.Width + 2 * tolerance, area.Height + 2 * tolerance).Contains(window));
-
-    /// <summary>Położenie obok prostokąta okna głównego w obrębie obszaru roboczego.</summary>
-    internal static PixelPoint Beside(PixelRect owner, PixelSize size, PixelRect area, int gap)
+    /// <summary>Wynik otwiera podkategorię, przewija do ustawienia i na chwilę wyróżnia jego nazwę.</summary>
+    private void OnSearchResultClick(object? sender, RoutedEventArgs e)
     {
-        var y = Math.Clamp(owner.Y, area.Y, Math.Max(area.Y, area.Bottom - size.Height));
+        if (sender is not Control { DataContext: SettingsSearchResult result }) return;
 
-        var right = owner.Right + gap;
-        if (right + size.Width <= area.Right) return new PixelPoint(right, y);
-
-        var left = owner.X - gap - size.Width;
-        if (left >= area.X) return new PixelPoint(left, y);
-
-        var roomRight = area.Right - owner.Right;
-        var roomLeft = owner.X - area.X;
-        var x = roomRight >= roomLeft ? area.Right - size.Width : area.X;
-
-        return new PixelPoint(Math.Max(area.X, x), y);
+        ShowResult(result);
     }
 
-    protected override void OnClosing(WindowClosingEventArgs e)
+    internal void ShowResult(SettingsSearchResult result)
     {
-        App.Settings.Current.SettingsWindow = new WindowGeometry
-        {
-            X = Position.X,
-            Y = Position.Y,
-            Width = Width,
-            Height = Height,
-        };
-        App.Settings.Touch();
+        Select(result.Section);
+        if (result.Target is null) return;
 
-        base.OnClosing(e);
+        // Pozycja listy z modelu ma kontrolkę dopiero po ułożeniu pokazanej strony, więc szuka się jej po tym.
+        Dispatcher.UIThread.Post(() =>
+        {
+            var target = result.Target as TextBlock ?? FindLabel(result.Target, result.Label);
+            if (target is null) return;
+
+            target.BringIntoView();
+            ClearHit();
+            _hit = target;
+            target.Classes.Add("search-hit");
+            _hitTimer.Start();
+        }, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>Napis z nazwą pozycji listy na pokazanej stronie: tekst wyniku w kontrolce tej pozycji.</summary>
+    private TextBlock? FindLabel(object item, string label) =>
+        ContentArea.GetVisualDescendants().OfType<TextBlock>()
+            .Where(text => text.IsEffectivelyVisible && ReferenceEquals(text.DataContext, item))
+            .OrderBy(text => text.Text == label ? 0 : 1)
+            .FirstOrDefault();
+
+    /// <summary>Wyróżniona nazwa ustawienia, dla testów.</summary>
+    internal TextBlock? Hit => _hit;
+
+    private void ClearHit()
+    {
+        _hitTimer.Stop();
+        _hit?.Classes.Remove("search-hit");
+        _hit = null;
+    }
+
+    /// <summary>Ctrl+F przenosi fokus do pola wyszukiwania; Esc w polu z tekstem czyści je zamiast zamykać okno.</summary>
+    private void OnSearchKeys(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.Control)
+        {
+            SettingsSearchBox.Focus(NavigationMethod.Tab);
+            SettingsSearchBox.SelectAll();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && SettingsSearchBox.IsFocused && !string.IsNullOrEmpty(SettingsSearchBox.Text))
+        {
+            SettingsSearchBox.Text = string.Empty;
+            e.Handled = true;
+        }
     }
 
     protected override void OnClosed(EventArgs e)
     {
         _viewModel?.Dispose();
         base.OnClosed(e);
-    }
-
-    protected override void OnKeyDown(KeyEventArgs e)
-    {
-        base.OnKeyDown(e);
-        if (e.Handled) return;
-
-        if (e.Key == Key.Escape)
-        {
-            Close();
-            e.Handled = true;
-            return;
-        }
-
-        // Klawisze, których nie zużyła kontrolka z fokusem, sterują odtwarzaniem jak w oknie głównym.
-        PlaybackShortcuts?.Invoke(e);
     }
 
     private void OnSectionClick(object? sender, RoutedEventArgs e)
@@ -218,10 +182,23 @@ public partial class SettingsWindow : Window
 
     private void OnRefreshDevices(object? sender, RoutedEventArgs e) => _viewModel?.RefreshDevices();
 
+    private void OnFitEdges(object? sender, RoutedEventArgs e) => _viewModel?.FitEdges();
+
+    private void OnRefreshScreens(object? sender, RoutedEventArgs e) => _viewModel?.RefreshScreens();
+
+    private void OnScreenClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: ScreenOption screen }) _viewModel?.ChooseScreen(screen);
+    }
+
     private void OnDeviceClick(object? sender, RoutedEventArgs e)
     {
         if (sender is Button { DataContext: DeviceOption device }) _viewModel?.ChooseDevice(device);
     }
+
+    private void OnRadioClearLogos(object? sender, RoutedEventArgs e) => _viewModel?.ClearRadioLogos();
+
+    private void OnRadioClearRecent(object? sender, RoutedEventArgs e) => _viewModel?.ClearRadioRecent();
 
     private void OnOpenRepository(object? sender, RoutedEventArgs e) =>
         WebLink.Open(_viewModel?.RepositoryUrl);
@@ -242,61 +219,4 @@ public partial class SettingsWindow : Window
     private void OnRegisterAssociations(object? sender, RoutedEventArgs e) => _viewModel?.RegisterAssociations();
 
     private void OnRemoveAssociations(object? sender, RoutedEventArgs e) => _viewModel?.RemoveAssociations();
-
-    // ================= Sterowanie oknem bez ramki systemowej =================
-
-    protected override void OnPointerPressed(PointerPressedEventArgs e)
-    {
-        base.OnPointerPressed(e);
-        if (e.Handled || _systemFrame) return;
-        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
-
-        var position = e.GetPosition(this);
-
-        if (WindowState == WindowState.Normal && TryGetResizeEdge(position) is { } edge)
-        {
-            BeginResizeDrag(edge, e);
-            return;
-        }
-
-        if (position.Y <= TitleBar.Bounds.Height) BeginMoveDrag(e);
-    }
-
-    protected override void OnPointerMoved(PointerEventArgs e)
-    {
-        base.OnPointerMoved(e);
-        if (_systemFrame) return;
-
-        Cursor = TryGetResizeEdge(e.GetPosition(this)) switch
-        {
-            WindowEdge.North or WindowEdge.South => new Cursor(StandardCursorType.SizeNorthSouth),
-            WindowEdge.West or WindowEdge.East => new Cursor(StandardCursorType.SizeWestEast),
-            WindowEdge.NorthWest => new Cursor(StandardCursorType.TopLeftCorner),
-            WindowEdge.NorthEast => new Cursor(StandardCursorType.TopRightCorner),
-            WindowEdge.SouthWest => new Cursor(StandardCursorType.BottomLeftCorner),
-            WindowEdge.SouthEast => new Cursor(StandardCursorType.BottomRightCorner),
-            _ => Cursor.Default,
-        };
-    }
-
-    private WindowEdge? TryGetResizeEdge(Point position)
-    {
-        var left = position.X <= ResizeMargin;
-        var right = position.X >= Bounds.Width - ResizeMargin;
-        var top = position.Y <= ResizeMargin;
-        var bottom = position.Y >= Bounds.Height - ResizeMargin;
-
-        return (left, right, top, bottom) switch
-        {
-            (true, _, true, _) => WindowEdge.NorthWest,
-            (_, true, true, _) => WindowEdge.NorthEast,
-            (true, _, _, true) => WindowEdge.SouthWest,
-            (_, true, _, true) => WindowEdge.SouthEast,
-            (true, _, _, _) => WindowEdge.West,
-            (_, true, _, _) => WindowEdge.East,
-            (_, _, true, _) => WindowEdge.North,
-            (_, _, _, true) => WindowEdge.South,
-            _ => null,
-        };
-    }
 }

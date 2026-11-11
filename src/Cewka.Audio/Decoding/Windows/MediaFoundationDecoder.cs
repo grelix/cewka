@@ -274,7 +274,7 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
     /// matching shutdown is deliberately omitted: the platform is wanted for the whole run,
     /// and shutting it down while another decoder still holds a reader would fail.
     /// </summary>
-    private static void EnsureStarted()
+    internal static void EnsureStarted()
     {
         lock (StartupLock)
         {

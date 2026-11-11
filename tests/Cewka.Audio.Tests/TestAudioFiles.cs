@@ -317,5 +317,76 @@ internal static class TestAudioFiles
         return output;
     }
 
+    /// <summary>
+    /// Ramki MPEG-1 Layer III o poprawnych danych bocznych i szumie w danych głównych: dekoder
+    /// wydaje niezerowe próbki bez kodera i bez próbek binarnych. Tylko 44,1 kHz stereo oraz 48 kHz.
+    /// </summary>
+    public static byte[] Mp3NoiseFrames(int count = 4, int seed = 1, int sampleRate = 44100, int channels = 2, int kilobits = 128)
+    {
+        var (rateByte, frameLength) = (sampleRate, kilobits) switch
+        {
+            (44100, 128) when channels == 2 => ((byte)0x90, 417),
+            (48000, 128) => ((byte)0x94, 384),
+            (48000, 32) => ((byte)0x14, 96),
+            (48000, 48) => ((byte)0x34, 144),
+            (48000, 64) => ((byte)0x54, 192),
+            (48000, 80) => ((byte)0x64, 240),
+            _ => throw new ArgumentOutOfRangeException(nameof(sampleRate)),
+        };
+
+        // Dane główne muszą się zmieścić w ramce, inaczej dekoder odrzuci ją razem ze stanem.
+        var mainDataBits = Math.Min(600, (frameLength - 36) * 8 / 4);
+
+        var random = new Random(seed);
+        var output = new byte[frameLength * count];
+
+        for (var i = 0; i < count; i++)
+        {
+            var f = output.AsSpan(i * frameLength, frameLength);
+            random.NextBytes(f);
+
+            f[0] = 0xFF;
+            f[1] = 0xFB;
+            f[2] = rateByte;
+            f[3] = channels == 2 ? (byte)0x64 : (byte)0xE4;
+            WriteNoiseSideInfo(f[4..], channels, mainDataBits);
+        }
+
+        return output;
+    }
+
+    private static void WriteNoiseSideInfo(Span<byte> target, int channels, int mainDataBits = 600)
+    {
+        target[..(channels == 2 ? 32 : 17)].Clear();
+
+        var bit = 0;
+        PutBits(target, ref bit, 0, 9);                      // main_data_begin
+        PutBits(target, ref bit, 0, channels == 2 ? 3 : 5);  // bity prywatne
+        PutBits(target, ref bit, 0, 4 * channels);           // scfsi
+
+        for (var granuleChannel = 0; granuleChannel < 2 * channels; granuleChannel++)
+        {
+            PutBits(target, ref bit, mainDataBits, 12);  // part2_3_length
+            PutBits(target, ref bit, 120, 9);   // big_values
+            PutBits(target, ref bit, 170, 8);   // global_gain
+            PutBits(target, ref bit, 0, 4);     // scalefac_compress
+            PutBits(target, ref bit, 0, 1);     // window_switching
+            PutBits(target, ref bit, 1, 5);     // table_select
+            PutBits(target, ref bit, 2, 5);
+            PutBits(target, ref bit, 3, 5);
+            PutBits(target, ref bit, 3, 4);     // region0_count
+            PutBits(target, ref bit, 2, 3);     // region1_count
+            PutBits(target, ref bit, 0, 3);     // preflag, scalefac_scale, count1table
+        }
+    }
+
+    private static void PutBits(Span<byte> target, ref int bit, int value, int count)
+    {
+        for (var i = count - 1; i >= 0; i--, bit++)
+        {
+            if (((value >> i) & 1) != 0) target[bit / 8] |= (byte)(0x80 >> (bit % 8));
+        }
+    }
+
     public static byte[] Concat(params byte[][] parts) => parts.SelectMany(p => p).ToArray();
 }

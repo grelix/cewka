@@ -13,12 +13,12 @@
   <!-- ======================= Typografia ======================= -->
 
   <Style Selector="Window">
-    <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+    <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
     <Setter Property="FontSize" Value="13" />
   </Style>
 
   <Style Selector="TextBlock">
-    <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
+    <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
   </Style>
 
@@ -236,6 +236,17 @@
     <Setter Property="Width" Value="12" />
     <Setter Property="Height" Value="12" />
     <Setter Property="CornerRadius" Value="6" />
+  </Style>
+
+  <!--
+    Znak 7 px w krążku 12 px stoi 2,5 px od krawędzi; zaokrąglanie układu przesuwało go o pół piksela
+    w lewo i w górę (przy skali 125-150% o inną część piksela), więc znak nie jest zaokrąglany i stoi
+    dokładnie w środku krążka przy każdej skali.
+  -->
+  <Style Selector="Button.traffic Border.dot > Viewbox">
+    <Setter Property="UseLayoutRounding" Value="False" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
 
   <!-- Barwy z systemu macOS, żeby wariant był rozpoznawalny. -->
@@ -457,6 +468,24 @@
     <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
   </Style>
 
+  <!-- Ustawienie znalezione wyszukiwaniem: nazwa na chwilę w barwie akcentu. -->
+  <Style Selector="TextBlock.search-hit">
+    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <!--
+    Nagłówek kategorii głównej w pasku bocznym ustawień: nad jej podkategoriami, nie do kliknięcia.
+    Większe, pogrubione pismo w pełnej barwie tekstu odróżnia go od podkategorii, a nagłówek zaczyna się
+    bliżej krawędzi niż ich nazwy, więc podkategorie wyglądają na wcięte, nie tracąc szerokości.
+  -->
+  <Style Selector="TextBlock.sidebar-heading">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+    <Setter Property="Margin" Value="2,8,0,4" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </Style>
+
   <!-- Objaśnienie pod ustawieniem: zawija się, bo bywa dłuższe niż szerokość okna. -->
   <Style Selector="TextBlock.setting-hint">
     <Setter Property="FontSize" Value="11" />
@@ -507,6 +536,62 @@
   <Style Selector="Border.queue-overlay">
     <Setter Property="Background" Value="{DynamicResource OverlayBrush}" />
     <Setter Property="BoxShadow" Value="-10 0 32 0 #66000000" />
+  </Style>
+
+  <!-- Wąski panel (szerokość wewnętrzna poniżej 300 px): bez kolumny czasu i podsumowania w nagłówku. -->
+  <Style Selector="Border.queue-narrow TextBlock.row-duration">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector="Border.queue-narrow TextBlock.queue-summary">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+
+  <!--
+    Uchwyt panelu kolejki: przezroczysta strefa przy krawędzi z pionową pastylką, która po najechaniu
+    rośnie i bierze barwę akcentu. Bez tła przycisku, bo strefa leży nad treścią okna.
+  -->
+  <Style Selector="ToggleButton.queue-handle">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}">
+          <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}"
+                            HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+
+  <Style Selector="ToggleButton.queue-handle Border.handle-pill">
+    <Setter Property="Width" Value="4" />
+    <Setter Property="Height" Value="56" />
+    <Setter Property="CornerRadius" Value="2" />
+    <Setter Property="Margin" Value="0,0,6,0" />
+    <Setter Property="Background" Value="{DynamicResource Text3Brush}" />
+  </Style>
+
+  <Style Selector="ToggleButton.queue-handle:pointerover Border.handle-pill, ToggleButton.queue-handle:focus-visible Border.handle-pill">
+    <Setter Property="Width" Value="6" />
+    <Setter Property="Height" Value="72" />
+    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="Margin" Value="0,0,5,0" />
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+  </Style>
+
+  <!-- Krawędź zmiany szerokości panelu: linia w barwie akcentu po najechaniu i w trakcie przeciągania. -->
+  <Style Selector="Border.queue-grip">
+    <Setter Property="Cursor" Value="SizeWestEast" />
+  </Style>
+
+  <Style Selector="Border.queue-grip Border.grip-line">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style Selector="Border.queue-grip:pointerover Border.grip-line, Border.queue-grip.dragging Border.grip-line">
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
   </Style>
 
   <!-- ======================= Ikony ======================= -->

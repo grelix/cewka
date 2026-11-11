@@ -1,7 +1,10 @@
 using System.Diagnostics;
 using Cewka.Audio.Decoding;
+using Cewka.Audio.Decoding.Live;
 using Cewka.Audio.Devices;
 using Cewka.Audio.Dsp;
+using Cewka.Audio.Streaming;
+using StreamState = Cewka.Audio.Streaming.LiveState;
 
 namespace Cewka.Audio.Playback;
 
@@ -38,11 +41,20 @@ public sealed class PlaybackEngine : IDisposable
     /// <summary>Najdłuższe czekanie na wyciszenie przed pauzą; woła je wątek interfejsu.</summary>
     private const int PauseFadeTimeoutMilliseconds = 250;
 
+    /// <summary>Powrót do pełnego poziomu przerwanej miękkiej pauzy przy nowym wyborze: bez skoku, ale od razu.</summary>
+    private const double ShortRampSeconds = 0.02;
+
+    /// <summary>Zapas na ostatni okres urządzenia po miękkim wyciszeniu, zanim pauza zatrzyma wyjście.</summary>
+    private static readonly TimeSpan SoftPauseMargin = TimeSpan.FromMilliseconds(60);
+
     /// <summary>
     /// Cisza oddawana po wyciszeniu, zanim wolno zatrzymać urządzenie. Wyrenderowane próbki
     /// czekają jeszcze w buforze sprzętowym, a zatrzymanie go ucina — z trzaskiem.
     /// </summary>
     private const int DrainMilliseconds = 40;
+
+    /// <summary>Przerwa, gdy stacja chwilowo nie ma danych; zatrzymanie nie może na nią długo czekać.</summary>
+    private const int LiveWaitMilliseconds = 5;
 
     private int _drainLength = 1;
     private int _pauseDrainPosition;
@@ -64,6 +76,15 @@ public sealed class PlaybackEngine : IDisposable
     private QueueEntry? _seekTargetEntry;
     private long _seekTargetFrame;
 
+    /// <summary>Przewinięcie do niczego kończy kolejkę, a nie tylko zatrzymuje; pod blokadą kolejki.</summary>
+    private bool _endAfterSeek;
+
+    /// <summary>
+    /// Generacja, w której wątek dekodujący przejął zlecony koniec kolejki, a zgłoszenie końca
+    /// jeszcze nie przyszło; pod blokadą kolejki.
+    /// </summary>
+    private int? _endQueuedGeneration;
+
     /// <summary>Rośnie z każdym żądaniem przewinięcia; nieaktualny sygnał końca kolejki go nie zgadza.</summary>
     private int _generation;
 
@@ -72,6 +93,10 @@ public sealed class PlaybackEngine : IDisposable
 
     // Stan wątku dźwiękowego. Pola volatile ustawiają inne wątki, resztę zmienia tylko on.
     private volatile bool _pauseFadeRequested;
+
+    /// <summary>Miękka pauza wycisza dźwięk, a urządzenie zatrzyma się po wyciszeniu.</summary>
+    private bool _softPausePending;
+    private int _softPauseGeneration;
     private volatile bool _pauseFadeDone;
     private volatile bool _startFadeIn;
     private volatile bool _resetChainPending;
@@ -87,6 +112,34 @@ public sealed class PlaybackEngine : IDisposable
 
     private volatile TrackBoundary _current = TrackBoundary.None;
 
+    // Stacja: pod blokadą kolejki. Wybrana zostaje także w pauzie i po błędzie, a wpis i sesja
+    // istnieją tylko w czasie połączenia.
+    private LiveSource? _liveSource;
+    private QueueEntry? _liveEntry;
+    private StreamState _liveRestState = StreamState.Stopped;
+    private StreamState? _liveReportedState;
+    private string? _liveTitle;
+
+    // Zdarzenia stacji: jedna kolejka, żeby wolny odbiorca nie zamieniał ich kolejności. Epoka to
+    // jedno połączenie; zgłoszenie z minionej przepada, gdy przyjdzie na nie kolej.
+    private readonly Queue<(int Epoch, Action Raise)> _liveEvents = new();
+    private bool _liveEventsRunning;
+    private int _liveEpoch;
+
+    /// <summary>
+    /// Miejsce pliku sprzed stacji; po wyłączeniu stacji wraca jak w wieży. Wpis usunięty z kolejki
+    /// nie jest miejscem powrotu, dopóki cofnięcie usunięcia go nie przywróci.
+    /// </summary>
+    private LiveBookmark? _bookmark;
+
+    // Głośność stacji: pod blokadą kolejki. Znany poziom żyje tylko w pamięci, do końca działania.
+    private readonly Dictionary<string, TrackGain> _liveGains = new(StringComparer.Ordinal);
+    private TrackGain? _liveGain;
+    private LiveLoudnessTracker? _liveTracker;
+    private string? _liveTrackerStation;
+    private int _liveTrackerRate;
+    private int _liveTrackerChannels;
+
     public PlaybackEngine()
         : this(static (name, period) => AudioDevice.Open(name, 0, 2, period))
     {
@@ -97,10 +150,27 @@ public sealed class PlaybackEngine : IDisposable
     {
         _openOutput = openOutput;
         _shuffleOrder = new ShuffleOrder(random);
+        OpenLiveSession = OpenDefaultLiveSession;
     }
 
     /// <summary>Otwieranie dekodera; testy podstawiają tu dekoder syntetyczny.</summary>
     internal Func<string, int, int, IAudioDecoder> OpenDecoder { get; set; } = DecoderFactory.Open;
+
+    /// <summary>Otwieranie sesji stacji; testy podstawiają atrapę.</summary>
+    internal Func<LiveSource, ILiveSession> OpenLiveSession { get; set; }
+
+    /// <summary>
+    /// Blokada adresów stacji, sprawdzana dla adresu początkowego i każdego przekierowania; zwraca
+    /// przyczynę odmowy albo null. Ustawia aplikacja (lista blokad); ważna dla następnych otwarć.
+    /// </summary>
+    public Func<Uri, LiveFailureReason?>? LiveUrlGuard { get; set; }
+
+    private ILiveSession OpenDefaultLiveSession(LiveSource source) =>
+        new LiveSession(source, LiveUrlGuard is { } guard ? new LiveOptions { UrlGuard = guard } : new LiveOptions());
+
+    /// <summary>Otwieranie dekodera stacji; testy podstawiają atrapę.</summary>
+    internal Func<ILiveByteSource, int, int, ILiveDecoder> OpenLiveDecoder { get; set; } =
+        static (bytes, rate, channels) => new LiveStreamDecoder(bytes, rate, channels);
 
     /// <summary>Ramki czekające w buforze; testy dozują nim tempo wątku dźwiękowego.</summary>
     internal int BufferedFrames => _session?.Ring.FramesAvailable ?? 0;
@@ -145,12 +215,101 @@ public sealed class PlaybackEngine : IDisposable
     /// </summary>
     public event Action? DeviceLost;
 
+    /// <summary>Pierwszy dźwięk stacji minął wyjście. Zgłaszane z puli wątków po kolei, jak pozostałe zdarzenia stacji.</summary>
+    public event Action<LiveSource>? LiveStarted;
+
+    public event Action<LiveSource, LiveState>? LiveStateChanged;
+
+    /// <summary>Tytuł obowiązuje od dźwięku, który właśnie minął wyjście.</summary>
+    public event Action<LiveSource, string?>? LiveTitleChanged;
+
+    /// <summary>Stacja przestała grać z przyczyny podanej kodem; zgłaszane, gdy bufor wybrzmiał.</summary>
+    public event Action<LiveSource, LiveFailure>? LiveFailed;
+
+    public event Action<LiveSource, LiveStreamInfo>? LiveInfoChanged;
+
     public PlaybackState State { get; private set; } = PlaybackState.Stopped;
 
-    public RepeatMode Repeat { get; set; } = RepeatMode.None;
+    /// <summary>Stacja wybrana, także w pauzie i po błędzie.</summary>
+    public bool IsLive
+    {
+        get { lock (_sync) return _liveSource is not null; }
+    }
+
+    public LiveSource? CurrentLive
+    {
+        get { lock (_sync) return _liveSource; }
+    }
+
+    /// <summary>
+    /// Miejsce pliku, do którego wraca się po stacji (numer w kolejce i pozycja w sekundach); null, gdy nie gra
+    /// stacja albo plik nie zaczął grać. W czasie stacji tylko to jest pozycją pliku, bo <see cref="Position"/>
+    /// opisuje strumień.
+    /// </summary>
+    public (int Index, double Seconds)? FilePlaceBehindLive
+    {
+        get
+        {
+            lock (_sync)
+            {
+                if (_liveSource is null || _bookmark is not { } place) return null;
+                var index = _queue.IndexOf(place.Entry);
+                return index < 0 ? null : (index, place.Position.TotalSeconds);
+            }
+        }
+    }
+
+    /// <summary>Ostatni zgłoszony stan: porażka dopiero po wybrzmieniu bufora. Null, gdy nie wybrano stacji.</summary>
+    public LiveState? LiveState
+    {
+        get
+        {
+            lock (_sync)
+            {
+                if (_liveSource is null) return null;
+                return _liveEntry is null ? _liveRestState : _liveReportedState ?? StreamState.Connecting;
+            }
+        }
+    }
+
+    /// <summary>Tytuł tego, co słychać; null, gdy stacja go nie podaje.</summary>
+    public string? LiveTitle
+    {
+        get { lock (_sync) return _liveTitle; }
+    }
+
+    public LiveStreamInfo? LiveInfo
+    {
+        get { lock (_sync) return _liveEntry?.Live?.Session.Info; }
+    }
+
+    /// <summary>Kodek z dekodera, nie z nagłówków; przepływność podaje <see cref="InstantaneousBitrate"/>.</summary>
+    public LiveCodec LiveCodec => _session?.Decoder is ILiveDecoder decoder ? decoder.Codec : LiveCodec.Unknown;
+
+    /// <summary>
+    /// Tryb powtarzania. Zmiana w ostatnim pół sekundy utworu sprawdza następny, który dekoder
+    /// już otworzył, tak jak zmiana kolejki.
+    /// </summary>
+    public RepeatMode Repeat
+    {
+        get { lock (_sync) return _repeat; }
+        set
+        {
+            lock (_sync)
+            {
+                if (_repeat == value) return;
+                _repeat = value;
+                _orderVersion++;
+                RevalidatePrefetchLocked();
+            }
+        }
+    }
+
+    private RepeatMode _repeat = RepeatMode.None;
 
     /// <summary>
     /// Odtwarzanie losowe. Włączenie układa nową kolejność z bieżącym utworem na początku.
+    /// Następny otwarty już przez dekoder jest sprawdzany jak przy zmianie kolejki.
     /// </summary>
     public bool Shuffle
     {
@@ -161,7 +320,9 @@ public sealed class PlaybackEngine : IDisposable
             {
                 if (_shuffle == value) return;
                 _shuffle = value;
-                if (value) _shuffleOrder.Reset(_queue, AudibleOrPendingEntry());
+                _orderVersion++;
+                if (value) _shuffleOrder.Reset(_queue, OrderAnchorLocked());
+                RevalidatePrefetchLocked();
             }
         }
     }
@@ -191,13 +352,81 @@ public sealed class PlaybackEngine : IDisposable
     }
 
     /// <summary>
+    /// Numer wpisu, który zagra po bieżącym samoczynnie, liczony tak samo jak faktyczne przejście
+    /// (kolejność losowa, powtarzanie kolejki, pomijanie wpisów nie do otwarcia). −1, gdy nic nie
+    /// zagra: koniec kolejki, powtarzanie utworu albo jedyny wpis, źródło na żywo, koniec odtwarzania.
+    /// Sam odczyt niczego nie przesuwa: na końcu rundy losowania tylko planuje następną.
+    /// </summary>
+    public int NextIndex
+    {
+        get
+        {
+            lock (_sync)
+            {
+                var current = AudibleOrPendingEntry();
+                if (current is null || current.IsLive || _liveSource is not null || _ended
+                    || _repeat == RepeatMode.Track || !_queue.Contains(current))
+                    return -1;
+
+                var next = _shuffle && _queue.Count > 1
+                    ? _shuffleOrder.Preview(current, _repeat == RepeatMode.Queue, _queue,
+                        entry => entry is not ({ IsUnsupported: true } or { OpenFailure: not null }))
+                    : NextPlayableLocked(current);
+                return next is null || ReferenceEquals(next, current) ? -1 : _queue.IndexOf(next);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Kolejność odtwarzania do pokazania: przy losowaniu permutacja, inaczej kolejka, razem z miejscem
+    /// bieżącego wpisu, odczytane naraz. Tylko odczyt: bez losowania i bez zmiany kolejności, więc
+    /// na końcu rundy przy powtarzaniu kolejki pokazuje bieżącą rundę, dopóki przejście nie zacznie
+    /// następnej. Poza tym wpis po bieżącym jest tym, który zagra;
+    /// wpisy nie do otwarcia zostają na swoich miejscach, choć silnik je pomija.
+    /// </summary>
+    public PlaybackOrderSnapshot PlaybackOrder
+    {
+        get
+        {
+            lock (_sync)
+            {
+                var current = _liveSource is null ? AudibleOrPendingEntry() : null;
+                var entries = _shuffle && _queue.Count > 1 && _shuffleOrder.Order.Count == _queue.Count
+                    ? _shuffleOrder.Snapshot(current, _repeat == RepeatMode.Queue)
+                    : _queue.ToArray();
+
+                return new PlaybackOrderSnapshot(entries, current is null ? -1 : Array.IndexOf(entries, current),
+                    _orderVersion + _shuffleOrder.Version);
+            }
+        }
+    }
+
+    /// <summary>Rośnie przy każdej zmianie kolejki, kolejności i trybów; tani odczyt do sprawdzania migawki.</summary>
+    public long PlaybackOrderVersion
+    {
+        get { lock (_sync) return _orderVersion + _shuffleOrder.Version; }
+    }
+
+    private long _orderVersion;
+
+    /// <summary>
     /// Ponownie odczytuje wzmocnienie wyrównania dla słyszanego utworu. Potrzebne, gdy zmieni
     /// się samo ustawienie: bez tego zmiana byłaby słyszalna dopiero od następnego utworu.
     /// </summary>
     public void RefreshTrackGain()
     {
         var entry = _current.Entry;
-        if (entry is not null) Graph.OnTrackChanged(entry);
+        if (entry is null) return;
+
+        if (entry.IsLive)
+        {
+            TrackGain? gain;
+            lock (_sync) gain = _liveGain;
+            Graph.ApplyTrackGain(gain, snap: false);
+            return;
+        }
+
+        Graph.OnTrackChanged(entry);
     }
 
     public int SampleRate { get; private set; } = 48000;
@@ -294,6 +523,9 @@ public sealed class PlaybackEngine : IDisposable
 
             Graph.Prepare(SampleRate, Channels);
 
+            // Dwa okresy: ten, który właśnie gra, i ten w kolejce urządzenia.
+            Graph.Analyser.OutputLatencyFrames = device.PeriodSizeInFrames * 2;
+
             device.Lost += () => OnDeviceLost(device);
             device.Render = buffer => Render(session, buffer);
 
@@ -360,6 +592,8 @@ public sealed class PlaybackEngine : IDisposable
         FeederSession? session;
         IAudioOutput? device;
         ClosedState closed;
+        bool finishes;
+        ILiveSession? liveSession = null;
 
         lock (_sync)
         {
@@ -369,31 +603,63 @@ public sealed class PlaybackEngine : IDisposable
             session = _session;
             device = _device;
 
-            var entry = AudibleOrPendingEntry();
-            closed = new ClosedState(State == PlaybackState.Playing && !_ended);
-            var frame = FramesFrom(Position);
-            var ended = _ended;
-
-            _feeder = null;
-            _session = null;
-            _device = null;
-
             // Odłączenie jeszcze pod blokadą: sterownik może sam uruchomić utracone urządzenie,
-            // a Initialise nowej sesji przygotowuje ten sam tor. Stop czeka na trwający okres.
+            // a Initialise nowej sesji przygotowuje ten sam tor. Stop czeka na trwający okres,
+            // więc dalej słyszany wpis, pozycja i poprzedni wpis już się nie zmieniają.
             if (device is not null)
             {
                 device.Render = null;
                 try { device.Stop(); } catch (AudioException) { }
             }
 
+            var entry = AudibleOrPendingEntry();
+            var frame = FramesFrom(Position);
+
+            // Zlecony koniec kolejki, którego wątek dekodujący jeszcze nie wykonał albo nie zgłosił,
+            // też jest końcem.
+            var ended = _ended || _seekPending && _endAfterSeek || _endQueuedGeneration == _generation;
+
+            // Słyszany wpis usunięty z kolejki gra jeszcze z bufora: miejscem jest wpis po kotwicy,
+            // od początku, a gdy po niej nic nie ma, koniec kolejki (jak w RestartAfterHeardLocked).
+            if (entry is { IsLive: false } && !_queue.Contains(entry)
+                && session?.PreviousHeard is { } anchor && _queue.Contains(anchor))
+            {
+                entry = NextPlayableLocked(anchor, afterRemoved: true);
+                frame = 0;
+                ended |= entry is null;
+            }
+
+            closed = new ClosedState(State == PlaybackState.Playing && !ended);
+
+            // Koniec kolejki ustalony dopiero tutaj zgłasza się raz, poza blokadą; zgłoszenie starej
+            // sesji, które mogło już czekać w puli wątków, traci ważność razem z jej generacją.
+            finishes = keepPlace && ended && !_ended;
+            if (finishes) _generation++;
+
+            _feeder = null;
+            _session = null;
+            _device = null;
+
             State = PlaybackState.Stopped;
             _seekTargetEntry = null;
             _seekPending = false;
+            _endAfterSeek = false;
+            _endQueuedGeneration = null;
             _ended = false;
             _pauseFadeRequested = false;
             _current = TrackBoundary.None;
 
-            if (keepPlace)
+            if (!keepPlace)
+            {
+                liveSession = ForgetLiveLocked();
+            }
+            else if (_liveSource is not null)
+            {
+                // Stacja nie ma miejsca do zachowania: następne Play łączy od nowa.
+                liveSession = DisconnectLiveLocked();
+                State = PlaybackState.Paused;
+            }
+            else
             {
                 if (ended)
                 {
@@ -409,13 +675,18 @@ public sealed class PlaybackEngine : IDisposable
         }
 
         if (session is not null) session.Cancelled = true;
+        liveSession?.Stop();
         feeder?.Join(1000);
         device?.Dispose();
+
+        if (finishes) ThreadPool.UnsafeQueueUserWorkItem(_ => QueueFinished?.Invoke(), null);
 
         return closed;
     }
 
     private readonly record struct ClosedState(bool WasPlaying);
+
+    private readonly record struct LiveBookmark(QueueEntry Entry, TimeSpan Position);
 
     private void ResetAudioThreadState()
     {
@@ -439,9 +710,11 @@ public sealed class PlaybackEngine : IDisposable
         int count;
         lock (_sync)
         {
+            _orderVersion++;
             _queue.Clear();
             foreach (var path in paths) _queue.Add(new QueueEntry { Path = path });
             count = _queue.Count;
+            _bookmark = null;
 
             var first = count > 0 ? _queue[Math.Clamp(startIndex, 0, count - 1)] : null;
             _shuffleOrder.Reset(_queue, first);
@@ -455,8 +728,9 @@ public sealed class PlaybackEngine : IDisposable
         lock (_sync)
         {
             var added = paths.Select(path => new QueueEntry { Path = path }).ToList();
+            _orderVersion++;
             _queue.AddRange(added);
-            _shuffleOrder.Insert(added, AudibleOrPendingEntry());
+            _shuffleOrder.Insert(added, OrderAnchorLocked());
 
             RevalidatePrefetchLocked();
         }
@@ -475,16 +749,48 @@ public sealed class PlaybackEngine : IDisposable
             if (index < 0 || index >= _queue.Count) return;
 
             var entry = _queue[index];
+            _orderVersion++;
             _queue.RemoveAt(index);
             _shuffleOrder.Remove(entry);
 
             wasPlaying = ReferenceEquals(entry, AudibleOrPendingEntry());
+            AfterRemovalChecked?.Invoke();
             if (!wasPlaying) RevalidatePrefetchLocked();
         }
 
         if (wasPlaying) Stop();
         else NotifyCurrentIndex();
     }
+
+    /// <summary>
+    /// Wstawia z powrotem wpis usunięty przez <see cref="RemoveAt"/>, czyli cofa usunięcie. To ten
+    /// sam wpis, więc gdy jeszcze gra z bufora, odtwarzanie rozpoznaje go i nie zaczyna od nowa.
+    /// </summary>
+    public void Restore(QueueEntry entry, int index)
+    {
+        lock (_sync)
+        {
+            if (_queue.Contains(entry)) return;
+
+            var anchor = OrderAnchorLocked();
+            _orderVersion++;
+            _queue.Insert(Math.Clamp(index, 0, _queue.Count), entry);
+            _shuffleOrder.Insert([entry], anchor);
+
+            // Słyszany wpis wraca tam, skąd go usunięto: tuż za kotwicą.
+            if (ReferenceEquals(entry, _current.Entry)) _shuffleOrder.MoveAfter(entry, anchor);
+
+            RevalidatePrefetchLocked();
+        }
+
+        NotifyCurrentIndex();
+    }
+
+    /// <summary>
+    /// Wyłącznie dla testów: wołane w <see cref="RemoveAt"/> pod blokadą kolejki, po sprawdzeniu,
+    /// czy usuwany wpis gra, np. żeby wątek dźwięku przekroczył w tej chwili granicę.
+    /// </summary>
+    internal Action? AfterRemovalChecked;
 
     /// <summary>Reorders the queue, used by dragging a row to a new position.</summary>
     public void Move(int from, int to)
@@ -495,6 +801,7 @@ public sealed class PlaybackEngine : IDisposable
             if (to < 0 || to >= _queue.Count || from == to) return;
 
             var entry = _queue[from];
+            _orderVersion++;
             _queue.RemoveAt(from);
             _queue.Insert(to, entry);
 
@@ -513,68 +820,98 @@ public sealed class PlaybackEngine : IDisposable
     /// </summary>
     private void RevalidatePrefetchLocked()
     {
-        var heard = _current.Entry;
         var session = _session;
 
         // W trakcie przewinięcia słyszany wpis jest nieaktualny, a dekoder otwiera właśnie cel.
-        if (IsSeeking || _ended || heard is null || session is null) return;
+        // Stacja nie ma następnika, a plik czeka do jej końca.
+        if (IsSeeking || _ended || session is null || _liveSource is not null) return;
 
+        // Wątek dźwięku przekracza granice bez blokady kolejki, ale pod blokadą granic. Słyszany
+        // wpis, poprzedni i zapisane granice pochodzą z jednej migawki pod tą blokadą; gdy granica
+        // przesunie się przed zleceniem przewinięcia, sprawdzenie zaczyna się od nowa.
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            TrackBoundary current;
+            QueueEntry? previousHeard;
+            List<QueueEntry> written;
+
+            // Wątek dźwięku czeka na tę blokadę, więc pod nią tylko kopia.
+            lock (session.BoundaryLock)
+            {
+                current = _current;
+                previousHeard = session.PreviousHeard;
+                written = session.Boundaries.Where(boundary => !boundary.IsEnd).Select(boundary => boundary.Entry!).ToList();
+            }
+
+            if (current.Entry is null || RevalidateFromLocked(current, previousHeard, written, session)) return;
+        }
+    }
+
+    /// <returns>Fałsz, gdy słyszany wpis zmienił się w trakcie i trzeba sprawdzić od nowa.</returns>
+    private bool RevalidateFromLocked(
+        TrackBoundary current, QueueEntry? previousHeard, List<QueueEntry> written, FeederSession session)
+    {
+        var heard = current.Entry!;
         var decoding = session.Entry;
-        var previousHeard = session.PreviousHeard;
-
-        // Wątek dźwięku czeka na tę blokadę, więc pod nią tylko kopia granic.
-        List<QueueEntry> written;
-        lock (session.BoundaryLock)
-            written = session.Boundaries.Where(boundary => !boundary.IsEnd).Select(boundary => boundary.Entry!).ToList();
+        var heardQueued = _queue.Contains(heard);
 
         // Granica dekodowanego jest ostatnia. Bez niej dekoder jest jeszcze w słyszanym utworze,
-        // chyba że właśnie otwiera następny.
+        // chyba że właśnie otwiera następny. Słyszany usunięty z kolejki nie ma dokąd grać dalej.
         if (decoding is not null)
         {
             if (written.Count > 0 && ReferenceEquals(written[^1], decoding)) written.RemoveAt(written.Count - 1);
-            else if (written.Count == 0 && ReferenceEquals(decoding, heard)) return;
+            else if (written.Count == 0 && ReferenceEquals(decoding, heard) && heardQueued) return true;
         }
 
         // Krótki wpis usunięty po zapisaniu w buforze gra dalej; następnik liczy się wtedy od
         // utworu przed nim. Gdy i tego nie ma w kolejce, następnik jest nieznany i bufor zostaje.
-        var anchor = _queue.Contains(heard) ? heard : previousHeard;
+        var anchor = heardQueued ? heard : previousHeard;
         if (anchor is not null && !_queue.Contains(anchor)) anchor = null;
 
+        // Powtarzanie utworu nie dotyczy usuniętego słyszanego: za nim gra wpis po kotwicy.
+        var afterRemoved = !heardQueued;
         var previous = anchor;
+
         foreach (var entry in written)
         {
             // Usunięte z kolejki grają z bufora, ale nie wyznaczają następnika.
             if (!_queue.Contains(entry)) continue;
 
-            if (previous is not null && !ReferenceEquals(NextPlayableLocked(previous), entry))
-            {
-                RestartAfterHeardLocked(heard, session);
-                return;
-            }
+            if (previous is not null && !ReferenceEquals(NextPlayableLocked(previous, afterRemoved), entry))
+                return RestartAfterHeardLocked(current, anchor, session);
 
             previous = entry;
+            afterRemoved = false;
         }
 
-        var expected = previous is null ? null : NextPlayableLocked(previous);
+        var expected = previous is null ? null : NextPlayableLocked(previous, afterRemoved);
 
         if (decoding is null)
         {
-            Volatile.Write(ref session.ContinueWith, expected);
-            return;
+            lock (session.BoundaryLock)
+            {
+                if (!ReferenceEquals(_current, current)) return false;
+
+                Volatile.Write(ref session.ContinueWith, expected);
+                return true;
+            }
         }
 
-        if (previous is null || ReferenceEquals(expected, decoding)) return;
+        if (previous is null || ReferenceEquals(expected, decoding)) return true;
 
-        RestartAfterHeardLocked(heard, session);
+        return RestartAfterHeardLocked(current, anchor, session);
     }
 
     /// <summary>
     /// Wpis, który dekoder otworzy po <paramref name="from"/>. Wpisy, których nie dało się
     /// otworzyć, dekoder już zgłosił i pominął.
     /// </summary>
-    private QueueEntry? NextPlayableLocked(QueueEntry from)
+    /// <param name="afterRemoved">
+    /// Następnik usuniętego słyszanego, liczony od kotwicy: powtarzanie utworu go nie dotyczy.
+    /// </param>
+    private QueueEntry? NextPlayableLocked(QueueEntry from, bool afterRemoved = false)
     {
-        var next = Repeat == RepeatMode.Track ? from : FollowingEntryLocked(from, userInitiated: false);
+        var next = _repeat == RepeatMode.Track && !afterRemoved ? from : FollowingEntryLocked(from, userInitiated: false);
 
         var left = _queue.Count;
         while (next is { IsUnsupported: true } or { OpenFailure: not null })
@@ -584,19 +921,61 @@ public sealed class PlaybackEngine : IDisposable
     }
 
     /// <summary>
-    /// Przewija słyszany utwór w miejscu, żeby dekoder wybrał następny od nowa. Wpisu spoza
-    /// kolejki przewinąć się nie da, więc wtedy bufor zostaje bez zmian.
-    ///
-    /// <para>Znane ograniczenie: gdy słyszany wpis usunięto z kolejki, a dekoder ma już otwarty
-    /// następny, wpis wstawiony między kotwicę (<c>PreviousHeard</c>) a dekodowany zostaje
-    /// pominięty — kasuje się tylko <c>ContinueWith</c>, a dekodowanego nikt nie cofa. Okno
-    /// czasowe to czas grania krótkiego, usuniętego utworu zapisanego w buforze. Zachowanie
-    /// opisuje pominięty test <c>RemovedHeardThenEntryInsertedBeforeDecodedIsSkipped</c>.</para>
+    /// Przewija słyszany utwór w miejscu, żeby dekoder wybrał następny od nowa. Słyszanego wpisu
+    /// usuniętego z kolejki przewinąć się nie da, więc gra od razu wpis, który ma przyjść po
+    /// kotwicy, a gdy po niej nic nie ma, kolejka kończy się od razu: reszta usuniętego utworu to
+    /// najwyżej pół sekundy, a wszystko za nim jest jeszcze tylko w buforze. Bez kotwicy
+    /// następnik jest nieznany i bufor zostaje.
     /// </summary>
-    private void RestartAfterHeardLocked(QueueEntry heard, FeederSession session)
+    /// <returns>Fałsz, gdy słyszany wpis zmienił się w trakcie i nic nie zlecono.</returns>
+    private bool RestartAfterHeardLocked(TrackBoundary current, QueueEntry? anchor, FeederSession session)
     {
-        if (_queue.Contains(heard)) RequestSeekLocked(heard, FramesFrom(Position));
-        else Volatile.Write(ref session.ContinueWith, null);
+        // Sprawdzenie i zlecenie pod blokadą granic: wątek dźwięku nie przekroczy granicy między
+        // nimi, a po zleceniu przewinięcia nie przekracza ich wcale.
+        lock (session.BoundaryLock)
+        {
+            if (!ReferenceEquals(_current, current)) return false;
+
+            var heard = current.Entry!;
+            if (_queue.Contains(heard))
+            {
+                // Pozycja z tej samej migawki co wpis, nie z bieżącej granicy.
+                var frame = Math.Max(0, session.Ring.TotalRead - current.AbsoluteFrame) + current.StartFrame;
+                RequestSeekLocked(heard, frame);
+            }
+            else if (anchor is null)
+            {
+                Volatile.Write(ref session.ContinueWith, null);
+            }
+            else if (NextPlayableLocked(anchor, afterRemoved: true) is { } next)
+            {
+                RequestSeekLocked(next, 0);
+            }
+            else
+            {
+                RequestSeekLocked(null, 0);
+                _endAfterSeek = true;
+            }
+
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Wpis, od którego liczy się kolejność losowa: słyszany albo, gdy usunięto go z kolejki,
+    /// a gra jeszcze z bufora, kotwica, czyli utwór słyszany przed nim. Null, gdy żadnego z nich
+    /// nie ma w kolejce.
+    /// </summary>
+    private QueueEntry? OrderAnchorLocked()
+    {
+        if (_liveSource is not null)
+            return _bookmark is { } place && _queue.Contains(place.Entry) ? place.Entry : null;
+
+        var entry = AudibleOrPendingEntry();
+        if (entry is null || _queue.Contains(entry)) return entry;
+
+        var previous = _session?.PreviousHeard;
+        return previous is not null && _queue.Contains(previous) ? previous : null;
     }
 
     /// <summary>Po zmianie kolejki numer grającego wpisu mógł się zmienić; interfejs dostaje nowy.</summary>
@@ -616,9 +995,12 @@ public sealed class PlaybackEngine : IDisposable
     {
         lock (_sync)
         {
-            Stop();
+            // Stacja gra niezależnie od kolejki; znika tylko miejsce powrotu.
+            if (_liveSource is null) Stop();
+            _orderVersion++;
             _queue.Clear();
             _shuffleOrder.Clear();
+            _bookmark = null;
         }
     }
 
@@ -634,15 +1016,42 @@ public sealed class PlaybackEngine : IDisposable
     {
         Initialise();
 
-        lock (_sync)
+        ILiveSession? ended = null;
+        try
         {
-            if (index < 0 || index >= _queue.Count) return;
+            lock (_sync)
+            {
+                if (index < 0 || index >= _queue.Count) return;
 
-            var entry = _queue[index];
-            if (_shuffle) _shuffleOrder.MoveAfter(entry, AudibleOrPendingEntry());
+                var entry = _queue[index];
+                if (_shuffle) _shuffleOrder.MoveAfter(entry, OrderAnchorLocked());
 
-            RequestSeekLocked(entry, FramesFrom(start));
-            PlayLocked();
+                var station = _liveSource;
+                ended = ForgetLiveLocked();
+                RaiseLiveStopped(station);
+                RequestSeekLocked(entry, FramesFrom(start));
+                PlayLocked();
+            }
+        }
+        finally
+        {
+            ended?.Stop();
+        }
+    }
+
+    /// <summary>
+    /// Czas płynnego wyciszenia przy pauzie i podgłośnienia przy wznowieniu plików; zero to
+    /// pauza jak dotąd, z wyciszeniem tylko przeciw trzaskom. Stacji nie dotyczy: pauza je
+    /// rozłącza, a wznowienie łączy od nowa.
+    /// </summary>
+    public TimeSpan SoftPause { get; set; }
+
+    /// <summary>Miękka pauza wycisza jeszcze dźwięk i nie zatrzymała wyjścia.</summary>
+    public bool IsSoftPausing
+    {
+        get
+        {
+            lock (_sync) return _softPausePending;
         }
     }
 
@@ -654,34 +1063,279 @@ public sealed class PlaybackEngine : IDisposable
     {
         Initialise();
 
-        lock (_sync) PlayLocked();
+        lock (_sync) PlayLocked(resume: true);
     }
 
-    private void PlayLocked()
+    /// <param name="resume">„Odtwórz” bez nowego wyboru; tylko ono podgłaśnia płynnie po miękkiej pauzie.</param>
+    private void PlayLocked(bool resume = false)
     {
-        if (_queue.Count == 0 || _device is null) return;
+        if (_device is null || _liveSource is null && _queue.Count == 0) return;
 
-        // Nic nie gra i nic nie jest zaplanowane albo kolejka się skończyła: od początku.
-        if (_ended || AudibleOrPendingEntry() is null)
+        // Wznowienie pliku po pauzie podgłaśnia płynnie; nowy wybór gra od razu pełnym poziomem.
+        // Miękka pauza w toku nie zatrzymała jeszcze wyjścia: dźwięk wraca od poziomu, do którego
+        // zdążył się wyciszyć, krótką rampą, żeby nie skoczył.
+        var soft = resume && SoftPause > TimeSpan.Zero && State == PlaybackState.Paused && _liveSource is null;
+        var fadingOut = _softPausePending && _device.IsRunning;
+        CancelSoftPauseLocked();
+        Graph.PauseFade.FadeTo(1, soft ? SoftPause.TotalSeconds : fadingOut ? ShortRampSeconds : 0);
+
+        if (_liveSource is { } station)
         {
+            // Pauza, błąd i zmiana urządzenia rozłączają; wznowienie łączy od nowa.
+            if (_liveEntry is null) AttachLiveLocked(station, OpenLiveSession(station));
+        }
+        else if (_ended || AudibleOrPendingEntry() is null)
+        {
+            // Nic nie gra i nic nie jest zaplanowane albo kolejka się skończyła: od początku.
             var first = FirstEntryLocked();
             if (first is not null) RequestSeekLocked(first, 0);
         }
 
-        if (State != PlaybackState.Playing) _startFadeIn = true;
+        // Urządzenie pracujące po miękkiej pauzie gra bez przerwy: krótkie narastanie dałoby dołek.
+        if (State != PlaybackState.Playing && !fadingOut) _startFadeIn = true;
 
-        _device.Start();
+        // Stojące urządzenie nie ma czego wyciszać, a wątek dekodujący może nie zdążyć przed pierwszym
+        // okresem: bez opróżnienia słychać by było stary dźwięk z pierścienia.
+        if (_seekPending && !_device.IsRunning && _session is { } session)
+        {
+            session.Ring.DiscardAll();
+            _resetChainPending = true;
+        }
+
+        try
+        {
+            _device.Start();
+        }
+        catch (AudioException) when (_liveEntry is not null)
+        {
+            // Nikt by go nie słuchał; stacja zostaje wybrana, a Play spróbuje od nowa.
+            DisconnectLiveLocked()?.Stop();
+            State = PlaybackState.Paused;
+            throw;
+        }
+
         State = PlaybackState.Playing;
     }
 
+    /// <summary>W czasie stacji rozłącza: wznowienie łączy od bieżącego miejsca transmisji.</summary>
     public void Pause()
     {
+        ILiveSession? disconnected = null;
+
         lock (_sync)
         {
             if (State != PlaybackState.Playing) return;
 
-            FadeOutAndStopLocked();
+            if (_liveSource is null && SoftPause > TimeSpan.Zero && _device is { IsRunning: true })
+            {
+                BeginSoftPauseLocked();
+            }
+            else if (_liveSource is null)
+            {
+                FadeOutAndStopLocked();
+            }
+            else
+            {
+                FadeOutAndStopForLiveLocked();
+                disconnected = DisconnectLiveLocked();
+            }
+
             State = PlaybackState.Paused;
+        }
+
+        disconnected?.Stop();
+    }
+
+    /// <summary>
+    /// Włącza stację w miejsce tego, co gra; kolejka zostaje. Start idzie drogą przewinięcia,
+    /// więc obejmuje go to samo wyciszenie.
+    /// </summary>
+    /// <exception cref="AudioException">Nie da się otworzyć urządzenia.</exception>
+    public void PlayLive(LiveSource source)
+    {
+        ILiveSession? previous = null;
+        try
+        {
+            lock (_sync)
+            {
+                // Pod blokadą: utrata urządzenia nie wejdzie między otwarcie a utworzenie sesji.
+                Initialise();
+
+                var session = OpenLiveSession(source);
+                previous = _liveEntry?.Live?.Session;
+
+                if (_liveSource is null) SaveBookmarkLocked();
+
+                _liveSource = source;
+                AttachLiveLocked(source, session);
+                PlayLocked();
+            }
+        }
+        finally
+        {
+            previous?.Stop();
+        }
+    }
+
+    public void StopLive()
+    {
+        ILiveSession? stopped;
+        lock (_sync)
+        {
+            if (_liveSource is null) return;
+            stopped = EndLiveLocked();
+        }
+
+        stopped?.Stop();
+    }
+
+    /// <summary>Koniec kolejki to nie miejsce do powrotu: następne Play i tak zacznie od początku.</summary>
+    private void SaveBookmarkLocked()
+    {
+        var entry = AudibleOrPendingEntry();
+        _bookmark = entry is not null && !_ended && _queue.Contains(entry) ? new LiveBookmark(entry, Position) : null;
+    }
+
+    /// <summary>
+    /// Kończy stację i wraca do zakładki jako przewinięcia w pauzie; czy grać dalej, wie wołający.
+    /// Sesję zatrzymuje wołający, już poza blokadą.
+    /// </summary>
+    private ILiveSession? EndLiveLocked()
+    {
+        var bookmark = _bookmark;
+
+        FadeOutAndStopForLiveLocked();
+
+        var source = _liveSource;
+        var session = ForgetLiveLocked();
+        RaiseLiveStopped(source);
+        _current = TrackBoundary.None;
+
+        if (bookmark is { } place && _queue.Contains(place.Entry))
+        {
+            RequestSeekLocked(place.Entry, FramesFrom(place.Position));
+            State = PlaybackState.Paused;
+            return session;
+        }
+
+        State = PlaybackState.Stopped;
+        ForgetPlaceLocked();
+
+        return session;
+    }
+
+    /// <summary>Połączenie się kończy, a stacja zostaje wybrana i czeka na Play. Sesję zatrzymuje wołający.</summary>
+    private ILiveSession? DisconnectLiveLocked()
+    {
+        RequestSeekLocked(null, 0);
+
+        // Już rozłączona: stan spoczynku, także po porażce, zostaje i nie ma czego zgłaszać.
+        if (_liveEntry is null) return null;
+
+        var session = _liveEntry.Live?.Session;
+
+        _liveEntry = null;
+        _liveTitle = null;
+        _liveRestState = StreamState.Stopped;
+        _liveEpoch++;
+        RaiseLiveStopped(_liveSource);
+
+        return session;
+    }
+
+    private void RaiseLiveStopped(LiveSource? source)
+    {
+        if (source is not null) PostLiveEventLocked(() => LiveStateChanged?.Invoke(source, StreamState.Stopped));
+    }
+
+    private void PostLiveEventLocked(Action raise)
+    {
+        _liveEvents.Enqueue((_liveEpoch, raise));
+        if (_liveEventsRunning) return;
+
+        _liveEventsRunning = true;
+        ThreadPool.UnsafeQueueUserWorkItem(_ => DeliverLiveEvents(), null);
+    }
+
+    /// <summary>Jeden wątek naraz; ważność sprawdza się tuż przed wywołaniem odbiorcy.</summary>
+    private void DeliverLiveEvents()
+    {
+        while (true)
+        {
+            Action raise;
+            lock (_sync)
+            {
+                if (!_liveEvents.TryDequeue(out var next))
+                {
+                    _liveEventsRunning = false;
+                    return;
+                }
+
+                if (next.Epoch != _liveEpoch) continue;
+                raise = next.Raise;
+            }
+
+            try
+            {
+                raise();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[cewka] błąd odbiorcy zdarzenia stacji: {ex.Message}");
+            }
+        }
+    }
+
+    private ILiveSession? ForgetLiveLocked()
+    {
+        var session = _liveEntry?.Live?.Session;
+
+        _liveSource = null;
+        _liveEntry = null;
+        _liveTitle = null;
+        _bookmark = null;
+        _liveEpoch++;
+
+        return session;
+    }
+
+    /// <summary>Nowe połączenie: wpis powstaje za każdym razem, a zgłoszenia starego go nie miną.</summary>
+    private void AttachLiveLocked(LiveSource source, ILiveSession session)
+    {
+        var entry = new QueueEntry { Path = source.StationId, Live = new LiveBinding(source, session) };
+        _liveEntry = entry;
+        _liveTitle = null;
+        _liveReportedState = null;
+        _liveEpoch++;
+
+        session.StateChanged += state => OnLiveSessionState(entry, state);
+        session.InfoChanged += info => OnLiveSessionInfo(entry, info);
+
+        RequestSeekLocked(entry, 0);
+        session.Start();
+    }
+
+    private void OnLiveSessionState(QueueEntry entry, StreamState state)
+    {
+        lock (_sync)
+        {
+            if (!ReferenceEquals(entry, _liveEntry)) return;
+
+            // Porażka sesji to dopiero zapowiedź: bufor gra dalej, a stan końcowy zgłasza FinishLive.
+            if (state == StreamState.Failed || state == _liveReportedState) return;
+
+            _liveReportedState = state;
+            PostLiveEventLocked(() => LiveStateChanged?.Invoke(entry.Live!.Source, state));
+        }
+    }
+
+    private void OnLiveSessionInfo(QueueEntry entry, LiveStreamInfo info)
+    {
+        lock (_sync)
+        {
+            if (!ReferenceEquals(entry, _liveEntry)) return;
+
+            PostLiveEventLocked(() => LiveInfoChanged?.Invoke(entry.Live!.Source, info));
         }
     }
 
@@ -693,53 +1347,84 @@ public sealed class PlaybackEngine : IDisposable
 
     public void Stop()
     {
+        ILiveSession? ended = null;
+
         lock (_sync)
         {
-            FadeOutAndStopLocked();
-            State = PlaybackState.Stopped;
-            _current = TrackBoundary.None;
-
-            // Bez urządzenia nie ma wątku, który wykonałby przewinięcie; wystarczy zapomnieć cel.
-            if (_device is not null)
+            if (_liveSource is not null)
             {
-                RequestSeekLocked(null, 0);
+                ended = EndLiveLocked();
             }
             else
             {
-                _seekPending = false;
-                _seekTargetEntry = null;
-                _ended = false;
-                _generation++;
+                FadeOutAndStopLocked();
+                State = PlaybackState.Stopped;
+                _current = TrackBoundary.None;
+                ForgetPlaceLocked();
             }
+        }
+
+        ended?.Stop();
+    }
+
+    /// <summary>Bez urządzenia nie ma wątku, który wykonałby przewinięcie; wystarczy zapomnieć cel.</summary>
+    private void ForgetPlaceLocked()
+    {
+        if (_device is not null)
+        {
+            RequestSeekLocked(null, 0);
+        }
+        else
+        {
+            _seekPending = false;
+            _seekTargetEntry = null;
+            _ended = false;
+            _generation++;
         }
     }
 
+    /// <summary>W czasie stacji nic: stację zmienia <see cref="PlayLive"/>.</summary>
     public void Next() => Step(forward: true);
 
     /// <summary>Rewinds first; only jumps back when already near the start of the track.</summary>
     public void Previous()
     {
-        if (Position > TimeSpan.FromSeconds(3))
+        // Pod blokadą: stacja włączona po sprawdzeniu oddałaby miejsce utworowi z kolejki.
+        lock (_sync)
         {
-            SeekTo(TimeSpan.Zero);
-            return;
-        }
+            if (_liveSource is not null) return;
 
-        Step(forward: false);
+            if (Position > TimeSpan.FromSeconds(3))
+            {
+                SeekTo(TimeSpan.Zero);
+                return;
+            }
+
+            Step(forward: false);
+        }
     }
 
     private void Step(bool forward)
     {
-        Initialise();
-
         lock (_sync)
         {
+            if (_liveSource is not null) return;
+
+            Initialise();
+
             if (_queue.Count == 0) return;
 
             var from = AudibleOrPendingEntry();
 
             QueueEntry? target;
-            if (from is null) target = FirstEntryLocked();
+            if (from is not null && !_queue.Contains(from))
+            {
+                // Usunięty słyszany gra z bufora: kolejność liczy się od kotwicy, utworu przed nim.
+                var anchor = OrderAnchorLocked();
+                if (anchor is null) target = FirstEntryLocked();
+                else target = forward ? FollowingEntryLocked(anchor, userInitiated: true) : anchor;
+            }
+            else if (from is null) target = FirstEntryLocked();
             else if (forward) target = FollowingEntryLocked(from, userInitiated: true);
             else target = PrecedingEntryLocked(from) ?? from;
 
@@ -754,9 +1439,12 @@ public sealed class PlaybackEngine : IDisposable
     {
         lock (_sync)
         {
-            // Przewinięcie zaraz po PlayIndex dotyczy wpisu, który dopiero zacznie grać.
+            if (_liveSource is not null) return;
+
+            // Przewinięcie zaraz po PlayIndex dotyczy wpisu, który dopiero zacznie grać. Usuniętego
+            // słyszanego przewinąć się nie da, a zostało z niego najwyżej pół sekundy.
             var entry = AudibleOrPendingEntry();
-            if (entry is null) return;
+            if (entry is null || !_queue.Contains(entry)) return;
 
             RequestSeekLocked(entry, FramesFrom(position));
         }
@@ -772,11 +1460,58 @@ public sealed class PlaybackEngine : IDisposable
 
     private void RequestSeekLocked(QueueEntry? entry, long frame)
     {
+        _endAfterSeek = false;
+        _endQueuedGeneration = null;
         _seekTargetEntry = entry;
         Interlocked.Exchange(ref _seekTargetFrame, frame);
         _ended = false;
         _generation++;
         _seekPending = true;
+    }
+
+    /// <summary>
+    /// Miękka pauza: tor wycisza się w czasie <see cref="SoftPause"/>, a wyjście zatrzymuje się
+    /// w tle po wyciszeniu. Wątek interfejsu nie czeka, a stan od razu jest pauzą.
+    /// </summary>
+    private void BeginSoftPauseLocked()
+    {
+        var duration = SoftPause;
+        Graph.PauseFade.FadeTo(0, duration.TotalSeconds);
+
+        _softPausePending = true;
+        var generation = ++_softPauseGeneration;
+        _ = Task.Delay(duration + SoftPauseMargin).ContinueWith(_ => FinishSoftPause(generation), TaskScheduler.Default);
+    }
+
+    /// <summary>Zatrzymuje wyjście po miękkim wyciszeniu, o ile w międzyczasie nic go nie wznowiło.</summary>
+    private void FinishSoftPause(int generation)
+    {
+        try
+        {
+            lock (_sync)
+            {
+                if (!_softPausePending || generation != _softPauseGeneration) return;
+
+                _softPausePending = false;
+                if (State == PlaybackState.Paused) FadeOutAndStopLocked();
+            }
+        }
+        catch (AudioException ex)
+        {
+            Console.Error.WriteLine($"[cewka] nie zatrzymano wyjścia po pauzie: {ex.Message}");
+        }
+        catch (ObjectDisposedException)
+        {
+            // Silnik zamknięty w trakcie wyciszania: wyjścia już nie ma.
+        }
+    }
+
+    private void CancelSoftPauseLocked()
+    {
+        if (!_softPausePending) return;
+
+        _softPausePending = false;
+        _softPauseGeneration++;
     }
 
     /// <summary>
@@ -806,6 +1541,19 @@ public sealed class PlaybackEngine : IDisposable
         finally
         {
             _pauseFadeRequested = false;
+        }
+    }
+
+    /// <summary>Błąd zatrzymania wyjścia nie może przerwać rozłączania: połączenie nie miałoby już właściciela.</summary>
+    private void FadeOutAndStopForLiveLocked()
+    {
+        try
+        {
+            FadeOutAndStopLocked();
+        }
+        catch (AudioException ex)
+        {
+            Console.Error.WriteLine($"[cewka] nie zatrzymano wyjścia: {ex.Message}");
         }
     }
 
@@ -840,7 +1588,7 @@ public sealed class PlaybackEngine : IDisposable
     {
         if (_queue.Count == 0) return null;
 
-        var wrap = userInitiated || Repeat == RepeatMode.Queue;
+        var wrap = userInitiated || _repeat == RepeatMode.Queue;
 
         if (_shuffle && _queue.Count > 1) return _shuffleOrder.Next(from, wrap, _queue);
 
@@ -854,7 +1602,7 @@ public sealed class PlaybackEngine : IDisposable
     private QueueEntry? PrecedingEntryLocked(QueueEntry from)
     {
         if (_shuffle && _queue.Count > 1)
-            return _shuffleOrder.Previous(from, Repeat == RepeatMode.Queue, _queue);
+            return _shuffleOrder.Previous(from, _repeat == RepeatMode.Queue, _queue);
 
         var index = _queue.IndexOf(from);
         if (index < 0) return null;
@@ -966,7 +1714,11 @@ public sealed class PlaybackEngine : IDisposable
             Graph.Process(rest, frames - done);
         }
 
-        if (trackBoundaries) while (TryCrossBoundary(session, ring.TotalRead)) { }
+        if (trackBoundaries)
+        {
+            while (TryCrossBoundary(session, ring.TotalRead)) { }
+            TryCrossLiveMark(session, ring.TotalRead);
+        }
     }
 
     /// <summary>
@@ -1034,12 +1786,23 @@ public sealed class PlaybackEngine : IDisposable
         if (!session.BoundaryLock.TryEnter()) return false;
         try
         {
+            // Przewinięcie zlecone w trakcie okresu: granice za nim i tak znikną, a ich przekroczenie
+            // zgłosiłoby na chwilę utwór, który nie zagra.
+            if (_seekPending || session.SeekInProgress) return false;
             if (session.Boundaries.Count == 0) return false;
 
             next = session.Boundaries.Peek();
             if (framesRead < next.AbsoluteFrame) return false;
 
             session.Boundaries.Dequeue();
+
+            // Słyszany wpis zmienia się pod tą samą blokadą, pod którą sprawdzanie kolejki robi
+            // migawkę, żeby migawka nie łączyła starego słyszanego z nowymi granicami.
+            if (!next.IsEnd)
+            {
+                session.PreviousHeard = _current.Entry;
+                _current = next;
+            }
         }
         finally
         {
@@ -1053,11 +1816,29 @@ public sealed class PlaybackEngine : IDisposable
             return true;
         }
 
-        session.PreviousHeard = _current.Entry;
-        _current = next;
         Graph.ApplyTrackGain(next.Gain, snap: false);
         Volatile.Write(ref session.TrackChangeSignal, 1);
         return true;
+    }
+
+    /// <summary>
+    /// Przekazuje wątkowi dekodującemu znacznik stacji, jeśli odtwarzanie go minęło. Jedno miejsce
+    /// na znacznik wystarcza: następny poczeka okres, a tytuły przychodzą rzadko.
+    /// </summary>
+    private static void TryCrossLiveMark(FeederSession session, long framesRead)
+    {
+        if (Volatile.Read(ref session.CrossedLiveMark) is not null) return;
+        if (!session.BoundaryLock.TryEnter()) return;
+        try
+        {
+            if (session.LiveMarks.Count == 0 || framesRead < session.LiveMarks.Peek().AbsoluteFrame) return;
+
+            Volatile.Write(ref session.CrossedLiveMark, session.LiveMarks.Dequeue());
+        }
+        finally
+        {
+            session.BoundaryLock.Exit();
+        }
     }
 
     private static long NextBoundaryFrame(FeederSession session)
@@ -1094,7 +1875,8 @@ public sealed class PlaybackEngine : IDisposable
                     }
                     if (session.Ring.SpaceAvailable < DecodeChunkFrames) { Thread.Sleep(3); continue; }
 
-                    PumpOneChunk(session);
+                    if (session.Decoder is ILiveDecoder live) PumpLive(session, live);
+                    else PumpOneChunk(session);
                 }
                 catch (Exception ex)
                 {
@@ -1104,6 +1886,14 @@ public sealed class PlaybackEngine : IDisposable
                     Console.Error.WriteLine($"[cewka] błąd wątku dekodującego: {ex.Message}");
 
                     var failed = session.Entry;
+
+                    // Stacja nie ma następnego utworu ani numeru w kolejce do zgłoszenia.
+                    if (failed is { IsLive: true } && !session.Cancelled)
+                    {
+                        EndLive(session, new LiveFailure(LiveFailureReason.UndecodableData, Detail: ex.Message));
+                        continue;
+                    }
+
                     CloseDecoder(session);
 
                     if (failed is not null && !session.Cancelled)
@@ -1142,6 +1932,63 @@ public sealed class PlaybackEngine : IDisposable
             var generation = Volatile.Read(ref session.EndGeneration);
             ThreadPool.UnsafeQueueUserWorkItem(_ => FinishPlayback(generation), null);
         }
+
+        if (Interlocked.Exchange(ref session.CrossedLiveMark, null) is { } mark) DeliverLiveMark(mark);
+    }
+
+    /// <summary>Znacznik stacji minął wyjście. Znacznik połączenia, które już się skończyło, przepada.</summary>
+    private void DeliverLiveMark(LiveMark mark)
+    {
+        lock (_sync)
+        {
+            if (!ReferenceEquals(mark.Entry, _liveEntry)) return;
+
+            var source = mark.Entry.Live!.Source;
+            switch (mark.Kind)
+            {
+                case LiveMarkKind.Started:
+                    PostLiveEventLocked(() => LiveStarted?.Invoke(source));
+                    break;
+                case LiveMarkKind.Title:
+                    _liveTitle = mark.Title;
+                    PostLiveEventLocked(() => LiveTitleChanged?.Invoke(source, mark.Title));
+                    break;
+                default:
+                    ThreadPool.UnsafeQueueUserWorkItem(_ => FinishLive(mark.Entry, mark.Failure), null);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Koniec stacji dotarł do wyjścia. Pauza dopiero teraz, gdy bufor wybrzmiał. Kolejka nie
+    /// zaczyna grać sama, a stacja zostaje wybrana: Play to ponowna próba.
+    /// </summary>
+    private void FinishLive(QueueEntry entry, LiveFailure? failure)
+    {
+        var binding = entry.Live!;
+
+        lock (_sync)
+        {
+            if (!ReferenceEquals(entry, _liveEntry)) return;
+
+            FadeOutAndStopForLiveLocked();
+            State = PlaybackState.Paused;
+
+            var reported = _liveReportedState;
+            var final = failure is null ? StreamState.Stopped : StreamState.Failed;
+
+            _liveEntry = null;
+            _liveTitle = null;
+            _liveRestState = final;
+            _liveEpoch++;
+            RequestSeekLocked(null, 0);
+
+            if (reported != final) PostLiveEventLocked(() => LiveStateChanged?.Invoke(binding.Source, final));
+            if (failure is { } reason) PostLiveEventLocked(() => LiveFailed?.Invoke(binding.Source, reason));
+        }
+
+        binding.Session.Stop();
     }
 
     /// <summary>
@@ -1155,6 +2002,7 @@ public sealed class PlaybackEngine : IDisposable
             if (generation != _generation || _seekPending) return;
 
             _ended = true;
+            _endQueuedGeneration = null;
             if (State == PlaybackState.Playing)
             {
                 FadeOutAndStopLocked();
@@ -1188,6 +2036,7 @@ public sealed class PlaybackEngine : IDisposable
         QueueEntry? entry;
         long frame;
         int generation;
+        bool endQueue;
 
         lock (_sync)
         {
@@ -1196,22 +2045,43 @@ public sealed class PlaybackEngine : IDisposable
             entry = _seekTargetEntry;
             frame = Interlocked.Read(ref _seekTargetFrame);
             generation = _generation;
+            endQueue = _endAfterSeek;
+            _endAfterSeek = false;
             _seekPending = false;
             session.ContinueWith = null;
 
-            if (entry is not null && !_queue.Contains(entry)) entry = null;
+            // Cel usunięty z kolejki w międzyczasie: nie ma czego grać, więc kolejka się kończy,
+            // zamiast zostać w stanie odtwarzania bez dźwięku. Stacji w kolejce nigdy nie ma.
+            if (entry is { IsLive: false } && !_queue.Contains(entry))
+            {
+                entry = null;
+                endQueue = true;
+            }
+
+            // Koniec w toku: zmiana urządzenia przed zgłoszeniem końca nadal ma go za koniec.
+            if (endQueue) _endQueuedGeneration = generation;
 
             // Jawne polecenie: plik, którego wcześniej nie dało się otworzyć, dostaje nową szansę.
             if (entry is not null) entry.OpenFailure = null;
         }
 
-        lock (session.BoundaryLock) session.Boundaries.Clear();
+        lock (session.BoundaryLock)
+        {
+            session.Boundaries.Clear();
+            session.LiveMarks.Clear();
+        }
 
         if (entry is null)
         {
             CloseDecoder(session);
             session.Entry = null;
-            SetCurrent(session, TrackBoundary.None);
+            if (SetCurrent(session, TrackBoundary.None) && endQueue) EndOfQueue(session, gapless: false, generation);
+            return;
+        }
+
+        if (entry.IsLive)
+        {
+            OpenLive(session, entry);
             return;
         }
 
@@ -1252,6 +2122,94 @@ public sealed class PlaybackEngine : IDisposable
         _snapGainPending = true;
 
         RaiseTrackChanged(session, opened);
+    }
+
+    /// <summary>Dekoder stacji w miejsce tego, co grało; pozycja to odtąd czas słuchania.</summary>
+    private void OpenLive(FeederSession session, QueueEntry entry)
+    {
+        CloseDecoder(session);
+
+        lock (_sync) session.Entry = entry;
+
+        LiveFailure? failure = null;
+        try
+        {
+            session.Decoder = OpenLiveDecoder(entry.Live!.Session.Bytes, SampleRate, Channels);
+            session.LiveStartPending = true;
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            Console.Error.WriteLine($"[cewka] nie otwarto dekodera stacji: {ex.Message}");
+            failure = new LiveFailure(LiveFailureReason.Unspecified, Detail: ex.Message);
+        }
+
+        var gain = StartLiveLoudness(session, entry.Live!.Source);
+
+        if (!SetCurrent(session, new TrackBoundary(session.Ring.TotalWritten, entry, 0, 0, gain))) return;
+
+        _pendingGain = gain;
+        _snapGainPending = true;
+
+        if (failure is not null) EndLive(session, failure);
+    }
+
+    /// <summary>
+    /// Powrót do stacji startuje od znanego poziomu, a do tej, która gra dalej po ponownym
+    /// połączeniu, także z dotychczasowym pomiarem. Nieznana gra bez korekty.
+    /// </summary>
+    /// <returns>Wzmocnienie na początek; null, gdy stacja jeszcze nieznana.</returns>
+    private TrackGain? StartLiveLoudness(FeederSession session, LiveSource source)
+    {
+        lock (_sync)
+        {
+            _liveGain = _liveGains.TryGetValue(source.StationId, out var known) ? known : null;
+
+            if (_liveTracker is null || _liveTrackerStation != source.StationId
+                || _liveTrackerRate != SampleRate || _liveTrackerChannels != Channels)
+            {
+                _liveTracker = new LiveLoudnessTracker(SampleRate, Channels, _liveGain?.GainDecibels ?? 0);
+                _liveTrackerStation = source.StationId;
+                _liveTrackerRate = SampleRate;
+                _liveTrackerChannels = Channels;
+            }
+
+            session.LiveLoudness = _liveTracker;
+            return _liveGain;
+        }
+    }
+
+    /// <summary>Próbki sprzed toru, więc suwak głośności ani samo wyrównanie nie zmieniają pomiaru.</summary>
+    private void FeedLiveLoudness(FeederSession session, int frames)
+    {
+        var tracker = session.LiveLoudness;
+        if (tracker is null) return;
+
+        tracker.Add(session.Buffer, frames);
+        if (!tracker.TryUpdate(Graph.LiveTargetLufs, out var gain)) return;
+
+        lock (_sync)
+        {
+            if (session.Entry is not { } entry || !ReferenceEquals(entry, _liveEntry)) return;
+
+            _liveGain = gain;
+            _liveGains[entry.Live!.Source.StationId] = gain;
+        }
+
+        Graph.ApplyTrackGain(gain, snap: false);
+    }
+
+    /// <summary>Koniec idzie do bufora jako znacznik: to, co już zdekodowane, ma wybrzmieć.</summary>
+    private static void EndLive(FeederSession session, LiveFailure? failure)
+    {
+        var entry = session.Entry;
+
+        CloseDecoder(session);
+        session.Entry = null;
+
+        if (entry is null) return;
+
+        var mark = new LiveMark(session.Ring.TotalWritten, LiveMarkKind.Ended, entry, Failure: failure);
+        lock (session.BoundaryLock) session.LiveMarks.Enqueue(mark);
     }
 
     /// <summary>
@@ -1314,6 +2272,62 @@ public sealed class PlaybackEngine : IDisposable
             return;
         }
 
+        WriteToRing(session, frames);
+    }
+
+    private void PumpLive(FeederSession session, ILiveDecoder decoder)
+    {
+        var needed = DecodeChunkFrames * Channels;
+        if (session.Buffer.Length < needed) session.Buffer = new float[needed];
+
+        var status = decoder.ReadLive(session.Buffer.AsSpan(0, needed), out var frames);
+
+        if (status == LiveReadStatus.Waiting)
+        {
+            Thread.Sleep(LiveWaitMilliseconds);
+            return;
+        }
+
+        if (status == LiveReadStatus.Ended)
+        {
+            EndLive(session, decoder.EndFailure);
+            return;
+        }
+
+        EnqueueLiveMarks(session, decoder, frames);
+        WriteToRing(session, frames);
+        FeedLiveLoudness(session, frames);
+    }
+
+    /// <summary>Znaczniki idą do bufora razem z dźwiękiem, żeby zgłosić je dopiero, gdy zagra.</summary>
+    private static void EnqueueLiveMarks(FeederSession session, ILiveDecoder decoder, int frames)
+    {
+        var entry = session.Entry;
+        if (entry is null) return;
+
+        var ringFrame = session.Ring.TotalWritten;
+        var decoderFrame = decoder.Position - frames;
+
+        lock (session.BoundaryLock)
+        {
+            if (session.LiveStartPending)
+            {
+                session.LiveStartPending = false;
+                session.LiveMarks.Enqueue(new LiveMark(ringFrame + 1, LiveMarkKind.Started, entry));
+            }
+
+            while (decoder.TryTakeMarker(out var marker, out var at))
+            {
+                if (marker is not StreamTitle title) continue;
+
+                var frame = ringFrame + Math.Clamp(at - decoderFrame, 0, frames);
+                session.LiveMarks.Enqueue(new LiveMark(frame, LiveMarkKind.Title, entry, title.Title));
+            }
+        }
+    }
+
+    private void WriteToRing(FeederSession session, int frames)
+    {
         var written = 0;
         while (written < frames && !session.Cancelled && !_seekPending)
         {
@@ -1339,7 +2353,7 @@ public sealed class PlaybackEngine : IDisposable
         lock (_sync)
         {
             if (finished is not null && _queue.Contains(finished))
-                next = Repeat == RepeatMode.Track ? finished : FollowingEntryLocked(finished, userInitiated: false);
+                next = _repeat == RepeatMode.Track ? finished : FollowingEntryLocked(finished, userInitiated: false);
         }
 
         OpenFirstPlayable(session, next, gapless: true);
@@ -1525,7 +2539,24 @@ public sealed class PlaybackEngine : IDisposable
         public QueueEntry? ContinueWith;
 
         public float[] Buffer = [];
+
+        /// <summary>Znaczniki stacji w pozycjach bufora, pod <see cref="BoundaryLock"/>.</summary>
+        public readonly Queue<LiveMark> LiveMarks = new();
+
+        /// <summary>Znacznik, który minął wyjście; wątek dźwiękowy odkłada, wątek dekodujący odbiera.</summary>
+        public LiveMark? CrossedLiveMark;
+
+        public bool LiveStartPending;
+
+        /// <summary>Używa go wyłącznie wątek dekodujący.</summary>
+        public LiveLoudnessTracker? LiveLoudness;
     }
+
+    private enum LiveMarkKind { Started, Title, Ended }
+
+    /// <summary>Zdarzenie stacji w miejscu bufora; zgłaszane, gdy odtwarzanie je minie.</summary>
+    private sealed record LiveMark(
+        long AbsoluteFrame, LiveMarkKind Kind, QueueEntry Entry, string? Title = null, LiveFailure? Failure = null);
 
     /// <summary>
     /// Marks the frame in the ring at which a queue entry's audio begins.

@@ -4,12 +4,14 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>Cewka.App.Tests</RootNamespace>
+    <!-- Sygnał D-Bus wysyłany w teście blokady wygaszania przez libdbus. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
-    <PackageReference Include="xunit" Version="2.9.2" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" />
     <!-- Modele widoku sięgają po dyspozytor i zasoby aplikacji; testy stawiają je bez okna. -->
     <PackageReference Include="Avalonia.Headless" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Skia" Version="$(AvaloniaVersion)" />
@@ -33,6 +35,8 @@
   <ItemGroup>
     <Compile Include="..\Cewka.Audio.Tests\Engine\TestOutput.cs" Link="Engine\TestOutput.cs" />
     <Compile Include="..\Cewka.Audio.Tests\Engine\SyntheticDecoder.cs" Link="Engine\SyntheticDecoder.cs" />
+    <Compile Include="..\Cewka.Audio.Tests\Engine\LiveFakes.cs" Link="Engine\LiveFakes.cs" />
+    <Compile Include="..\Cewka.Audio.Tests\Live\FakeByteSource.cs" Link="Live\FakeByteSource.cs" />
   </ItemGroup>
 
   <!--
@@ -46,14 +50,22 @@
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Lista stacji w programie i logika generatora listy: testy sprawdzają plik, który trafia do wydania. -->
+  <ItemGroup>
+    <Content Include="..\..\src\Cewka.App\Radio\stations.json"
+             Link="Radio\stations.json"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="..\..\tools\Cewka.RadioCatalog\CatalogBuilder.cs" Link="Radio\CatalogBuilder.cs" />
+  </ItemGroup>
+
   <!--
-    Font interfejsu kopiowany obok testów. Sprawdzenie, czy tekst w danym języku da się wyświetlić,
-    wymaga tablicy znaków tego samego pliku, który trafia do wydania — nie listy zakresów
+    Fonty interfejsu kopiowane obok testów. Sprawdzenie, czy tekst w danym języku da się wyświetlić,
+    wymaga tablic znaków tych samych plików, które trafiają do wydania — nie listy zakresów
     dopisanej z pamięci.
   -->
   <ItemGroup>
-    <Content Include="..\..\src\Cewka.App\Assets\Fonts\Cantarell-Regular.otf"
-             Link="Fonts\Cantarell-Regular.otf"
+    <Content Include="..\..\src\Cewka.App\Assets\Fonts\*-Regular.*"
+             Link="Fonts\%(Filename)%(Extension)"
              CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

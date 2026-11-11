@@ -90,6 +90,7 @@ internal static class Program
             Probe(main, "Kolejka", main.QueueToggle);
             Probe(main, "Motyw", main.ThemeButton);
             Probe(main, "Ustawienia", main.SettingsButton);
+            Probe(main, "PelnyEkran", main.FullScreenButton);
             Probe(main, "Minimalizuj", Named(buttons, "SquareMinimise"));
             Probe(main, "Maksymalizuj", Named(buttons, "SquareMaximise"));
             Probe(main, "Zamknij", Named(buttons, "SquareClose"));

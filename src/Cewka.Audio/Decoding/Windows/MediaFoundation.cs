@@ -28,15 +28,26 @@ internal static class MediaFoundation
     internal static readonly Guid MF_MT_AUDIO_SAMPLES_PER_SECOND = new("5faeeae7-0290-4c31-9e8a-c534f68d9dba");
     internal static readonly Guid MF_MT_AUDIO_BITS_PER_SAMPLE = new("f2deb57f-40fa-4764-aa33-ed4f2d1ff669");
     internal static readonly Guid MF_MT_AUDIO_CHANNEL_MASK = new("55fb5765-644a-4caf-8479-938983bb1588");
+    internal static readonly Guid MF_MT_AAC_PAYLOAD_TYPE = new("bfbabe79-7434-4d1c-94f0-72a3b9e17188");
+    internal static readonly Guid MF_MT_AAC_AUDIO_PROFILE_LEVEL_INDICATION = new("7632f0e6-9538-4d61-acda-ea29c8c14456");
+    internal static readonly Guid MF_MT_USER_DATA = new("b6bc765f-4c3b-40a4-bd51-2535b66fe09d");
 
     // Kody HRESULT, które dekoder zamienia na przyczyny błędu.
     internal const int MF_E_INVALIDSTREAMNUMBER = unchecked((int)0xC00D36B3);
     internal const int MF_E_INVALIDMEDIATYPE = unchecked((int)0xC00D36B4);
     internal const int MF_E_UNSUPPORTED_BYTESTREAM_TYPE = unchecked((int)0xC00D36C4);
     internal const int MF_E_TOPO_CODEC_NOT_FOUND = unchecked((int)0xC00D5212);
+    internal const int MF_E_TRANSFORM_NEED_MORE_INPUT = unchecked((int)0xC00D6D72);
+    internal const int MF_E_TRANSFORM_STREAM_CHANGE = unchecked((int)0xC00D6D61);
+
+    internal const int MFT_MESSAGE_COMMAND_DRAIN = 1;
+    internal const int MFT_MESSAGE_NOTIFY_BEGIN_STREAMING = 0x10000000;
+    internal const int MFT_MESSAGE_NOTIFY_START_OF_STREAM = 0x10000003;
+    internal const int MFT_OUTPUT_STREAM_PROVIDES_SAMPLES = 0x100;
 
     internal static readonly Guid MFMediaType_Audio = new("73647561-0000-0010-8000-00aa00389b71");
     internal static readonly Guid MFAudioFormat_Float = new("00000003-0000-0010-8000-00aa00389b71");
+    internal static readonly Guid MFAudioFormat_AAC = new("00001610-0000-0010-8000-00aa00389b71");
 
     internal static readonly Guid MF_PD_DURATION = new("6c990d33-bb8e-477a-8598-0d5d96fcd88a");
     internal static readonly Guid GUID_NULL = Guid.Empty;
@@ -51,6 +62,12 @@ internal static class MediaFoundation
 
     [DllImport("mfplat.dll", ExactSpelling = true)]
     internal static extern int MFCreateMediaType(out IMFMediaType type);
+
+    [DllImport("mfplat.dll", ExactSpelling = true)]
+    internal static extern int MFCreateSample(out IMFSample sample);
+
+    [DllImport("mfplat.dll", ExactSpelling = true)]
+    internal static extern int MFCreateMemoryBuffer(int maxLength, out IMFMediaBuffer buffer);
 
     [DllImport("mfreadwrite.dll", ExactSpelling = true, CharSet = CharSet.Unicode)]
     internal static extern int MFCreateSourceReaderFromURL(
@@ -221,6 +238,55 @@ internal static class MediaFoundation
         [PreserveSig] int GetCurrentLength(out int length);
         [PreserveSig] int SetCurrentLength(int length);
         [PreserveSig] int GetMaxLength(out int length);
+    }
+
+    [ComImport]
+    [Guid("bf94c121-5b05-4e6f-8000-ba598961414d")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    internal interface IMFTransform
+    {
+        [PreserveSig] int GetStreamLimits(out int inputMinimum, out int inputMaximum, out int outputMinimum, out int outputMaximum);
+        [PreserveSig] int GetStreamCount(out int inputStreams, out int outputStreams);
+        [PreserveSig] int GetStreamIDs(int inputSize, IntPtr inputIds, int outputSize, IntPtr outputIds);
+        [PreserveSig] int GetInputStreamInfo(int streamId, IntPtr info);
+        [PreserveSig] int GetOutputStreamInfo(int streamId, out OutputStreamInfo info);
+        [PreserveSig] int GetAttributes(out IntPtr attributes);
+        [PreserveSig] int GetInputStreamAttributes(int streamId, out IntPtr attributes);
+        [PreserveSig] int GetOutputStreamAttributes(int streamId, out IntPtr attributes);
+        [PreserveSig] int DeleteInputStream(int streamId);
+        [PreserveSig] int AddInputStreams(int count, IntPtr streamIds);
+        [PreserveSig] int GetInputAvailableType(int streamId, int typeIndex, out IMFMediaType type);
+        [PreserveSig] int GetOutputAvailableType(int streamId, int typeIndex, out IMFMediaType type);
+        [PreserveSig] int SetInputType(int streamId, IMFMediaType type, int flags);
+        [PreserveSig] int SetOutputType(int streamId, IMFMediaType type, int flags);
+        [PreserveSig] int GetInputCurrentType(int streamId, out IMFMediaType type);
+        [PreserveSig] int GetOutputCurrentType(int streamId, out IMFMediaType type);
+        [PreserveSig] int GetInputStatus(int streamId, out int flags);
+        [PreserveSig] int GetOutputStatus(out int flags);
+        [PreserveSig] int SetOutputBounds(long lower, long upper);
+        [PreserveSig] int ProcessEvent(int streamId, IntPtr mediaEvent);
+        [PreserveSig] int ProcessMessage(int message, nuint parameter);
+        [PreserveSig] int ProcessInput(int streamId, IMFSample sample, int flags);
+        [PreserveSig] int ProcessOutput(int flags, int count, ref OutputDataBuffer buffers, out int status);
+    }
+
+    /// <summary>Mirrors <c>MFT_OUTPUT_STREAM_INFO</c>.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct OutputStreamInfo
+    {
+        public int Flags;
+        public int Size;
+        public int Alignment;
+    }
+
+    /// <summary>Mirrors <c>MFT_OUTPUT_DATA_BUFFER</c>.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct OutputDataBuffer
+    {
+        public int StreamId;
+        public nint Sample;
+        public int Status;
+        public nint Events;
     }
 
     /// <summary>

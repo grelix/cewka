@@ -1,14 +1,14 @@
-<Window xmlns="https://github.com/avaloniaui"
+<v:AuxiliaryWindow xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:c="using:Cewka.App.Controls"
         xmlns:l="using:Cewka.App.Localisation"
         xmlns:vm="using:Cewka.App.ViewModels"
+        xmlns:v="using:Cewka.App.Views"
         x:Class="Cewka.App.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Title="{l:Translate SettingsWindowTitle}"
-        Icon="avares://Cewka/Assets/cewka.png"
-        Width="820" Height="640"
-        MinWidth="700" MinHeight="520"
+        Width="832" Height="640"
+        MinWidth="712" MinHeight="520"
         CanMaximize="False"
         WindowStartupLocation="Manual"
         Background="Transparent"
@@ -43,33 +43,97 @@
         </Panel>
       </Border>
 
-      <Grid ColumnDefinitions="188,*">
+      <Grid ColumnDefinitions="200,*">
 
-        <!-- Zakładki: lista pionowa, żeby nazwy sekcji mieściły się w całości w każdym języku -->
+        <!--
+          Pasek boczny: kategorie główne jako nagłówki, pod nimi podkategorie. Lista pionowa, żeby nazwy
+          mieściły się w całości w każdym języku; przewijana, gdy okno jest niskie.
+        -->
         <Border Grid.Column="0"
                 Background="{DynamicResource HeaderBarBrush}"
                 BorderBrush="{DynamicResource StrokeBrush}"
                 BorderThickness="0,0,1,0">
-          <ItemsControl ItemsSource="{Binding Sections}" Margin="10,16,10,16">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <StackPanel Spacing="3" />
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:SettingsSection">
-                <c:OptionButton Classes="option wide" Classes.on="{Binding IsSelected}" IsSelected="{Binding IsSelected}"
-                                AutomationProperties.Name="{Binding Label}"
-                        Click="OnSectionClick"
-                        Height="32"
-                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                  <TextBlock Text="{Binding Label}" FontSize="12"
-                             TextTrimming="CharacterEllipsis"
-                             Foreground="{Binding $parent[Button].Foreground}" />
-                </c:OptionButton>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
+          <DockPanel>
+          <!-- Wyszukiwanie jak w ustawieniach macOS i Windows; Ctrl+F przenosi tu fokus, Esc czyści pole. -->
+          <TextBox x:Name="SettingsSearchBox" DockPanel.Dock="Top" Margin="10,12,10,2"
+                   Text="{Binding Search.Text, Mode=TwoWay}"
+                   PlaceholderText="{l:Translate SettingsSearchPlaceholder}"
+                   AutomationProperties.Name="{l:Translate SettingsSearchPlaceholder}"
+                   MinHeight="30" CornerRadius="9" FontSize="12"
+                   Background="{DynamicResource Glass2Brush}"
+                   BorderBrush="{DynamicResource StrokeBrush}" />
+
+          <Panel>
+          <!-- Wyniki zamiast kategorii, dopóki pole nie jest puste. -->
+          <ScrollViewer x:Name="SearchScroll" HorizontalScrollBarVisibility="Disabled"
+                        VerticalScrollBarVisibility="Auto" IsVisible="{Binding Search.IsActive}">
+            <StackPanel Margin="10,10,10,16" Spacing="2">
+              <TextBlock x:Name="SearchEmpty" Classes="setting-hint" Margin="10,6,0,0"
+                         Text="{l:Translate SettingsSearchEmpty}" IsVisible="{Binding Search.HasNoResults}" />
+              <ItemsControl x:Name="SearchResults" ItemsSource="{Binding Search.Results}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Spacing="2" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SettingsSearchResult">
+                    <c:OptionButton Classes="option wide" Click="OnSearchResultClick"
+                                    AutomationProperties.Name="{Binding Label}"
+                                    AutomationProperties.HelpText="{Binding Path}"
+                                    Padding="10,5" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                      <StackPanel Spacing="1">
+                        <TextBlock Text="{Binding Label}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                   Foreground="{Binding $parent[Button].Foreground}" />
+                        <TextBlock Classes="faint" Text="{Binding Path}" FontSize="10.5"
+                                   TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                    </c:OptionButton>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </ScrollViewer>
+
+          <ScrollViewer x:Name="SidebarScroll" HorizontalScrollBarVisibility="Disabled"
+                        VerticalScrollBarVisibility="Auto" IsVisible="{Binding !Search.IsActive}">
+            <ItemsControl x:Name="SidebarList" ItemsSource="{Binding Categories}" Margin="10,10,10,16">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Spacing="12" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:SettingsCategory">
+                  <StackPanel Spacing="2">
+                    <TextBlock Classes="sidebar-heading" Text="{Binding Label}" />
+                    <ItemsControl ItemsSource="{Binding Sections}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Spacing="2" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SettingsSection">
+                          <c:OptionButton Classes="option wide" Classes.on="{Binding IsSelected}" IsSelected="{Binding IsSelected}"
+                                          AutomationProperties.Name="{Binding Label}"
+                                          Click="OnSectionClick"
+                                          Height="30"
+                                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                            <TextBlock Text="{Binding Label}" FontSize="12"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{Binding $parent[Button].Foreground}" />
+                          </c:OptionButton>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+          </Panel>
+          </DockPanel>
         </Border>
 
         <!-- Treść; pasek przewijania jak w kolejce, zamiast domyślnego z motywu Fluent -->
@@ -80,7 +144,7 @@
             <Panel Margin="24,20,30,26">
 
               <!-- ========== Wygląd ========== -->
-              <StackPanel Spacing="18" IsVisible="{Binding Appearance.IsSelected}">
+              <StackPanel Spacing="18" Tag="SectionAppearance" IsVisible="{Binding Appearance.IsSelected}">
                 <!-- Bez tytułu karty: nazwę sekcji podaje zakładka po lewej, na tej samej
                      wysokości -->
                 <Border Classes="section">
@@ -122,6 +186,33 @@
                   </StackPanel>
                 </Border>
 
+                <!-- Boczny panel kolejki i stacji: wysuwanie i chowanie. Szerokość i przypięcie
+                     zapamiętuje sam panel, bez osobnych kontrolek. -->
+                <Border x:Name="QueuePanelCard" Classes="section">
+                  <StackPanel Spacing="16">
+                    <StackPanel Spacing="3">
+                      <TextBlock Classes="section-title" Text="{l:Translate QueuePanelHeading}" />
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintQueuePanel}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingQueueReveal}" />
+                      <c:SegmentBar Group="{Binding QueueRevealChoice}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8" IsEnabled="{Binding QueueHoverOptionsEnabled}">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingQueueRevealDelay}" />
+                      <c:SegmentBar Group="{Binding QueueRevealDelayChoice}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8" IsEnabled="{Binding QueueHoverOptionsEnabled}">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingQueueHideDelay}" />
+                      <c:SegmentBar Group="{Binding QueueHideDelayChoice}" />
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintQueueHideDelay}" />
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+
                 <!-- Barwa domyślnej okładki: każda pozycja pokazuje przejście barw takie,
                      jakie wyjdzie w bieżącym motywie -->
                 <Border Classes="section">
@@ -159,7 +250,7 @@
               </StackPanel>
 
               <!-- ========== Język ========== -->
-              <StackPanel Spacing="18" IsVisible="{Binding LanguageSection.IsSelected}">
+              <StackPanel Spacing="18" Tag="SectionLanguage" IsVisible="{Binding LanguageSection.IsSelected}">
 
                 <!-- Lista, bo przy kilkunastu pozycjach pasek segmentów nie mieści się w wierszu.
                      Kafel ma 168 px, żeby przy domyślnej szerokości okna w wierszu stały trzy
@@ -181,7 +272,15 @@
                                   Width="168" Height="30" Margin="0,0,8,6"
                                   HorizontalContentAlignment="Left">
                             <StackPanel Orientation="Horizontal" Spacing="9">
-                              <Ellipse Width="7" Height="7" VerticalAlignment="Center" />
+                              <!-- Flaga kraju języka; obrys, żeby białe pasy nie zlewały się z tłem. -->
+                              <Border Width="20" Height="15" CornerRadius="2" ClipToBounds="True"
+                                      VerticalAlignment="Center" IsVisible="{Binding HasIcon}"
+                                      BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="0.5">
+                                <Image Source="{Binding Icon}" Stretch="UniformToFill"
+                                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+                              </Border>
+                              <Ellipse Width="7" Height="7" Margin="6,0,7,0" VerticalAlignment="Center"
+                                       IsVisible="{Binding !HasIcon}" />
                               <TextBlock Text="{Binding Label}" FontSize="11.5"
                                          TextTrimming="CharacterEllipsis"
                                          Foreground="{Binding $parent[Button].Foreground}" />
@@ -207,8 +306,8 @@
                 </Border>
               </StackPanel>
 
-              <!-- ========== Dźwięk ========== -->
-              <StackPanel Spacing="18" IsVisible="{Binding Audio.IsSelected}">
+              <!-- ========== Dźwięk › Wyjście dźwięku ========== -->
+              <StackPanel Spacing="18" Tag="SectionAudioOutput" IsVisible="{Binding Audio.IsSelected}">
 
                 <Border Classes="section">
                   <StackPanel Spacing="16">
@@ -216,7 +315,8 @@
                       <TextBlock Grid.Column="0" Classes="section-title"
                                  Text="{l:Translate SettingOutputDevice}" VerticalAlignment="Center" />
                       <Button Grid.Column="1" Classes="pill" Click="OnRefreshDevices"
-                              Content="{l:Translate DeviceRefresh}" />
+                              Content="{l:Translate DeviceRefresh}"
+                              AutomationProperties.Name="{l:Translate DeviceRefreshName}" />
                     </Grid>
 
                     <!-- Lista zamiast listy rozwijanej, bo urządzeń jest zwykle kilka. -->
@@ -252,8 +352,21 @@
                       <TextBlock Classes="setting-hint" Text="{l:Translate HintLatency}" />
                       <TextBlock Classes="faint" FontSize="10.5" Text="{Binding LatencyDescription}" />
                     </StackPanel>
+
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingQuality}" />
+                      <c:SegmentBar Group="{Binding Quality}" />
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintQuality}" />
+                    </StackPanel>
                   </StackPanel>
                 </Border>
+              </StackPanel>
+
+              <!-- ========== Dźwięk › Korektor i efekty ========== -->
+              <StackPanel x:Name="ProcessingPage" Spacing="18" Tag="SectionEqualiser" IsVisible="{Binding Processing.IsSelected}">
+                <!-- Ten sam panel co w oknie „Korektor i efekty”, tu karty jedna pod drugą i z opisami efektów. -->
+                <v:SoundPanel x:Name="SettingsSoundPanel" Stacked="True" ShowDescriptions="True"
+                              DataContext="{Binding Player}" />
 
                 <Border Classes="section">
                   <StackPanel Spacing="16">
@@ -304,20 +417,12 @@
                                      BorderBrush="{DynamicResource StrokeBrush}" />
                     </Grid>
 
-                    <StackPanel Spacing="8">
-                      <TextBlock Classes="setting-label" Text="{l:Translate SettingQuality}" />
-                      <c:SegmentBar Group="{Binding Quality}" />
-                      <TextBlock Classes="setting-hint" Text="{l:Translate HintQuality}" />
-                    </StackPanel>
-
-                    <!-- Korektor i efekty mają jedno miejsce: pas w oknie głównym. -->
-                    <TextBlock Classes="setting-hint" Text="{l:Translate HintEqualiserInMainWindow}" />
                   </StackPanel>
                 </Border>
               </StackPanel>
 
-              <!-- ========== Odtwarzanie ========== -->
-              <StackPanel Spacing="18" IsVisible="{Binding Playback.IsSelected}">
+              <!-- ========== Dźwięk › Odtwarzanie ========== -->
+              <StackPanel Spacing="18" Tag="SectionPlayback" IsVisible="{Binding Playback.IsSelected}">
                 <Border Classes="section">
                   <StackPanel Spacing="16">
                     <Grid ColumnDefinitions="*,Auto">
@@ -339,6 +444,19 @@
                       <TextBlock Classes="setting-hint" Text="{l:Translate HintSeekStep}" />
                     </StackPanel>
 
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
+                        <TextBlock Classes="setting-label" Text="{l:Translate SettingSoftPause}" />
+                        <TextBlock Classes="setting-hint" Text="{l:Translate HintSoftPause}" />
+                      </StackPanel>
+                      <c:GlassSwitch x:Name="SoftPauseSwitch" Grid.Column="1" VerticalAlignment="Center"
+                                     IsChecked="{Binding SoftPause, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingSoftPause}"
+                                     OffBrush="{DynamicResource TrackBrush}"
+                                     OnBrush="{DynamicResource AccentBrush}"
+                                     BorderBrush="{DynamicResource StrokeBrush}" />
+                    </Grid>
+
                     <StackPanel Spacing="8">
                       <TextBlock Classes="setting-label" Text="{l:Translate SettingFileOpen}" />
                       <c:SegmentBar Group="{Binding FileOpen}" />
@@ -348,8 +466,330 @@
                 </Border>
               </StackPanel>
 
-              <!-- ========== System ========== -->
-              <StackPanel Spacing="18" IsVisible="{Binding Integration.IsSelected}">
+              <!-- ========== Scena › Pełny ekran ========== -->
+              <StackPanel Spacing="18" Tag="SectionFullScreen" IsVisible="{Binding SceneFullScreen.IsSelected}">
+                <Border Classes="section">
+                  <StackPanel Spacing="16">
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingSceneVisual}" />
+                      <c:SegmentBar Group="{Binding SceneVisualChoice}" />
+                      <c:SegmentBar Group="{Binding SceneVisualReactiveChoice}" />
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintSceneVisual}" />
+                    </StackPanel>
+
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
+                        <TextBlock Classes="setting-label" Text="{l:Translate SettingSceneNext}" />
+                        <TextBlock Classes="setting-hint" Text="{l:Translate HintSceneNext}" />
+                      </StackPanel>
+                      <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
+                                     IsChecked="{Binding SceneShowNext, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingSceneNext}"
+                                     OffBrush="{DynamicResource TrackBrush}"
+                                     OnBrush="{DynamicResource AccentBrush}"
+                                     BorderBrush="{DynamicResource StrokeBrush}" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
+                        <TextBlock Classes="setting-label" Text="{l:Translate SettingKeepAwake}" />
+                        <TextBlock Classes="setting-hint" Text="{l:Translate HintKeepAwake}" />
+                      </StackPanel>
+                      <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
+                                     IsChecked="{Binding KeepScreenAwake, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingKeepAwake}"
+                                     OffBrush="{DynamicResource TrackBrush}"
+                                     OnBrush="{DynamicResource AccentBrush}"
+                                     BorderBrush="{DynamicResource StrokeBrush}" />
+                    </Grid>
+                  </StackPanel>
+                </Border>
+
+                <!-- Napisy i wielkość płyty w Płycie, Okładce i radiu. -->
+                <Border x:Name="SceneTextCard" Classes="section">
+                  <StackPanel Spacing="16">
+                    <StackPanel Spacing="4">
+                      <TextBlock Classes="section-title" Text="{l:Translate SceneTextHeading}" />
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintSceneText}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingSceneTextSize}" />
+                      <c:SegmentBar Group="{Binding SceneTextSizeChoice}" />
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintSceneTextSize}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingSceneTextPosition}" />
+                      <c:SegmentBar Group="{Binding SceneTextPositionChoice}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingSceneTextAlign}" />
+                      <c:SegmentBar Group="{Binding SceneTextAlignChoice}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingSceneTextInset}" />
+                      <c:SegmentBar Group="{Binding SceneTextInsetChoice}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingSceneArtSize}" />
+                      <c:SegmentBar Group="{Binding SceneArtSizeChoice}" />
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+
+              <!-- ========== Scena › Wizualizacje i efekty ========== -->
+              <StackPanel Spacing="18" Tag="SectionSceneVisuals" IsVisible="{Binding SceneVisuals.IsSelected}">
+                <!-- Wizualizacje pod klawiszem V: wyłączoną V pomija, Płyta zostaje zawsze. -->
+                <Border x:Name="SceneCycleCard" Classes="section">
+                  <StackPanel Spacing="12">
+                    <StackPanel Spacing="4">
+                      <TextBlock Classes="section-title" Text="{l:Translate SceneCycleHeading}" />
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintSceneCycle}" />
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding SceneCycleOptions}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Spacing="10" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SceneCycleOption">
+                          <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Classes="setting-label" Text="{Binding Label}" VerticalAlignment="Center" />
+                            <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
+                                           IsChecked="{Binding IsOn, Mode=TwoWay}"
+                                           AutomationProperties.Name="{Binding Label}"
+                                           OffBrush="{DynamicResource TrackBrush}"
+                                           OnBrush="{DynamicResource AccentBrush}"
+                                           BorderBrush="{DynamicResource StrokeBrush}" />
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Border>
+
+                <Border Classes="section">
+                  <StackPanel Spacing="16">
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingSpectrumShape}" />
+                      <c:SegmentBar Group="{Binding SpectrumShapeChoice}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingWaveKind}" />
+                      <c:SegmentBar Group="{Binding WaveformKindChoice}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingDiscRing}" />
+                      <c:SegmentBar Group="{Binding DiscRingChoice}" />
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+
+                <!-- Efekty tła Płyty i Okładki w barwach okładki: przełącznik i siła każdego. -->
+                <Border x:Name="SceneEffectsCard" Classes="section">
+                  <StackPanel Spacing="14">
+                    <StackPanel Spacing="4">
+                      <TextBlock Classes="section-title" Text="{l:Translate SceneBackgroundHeading}" />
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintSceneBackground}" />
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{Binding SceneEffectOptions}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Spacing="16" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SceneEffectOption">
+                          <StackPanel Spacing="8">
+                            <Grid ColumnDefinitions="*,Auto">
+                              <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
+                                <TextBlock Classes="setting-label" Text="{Binding Label}" />
+                                <TextBlock Classes="setting-hint" Text="{Binding Hint}" />
+                              </StackPanel>
+                              <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
+                                             IsChecked="{Binding IsOn, Mode=TwoWay}"
+                                             AutomationProperties.Name="{Binding Label}"
+                                             OffBrush="{DynamicResource TrackBrush}"
+                                             OnBrush="{DynamicResource AccentBrush}"
+                                             BorderBrush="{DynamicResource StrokeBrush}" />
+                            </Grid>
+                            <c:SegmentBar Group="{Binding Strength}" IsEnabled="{Binding IsOn}" />
+                          </StackPanel>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Border>
+
+                <Border x:Name="SceneMotionCard" Classes="section">
+                  <StackPanel Spacing="16">
+                    <StackPanel Spacing="3">
+                      <TextBlock Classes="section-title" Text="{l:Translate SceneMotionHeading}" />
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintSceneMotion}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingDiscSpin}" />
+                      <c:SegmentBar Group="{Binding DiscSpinChoice}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingBackdropMotion}" />
+                      <c:SegmentBar Group="{Binding BackdropMotionChoice}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingSpectrumResponse}" />
+                      <c:SegmentBar Group="{Binding SpectrumResponseChoice}" />
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+
+              <!-- ========== Scena › Telewizor ========== -->
+              <StackPanel Spacing="18" Tag="SectionSceneTv" IsVisible="{Binding SceneTelevision.IsSelected}">
+                <Border Classes="section">
+                  <StackPanel Spacing="16">
+                    <StackPanel Spacing="8">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Classes="setting-label" Text="{l:Translate SettingSceneScreen}"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="pill" Click="OnRefreshScreens"
+                                Content="{l:Translate DeviceRefresh}"
+                                AutomationProperties.Name="{l:Translate ScreenRefreshName}" />
+                      </Grid>
+                      <ItemsControl ItemsSource="{Binding ScreenOptions}">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <StackPanel Spacing="2" />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:ScreenOption">
+                            <c:OptionButton Classes="option wide" Classes.on="{Binding IsSelected}" IsSelected="{Binding IsSelected}"
+                                AutomationProperties.Name="{Binding Label}"
+                                    Click="OnScreenClick"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                              <StackPanel Orientation="Horizontal" Spacing="9">
+                                <Ellipse Width="7" Height="7" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding Label}" FontSize="11.5"
+                                           TextTrimming="CharacterEllipsis"
+                                           Foreground="{Binding $parent[Button].Foreground}" />
+                              </StackPanel>
+                            </c:OptionButton>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintSceneScreen}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingSceneMargin}" />
+                      <c:SegmentBar Group="{Binding SceneMarginChoice}" />
+                      <Button Classes="pill" HorizontalAlignment="Left" Click="OnFitEdges"
+                              Content="{l:Translate SceneFitEdges}" />
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintSceneMargin}" />
+                    </StackPanel>
+
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
+                        <TextBlock Classes="setting-label" Text="{l:Translate SettingSceneOled}" />
+                        <TextBlock Classes="setting-hint" Text="{l:Translate HintSceneOled}" />
+                      </StackPanel>
+                      <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
+                                     IsChecked="{Binding SceneOledCare, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingSceneOled}"
+                                     OffBrush="{DynamicResource TrackBrush}"
+                                     OnBrush="{DynamicResource AccentBrush}"
+                                     BorderBrush="{DynamicResource StrokeBrush}" />
+                    </Grid>
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+
+              <!-- ========== Radio › Stacje ========== -->
+              <StackPanel x:Name="RadioSettings" Spacing="18" Tag="SectionRadioStations" IsVisible="{Binding RadioSection.IsSelected}">
+                <Border Classes="section">
+                  <StackPanel Spacing="14">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
+                        <TextBlock Classes="setting-label" Text="{l:Translate SettingRadioEnabled}" />
+                        <TextBlock Classes="setting-hint" Text="{l:Translate HintRadioEnabled}" />
+                      </StackPanel>
+                      <c:GlassSwitch x:Name="RadioEnabledSwitch" Grid.Column="1" VerticalAlignment="Center"
+                                     IsChecked="{Binding RadioEnabled, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingRadioEnabled}"
+                                     OffBrush="{DynamicResource TrackBrush}"
+                                     OnBrush="{DynamicResource AccentBrush}"
+                                     BorderBrush="{DynamicResource StrokeBrush}" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="*,Auto" IsEnabled="{Binding RadioOptionsEnabled}">
+                      <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
+                        <TextBlock Classes="setting-label" Text="{l:Translate SettingRadioPlayAtStart}" />
+                        <TextBlock Classes="setting-hint" Text="{l:Translate HintRadioPlayAtStart}" />
+                      </StackPanel>
+                      <c:GlassSwitch x:Name="RadioPlayAtStartSwitch" Grid.Column="1" VerticalAlignment="Center"
+                                     IsChecked="{Binding RadioPlayAtStart, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingRadioPlayAtStart}"
+                                     OffBrush="{DynamicResource TrackBrush}"
+                                     OnBrush="{DynamicResource AccentBrush}"
+                                     BorderBrush="{DynamicResource StrokeBrush}" />
+                    </Grid>
+
+                    <StackPanel Spacing="8" IsEnabled="{Binding RadioOptionsEnabled}">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingRadioRecentLimit}" />
+                      <c:SegmentBar Group="{Binding RadioRecentLimitChoice}" />
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintRadioRecentLimit}" />
+                    </StackPanel>
+
+                    <StackPanel Spacing="8" IsEnabled="{Binding RadioOptionsEnabled}">
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintRadioClearRecent}" />
+                      <Button x:Name="RadioClearRecentButton" Classes="pill" Height="26" Padding="14,0"
+                              HorizontalAlignment="Left"
+                              Click="OnRadioClearRecent" Content="{l:Translate RadioClearRecent}" />
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+
+              <!-- ========== Radio › Logo i prywatność ========== -->
+              <StackPanel x:Name="RadioLogoSettings" Spacing="18" Tag="SectionRadioLogos" IsVisible="{Binding RadioLogos.IsSelected}">
+                <Border Classes="section">
+                  <StackPanel Spacing="14" IsEnabled="{Binding RadioOptionsEnabled}">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
+                        <TextBlock Classes="setting-label" Text="{l:Translate SettingRadioLogos}" />
+                        <TextBlock Classes="setting-hint" Text="{l:Translate HintRadioLogos}" />
+                      </StackPanel>
+                      <c:GlassSwitch x:Name="RadioLogosSwitch" Grid.Column="1" VerticalAlignment="Center"
+                                     IsChecked="{Binding RadioLogosEnabled, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingRadioLogos}"
+                                     OffBrush="{DynamicResource TrackBrush}"
+                                     OnBrush="{DynamicResource AccentBrush}"
+                                     BorderBrush="{DynamicResource StrokeBrush}" />
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                      <Button x:Name="RadioClearLogosButton" Classes="pill" Height="26" Padding="14,0"
+                              Click="OnRadioClearLogos" Content="{l:Translate RadioClearLogos}" />
+                      <TextBlock x:Name="RadioLogoCacheLabel" Classes="setting-hint" VerticalAlignment="Center"
+                                 Text="{Binding RadioLogoCacheText}" />
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+
+              <!-- ========== Ogólne › Integracja z systemem ========== -->
+              <StackPanel Spacing="18" Tag="SectionSystem" IsVisible="{Binding Integration.IsSelected}">
                 <Border Classes="section">
                   <StackPanel Spacing="16">
                     <Grid Classes="setting" ColumnDefinitions="*,Auto" IsEnabled="{Binding MediaKeysSupported}">
@@ -401,8 +841,8 @@
                 </Border>
               </StackPanel>
 
-              <!-- ========== Informacje ========== -->
-              <StackPanel Spacing="18" IsVisible="{Binding About.IsSelected}">
+              <!-- ========== O programie › Informacje ========== -->
+              <StackPanel Spacing="18" Tag="SectionAboutInfo" IsVisible="{Binding About.IsSelected}">
                 <Border Classes="section">
                   <StackPanel Spacing="13">
                     <StackPanel Spacing="4">
@@ -419,11 +859,6 @@
                       <TextBlock Classes="setting-label" Text="{l:Translate AboutDecoders}" />
                       <TextBlock Classes="setting-hint" Text="{Binding DecodersText}" />
                       <TextBlock Classes="setting-hint" Text="{Binding SystemCodecsText}" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="4">
-                      <TextBlock Classes="setting-label" Text="{l:Translate AboutLicences}" />
-                      <TextBlock Classes="setting-hint" Text="{Binding LicenceText}" />
                     </StackPanel>
                   </StackPanel>
                 </Border>
@@ -500,6 +935,21 @@
                 </Border>
               </StackPanel>
 
+              <!-- ========== O programie › Licencje składników ========== -->
+              <StackPanel x:Name="LicencesPage" Spacing="18" Tag="SectionLicences" IsVisible="{Binding Licences.IsSelected}">
+                <Border Classes="section">
+                  <StackPanel Spacing="4">
+                    <TextBlock Classes="setting-label" Text="{l:Translate AboutLicences}" />
+                    <TextBlock Classes="setting-hint" Text="{Binding LicenceText}" />
+                  </StackPanel>
+                </Border>
+
+                <!-- Składniki innych autorów: lista, a po wybraniu nazwa licencji i jej pełny tekst. -->
+                <Border Classes="section">
+                  <v:LicencesView x:Name="LicencesList" />
+                </Border>
+              </StackPanel>
+
             </Panel>
           </ScrollViewer>
 
@@ -513,4 +963,4 @@
     </DockPanel>
   </Border>
 
-</Window>
+</v:AuxiliaryWindow>

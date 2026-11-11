@@ -21,13 +21,12 @@ namespace Cewka.App.Tests;
 public sealed class MainWindowInputTests
 {
     /// <summary>Okno na silniku testowym. Model widoku zwalnia zamknięcie okna.</summary>
-    private static (MainWindow Window, PlayerHarness Harness) Open(int tracks = 0, bool panel = true, bool queue = true)
+    private static (MainWindow Window, PlayerHarness Harness) Open(int tracks = 0, bool queue = true)
     {
         App.Settings.Current.Window = null;
         var h = new PlayerHarness(s =>
         {
-            s.PanelOpen = panel;
-            s.QueueOpen = queue;
+            s.QueuePinned = queue;
             s.WindowControls = WindowControlsPosition.Right;
         });
 
@@ -36,7 +35,7 @@ public sealed class MainWindowInputTests
 
         if (tracks > 0)
         {
-            h.Player.OpenPaths(Enumerable.Range(0, tracks).Select(i => h.Track("t" + i)));
+            h.OpenPaths(Enumerable.Range(0, tracks).Select(i => h.Track("t" + i)));
             h.PumpUntil(() => h.Player.IsPlaying);
             h.Player.Pause();
         }
@@ -59,6 +58,15 @@ public sealed class MainWindowInputTests
         window.KeyPress(key, modifiers, PhysicalKey.None, null);
         window.KeyRelease(key, modifiers, PhysicalKey.None, null);
         Dispatcher.UIThread.RunJobs();
+    }
+
+    /// <summary>Otwiera okno „Korektor i efekty” przyciskiem okna głównego i czeka na jego układ.</summary>
+    private static SoundWindow OpenSound(MainWindow window, PlayerHarness h)
+    {
+        h.Player.PanelOpen = true;
+        var sound = window.OpenSoundWindow!;
+        Settle(sound);
+        return sound;
     }
 
     private static Point Centre(Visual control, Window window) =>
@@ -111,24 +119,33 @@ public sealed class MainWindowInputTests
 
             try
             {
-                var switches = window.GetVisualDescendants().OfType<GlassSwitch>().ToList();
+                var sound = OpenSound(window, h);
+                var switches = sound.GetVisualDescendants().OfType<GlassSwitch>().ToList();
                 var equaliser = switches.First(s => AutomationProperties.GetName(s) == Strings.Current["Equaliser"]);
                 var effectSwitch = switches.First(s => s.DataContext is EffectViewModel);
                 var effect = (EffectViewModel)effectSwitch.DataContext!;
+                var limiter = switches.First(s => s.Name == "LimiterSwitch");
                 var playing = h.Player.IsPlaying;
 
                 Assert.True(equaliser.Focus(NavigationMethod.Tab));
                 var eq = h.Player.EqualiserEnabled;
-                Key(window, Avalonia.Input.Key.Space);
+                Key(sound, Avalonia.Input.Key.Space);
                 h.PumpUntil(() => false, 150);
                 Assert.NotEqual(eq, h.Player.EqualiserEnabled);
                 Assert.Equal(playing, h.Player.IsPlaying);
 
                 Assert.True(effectSwitch.Focus(NavigationMethod.Tab));
                 var enabled = effect.Enabled;
-                Key(window, Avalonia.Input.Key.Space);
+                Key(sound, Avalonia.Input.Key.Space);
                 h.PumpUntil(() => false, 150);
                 Assert.NotEqual(enabled, effect.Enabled);
+                Assert.Equal(playing, h.Player.IsPlaying);
+
+                Assert.True(limiter.Focus(NavigationMethod.Tab));
+                var limited = h.Player.LimiterEnabled;
+                Key(sound, Avalonia.Input.Key.Space);
+                h.PumpUntil(() => false, 150);
+                Assert.NotEqual(limited, h.Player.LimiterEnabled);
                 Assert.Equal(playing, h.Player.IsPlaying);
             }
             finally { window.Close(); }
@@ -139,8 +156,6 @@ public sealed class MainWindowInputTests
     [InlineData("PanelToggle")]
     [InlineData("QueueToggle")]
     [InlineData("ShuffleToggle")]
-    [InlineData("LimiterToggle")]
-    [InlineData("NormalisationToggle")]
     public void SpacjaNaPrzyciskuPrzelaczanym_ZFokusemZKlawiaturyPrzelaczaStan(string name)
     {
         Ui.Run(() =>
@@ -152,11 +167,11 @@ public sealed class MainWindowInputTests
                 Func<bool> state = name switch
                 {
                     "PanelToggle" => () => h.Player.PanelOpen,
-                    "QueueToggle" => () => h.Player.QueueOpen,
-                    "ShuffleToggle" => () => h.Player.ShuffleEnabled,
-                    "LimiterToggle" => () => h.Player.LimiterEnabled,
-                    _ => () => h.Player.NormalisationEnabled,
+                    "QueueToggle" => () => h.Player.QueuePinned,
+                    _ => () => h.Player.ShuffleEnabled,
                 };
+                // Korektor i kolejka leżą w menu paska tytułu (decyzja 9a): bez rozsunięcia nie biorą fokusu.
+                if (name is "PanelToggle" or "QueueToggle") window.SetMenuOpen(true);
                 var toggle = window.FindControl<ToggleButton>(name)!;
                 var before = state();
                 var playing = h.Player.IsPlaying;
@@ -216,14 +231,15 @@ public sealed class MainWindowInputTests
 
             try
             {
-                var equaliser = window.GetVisualDescendants().OfType<GlassSwitch>()
+                var sound = OpenSound(window, h);
+                var equaliser = sound.GetVisualDescendants().OfType<GlassSwitch>()
                     .First(s => AutomationProperties.GetName(s) == Strings.Current["Equaliser"]);
                 Assert.True(equaliser.Focus(NavigationMethod.Pointer));
                 Assert.DoesNotContain(":focus-visible", equaliser.Classes);
                 var eq = h.Player.EqualiserEnabled;
                 var playing = h.Player.IsPlaying;
 
-                Key(window, Avalonia.Input.Key.Space);
+                Key(sound, Avalonia.Input.Key.Space);
                 h.PumpUntil(() => false, 150);
 
                 Assert.Equal(eq, h.Player.EqualiserEnabled);
@@ -453,6 +469,43 @@ public sealed class MainWindowInputTests
         });
     }
 
+    /// <summary>
+    /// Lista z wolnego dysku zastępuje kolejkę w trakcie przeciągania. Przeciągany wiersz już nie
+    /// istnieje, więc puszczenie przycisku niczego nie przenosi i nie kasuje cofnięcia zastąpienia.
+    /// </summary>
+    [Fact]
+    public void ListaDochodzacaWTrakciePrzeciaganiaPrzerywaJe()
+    {
+        Ui.Run(() =>
+        {
+            var (window, h) = Open(tracks: 6);
+
+            try
+            {
+                var names = Enumerable.Range(0, 6).Select(i => h.Track("n" + i)).ToArray();
+                var list = Path.Combine(h.Directory, "lista.m3u8");
+                File.WriteAllText(list, "#EXTM3U\n" + string.Concat(names.Select(name => name + "\n")));
+
+                var start = Centre(Row(window, 1), window);
+                var end = Centre(Row(window, 4), window);
+
+                window.MouseDown(start, MouseButton.Left);
+                window.MouseMove(start + new Point(0, 10), RawInputModifiers.LeftMouseButton);
+
+                h.LoadPlaylist(list);
+                Settle(window);
+
+                window.MouseMove(end, RawInputModifiers.LeftMouseButton);
+                window.MouseUp(end, MouseButton.Left);
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.Equal(names, h.Engine.QueuePaths.ToArray());
+                Assert.True(h.Player.CanUndoQueue);
+            }
+            finally { window.Close(); }
+        });
+    }
+
     [Fact]
     public void UpuszczenieNadListaNiczegoNiePrzenosi()
     {
@@ -507,11 +560,11 @@ public sealed class MainWindowInputTests
                 Settle(window);
                 Assert.True(RowVisible(window, 36));
 
-                h.Player.QueueOpen = false;
+                h.Player.QueuePinned = false;
                 Settle(window);
                 h.Player.PlayItem(h.Player.Queue[2]);
                 Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 2));
-                h.Player.QueueOpen = true;
+                h.Player.QueuePinned = true;
                 Settle(window);
 
                 Assert.True(RowVisible(window, 2));
@@ -521,7 +574,7 @@ public sealed class MainWindowInputTests
     }
 
     [Fact]
-    public void TabPrzechodziOdBlokuOdtwarzaniaPrzezKolejkeDoPasa()
+    public void TabPrzechodziOdBlokuOdtwarzaniaDoKolejki()
     {
         Ui.Run(() =>
         {
@@ -530,6 +583,7 @@ public sealed class MainWindowInputTests
             try
             {
                 var order = new List<IInputElement>();
+                window.SetMenuOpen(true);
                 window.FindControl<ToggleButton>("PanelToggle")!.Focus(NavigationMethod.Tab);
 
                 for (var i = 0; i < 80; i++)
@@ -544,9 +598,8 @@ public sealed class MainWindowInputTests
 
                 var play = IndexOf(e => e is Button { Name: "PlayButton" });
                 var queue = IndexOf(e => e is Visual v && v.FindAncestorOfType<ListBox>(includeSelf: true) is { Name: "QueueList" });
-                var fader = IndexOf(e => e is EqFader);
 
-                Assert.True(play >= 0 && queue > play && fader > queue, $"odtwarzanie {play}, kolejka {queue}, fader {fader}");
+                Assert.True(play >= 0 && queue > play, $"odtwarzanie {play}, kolejka {queue}");
             }
             finally { window.Close(); }
         });
@@ -675,7 +728,7 @@ public sealed class MainWindowInputTests
 
             try
             {
-                var reset = window.FindControl<Button>("EqResetButton")!;
+                var reset = OpenSound(window, h).Panel.EqResetButton;
                 Assert.False(reset.IsEffectivelyEnabled);
 
                 h.Player.Bands[2].Gain = 3;
@@ -699,7 +752,7 @@ public sealed class MainWindowInputTests
 
             try
             {
-                h.Player.OpenPaths([h.Track("a")]);
+                h.OpenPaths([h.Track("a")]);
                 Settle(window);
                 Assert.True(h.Player.HasAudioFailure);
 

@@ -127,4 +127,19 @@ public class PendingResumeTests
 
         Assert.Equal(expected, resume.Index);
     }
+
+    [Theory]
+    [InlineData(0, 3)]
+    [InlineData(2, 3)]
+    [InlineData(3, 2)]
+    [InlineData(5, 2)]
+    public void WstawienieWpisuPrzesuwaPozycje(int inserted, int expected)
+    {
+        var resume = new PendingResume();
+        resume.Arm(index: 2, seconds: 10, queueLength: 5);
+
+        resume.OnInserted(inserted);
+
+        Assert.Equal(expected, resume.Index);
+    }
 }

@@ -55,6 +55,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Cewka.App.Tests" />
     <InternalsVisibleTo Include="Cewka.WindowProbe" />
+    <InternalsVisibleTo Include="Cewka.RadioCatalog" />
   </ItemGroup>
 
   <ItemGroup>
@@ -65,6 +66,12 @@
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
     <AvaloniaResource Include="Localisation\Languages\**" />
+    <AvaloniaResource Include="Radio\stations.json" />
+    <!--
+      Noty o składnikach innych autorów, czytane przez widok licencji. To ten sam plik z katalogu
+      głównego repozytorium, ale jako zasób zestawu: wydanie jednoplikowe nie zostawia plików obok programu.
+    -->
+    <AvaloniaResource Include="..\..\THIRD-PARTY-NOTICES.txt" Link="Assets\Legal\THIRD-PARTY-NOTICES.txt" />
   </ItemGroup>
 
   <!--

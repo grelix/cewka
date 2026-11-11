@@ -85,6 +85,9 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
     /// </summary>
     protected abstract int ReadSource(Span<float> destination, int frames);
 
+    /// <summary>Zero z <see cref="ReadSource"/> oznacza chwilowy brak danych, a nie koniec.</summary>
+    protected virtual bool SourceWaiting => false;
+
     /// <summary>Moves the underlying reader; the frame index is expressed in source frames.</summary>
     protected abstract void SeekSource(long sourceFrame);
 
@@ -109,6 +112,7 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
                 if (got <= 0)
                 {
                     if (_reconfigured) continue;
+                    if (SourceWaiting) break;
 
                     _endOfStream = true;
                     break;

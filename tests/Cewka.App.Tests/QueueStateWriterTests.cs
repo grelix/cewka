@@ -39,7 +39,7 @@ public sealed class QueueStateWriterTests
     public void ZapisZamowionyPrzezZegarIdzieWTle() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a"), h.Track("b")], replace: false);
+        h.OpenPaths([h.Track("a"), h.Track("b")], replace: false);
 
         var saving = h.Player.SaveQueueStateInBackground();
 

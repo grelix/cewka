@@ -58,10 +58,21 @@ public sealed class AudioGraph
     /// <summary>Master volume, driven by the slider.</summary>
     public GainStage Volume { get; } = new(smoothingSeconds: 0.02);
 
+    /// <summary>Wyciszenie miękkiej pauzy; za głośnością, przed limiterem.</summary>
+    public Fader PauseFade { get; } = new();
+
     public SpectrumAnalyser Analyser { get; } = new();
+
+    /// <summary>Dane dźwięku dla wizualizacji sceny: jedyny punkt odczytu.</summary>
+    public SceneAudio Scene { get; }
+
+    public AudioGraph() => Scene = new SceneAudio(Analyser);
 
     /// <summary>Wyłączone sprowadza wzmocnienie wyrównania do jedności.</summary>
     public bool NormalisationEnabled { get; set; } = true;
+
+    /// <summary>Poziom, do którego dociąga się stacje; plik wyrównuje <see cref="LoudnessService"/>.</summary>
+    public double LiveTargetLufs { get; set; } = LoudnessService.ReferenceLufs;
 
     /// <summary>Set by the application; consulted whenever a track starts.</summary>
     public ITrackGainSource? GainSource { get; set; }
@@ -79,6 +90,7 @@ public sealed class AudioGraph
         DynamicRange.Prepare(sampleRate, channels);
         Limiter.Prepare(sampleRate, channels);
         Volume.Prepare(sampleRate, channels);
+        PauseFade.Prepare(sampleRate, channels);
         Analyser.Prepare(sampleRate, channels);
     }
 
@@ -104,6 +116,7 @@ public sealed class AudioGraph
 
         Analyser.Process(buffer, frames);
         Volume.Process(buffer, frames);
+        PauseFade.Process(buffer, frames);
         Limiter.Process(buffer, frames);
     }
 
@@ -147,6 +160,7 @@ public sealed class AudioGraph
         DynamicRange.Reset();
         Limiter.Reset();
         Volume.Reset();
+        PauseFade.Reset();
         Analyser.Reset();
     }
 }

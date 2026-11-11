@@ -1,9 +1,4 @@
-# Pakiety dla Linuksa wraz z próbną instalacją w kontenerach.
-#
-# Osobny plik, bo korzystają z niego budowa przy każdej zmianie, wydanie ze znacznika
-# i sprawdzenie na żądanie.
-
-name: Pakiety Linuksa
+name: Packages
 
 on:
   workflow_call:
@@ -13,8 +8,8 @@ permissions:
   contents: read
 
 jobs:
-  pakiety:
-    name: Pakiety i próbne instalacje
+  linux:
+    name: Linux packages
     runs-on: ubuntu-latest
 
     steps:
@@ -22,97 +17,91 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '10.0.x'
 
-      - name: Narzędzia pakujące
-        # bsdtar przychodzi z libarchive-tools, rpmbuild z rpm.
+      - name: Install packaging tools
         run: |
           sudo apt-get update
           sudo apt-get install -y rpm libarchive-tools zstd libfontconfig1
 
-      - name: Publikacja
+      - name: Publish
         run: ./tools/publish-linux.sh
 
-      - name: Wersja i znacznik czasu
-        id: dane
+      - name: Read version
+        id: meta
         run: |
-          WERSJA="$(./tools/sprawdz-wersje.sh)"
-          echo "wersja=$WERSJA" >> "$GITHUB_OUTPUT"
+          VERSION="$(./tools/sprawdz-wersje.sh)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # Commit time instead of build time keeps the packages reproducible.
+          echo "epoch=$(git log -1 --format=%ct)" >> "$GITHUB_OUTPUT"
 
-          # Znacznik czasu z zatwierdzenia, a nie z chwili budowy: trafia do metadanych pakietu
-          # pacmana, czasów jego plików i daty w %changelog RPM, więc bez tego dwie budowy
-          # tego samego materiału dawałyby różne pliki.
-          echo "epoka=$(git log -1 --format=%ct)" >> "$GITHUB_OUTPUT"
-
-      - name: Pakiety
+      - name: Build packages
         env:
-          SOURCE_DATE_EPOCH: ${{ steps.dane.outputs.epoka }}
+          SOURCE_DATE_EPOCH: ${{ steps.meta.outputs.epoch }}
         run: ./tools/build-packages.sh
 
-      - name: Archiwum z gotowym plikiem wykonywalnym
-        # Potrzebne pakietowi w AUR, który nie powinien rozpakowywać cudzego pakietu,
-        # oraz każdemu, kto woli rozpakować i uruchomić bez instalowania.
+      # Plain archive for the AUR package and for running without installing.
+      - name: Build archive
         env:
-          WERSJA: ${{ steps.dane.outputs.wersja }}
-          SOURCE_DATE_EPOCH: ${{ steps.dane.outputs.epoka }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          SOURCE_DATE_EPOCH: ${{ steps.meta.outputs.epoch }}
         run: |
-          KATALOG="cewka-$WERSJA"
-          mkdir -p "artifacts/archiwum/$KATALOG"
+          DIR="cewka-$VERSION"
+          mkdir -p "artifacts/archiwum/$DIR"
 
-          install -Dm755 artifacts/publish/linux-x64/Cewka "artifacts/archiwum/$KATALOG/cewka"
-          install -Dm644 LICENSE "artifacts/archiwum/$KATALOG/LICENSE"
-          install -Dm644 THIRD-PARTY-NOTICES.txt "artifacts/archiwum/$KATALOG/THIRD-PARTY-NOTICES.txt"
-          install -Dm644 README.md "artifacts/archiwum/$KATALOG/README.md"
-          install -Dm644 packaging/linux/cewka.desktop "artifacts/archiwum/$KATALOG/cewka.desktop"
-          cp -r packaging/linux/icons "artifacts/archiwum/$KATALOG/icons"
+          install -Dm755 artifacts/publish/linux-x64/Cewka "artifacts/archiwum/$DIR/cewka"
+          install -Dm644 LICENSE "artifacts/archiwum/$DIR/LICENSE"
+          install -Dm644 THIRD-PARTY-NOTICES.txt "artifacts/archiwum/$DIR/THIRD-PARTY-NOTICES.txt"
+          install -Dm644 README.md "artifacts/archiwum/$DIR/README.md"
+          install -Dm644 packaging/linux/cewka.desktop "artifacts/archiwum/$DIR/cewka.desktop"
+          cp -r packaging/linux/icons "artifacts/archiwum/$DIR/icons"
+          install -Dm644 assets/ikona/cewka.svg "artifacts/archiwum/$DIR/icons/cewka.svg"
 
           tar --sort=name --owner=0 --group=0 --numeric-owner \
               --mtime="@$SOURCE_DATE_EPOCH" \
-              -czf "artifacts/packages/cewka-$WERSJA-linux-x64.tar.gz" \
-              -C artifacts/archiwum "$KATALOG"
+              -czf "artifacts/packages/cewka-$VERSION-linux-x64.tar.gz" \
+              -C artifacts/archiwum "$DIR"
 
-      - name: Noty składników w pakietach
-        # Licencje składników pozwalają rozpowszechniać program tylko razem z ich notami.
-        # Sprawdzana jest zawartość plików pakietów, bo obraz Ubuntu w próbnej instalacji
-        # pomija przy instalacji dokumentację z /usr/share/doc poza plikami copyright.
+      # The licences of bundled components require their notices in every package.
+      - name: Check third-party notices
         env:
-          WERSJA: ${{ steps.dane.outputs.wersja }}
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
           set -euo pipefail
           cd artifacts/packages
 
-          # Spis plików trafia najpierw do zmiennej: grep -q w potoku kończy czytanie przed
-          # końcem spisu, a pipefail uznałby przerwany program wypisujący za błąd.
-          sprawdz() {
-            local pakiet="$1" plik="$2" spis="$3"
-            if ! grep -qxF "$plik" <<< "$spis"; then
-              echo "BLAD: w $pakiet brak $plik" >&2
+          # The file list goes into a variable first: grep -q in a pipe stops reading early,
+          # which pipefail would report as an error.
+          check() {
+            local package="$1" file="$2" list="$3"
+            if ! grep -qxF "$file" <<< "$list"; then
+              echo "$package does not contain $file" >&2
               exit 1
             fi
-            echo "$pakiet: $plik"
+            echo "$package: $file"
           }
 
-          DEB="cewka_${WERSJA}_amd64.deb"
-          RPM="cewka-${WERSJA}-1.x86_64.rpm"
-          PACMAN="cewka-${WERSJA}-1-x86_64.pkg.tar.zst"
-          ARCHIWUM="cewka-${WERSJA}-linux-x64.tar.gz"
+          DEB="cewka_${VERSION}_amd64.deb"
+          RPM="cewka-${VERSION}-1.x86_64.rpm"
+          PACMAN="cewka-${VERSION}-1-x86_64.pkg.tar.zst"
+          ARCHIVE="cewka-${VERSION}-linux-x64.tar.gz"
 
-          sprawdz "$DEB" ./usr/share/doc/cewka/THIRD-PARTY-NOTICES.txt "$(dpkg-deb -c "$DEB" | awk '{ print $6 }')"
-          sprawdz "$RPM" /usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt "$(rpm -qlp "$RPM")"
-          sprawdz "$PACMAN" usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt "$(bsdtar -tf "$PACMAN")"
-          sprawdz "$ARCHIWUM" "cewka-${WERSJA}/THIRD-PARTY-NOTICES.txt" "$(tar -tzf "$ARCHIWUM")"
+          check "$DEB" ./usr/share/doc/cewka/THIRD-PARTY-NOTICES.txt "$(dpkg-deb -c "$DEB" | awk '{ print $6 }')"
+          check "$RPM" /usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt "$(rpm -qlp "$RPM")"
+          check "$PACMAN" usr/share/licenses/cewka/THIRD-PARTY-NOTICES.txt "$(bsdtar -tf "$PACMAN")"
+          check "$ARCHIVE" "cewka-${VERSION}/THIRD-PARTY-NOTICES.txt" "$(tar -tzf "$ARCHIVE")"
 
-      - name: Materiał do prób
+      - name: Generate audio samples
         env:
           CEWKA_NULL_AUDIO: '1'
         run: dotnet run --project tools/Cewka.Snapshots -c Release -- --material artifacts/material
 
-      - name: Próbne instalacje w kontenerach
+      - name: Test installs in containers
         run: ./tools/test-packages.sh
 
-      - name: Odłóż pakiety
+      - name: Upload packages
         uses: actions/upload-artifact@v7
         with:
-          name: pakiety-linux
+          name: linux-packages
           path: artifacts/packages
           if-no-files-found: error

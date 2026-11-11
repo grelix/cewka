@@ -9,6 +9,68 @@ public class ShuffleOrderTests
     private static List<QueueEntry> Queue(int count) =>
         Enumerable.Range(0, count).Select(i => new QueueEntry { Path = $"utwor-{i}.flac" }).ToList();
 
+    /// <summary>Podgląd przy dowolnym układzie błędnych wpisów zgadza się z prawdziwym przejściem i niczego nie zmienia.</summary>
+    [Theory]
+    [MemberData(nameof(Seeds))]
+    public void PreviewMatchesTheRealWalkAndChangesNothing(int seed)
+    {
+        var queue = Queue(6);
+        var order = new ShuffleOrder(new Random(seed));
+        order.Reset(queue, null);
+
+        var picker = new Random(seed * 31 + 1);
+        var from = order.Order[picker.Next(2, 6)];
+        var others = queue.Where(entry => !ReferenceEquals(entry, from)).OrderBy(_ => picker.Next()).ToList();
+        foreach (var entry in others.Take(picker.Next(0, 5))) entry.OpenFailure = TrackFailureReason.DamagedFile;
+
+        bool Playable(QueueEntry entry) => entry.OpenFailure is null;
+
+        var snapshot = order.Order.ToArray();
+        var version = order.Version;
+        var previous = order.Previous(from, wrap: true, queue);
+        var predicted = order.Preview(from, wrap: true, queue, Playable);
+
+        for (var i = 0; i < 4; i++) Assert.Same(predicted, order.Preview(from, wrap: true, queue, Playable));
+        Assert.Equal(snapshot, order.Order);
+        Assert.Equal(version, order.Version);
+        Assert.Same(previous, order.Previous(from, wrap: true, queue));
+
+        var next = order.Next(from, wrap: true, queue);
+        for (var left = queue.Count; next is { OpenFailure: not null } && left > 0; left--)
+            next = order.Next(next, wrap: true, queue);
+
+        Assert.Same(predicted, next);
+    }
+
+    public static TheoryData<int> Seeds()
+    {
+        var seeds = new TheoryData<int>();
+        for (var seed = 1; seed <= 40; seed++) seeds.Add(seed);
+        return seeds;
+    }
+
+    [Fact]
+    public void ChangingTheOrderDropsThePlannedRound()
+    {
+        var queue = Queue(4);
+        var order = new ShuffleOrder(new Random(5));
+        order.Reset(queue, null);
+        var last = order.Order[^1];
+        _ = order.Preview(last, wrap: true, queue, _ => true);
+
+        var added = new QueueEntry { Path = "dodany.flac" };
+        queue.Add(added);
+        order.Insert([added], last);
+
+        // Plan sprzed dodania nie zawierałby nowego wpisu.
+        var position = order.Order.ToList().IndexOf(added);
+        Assert.InRange(position, 0, 4);
+        Assert.Equal(5, order.Order.Count);
+        var wrapped = order.Next(order.Order[^1], wrap: true, queue);
+        Assert.NotNull(wrapped);
+        Assert.Contains(added, order.Order);
+    }
+
     [Theory]
     [InlineData(1)]
     [InlineData(7)]
@@ -61,6 +123,24 @@ public class ShuffleOrderTests
     /// Pytanie o następny wpis na końcu rundy, zadane ponownie (sprawdzenie zapasu dekodera
     /// po zmianie kolejki), daje ten sam wpis, zamiast układać kolejną permutację.
     /// </summary>
+    /// <summary>
+    /// Runda zamknięta przy powtarzaniu kolejki, potem powtarzanie wyłączone: o wpis, który ją
+    /// zamknął, bez zawijania nie ma następnika, a po włączeniu z powrotem jest ten sam początek.
+    /// </summary>
+    [Fact]
+    public void AskingWithoutWrapAfterARoundClosedGivesNothing()
+    {
+        var queue = Queue(3);
+        var order = new ShuffleOrder(new Random(5));
+        order.Reset(queue, null);
+        var last = order.Order[^1];
+
+        var first = order.Next(last, wrap: true, queue);
+
+        Assert.Null(order.Next(last, wrap: false, queue));
+        Assert.Same(first, order.Next(last, wrap: true, queue));
+    }
+
     [Fact]
     public void AskingAgainAtTheEndOfARoundGivesTheSameEntry()
     {

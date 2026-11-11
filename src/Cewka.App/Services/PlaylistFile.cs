@@ -69,8 +69,11 @@ public static partial class PlaylistFile
     /// <param name="fallbackCodePage">
     /// Strona kodowa dla <c>.m3u</c>, który nie jest poprawnym UTF-8; null oznacza stronę systemu.
     /// </param>
-    internal static PlaylistLoad Load(string path, int? fallbackCodePage)
+    /// <param name="fileExists">Sprawdzanie plików z listy; null oznacza dysk.</param>
+    internal static PlaylistLoad Load(string path, int? fallbackCodePage, Func<string, bool>? fileExists = null)
     {
+        fileExists ??= File.Exists;
+
         var katalog = Path.GetDirectoryName(Path.GetFullPath(path)) ?? string.Empty;
         var found = new List<string>();
         var missing = 0;
@@ -92,7 +95,7 @@ public static partial class PlaylistFile
                 continue;
             }
 
-            var resolved = Resolve(line, katalog);
+            var resolved = Resolve(line, katalog, fileExists);
             if (resolved is not null) found.Add(resolved);
             else missing++;
         }
@@ -101,14 +104,14 @@ public static partial class PlaylistFile
     }
 
     /// <summary>Ścieżka istniejącego pliku dla jednej linii listy albo null.</summary>
-    private static string? Resolve(string line, string katalog)
+    private static string? Resolve(string line, string katalog, Func<string, bool> fileExists)
     {
         try
         {
             if (line.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
             {
                 // Adres pliku (VLC, Rhythmbox, Strawberry): znaki zakodowane procentowo.
-                return Uri.TryCreate(line.Trim(), UriKind.Absolute, out var uri) && uri.IsFile && File.Exists(uri.LocalPath)
+                return Uri.TryCreate(line.Trim(), UriKind.Absolute, out var uri) && uri.IsFile && fileExists(uri.LocalPath)
                     ? uri.LocalPath
                     : null;
             }
@@ -117,7 +120,7 @@ public static partial class PlaylistFile
             {
                 var full = Path.GetFullPath(Path.IsPathRooted(candidate) ? candidate : Path.Combine(katalog, candidate));
 
-                if (File.Exists(full)) return full;
+                if (fileExists(full)) return full;
             }
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException or UriFormatException)

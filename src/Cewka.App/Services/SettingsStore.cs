@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Avalonia.Threading;
 using Cewka.App.Models;
+using Cewka.App.Radio;
 using Cewka.Platform;
 
 namespace Cewka.App.Services;
@@ -219,6 +220,13 @@ public sealed class SettingsStore
             }
         }
 
+        // Kolejka otwarta na stałe przed wysuwanym panelem to dziś panel przypięty.
+        if (s.QueueOpen is { } open)
+        {
+            s.QueuePinned = open;
+            s.QueueOpen = null;
+        }
+
         s.SchemaVersion = AppSettings.CurrentSchema;
         return s;
     }
@@ -244,6 +252,26 @@ public sealed class SettingsStore
             s.EqualiserGains[i] = Math.Clamp(s.EqualiserGains[i], -12, 12);
 
         s.SeekStep = AudioPreferences.NearestSeekStep(s.SeekStep);
+
+        // Wskaźniki wycofano; zapisany wybór i wartość spoza wyliczenia dają Płytę.
+        if (s.SceneVisual == SceneVisual.Meters || !Enum.IsDefined(s.SceneVisual)) s.SceneVisual = SceneVisual.Disc;
+
+        // Płyty nie da się pominąć w cyklu V; nieznane i wycofane wartości z listy znikają.
+        s.SceneCycleOff = [.. (s.SceneCycleOff ?? []).Where(v => Enum.IsDefined(v) && v is not (SceneVisual.Disc or SceneVisual.Meters)).Distinct()];
+
+        if (!Enum.IsDefined(s.DiscSpin)) s.DiscSpin = DiscSpin.Normal;
+        if (!Enum.IsDefined(s.BackdropMotion)) s.BackdropMotion = BackdropMotion.Normal;
+        if (!Enum.IsDefined(s.SpectrumResponse)) s.SpectrumResponse = SpectrumResponse.Normal;
+        s.RadioRecentLimit = RecentLimits.Nearest(s.RadioRecentLimit);
+
+        if (!Enum.IsDefined(s.QueueReveal)) s.QueueReveal = QueueReveal.Hover;
+        if (!Enum.IsDefined(s.QueueHideDelay)) s.QueueHideDelay = QueueHideDelay.TwoSeconds;
+        if (!Enum.IsDefined(s.QueueRevealDelay)) s.QueueRevealDelay = QueueRevealDelay.Normal;
+
+        // Szerokość ręcznie wpisana poniżej najmniejszej rośnie do niej; nieliczbowa wraca do domyślnej.
+        // Górnej granicy nie ma, bo zależy od okna i obcina ją dopiero wyświetlanie.
+        if (s.QueueWidth is { } width)
+            s.QueueWidth = double.IsFinite(width) ? Math.Max(width, QueuePanelWidth.Minimum) : null;
 
         return s;
     }

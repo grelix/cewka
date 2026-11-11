@@ -19,6 +19,11 @@ public sealed class SegmentOption(string key, object value, bool literal = false
     /// </summary>
     public string Label => literal ? key : Strings.Current[key];
 
+    /// <summary>Mały obraz przed nazwą, np. flaga przy języku; null — sama nazwa.</summary>
+    public Avalonia.Media.IImage? Icon { get; init; }
+
+    public bool HasIcon => Icon is not null;
+
     private bool _isSelected;
 
     public bool IsSelected { get => _isSelected; set => Set(ref _isSelected, value); }

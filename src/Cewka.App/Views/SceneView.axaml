@@ -1,0 +1,692 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:Cewka.App.Controls"
+             xmlns:l="using:Cewka.App.Localisation"
+             xmlns:vm="using:Cewka.App.ViewModels"
+             x:Class="Cewka.App.Views.SceneView"
+             x:DataType="vm:MainViewModel"
+             IsVisible="False"
+             Focusable="True"
+             AutomationProperties.LiveSetting="Polite">
+
+  <UserControl.Transitions>
+    <Transitions>
+      <DoubleTransition Property="Opacity" Duration="0:0:0.3" />
+    </Transitions>
+  </UserControl.Transitions>
+
+  <!--
+    Wymiary to jednostki kadru 1920 × 1080; kod skaluje kadr równomiernie do ekranu. Jedna barwa
+    stanu włączonego, biel: przełącznik włączony ma białą ikonę i podpis oraz białą kropkę.
+  -->
+  <UserControl.Styles>
+    <Style Selector=":is(Button).scene">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0,6,0,8" />
+      <Setter Property="CornerRadius" Value="14" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Top" />
+      <Setter Property="RenderTransform" Value="{x:Null}" />
+    </Style>
+    <Style Selector=":is(Button).scene /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="{TemplateBinding CornerRadius}" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector=":is(Button).scene:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <!-- Tło najechania tylko przy widocznym kursorze myszy: bez klatki najechanie nie znika samo. -->
+    <Style Selector="Panel#Root.pointer :is(Button).scene:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource GlassBrush}" />
+    </Style>
+    <Style Selector=":is(Button).scene:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Glass2Brush}" />
+    </Style>
+
+    <!--
+      Przycisk rzędu ma co najmniej 80; kod widoku daje wszystkim tę samą szerokość, większą, gdy
+      wymaga tego najdłuższy podpis w bieżącym języku. Treść na całą szerokość przycisku: pole ikony
+      staje w jego środku po jednym zaokrągleniu, więc i przy nieparzystej szerokości na x = 920.
+    -->
+    <Style Selector="StackPanel#TransportRow > :is(Button)">
+      <Setter Property="MinWidth" Value="80" />
+    </Style>
+    <Style Selector="StackPanel#TransportRow > :is(Button).scene">
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+
+    <!-- Ikona 24 w polu 44, podpis 13/16 i kropka 4, co 6 jednostek. -->
+    <Style Selector=":is(Button).scene Panel.icon-field">
+      <Setter Property="Width" Value="44" />
+      <Setter Property="Height" Value="44" />
+    </Style>
+    <Style Selector=":is(Button).scene Viewbox.icon">
+      <Setter Property="Width" Value="24" />
+      <Setter Property="Height" Value="24" />
+    </Style>
+    <Style Selector=":is(Button).scene Path.stroke">
+      <Setter Property="Stroke" Value="{DynamicResource SceneText2Brush}" />
+    </Style>
+    <Style Selector=":is(Button).scene Path.fill">
+      <Setter Property="Fill" Value="{DynamicResource SceneText2Brush}" />
+    </Style>
+    <Style Selector=":is(Button).scene TextBlock.caption">
+      <Setter Property="FontSize" Value="{StaticResource FontSizeSceneCaption}" />
+      <Setter Property="LineHeight" Value="16" />
+      <Setter Property="Foreground" Value="{DynamicResource SceneText2Brush}" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="TextAlignment" Value="Center" />
+    </Style>
+    <Style Selector=":is(Button).scene Ellipse.dot">
+      <Setter Property="Width" Value="4" />
+      <Setter Property="Height" Value="4" />
+      <Setter Property="Fill" Value="Transparent" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector=":is(Button).scene:checked Path.stroke">
+      <Setter Property="Stroke" Value="{DynamicResource TextBrush}" />
+    </Style>
+    <Style Selector=":is(Button).scene:checked TextBlock.caption">
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+    </Style>
+    <Style Selector=":is(Button).scene:checked Ellipse.dot">
+      <Setter Property="Fill" Value="{DynamicResource TextBrush}" />
+    </Style>
+
+    <!-- Odtwórz/Wstrzymaj: białe koło 56 wystaje po 6 nad i pod pole ikony, podpis zawsze biały. -->
+    <Style Selector="Button.scene.playpause TextBlock.caption">
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+    </Style>
+    <Style Selector="Button.scene.playpause Path.fill">
+      <Setter Property="Fill" Value="{DynamicResource SceneInkBrush}" />
+    </Style>
+
+    <!-- Przycisk wyjścia: kapsuła 36 z samą ikoną 20. -->
+    <Style Selector="Button.scene.exit">
+      <Setter Property="Width" Value="36" />
+      <Setter Property="Height" Value="36" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="18" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.scene.exit Viewbox.icon">
+      <Setter Property="Width" Value="20" />
+      <Setter Property="Height" Value="20" />
+    </Style>
+
+    <!-- Przycisk „Odtwórz od początku”: kapsuła ze szkła, tekst 20. -->
+    <Style Selector="Button.scene.restart">
+      <Setter Property="Padding" Value="28,14" />
+      <Setter Property="CornerRadius" Value="28" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.scene.restart /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Glass2Brush}" />
+    </Style>
+
+    <!-- Rząd okładek kolejki: przygaszone zagrane, pierścień na okładce z fokusem, kropka przy bieżącej. -->
+    <Style Selector=":is(Button).cover-tile">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="VerticalContentAlignment" Value="Top" />
+      <Setter Property="RenderTransform" Value="{x:Null}" />
+    </Style>
+    <Style Selector=":is(Button).cover-tile /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector=":is(Button).cover-tile:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector=":is(Button).cover-tile:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector=":is(Button).cover-tile Border.cover-tile-art">
+      <Setter Property="CornerRadius" Value="{StaticResource SceneCoverRadius}" />
+      <Setter Property="Background" Value="{DynamicResource GlassBrush}" />
+    </Style>
+    <Style Selector=":is(Button).cover-tile.played Border.cover-tile-art">
+      <Setter Property="Opacity" Value="{StaticResource SceneRowPlayedOpacity}" />
+    </Style>
+    <Style Selector=":is(Button).cover-tile Border.cover-tile-ring">
+      <Setter Property="CornerRadius" Value="{StaticResource SceneCoverRadius}" />
+      <Setter Property="BorderThickness" Value="3" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Panel#Root.pointer :is(Button).cover-tile:pointerover Border.cover-tile-ring">
+      <Setter Property="BorderBrush" Value="{DynamicResource SceneText2Brush}" />
+    </Style>
+    <Style Selector=":is(Button).cover-tile.focused Border.cover-tile-ring">
+      <Setter Property="BorderBrush" Value="{DynamicResource TextBrush}" />
+    </Style>
+    <Style Selector=":is(Button).cover-tile Ellipse.cover-tile-dot">
+      <Setter Property="Width" Value="8" />
+      <Setter Property="Height" Value="8" />
+      <Setter Property="Margin" Value="0,8,0,0" />
+      <Setter Property="Fill" Value="{DynamicResource TextBrush}" />
+    </Style>
+    <Style Selector="c|CoverRow TextBlock.cover-row-caption">
+      <Setter Property="FontSize" Value="{StaticResource FontSizeSceneAlbum}" />
+      <Setter Property="LineHeight" Value="26" />
+      <Setter Property="MaxWidth" Value="880" />
+      <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+    </Style>
+
+    <!--
+      Pierścień fokusu z kluczy planszy: leży w warstwie ozdobników okna, poza ciemnym zakresem
+      motywu sceny, więc barwę bierze z tokenu spoza słowników motywów.
+    -->
+    <Style Selector=":is(Control)">
+      <Setter Property="FocusAdorner">
+        <FocusAdornerTemplate>
+          <c:FocusRing Brush="{DynamicResource SceneText2Brush}" />
+        </FocusAdornerTemplate>
+      </Setter>
+    </Style>
+
+    <!--
+      Uchwyt paska 20, w regulacji strzałkami 28, w obu stanach w torze. Średnica tylko w stylach:
+      wartość wpisana przy kontrolce przesłoniłaby styl regulacji.
+    -->
+    <Style Selector="c|TrackSlider#Seek">
+      <Setter Property="ThumbDiameter" Value="20" />
+    </Style>
+    <Style Selector="c|TrackSlider#Seek.adjusting">
+      <Setter Property="ThumbDiameter" Value="28" />
+    </Style>
+
+    <!--
+      Rząd przycisków i wyjście przenikają, a ich miejsce zostaje. Przy ukrytym kursorze myszy części
+      warstwy nie przyjmują wskaźnika myszy (kod widoku).
+    -->
+    <Style Selector=":is(Control).fades">
+      <Setter Property="Transitions">
+        <Transitions>
+          <DoubleTransition Property="Opacity" Duration="0:0:0.2" Easing="CubicEaseOut" />
+        </Transitions>
+      </Setter>
+    </Style>
+  </UserControl.Styles>
+
+  <!-- Scena jest zawsze ciemna, bez względu na motyw okna. -->
+  <ThemeVariantScope RequestedThemeVariant="Dark">
+    <Panel x:Name="Root" Background="{DynamicResource DeskBrush}" KeyboardNavigation.TabNavigation="Cycle">
+
+      <!--
+        Tło na cały ekran: rozmyta okładka, plamy i dwa przyciemnienia. Wystrój, bez automatyzacji.
+        Okładka jest już rozmyta, więc próbkowanie dwuliniowe wygląda jak sześcienne, a obracana płyta
+        przerysowuje tło pod sobą w każdej klatce.
+      -->
+      <Panel x:Name="CoverLayer" ClipToBounds="True" IsHitTestVisible="False"
+             AutomationProperties.AccessibilityView="Raw">
+        <Image x:Name="CoverBackdrop" Source="{Binding SceneBackdrop}" Stretch="UniformToFill"
+               RenderTransformOrigin="50%,50%" RenderTransform="scale(1.2)"
+               RenderOptions.BitmapInterpolationMode="MediumQuality" />
+      </Panel>
+
+      <!--
+        Zabarwienie tła w barwach okładki (efekt tła w Płycie i Okładce): gradient od lewego górnego rogu
+        i winieta przy krawędziach. Pędzle i krycie ustawia kod widoku.
+      -->
+      <Panel x:Name="TintLayer" IsVisible="False" IsHitTestVisible="False"
+             AutomationProperties.AccessibilityView="Raw">
+        <Border x:Name="TintGradient" />
+        <Border x:Name="TintVignette" />
+      </Panel>
+
+      <!-- Siła plam jak we wzorze: kryjąca barwa w środku plamy o kryciu około 0,13–0,26. -->
+      <c:LiveBackdrop x:Name="Backdrop"
+                      Tempo="0.5" StopSeconds="1"
+                      Palette="{Binding SceneBlobs}"
+                      MinimumStrength="0.25"
+                      MaximumStrength="0.3"
+                      Level="{Binding WaveLevel}"
+                      IsActive="{Binding IsPlaying}"
+                      IsReduced="{Binding ReducedEffects}"
+                      AutomationProperties.AccessibilityView="Raw" />
+
+      <!-- Drobinki światła w barwach okładki (efekt tła w Płycie i Okładce). -->
+      <c:SceneParticles x:Name="Particles" IsVisible="False" Palette="{Binding SceneBlobs}"
+                        AutomationProperties.AccessibilityView="Raw" />
+
+      <!-- Zorza: shader na cały kadr, także marginesy ekranu, pod sceną i przyciemnieniami. -->
+      <c:AuroraView x:Name="AuroraStage" IsVisible="False" AutomationProperties.AccessibilityView="Raw" />
+      <c:SceneGpuProbe x:Name="GpuProbe" HorizontalAlignment="Left" VerticalAlignment="Top"
+                       AutomationProperties.AccessibilityView="Raw" />
+
+      <Border x:Name="DimAcross" Background="{StaticResource SceneDimAcrossBrush}" IsHitTestVisible="False"
+              AutomationProperties.AccessibilityView="Raw" />
+      <Border x:Name="DimBottom" Background="{StaticResource SceneDimBottomBrush}" IsHitTestVisible="False"
+              AutomationProperties.AccessibilityView="Raw" />
+
+      <!-- Noc: czysta czerń na cały ekran, nad tłem i przyciemnieniami; wystrój, bez automatyzacji. -->
+      <Border x:Name="NightVeil" Background="{StaticResource SceneNightBrush}" IsVisible="False" IsHitTestVisible="False"
+              AutomationProperties.AccessibilityView="Raw" />
+
+      <LayoutTransformControl x:Name="Stage" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Panel x:Name="Plane" Width="1920" Height="1080">
+
+          <!-- Część kadru unoszona przy otwartym rzędzie kolejki; przesunięcie ustawia kod widoku. -->
+          <Panel x:Name="SceneBody">
+            <!--
+              Poświata za płytą, okładką i logo w barwach okładki (efekt tła); środek i rozmiar ustawia
+              kod widoku razem z płytą, a jasność wolno idzie za poziomem dźwięku.
+            -->
+            <Ellipse x:Name="ArtGlow" IsVisible="False" Width="960" Height="960"
+                     HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False"
+                     AutomationProperties.AccessibilityView="Raw" />
+
+            <!--
+              Płyta i kolumna stoją niżej niż środek kadru: ich wspólny środek wypada na y = 620.
+              Płyta: cień, talerz obracany przez DiscSpinner i nieruchomy połysk nad nim.
+            -->
+            <Panel x:Name="DiscHost" Width="640" Height="640" Margin="160,300,0,0"
+                   HorizontalAlignment="Left" VerticalAlignment="Top"
+                   IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw">
+              <Ellipse x:Name="DiscShadow" Width="760" Height="760" Margin="-60,-30,-60,-90"
+                       Fill="{StaticResource SceneDiscShadowBrush}" />
+
+              <c:VinylDisc x:Name="Disc"
+                           Cover="{Binding SceneCover}"
+                           CoreFraction="0.4125" BodyFraction="0.41875"
+                           CoreBrush="{StaticResource SceneDiscCoreBrush}"
+                           BodyBrush="{StaticResource SceneDiscBodyBrush}"
+                           RimBrush="{StaticResource SceneDiscRimBrush}"
+                           OutlineBrush="{DynamicResource GlassBrush}"
+                           DesignDiameter="640" GroovePitch="3" GrooveInset="7.5" GrooveInnerFraction="0.44375"
+                           GrooveBrush="{DynamicResource DiscGrooveBrush}"
+                           SeparatorBrush="{StaticResource SceneDiscSeparatorBrush}"
+                           SeparatorFractions="0.615625, 0.796875"
+                           LabelFraction="0.40625"
+                           LabelOutlineBrush="{StaticResource SceneDiscLabelOutlineBrush}"
+                           HoleFraction="0.021875"
+                           HoleBrush="{StaticResource SceneInkBrush}"
+                           HoleOutlineBrush="{StaticResource SceneDiscHoleOutlineBrush}" />
+
+              <!-- Pierścień 135–319: połysk leży na rowkach, nie na naklejce i nie poza płytą. -->
+              <Path x:Name="DiscSheen" Width="640" Height="640" IsHitTestVisible="False"
+                    Fill="{StaticResource SceneDiscSheenBrush}">
+                <Path.Data>
+                  <GeometryGroup FillRule="EvenOdd">
+                    <EllipseGeometry Center="320,320" RadiusX="319" RadiusY="319" />
+                    <EllipseGeometry Center="320,320" RadiusX="135" RadiusY="135" />
+                  </GeometryGroup>
+                </Path.Data>
+              </Path>
+
+              <!-- Pierścień widma: krótkie kreski tuż za krawędzią płyty, tylko przy wariancie Wł. -->
+              <c:SceneAudioView x:Name="DiscRingView" Width="680" Height="680" IsVisible="False"
+                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                AutomationProperties.AccessibilityView="Raw" />
+            </Panel>
+
+            <!-- Dane dźwięku, dekoracja bez automatyzacji. Położenie zależne od wizualizacji ustawia kod widoku. -->
+            <c:SceneAudioView x:Name="AudioStage" Width="1600" Height="410" Margin="160,590,0,0" IsVisible="False"
+                              HorizontalAlignment="Left" VerticalAlignment="Top"
+                              AutomationProperties.AccessibilityView="Raw" />
+            <TextBlock x:Name="MonoNote" Width="560" Margin="160,940,0,0" IsVisible="False"
+                       HorizontalAlignment="Left" VerticalAlignment="Top" TextWrapping="Wrap"
+                       FontSize="{StaticResource FontSizeSceneAlbum}" Foreground="{DynamicResource TextBrush}"
+                       Text="{l:Translate SceneMonoNote}" />
+
+            <!--
+              Okładka: ostra okładka (65% wysokości kadru) w miejscu płyty, z cieniem. Dwie warstwy
+              obrazu przenikają się przy zmianie utworu; wolny ruch (skala i przesunięcie) ustawia kod
+              widoku na całym hoście. Rozmiar ramki zależy od proporcji obrazu (kod widoku).
+            -->
+            <Panel x:Name="CoverArtHost" Width="720" Height="702" Margin="160,269,0,0"
+                   HorizontalAlignment="Left" VerticalAlignment="Top" IsVisible="False"
+                   RenderTransformOrigin="50%,50%"
+                   IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw">
+              <Border x:Name="CoverArtFrame" Width="702" Height="702" HorizontalAlignment="Left" VerticalAlignment="Center"
+                      ClipToBounds="True" CornerRadius="{StaticResource SceneCoverRadius}"
+                      BoxShadow="{StaticResource SceneCoverShadow}">
+                <Panel>
+                  <Image x:Name="CoverArtA" Stretch="Uniform" Opacity="1"
+                         RenderOptions.BitmapInterpolationMode="HighQuality" />
+                  <Image x:Name="CoverArtB" Stretch="Uniform" Opacity="0"
+                         RenderOptions.BitmapInterpolationMode="HighQuality" />
+                </Panel>
+              </Border>
+            </Panel>
+
+            <!--
+              Radio: bez płyty, logo stacji stoi w ramce z lekkim cieniem w miejscu płyty (decyzja 14.3).
+              Stacja bez logo ma w ramce ikonę radia.
+            -->
+            <Panel x:Name="RadioStageHost" Width="640" Height="640" Margin="160,300,0,0"
+                   HorizontalAlignment="Left" VerticalAlignment="Top" IsVisible="False"
+                   IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw">
+              <Border Width="600" Height="600" CornerRadius="64" ClipToBounds="True"
+                      HorizontalAlignment="Center" VerticalAlignment="Center"
+                      Background="#1AFFFFFF" BorderBrush="#2EFFFFFF" BorderThickness="1"
+                      BoxShadow="0 28 72 0 #66000000, 0 6 18 0 #40000000">
+                <Panel>
+                  <Image x:Name="RadioStageLogo" Source="{Binding Radio.StageLogo}"
+                         IsVisible="{Binding Radio.HasStageLogo}" Stretch="Uniform" Margin="72"
+                         RenderOptions.BitmapInterpolationMode="HighQuality" />
+                  <Viewbox x:Name="RadioStagePlaceholder" Width="220" Height="220"
+                           IsVisible="{Binding Radio.ShowsStagePlaceholder}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Path Classes="stroke" Data="{StaticResource IconRadioStroke}" Width="16" Height="16"
+                          StrokeThickness="0.7" Stroke="{StaticResource SceneText3Brush}" />
+                  </Viewbox>
+                </Panel>
+              </Border>
+            </Panel>
+
+            <!--
+              Koniec kolejki: napis i przycisk pod kolumną informacji, poza jej układem, żeby pojawienie się
+              nie przesuwało kolumny. Przycisk należy do warstwy sterowania.
+            -->
+            <StackPanel x:Name="QueueEndBlock" IsVisible="{Binding QueueEnded}" Spacing="16"
+                        Margin="920,0,0,64" HorizontalAlignment="Left" VerticalAlignment="Bottom">
+              <TextBlock x:Name="QueueEndText" Text="{l:Translate SceneQueueEnd}"
+                         FontSize="{StaticResource FontSizeSceneArtist}" FontWeight="SemiBold"
+                         Foreground="{DynamicResource TextBrush}"
+                         AutomationProperties.LiveSetting="Polite" />
+              <Button x:Name="RestartButton" Classes="scene restart fades" Click="OnRestart"
+                      AutomationProperties.Name="{l:Translate SceneRestartQueue}">
+                <TextBlock Text="{l:Translate SceneRestartQueue}" FontSize="{StaticResource FontSizeSceneAlbum}"
+                           FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" />
+              </Button>
+            </StackPanel>
+
+            <!-- Mała okładka po lewej stronie tytułu, tylko w Widmie i Horyzoncie. -->
+            <Border x:Name="MiniCover" Width="160" Height="160" Margin="160,112,0,0" IsVisible="False"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                    ClipToBounds="True" CornerRadius="{StaticResource SceneCoverRadius}"
+                    IsHitTestVisible="False" AutomationProperties.AccessibilityView="Raw">
+              <Image x:Name="MiniCoverImage" Stretch="UniformToFill"
+                     RenderOptions.BitmapInterpolationMode="HighQuality" />
+            </Border>
+
+            <!--
+              Kolumna 880 od x = 920, środek na y = 620 (środek obszaru pod górnym marginesem 160), grupy co 40.
+              Nad Falą, Widmem i Horyzontem kod widoku przenosi ją nad wizualizację.
+            -->
+            <StackPanel x:Name="InfoColumn" Width="880" Margin="920,160,0,0" Spacing="40"
+                        HorizontalAlignment="Left" VerticalAlignment="Center">
+
+              <StackPanel x:Name="TitleBlock" Spacing="8" IsHitTestVisible="False">
+                <!--
+                  Pismo (Noto Sans) rysuje tylko to, co mieści się w wierszu, a wiersz 72 px z planszy jest
+                  ciaśniejszy niż pismo i ucinał dół liter g, j, p, y. Wiersz ma więc 82 px, a margines −5 px u góry
+                  i u dołu zostawia jednowierszowemu tytułowi 72 px w układzie i linię bazową z planszy
+                  (dwuwierszowy jest o 10 px wyższy); tak samo przy
+                  małych napisach niżej (wiersz o 2 px wyższy, margines 1 px).
+                -->
+                <TextBlock x:Name="SceneTitle" Text="{Binding ShownTitle}"
+                           FontSize="{StaticResource FontSizeSceneTitle}" LineHeight="82" Margin="0,-5,0,-5" FontWeight="Bold"
+
+                           Foreground="{DynamicResource TextBrush}"
+                           MaxLines="2" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+                <!-- Odstęp liter −0,01 em. -->
+                <TextBlock x:Name="SceneArtist" Text="{Binding SceneLine}" IsVisible="{Binding HasSceneLine}"
+                           FontSize="{StaticResource FontSizeSceneArtist}" LineHeight="38" LetterSpacing="-0.3"
+                           Foreground="{StaticResource SceneText3Brush}"
+                           MaxLines="1" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="SceneAlbum" Text="{Binding Album}" IsVisible="{Binding HasSceneAlbum}"
+                           FontSize="{StaticResource FontSizeSceneAlbum}" LineHeight="26" LetterSpacing="-0.2"
+                           Foreground="{StaticResource SceneText2Brush}"
+                           MaxLines="1" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+
+              <StackPanel x:Name="ProgressBlock" Spacing="4">
+                <Panel>
+                <c:TrackSlider x:Name="Seek" Height="20"
+                               TrackThickness="4" ThumbInTrack="True" KeyboardStep="0.02"
+                               Scrubbing="OnSeekScrubbing" Committed="OnSeekCommitted"
+                               AutomationProperties.Name="{l:Translate SeekPosition}"
+                               AutomationProperties.HelpText="{l:Translate SeekPositionHelp}"
+                               TrackBrush="{DynamicResource TrackBrush}"
+                               FillBrush="{DynamicResource FillBrush}"
+                               ThumbOutlineBrush="{StaticResource SceneThumbOutlineBrush}"
+                               ThumbShadowBrush="{StaticResource SceneThumbShadowBrush}">
+                  <c:TrackSlider.Transitions>
+                    <Transitions>
+                      <DoubleTransition Property="ThumbOpacity" Duration="0:0:0.2" Easing="CubicEaseOut" />
+                    </Transitions>
+                  </c:TrackSlider.Transitions>
+                </c:TrackSlider>
+                <!-- Radio: zamiast paska postępu cienka kreska w tym samym miejscu. -->
+                <Border x:Name="LiveLine" Height="2" CornerRadius="1" IsVisible="False" IsHitTestVisible="False"
+                        VerticalAlignment="Center" Background="{DynamicResource TrackBrush}" />
+                </Panel>
+                <!-- Przed „Na żywo” czerwona kropka; przy błędzie i stanie łączenia kod widoku ją chowa. -->
+                <StackPanel Orientation="Horizontal" IsVisible="{Binding #LiveCaption.IsVisible}">
+                <c:LiveDot x:Name="LiveDot" IsVisible="False" FontSize="{Binding #LiveCaption.FontSize}"
+                           Fill="{DynamicResource LiveDotBrush}"
+                           IsActive="{Binding IsPlaying}" IsReduced="{Binding ReducedEffects}" />
+                <TextBlock x:Name="LiveCaption" Classes="tabular" IsVisible="False" IsHitTestVisible="False"
+                           FontSize="{StaticResource FontSizeSceneTime}" LineHeight="22" Margin="0,-1,0,-1"
+                           Foreground="{StaticResource SceneText2Brush}"
+                           AutomationProperties.LiveSetting="Polite" />
+                </StackPanel>
+                <Grid x:Name="TimesRow" ColumnDefinitions="*,Auto" IsHitTestVisible="False">
+                  <TextBlock Grid.Column="0" Classes="tabular" Text="{Binding Elapsed}"
+                             FontSize="{StaticResource FontSizeSceneTime}" LineHeight="22" Margin="0,-1,0,-1"
+                             Foreground="{StaticResource SceneText2Brush}" />
+                  <TextBlock Grid.Column="1" Classes="tabular" Text="{Binding Total}"
+                             FontSize="{StaticResource FontSizeSceneTime}" LineHeight="22" Margin="0,-1,0,-1"
+                             Foreground="{StaticResource SceneText2Brush}" />
+                </Grid>
+              </StackPanel>
+
+              <!--
+                Rząd wysunięty w lewo o połowę nadwyżki przycisku nad polem ikony (przy 80 o 18), żeby
+                pole ikony pierwszego przycisku stało na x = 920; kod widoku liczy to przy zmianie języka.
+                Przezroczyste tło: kursor w odstępie między przyciskami też jest nad warstwą.
+              -->
+              <StackPanel x:Name="TransportRow" Classes="fades" Orientation="Horizontal" Spacing="24"
+                          Margin="-18,0,0,0" HorizontalAlignment="Left" Background="Transparent">
+
+                <ToggleButton x:Name="ShuffleButton" Classes="scene"
+                              IsChecked="{Binding ShuffleEnabled, Mode=TwoWay}"
+                              AutomationProperties.Name="{l:Translate SceneShuffle}">
+                  <StackPanel Spacing="6">
+                    <Panel x:Name="ShuffleField" Classes="icon-field">
+                      <Viewbox Classes="icon">
+                        <Path Classes="stroke" Data="{StaticResource IconShuffleStroke}" Width="16" Height="16" />
+                      </Viewbox>
+                    </Panel>
+                    <TextBlock Classes="caption" Text="{l:Translate SceneShuffle}" />
+                    <Ellipse Classes="dot" />
+                  </StackPanel>
+                </ToggleButton>
+
+                <Button x:Name="PreviousButton" Classes="scene" Click="OnPrevious"
+                        AutomationProperties.Name="{l:Translate ScenePrevious}">
+                  <StackPanel Spacing="6">
+                    <Panel Classes="icon-field">
+                      <Viewbox Classes="icon" RenderTransformOrigin="50%,50%" RenderTransform="scale(-1,1)">
+                        <Path Classes="fill" Data="{StaticResource IconSkip}" Width="16" Height="16" />
+                      </Viewbox>
+                    </Panel>
+                    <TextBlock Classes="caption" Text="{l:Translate ScenePrevious}" />
+                    <Ellipse Classes="dot" />
+                  </StackPanel>
+                </Button>
+
+                <Button x:Name="PlayButton" Classes="scene playpause" Click="OnTogglePlay">
+                  <StackPanel Spacing="6">
+                    <Panel Classes="icon-field">
+                      <Border x:Name="PlayCircle" Width="56" Height="56" Margin="-6" CornerRadius="28"
+                              Background="{DynamicResource TextBrush}" BoxShadow="{StaticResource ScenePlayShadow}">
+                        <Panel>
+                          <Viewbox Classes="icon" IsVisible="{Binding ShowsPauseIcon}">
+                            <Path x:Name="PauseIcon" Classes="fill" Data="{StaticResource IconPause}" Width="16" Height="16" />
+                          </Viewbox>
+                          <Viewbox Classes="icon" IsVisible="{Binding ShowsStopIcon}">
+                            <Path x:Name="StopIcon" Classes="fill" Data="{StaticResource IconStop}" Width="16" Height="16" />
+                          </Viewbox>
+                          <!-- Trójkąt przesunięty w prawo, żeby wyglądał na wyśrodkowany. -->
+                          <Viewbox Classes="icon" Margin="2,0,0,0" IsVisible="{Binding IsPaused}">
+                            <Path x:Name="PlayIcon" Classes="fill" Data="{StaticResource IconPlay}" Width="16" Height="16" />
+                          </Viewbox>
+                        </Panel>
+                      </Border>
+                    </Panel>
+                    <TextBlock x:Name="PlayLabel" Classes="caption" />
+                    <Ellipse Classes="dot" />
+                  </StackPanel>
+                </Button>
+
+                <Button x:Name="NextButton" Classes="scene" Click="OnNext"
+                        AutomationProperties.Name="{l:Translate SceneNext}">
+                  <StackPanel Spacing="6">
+                    <Panel Classes="icon-field">
+                      <Viewbox Classes="icon">
+                        <Path Classes="fill" Data="{StaticResource IconSkip}" Width="16" Height="16" />
+                      </Viewbox>
+                    </Panel>
+                    <TextBlock Classes="caption" Text="{l:Translate SceneNext}" />
+                    <Ellipse Classes="dot" />
+                  </StackPanel>
+                </Button>
+
+                <!-- Trzy tryby jak klawisz R; przełącznik włączony przy powtarzaniu kolejki i utworu. -->
+                <c:CycleToggleButton x:Name="RepeatButton" Classes="scene"
+                                     IsChecked="{Binding RepeatEnabled, Mode=OneWay}"
+                                     Click="OnRepeat"
+                                     AutomationProperties.Name="{l:Translate SceneRepeat}"
+                                     AutomationProperties.HelpText="{Binding RepeatTooltip}">
+                  <StackPanel Spacing="6">
+                    <Panel Classes="icon-field">
+                      <Viewbox Classes="icon" IsVisible="{Binding !RepeatTrack}">
+                        <Path x:Name="RepeatIcon" Classes="stroke" Data="{StaticResource IconRepeatStroke}" Width="16" Height="16" />
+                      </Viewbox>
+                      <Viewbox Classes="icon" IsVisible="{Binding RepeatTrack}">
+                        <Path x:Name="RepeatOneIcon" Classes="stroke" Data="{StaticResource IconRepeatOneStroke}" Width="16" Height="16" />
+                      </Viewbox>
+                    </Panel>
+                    <TextBlock Classes="caption" Text="{l:Translate SceneRepeat}" />
+                    <Ellipse Classes="dot" />
+                  </StackPanel>
+                </c:CycleToggleButton>
+              </StackPanel>
+            </StackPanel>
+          </Panel>
+
+          <!--
+            Noc: mały przygaszony blok (tytuł, wykonawca, czas) przenosi się co 2 minuty w inne miejsce
+            kompozycji, z przenikaniem. Margines ustawia kod widoku.
+          -->
+          <StackPanel x:Name="NightBlock" IsVisible="False" IsHitTestVisible="False" Spacing="6" Width="640"
+                      Opacity="0.5" HorizontalAlignment="Left" VerticalAlignment="Top">
+            <StackPanel.Transitions>
+              <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.6" />
+              </Transitions>
+            </StackPanel.Transitions>
+            <TextBlock x:Name="NightTitle" Text="{Binding ShownTitle}" FontSize="{StaticResource FontSizeSceneArtist}"
+                       FontWeight="Bold" Foreground="{DynamicResource TextBrush}"
+                       MaxLines="1" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="NightArtist" Text="{Binding SceneLine}" IsVisible="{Binding HasSceneLine}"
+                       FontSize="{StaticResource FontSizeSceneAlbum}" Foreground="{DynamicResource TextBrush}"
+                       MaxLines="1" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="NightTime" Classes="tabular" Text="{Binding Elapsed}" IsVisible="{Binding IsFilesMode}"
+                       FontSize="{StaticResource FontSizeSceneTime}" Foreground="{DynamicResource TextBrush}" />
+          </StackPanel>
+          <!-- Podpis wybranej wizualizacji: kilkaset milisekund po klawiszu V, czytany grzecznie. -->
+          <Border x:Name="VisualCaption" IsVisible="False" IsHitTestVisible="False"
+                  HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,64,0,0"
+                  Padding="32,14" CornerRadius="28" Background="{DynamicResource Glass2Brush}">
+            <TextBlock x:Name="VisualCaptionText" FontSize="28" FontWeight="SemiBold"
+                       Foreground="{DynamicResource TextBrush}"
+                       AutomationProperties.LiveSetting="Polite" />
+          </Border>
+
+          <!--
+            Karta następnego utworu: prawy dolny róg kadru, okładka 8% wysokości. Widoczność, przenikanie
+            i przygaszenie w Nocy ustawia kod widoku, tylko przy zmianie stanu.
+          -->
+          <Border x:Name="NextCard" IsVisible="False" IsHitTestVisible="False" Opacity="0"
+                  HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,120,96"
+                  MaxWidth="560" Padding="12" CornerRadius="16" Background="{DynamicResource Glass2Brush}"
+                  AutomationProperties.LiveSetting="Polite">
+            <Grid ColumnDefinitions="Auto,*">
+              <Border x:Name="NextCardCover" Width="86.4" Height="86.4" ClipToBounds="True"
+                      CornerRadius="{StaticResource SceneCoverRadius}" Background="{DynamicResource GlassBrush}">
+                <Image Source="{Binding NextUpCover}" Stretch="UniformToFill"
+                       RenderOptions.BitmapInterpolationMode="HighQuality" />
+              </Border>
+              <StackPanel Grid.Column="1" Margin="16,0,8,0" VerticalAlignment="Center" Spacing="2">
+                <TextBlock x:Name="NextCardLabel" Text="{l:Translate SceneUpNext}"
+                           FontSize="{StaticResource FontSizeSceneCaption}" LineHeight="18" Margin="0,-1,0,-1"
+                           Foreground="{StaticResource SceneText2Brush}" />
+                <TextBlock x:Name="NextCardTitle" Text="{Binding NextUpTitle}"
+                           FontSize="{StaticResource FontSizeSceneAlbum}" FontWeight="Bold"
+                           Foreground="{DynamicResource TextBrush}"
+                           MaxLines="1" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="NextCardArtist" Text="{Binding NextUpArtist}" IsVisible="{Binding HasNextUpArtist}"
+                           FontSize="{StaticResource FontSizeSceneTime}"
+                           Foreground="{StaticResource SceneText3Brush}"
+                           MaxLines="1" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </Grid>
+          </Border>
+
+          <!--
+            Rząd okładek kolejki pod klawiszem Q: na dole kadru, 16% wysokości; widoczność i wjazd ustawia
+            kod widoku. Okładki poza kadrem przewijają się pod krawędzią.
+          -->
+          <c:CoverRow x:Name="QueueRow" IsVisible="False" Width="1920" Margin="0,0,0,48"
+                      HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                      TileSize="172.8" TileSpacing="24" EdgePadding="160" FooterHeight="20"
+                      ItemInvoked="OnQueueRowInvoked"
+                      AutomationProperties.Name="{l:Translate Queue}" />
+        </Panel>
+      </LayoutTransformControl>
+
+      <!--
+        Wyjście w narożniku ekranu, nie kadru: 48 od góry i od prawej, w skali kadru. Panel pod
+        przekształceniem, bo margines przekształcanej kontrolki nie skaluje się razem z nią.
+      -->
+      <LayoutTransformControl x:Name="ExitStage" HorizontalAlignment="Right" VerticalAlignment="Top">
+        <Panel>
+          <Button x:Name="ExitButton" Classes="scene exit fades" Margin="0,48,48,0"
+                  Click="OnExitClick"
+                  AutomationProperties.Name="{l:Translate SceneExit}">
+            <Viewbox Classes="icon">
+              <Path Classes="stroke" Data="{StaticResource IconFullScreenExitStroke}" Width="16" Height="16" />
+            </Viewbox>
+          </Button>
+        </Panel>
+      </LayoutTransformControl>
+
+      <!--
+        Dopasowanie krawędzi: cienka ramka w barwie akcentu na granicy marginesu i krótki opis w środku.
+        Margines ramki i skalę opisu ustawia kod widoku.
+      -->
+      <Border x:Name="EdgeFrame" IsVisible="False" IsHitTestVisible="False"
+              BorderBrush="{DynamicResource AccentBrush}" BorderThickness="3">
+        <LayoutTransformControl x:Name="EdgeHintStage" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <Border Padding="40,28" CornerRadius="28" Background="{DynamicResource Glass2Brush}">
+            <StackPanel Spacing="10" Width="900">
+              <TextBlock x:Name="EdgeFitValue" HorizontalAlignment="Center"
+                         FontSize="32" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" />
+              <TextBlock x:Name="EdgeFitHint" Text="{l:Translate SceneEdgeFitHint}"
+                         TextWrapping="Wrap" TextAlignment="Center" FontSize="22"
+                         Foreground="{StaticResource SceneText3Brush}"
+                         AutomationProperties.LiveSetting="Polite" />
+            </StackPanel>
+          </Border>
+        </LayoutTransformControl>
+      </Border>
+    </Panel>
+  </ThemeVariantScope>
+</UserControl>

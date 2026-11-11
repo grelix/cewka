@@ -9,21 +9,21 @@ po przywróceniu pakietów.
 
 | Pakiet | Wersja | Licencja | Zastosowanie |
 |--------|--------|----------|--------------|
-| Avalonia | 12.1.1 | MIT | interfejs |
-| Avalonia.Desktop | 12.1.1 | MIT | warstwy systemowe Windows i X11 |
-| Avalonia.Themes.Fluent | 12.1.1 | MIT | bazowe szablony kontrolek |
+| Avalonia | 12.1.6 | MIT | interfejs |
+| Avalonia.Desktop | 12.1.6 | MIT | warstwy systemowe Windows i X11 |
+| Avalonia.Themes.Fluent | 12.1.6 | MIT | bazowe szablony kontrolek |
 | NVorbis | 0.10.5 | MIT | dekodowanie Ogg Vorbis |
 | Concentus | 2.2.2 | BSD, 3 klauzule (licencja Opus) | dekodowanie Opus |
 | Concentus.OggFile | 1.0.7 | MIT | kontener Ogg dla Opusa |
-| z440.atl.core (ATL.NET) | 7.16.0 | MIT | tagi, okładki, wartości ReplayGain |
+| z440.atl.core (ATL.NET) | 7.19.0 | MIT | tagi, okładki, wartości ReplayGain |
 
 ## Zależności przechodnie w wydaniu
 
 | Pakiet | Wersja | Licencja | Skąd |
 |--------|--------|----------|------|
-| Avalonia.Win32, Avalonia.X11, Avalonia.Native, Avalonia.Skia, Avalonia.HarfBuzz | 12.1.1 | MIT | Avalonia.Desktop |
-| Avalonia.FreeDesktop, Avalonia.FreeDesktop.AtSpi | 12.1.1 | MIT | Avalonia.X11 |
-| Avalonia.Remote.Protocol | 12.1.1 | MIT | Avalonia |
+| Avalonia.Win32, Avalonia.X11, Avalonia.Native, Avalonia.Skia, Avalonia.HarfBuzz | 12.1.6 | MIT | Avalonia.Desktop |
+| Avalonia.FreeDesktop, Avalonia.FreeDesktop.AtSpi | 12.1.6 | MIT | Avalonia.X11 |
+| Avalonia.Remote.Protocol | 12.1.6 | MIT | Avalonia |
 | MicroCom.Runtime | 0.11.6 | MIT | Avalonia |
 | Tmds.DBus.Protocol | 0.94.1 | MIT | Avalonia.FreeDesktop |
 | SkiaSharp z bibliotekami natywnymi | 3.119.4 | MIT | Avalonia.Skia |
@@ -41,12 +41,10 @@ tagów zapisanych w nieznanym kodowaniu. Pakiet nie zawiera tekstu licencji (pli
 odsyła do katalogu, którego w pakiecie nie ma). Licencję podaje README repozytorium
 `yinyue200/ude`.
 
-Pakiety `System.IO.Pipelines`, `System.Memory`, `System.Numerics.Vectors` i `System.ValueTuple`
-pojawiają się w grafie zależności, ale w wydaniu zastępują je zestawy środowiska .NET.
 Pakiety `SkiaSharp.NativeAssets.*` i `HarfBuzzSharp.NativeAssets.*` dla macOS i WebAssembly
 też są w grafie, ale wydania dla tych platform nie ma, więc ich biblioteki do niego nie trafiają.
 
-Wydanie jest samodzielne (`SelfContained`), więc zawiera też środowisko uruchomieniowe .NET 9
+Wydanie jest samodzielne (`SelfContained`), więc zawiera też środowisko uruchomieniowe .NET 10
 z pakietu `Microsoft.NETCore.App.Runtime.<rid>` (MIT, z notami składników w jego
 `THIRD-PARTY-NOTICES.TXT`). Program nie odwołuje się do `Microsoft.WindowsDesktop.App`, więc
 środowisko WPF i Windows Forms do wydania nie trafia.
@@ -54,14 +52,14 @@ z pakietu `Microsoft.NETCore.App.Runtime.<rid>` (MIT, z notami składników w je
 ## Pakiety wyłącznie deweloperskie
 
 Nie trafiają do wydania: Avalonia.BuildServices 11.3.2 (MIT, zależność czasu budowania Avalonii),
-Avalonia.Headless 12.1.1 (MIT, testy i narzędzie zrzutów), xunit 2.9.2, xunit.runner.visualstudio
-2.8.2 (Apache 2.0) i Microsoft.NET.Test.Sdk 17.12.0 (MIT).
+Avalonia.Headless 12.1.6 (MIT, testy i narzędzie zrzutów), xunit 2.9.3, xunit.runner.visualstudio
+4.0.1 (Apache 2.0) i Microsoft.NET.Test.Sdk 18.11.0 (MIT).
 
 ## Warstwa natywna
 
 | Składnik | Wersja | Licencja | Zastosowanie |
 |----------|--------|----------|--------------|
-| miniaudio | 0.11.25 | do wyboru domena publiczna (Unlicense) lub MIT-0 | wyjście dźwięku, dekodery MP3, FLAC i WAV, resampler |
+| miniaudio | 0.11.26 | do wyboru domena publiczna (Unlicense) lub MIT-0 | wyjście dźwięku, dekodery MP3, FLAC i WAV, resampler |
 
 Źródło miniaudio leży w `native/miniaudio/` razem z licencją. Kompiluje się razem z nakładką
 `native/cewka_audio.c` do biblioteki `cewka_audio`, która trafia do wydania.
@@ -78,16 +76,25 @@ Program ich nie dołącza. Ładuje je w czasie działania, jeśli są w systemie
 
 ## Font
 
-Font jest osadzony w pliku wykonywalnym.
+Fonty są osadzone w pliku wykonywalnym. Wszystkie pochodzą z rodziny Noto (wspólny projekt), pobrane
+9.11.2026 z oficjalnych repozytoriów: `notofonts/notofonts.github.io` (katalog `fonts/<Rodzina>/hinted/ttf/`)
+i `notofonts/noto-cjk` (`Sans/SubsetOTF/`).
 
 | Font | Wersja | Pliki | Zastosowanie | Licencja | Tekst licencji |
 |------|--------|-------|--------------|----------|----------------|
-| Cantarell | 0.303 | Regular, Bold (`.otf`) | cały interfejs; liczby i czasy z cyframi tabelarycznymi (cecha `tnum`) | SIL OFL 1.1 | `src/Cewka.App/Assets/Fonts/OFL-Cantarell.txt` |
+| Noto Sans | 2.015 | Regular, Bold, Light (`.ttf`) | cały interfejs: łacina z rozszerzeniami (także wietnamski), greka, cyrylica; liczby i czasy z cyframi tabelarycznymi (cecha `tnum`) | SIL OFL 1.1 | `src/Cewka.App/Assets/Fonts/OFL-NotoSans.txt` |
+| Noto Sans SC | 2.004 | Regular, Bold (`.otf`, podzbiór regionalny) | chiński uproszczony; znaki Han w pozostałych językach | SIL OFL 1.1 | `src/Cewka.App/Assets/Fonts/OFL-NotoSansCJK.txt` |
+| Noto Sans JP | 2.004 | Regular, Bold (`.otf`, podzbiór regionalny) | japoński (w japońskim interfejsie ma pierwszeństwo przed SC) | SIL OFL 1.1 | `src/Cewka.App/Assets/Fonts/OFL-NotoSansCJK.txt` |
+| Noto Sans Arabic | 2.013 | Regular, Bold (`.ttf`) | pismo zastępcze (tytuły i nazwy w metadanych) | SIL OFL 1.1 | `src/Cewka.App/Assets/Fonts/OFL-NotoSans.txt` |
+| Noto Sans Hebrew | 3.001 | Regular, Bold (`.ttf`) | pismo zastępcze | SIL OFL 1.1 | `src/Cewka.App/Assets/Fonts/OFL-NotoSans.txt` |
+| Noto Sans Devanagari | 2.007 | Regular, Bold (`.ttf`) | pismo zastępcze | SIL OFL 1.1 | `src/Cewka.App/Assets/Fonts/OFL-NotoSans.txt` |
+| Noto Sans Thai | 2.002 | Regular, Bold (`.ttf`) | pismo zastępcze | SIL OFL 1.1 | `src/Cewka.App/Assets/Fonts/OFL-NotoSans.txt` |
 
-Cantarell 0.303 obejmuje alfabet łaciński z rozszerzeniami, grekę i cyrylicę, więc wystarcza dla
-wszystkich 17 języków interfejsu. Test `LanguageFileTests` sprawdza, że każdy znak w plikach
-językowych jest w foncie i że znaki z diakrytyką są zapisane w postaci złożonej. Pisma chińskie,
-japońskie, koreańskie, arabskie i dewanagari wymagałyby osobnego fontu.
+Łańcuch rodzin i kolejność zastępowania opisuje `src/Cewka.App/Themes/UiFonts.cs`. Fonty CJK zajmują
+około 26 MB; koreańskiego (Noto Sans KR, około 9,5 MB) nie dołączono, bo program nie ma interfejsu
+po koreańsku — znaki Hangul w metadanych rysuje font systemowy. Test `LanguageFileTests` sprawdza, że
+każdy znak w plikach językowych ma glif w łańcuchu fontów danego języka, że każda rodzina z łańcucha
+leży w obu odmianach pod właściwą nazwą i że znaki z diakrytyką są zapisane w postaci złożonej.
 
 ## Zobowiązania przy rozpowszechnianiu
 
@@ -119,10 +126,10 @@ Plik leży w każdej paczce obok licencji Cewki:
 Budowa pakietów w CI (`.github/workflows/packages.yml`) sprawdza, że plik jest w spisie plików
 pakietów `.deb`, `.rpm`, pacmana i archiwum. Test `ThirdPartyNoticesTests` wymaga w nim wiersza
 `Pakiet NuGet: <nazwa> <wersja>` dla każdego pakietu z projektów `src/*/*.csproj` i każdego
-pakietu z grafu zależności w `src/Cewka.App/obj/project.assets.json` (cel `net9.0`) oraz wiersza
+pakietu z grafu zależności w `src/Cewka.App/obj/project.assets.json` (cel `net10.0`) oraz wiersza
 `Plik: <nazwa>` dla każdego pliku fontu w `src/Cewka.App/Assets/Fonts`. Nowy pakiet, także
 przechodni, nowa wersja albo nowy font bez sekcji w pliku not zatrzymuje więc testy. Test pomija
-pakiety spoza wydania wymienione wyżej: Avalonia.BuildServices, cztery pakiety `System.*`
+pakiety spoza wydania wymienione wyżej: Avalonia.BuildServices
 oraz `*.NativeAssets.macOS` i `*.NativeAssets.WebAssembly`. Środowiska .NET i miniaudio
 nie ma w grafie pakietów, więc ich sekcje trzeba pilnować przy zmianie wersji.
 
@@ -133,9 +140,19 @@ a sekcja „Licencje” w ustawieniach podaje tylko nazwy licencji.
 
 Ikony interfejsu to geometrie w `src/Cewka.App/Themes/Icons.axaml`, narysowane dla tego projektu.
 Okładkę domyślną (spirala w jednej z 11 par barw) rysuje kod w `src/Cewka.App/Services/CoilCover.cs`.
-Ikonę aplikacji (`src/Cewka.App/Assets/cewka.ico`, `cewka.png` i rozmiary w
-`packaging/linux/icons/`) generuje skrypt `tools/make-icon.ps1`. Wszystko to jest na licencji MIT
-razem z resztą repozytorium.
+Ikona aplikacji, miedziana cewka głośnika, jest własnym rysunkiem projektu. Źródłem są dwa pliki
+SVG w `assets/ikona/`: pełny rysunek `cewka.svg` i uproszczony `cewka-maly.svg` na 16–32 px.
+Skrypt `tools/make-icon.ps1` renderuje z nich `src/Cewka.App/Assets/cewka.ico`, `cewka.png`
+i rozmiary w `packaging/linux/icons/`, a pakiety Linuksa dostają też `cewka.svg` jako ikonę
+skalowalną. Wszystko to jest na licencji MIT razem z resztą repozytorium.
+
+Flagi przy językach w ustawieniach pochodzą z paczki flag-icons 7.6.0 (MIT,
+https://github.com/lipis/flag-icons). Pliki SVG z wariantu 4×3 zamieniono raz na PNG 64 × 48
+(`rsvg-convert`, potem zmniejszenie filtrem Lanczos), bo program nie ma dekodera wektorów. Leżą
+w `src/Cewka.App/Assets/Flags/` pod kodami języków, z licencją `LICENSE-flag-icons.txt`, a nota
+jest w `THIRD-PARTY-NOTICES.txt` (pozycja 16). Język angielski ma flagę Wielkiej Brytanii,
+portugalski — Portugalii, portugalski brazylijski — Brazylii, chiński uproszczony — Chin, japoński —
+Japonii (trzy ostatnie dodane 9.11.2026 tą samą drogą).
 
 ## Zrzuty ekranu
 

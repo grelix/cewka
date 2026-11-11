@@ -13,8 +13,9 @@ namespace Cewka.Platform;
 public static class SystemLanguage
 {
     /// <summary>
-    /// Dwuliterowe kody języków systemu w kolejności preferencji, na przykład <c>en</c>,
-    /// <c>pl</c>. Pusta lista, gdy nie da się ich ustalić.
+    /// Kody języków systemu w kolejności preferencji, na przykład <c>en</c>, <c>pl</c>: dwuliterowe,
+    /// a przed nimi odmiana z osobnym tłumaczeniem (<c>pt-br</c>, <c>zh-hans</c>), gdy wpis ją określa.
+    /// Pusta lista, gdy nie da się ich ustalić.
     /// </summary>
     public static IReadOnlyList<string> Candidates()
     {
@@ -52,10 +53,10 @@ public static class SystemLanguage
         if (!IsNoLanguage(locale))
         {
             foreach (var entry in (variable("LANGUAGE") ?? string.Empty).Split(':'))
-                Add(result, ParseLocale(entry));
+                AddWithVariant(result, entry);
         }
 
-        Add(result, ParseLocale(locale));
+        AddWithVariant(result, locale);
         return result;
     }
 
@@ -69,14 +70,48 @@ public static class SystemLanguage
         if (list is null) return result;
 
         foreach (var entry in list.Split('\0', StringSplitOptions.RemoveEmptyEntries))
-            Add(result, ParseLocale(entry));
+            AddWithVariant(result, entry);
 
         return result;
+    }
+
+    /// <summary>Dodaje odmianę języka, jeśli wpis ją określa, a za nią sam język.</summary>
+    private static void AddWithVariant(List<string> result, string? raw)
+    {
+        Add(result, ParseVariant(raw));
+        Add(result, ParseLocale(raw));
     }
 
     private static void Add(List<string> result, string? code)
     {
         if (code is not null && !result.Contains(code)) result.Add(code);
+    }
+
+    /// <summary>
+    /// Odmiana języka, która ma osobne tłumaczenie albo może je mieć: <c>pt-br</c> dla portugalskiego
+    /// z Brazylii, <c>zh-hans</c> i <c>zh-hant</c> dla chińskiego według zapisu pisma (<c>zh-Hans-CN</c>)
+    /// albo regionu (<c>zh_CN</c>, <c>zh-TW</c>). Dla pozostałych wpisów <c>null</c>.
+    /// </summary>
+    public static string? ParseVariant(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+
+        var entry = raw.Split(':')[0].Split('.', '@')[0].Trim();
+        var parts = entry.Split('-', '_');
+        if (parts.Length < 2) return null;
+
+        var language = parts[0].ToLowerInvariant();
+        var rest = parts.Skip(1).Select(p => p.ToUpperInvariant()).ToArray();
+
+        return language switch
+        {
+            "pt" when rest.Contains("BR") => "pt-br",
+            "zh" when rest.Contains("HANS") => "zh-hans",
+            "zh" when rest.Contains("HANT") => "zh-hant",
+            "zh" when rest.Any(r => r is "CN" or "SG" or "MY") => "zh-hans",
+            "zh" when rest.Any(r => r is "TW" or "HK" or "MO") => "zh-hant",
+            _ => null,
+        };
     }
 
     private static bool IsNoLanguage(string? locale)

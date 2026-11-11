@@ -2,11 +2,12 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
   <!--
-    Font osadzony w pliku wykonywalnym, żeby interfejs wyglądał tak samo
-    w każdym systemie: Cantarell (SIL OFL 1.1).
+    Fonty osadzone w pliku wykonywalnym, żeby interfejs wyglądał tak samo w każdym systemie i każdym
+    języku: Noto Sans z rodziną Noto dla innych pism (SIL OFL 1.1). Ta wartość obowiązuje do wczytania
+    języka; aplikacja wymienia ją przy zmianie języka (Themes/UiFonts.cs).
   -->
 
-  <FontFamily x:Key="UiFont">avares://Cewka/Assets/Fonts#Cantarell</FontFamily>
+  <FontFamily x:Key="UiFont">avares://Cewka/Assets/Fonts#Noto Sans, avares://Cewka/Assets/Fonts#Noto Sans SC, avares://Cewka/Assets/Fonts#Noto Sans JP, avares://Cewka/Assets/Fonts#Noto Sans Arabic, avares://Cewka/Assets/Fonts#Noto Sans Hebrew, avares://Cewka/Assets/Fonts#Noto Sans Devanagari, avares://Cewka/Assets/Fonts#Noto Sans Thai</FontFamily>
 
   <!-- Skala typograficzna odwzorowana z projektu -->
   <x:Double x:Key="FontSizeTitle">42</x:Double>
@@ -16,5 +17,12 @@
   <x:Double x:Key="FontSizeHeader">13</x:Double>
   <x:Double x:Key="FontSizeRow">12.5</x:Double>
   <x:Double x:Key="FontSizeSmall">10.5</x:Double>
+
+  <!-- Plansza sceny, w jednostkach kadru 1920 × 1080 -->
+  <x:Double x:Key="FontSizeSceneTitle">64</x:Double>
+  <x:Double x:Key="FontSizeSceneArtist">30</x:Double>
+  <x:Double x:Key="FontSizeSceneAlbum">20</x:Double>
+  <x:Double x:Key="FontSizeSceneTime">16</x:Double>
+  <x:Double x:Key="FontSizeSceneCaption">13</x:Double>
 
 </ResourceDictionary>

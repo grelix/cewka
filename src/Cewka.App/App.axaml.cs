@@ -34,21 +34,34 @@ public partial class App : Application
     public static bool MediaPanelActive { get; internal set; }
 
     /// <summary>
-    /// Ustawienia fontów przekazywane Avalonii przy budowaniu aplikacji.
-    ///
-    /// <para>Pułapka: sam styl kontrolek nie wystarcza. Avalonia osobno pyta system o domyślną
-    /// rodzinę pisma i w systemie bez fontów (goły kontener) przerywa działanie komunikatem
-    /// „Default font family name can't be null or empty”. Narzędzie zrzutów używa tych samych
-    /// ustawień.</para>
+    /// Ustawienia fontów przekazywane Avalonii przy budowaniu aplikacji; szczegóły w <see cref="Themes.UiFonts"/>.
+    /// Narzędzie zrzutów i testy używają tych samych ustawień.
     /// </summary>
-    public static FontManagerOptions FontOptions => new()
-    {
-        DefaultFamilyName = "avares://Cewka/Assets/Fonts#Cantarell",
-    };
+    public static FontManagerOptions FontOptions => Themes.UiFonts.Options;
 
     private static MainWindow? _mainWindow;
 
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+
+        // Pismo interfejsu zależy od języka (znaki Han po chińsku albo po japońsku), więc styl tekstu
+        // bierze je z zasobu, który wymienia się przy każdej zmianie języka, także w testach.
+        ApplyUiFont();
+        Localisation.Strings.Current.PropertyChanged += (_, _) => ApplyUiFont();
+    }
+
+    private string? _uiFontKey;
+
+    private void ApplyUiFont()
+    {
+        var families = Themes.UiFonts.Families(Localisation.Strings.Current.CurrentCode);
+        var key = string.Join(",", families);
+        if (key == _uiFontKey) return;
+
+        _uiFontKey = key;
+        Resources["UiFont"] = Themes.UiFonts.For(Localisation.Strings.Current.CurrentCode);
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {

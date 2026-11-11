@@ -12,8 +12,9 @@ namespace Cewka.Snapshots;
 /// różniące się ponad próg i podaje obszar, jaki zajmują: przesunięty układ rozlewa różnicę po
 /// całym obrazie, a drobny ruch mieści się w małym prostokącie.</para>
 ///
-/// <para>Porównywane są wybrane zrzuty: okno główne w obu motywach, stan zwinięty i dwie
-/// najbogatsze zakładki ustawień. Komplet puchłby w historii repozytorium.</para>
+/// <para>Porównywane są wybrane zrzuty: okno główne w obu motywach, stan zwinięty, dwie
+/// najbogatsze zakładki ustawień i scena pełnoekranowa w spoczynku i ze sterowaniem. Komplet
+/// puchłby w historii repozytorium.</para>
 /// </summary>
 internal static class Odniesienie
 {
@@ -24,6 +25,8 @@ internal static class Odniesienie
         "ciemny-zwiniety",
         "ustawienia-wyglad-cala",
         "ustawienia-jezyk",
+        "scena-ciemna",
+        "scena-sterowanie",
     ];
 
     /// <summary>

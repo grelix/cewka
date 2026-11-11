@@ -1,0 +1,151 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:l="using:Cewka.App.Localisation"
+             xmlns:vm="using:Cewka.App.ViewModels"
+             x:Class="Cewka.App.Views.LicencesView"
+             x:DataType="vm:LicencesViewModel">
+
+  <!--
+    Licencje składników: lista, a po wybraniu wiersza szczegóły w tym samym miejscu. Widok nie ma
+    własnej karty; okno ustawień wstawia go do karty zakładki „O programie”.
+  -->
+
+  <UserControl.Resources>
+    <StreamGeometry x:Key="IconLicencesBackStroke">M13,8 H3 M7.4,3.6 L3,8 L7.4,12.4</StreamGeometry>
+    <StreamGeometry x:Key="IconLicencesChevronStroke">M6.2,3.6 L10.6,8 L6.2,12.4</StreamGeometry>
+  </UserControl.Resources>
+
+  <Panel>
+
+    <!-- Plik not nie dał się wczytać. -->
+    <TextBlock Classes="setting-hint" IsVisible="{Binding IsEmpty}"
+               Text="{l:Translate LicencesEmpty}" />
+
+    <!-- Lista: strzałki, Home i End przesuwają zaznaczenie, Enter i kliknięcie otwierają szczegóły. -->
+    <ListBox x:Name="LicenceList" Classes="queue"
+             ItemsSource="{Binding Items}"
+             IsVisible="{Binding IsListVisible}"
+             AutomationProperties.Name="{l:Translate AboutLicencesList}"
+             Tapped="OnListTapped"
+             KeyDown="OnListKeyDown">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:LicenceItem">
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:LicenceItem">
+          <Grid ColumnDefinitions="*,Auto" Margin="12,7">
+            <StackPanel Grid.Column="0" Spacing="1" VerticalAlignment="Center">
+              <TextBlock Classes="setting-label" Text="{Binding Name}" />
+              <TextBlock Classes="setting-hint faint" Text="{Binding Licence}"
+                         IsVisible="{Binding HasLicence}" />
+            </StackPanel>
+            <Path Grid.Column="1" Classes="stroke" Width="16" Height="16" Margin="12,0,0,0"
+                  VerticalAlignment="Center"
+                  Data="{StaticResource IconLicencesChevronStroke}"
+                  Stroke="{DynamicResource Text3Brush}" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+
+    <!-- Szczegóły wybranego składnika. -->
+    <StackPanel Spacing="14" IsVisible="{Binding IsDetailVisible}">
+
+      <Button x:Name="BackButton" Classes="pill" Height="26" Padding="12,0"
+              HorizontalAlignment="Left"
+              Click="OnBack"
+              AutomationProperties.Name="{l:Translate AboutLicencesBack}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <Path Classes="stroke" Width="16" Height="16" VerticalAlignment="Center"
+                Data="{StaticResource IconLicencesBackStroke}" />
+          <TextBlock Classes="dim" VerticalAlignment="Center"
+                     Text="{l:Translate AboutLicencesBack}" />
+        </StackPanel>
+      </Button>
+
+      <ContentControl Content="{Binding Current}">
+        <ContentControl.ContentTemplate>
+          <DataTemplate x:DataType="vm:LicenceItem">
+            <StackPanel Spacing="13">
+
+              <TextBlock Classes="section-title" Text="{Binding Name}" TextWrapping="Wrap" />
+
+              <StackPanel Spacing="4" IsVisible="{Binding HasPackages}">
+                <TextBlock Classes="setting-label" Text="{l:Translate AboutLicencesPackages}" />
+                <ItemsControl ItemsSource="{Binding Packages}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Spacing="2" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                      <TextBlock Classes="setting-hint" Text="{Binding}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+
+              <StackPanel Spacing="4" IsVisible="{Binding HasProjects}">
+                <TextBlock Classes="setting-label" Text="{l:Translate AboutLicencesProject}" />
+                <ItemsControl ItemsSource="{Binding Projects}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Spacing="3" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ProjectLink">
+                      <Panel>
+                        <Button Classes="link" Click="OnOpenProject"
+                                IsVisible="{Binding IsSafe}"
+                                Content="{Binding Address}" />
+                        <TextBlock Classes="setting-hint" IsVisible="{Binding IsNotSafe}"
+                                   Text="{Binding Address}" />
+                      </Panel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+
+              <StackPanel Spacing="4" IsVisible="{Binding HasCopyright}">
+                <TextBlock Classes="setting-label" Text="{l:Translate AboutLicencesCopyright}" />
+                <TextBlock Classes="setting-hint" Text="{Binding Copyright}" />
+              </StackPanel>
+
+              <StackPanel Spacing="4" IsVisible="{Binding HasLicence}">
+                <TextBlock Classes="setting-label" Text="{l:Translate AboutLicencesLicence}" />
+                <TextBlock Classes="setting-hint" Text="{Binding Licence}" />
+              </StackPanel>
+
+              <!--
+                Pełny tekst w jednym polu, żeby zaznaczenie i kopiowanie obejmowały dowolny
+                fragment. Nazwę dla czytnika ekranu nosi etykieta, bo tekst bywa dłuższy niż
+                sto tysięcy znaków; czytnik czyta go z samego pola.
+              -->
+              <StackPanel Spacing="6">
+                <TextBlock Classes="setting-label" Text="{l:Translate AboutLicencesText}" />
+                <Border Height="300" ClipToBounds="True" CornerRadius="10"
+                        Background="{DynamicResource GlassBrush}"
+                        BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1">
+                  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                    <SelectableTextBlock Margin="14,12" FontSize="11.5" LineHeight="16"
+                                         TextWrapping="Wrap"
+                                         Foreground="{DynamicResource Text2Brush}"
+                                         AutomationProperties.Name="{l:Translate AboutLicencesText}"
+                                         Text="{Binding LicenceText}" />
+                  </ScrollViewer>
+                </Border>
+              </StackPanel>
+
+            </StackPanel>
+          </DataTemplate>
+        </ContentControl.ContentTemplate>
+      </ContentControl>
+
+    </StackPanel>
+
+  </Panel>
+</UserControl>

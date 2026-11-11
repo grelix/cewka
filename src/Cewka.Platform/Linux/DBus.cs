@@ -8,8 +8,9 @@ namespace Cewka.Platform.Linux;
 /// Część <c>libdbus-1</c> potrzebna do wystawienia jednego obiektu na szynie sesji. Biblioteka
 /// jest na każdym pulpicie Linuksa, więc obywa się bez dodatkowej zależności.
 ///
-/// <para>Pułapka: połączenie nie jest bezpieczne wątkowo. Wszystko poniżej woła wyłącznie wątek
-/// utworzony przez <see cref="MprisService"/>.</para>
+/// <para>Pułapka: połączenie nie jest bezpieczne wątkowo. Każde ma jednego właściciela: wątek
+/// <see cref="MprisService"/> albo blokadę w <see cref="PortalSettings"/>
+/// i <see cref="LinuxDisplayWakeLock"/>.</para>
 /// </summary>
 [SupportedOSPlatform("linux")]
 internal static unsafe class DBus
@@ -22,6 +23,7 @@ internal static unsafe class DBus
     internal const int TypeInt32 = 'i';
     internal const int TypeInt64 = 'x';
     internal const int TypeDouble = 'd';
+    internal const int TypeUInt32 = 'u';
     internal const int TypeString = 's';
     internal const int TypeObjectPath = 'o';
     internal const int TypeVariant = 'v';
@@ -75,6 +77,24 @@ internal static unsafe class DBus
     [DllImport(Library)]
     internal static extern int dbus_connection_read_write_dispatch(nint connection, int timeoutMilliseconds);
 
+    /// <summary>Z <c>error</c> równym null nie czeka na odpowiedź szyny.</summary>
+    [DllImport(Library)]
+    internal static extern void dbus_bus_add_match(nint connection, byte* rule, Error* error);
+
+    /// <summary>Nazwa należy do połączenia; nie zwalnia się jej.</summary>
+    [DllImport(Library)]
+    internal static extern nint dbus_bus_get_unique_name(nint connection);
+
+    [DllImport(Library)]
+    internal static extern int dbus_connection_read_write(nint connection, int timeoutMilliseconds);
+
+    /// <summary>Następna wiadomość z kolejki przychodzących, do zwolnienia przez wywołującego, albo zero.</summary>
+    [DllImport(Library)]
+    internal static extern nint dbus_connection_pop_message(nint connection);
+
+    [DllImport(Library)]
+    internal static extern int dbus_message_is_signal(nint message, byte* iface, byte* name);
+
     [DllImport(Library)]
     internal static extern void dbus_connection_set_exit_on_disconnect(nint connection, int exit);
 
@@ -114,6 +134,15 @@ internal static unsafe class DBus
 
     [DllImport(Library)]
     internal static extern nint dbus_message_get_member(nint message);
+
+    [DllImport(Library)]
+    internal static extern nint dbus_message_get_destination(nint message);
+
+    [DllImport(Library)]
+    internal static extern nint dbus_message_get_path(nint message);
+
+    [DllImport(Library)]
+    internal static extern nint dbus_message_get_signature(nint message);
 
     [DllImport(Library)]
     internal static extern void dbus_message_iter_init_append(nint message, MessageIter* iter);
@@ -213,5 +242,16 @@ internal static unsafe class DBus
         var message = ReadString(error->Message) ?? "brak szczegółów";
         dbus_error_free(error);
         return message;
+    }
+
+    /// <summary>Reads and clears an error, returning its name, e.g. <c>org.freedesktop.DBus.Error.ServiceUnknown</c>, and message.</summary>
+    internal static (string Name, string Message) TakeError(Error* error)
+    {
+        if (dbus_error_is_set(error) == 0) return (string.Empty, "brak szczegółów");
+
+        var name = ReadString(error->Name) ?? string.Empty;
+        var message = ReadString(error->Message) ?? "brak szczegółów";
+        dbus_error_free(error);
+        return (name, message);
     }
 }

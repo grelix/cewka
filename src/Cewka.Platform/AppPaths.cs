@@ -38,6 +38,9 @@ public static class AppPaths
     /// <summary>Full path of the persisted playback queue.</summary>
     public static string QueueFile => Path.Combine(ConfigDirectory, "queue.json");
 
+    /// <summary>Full path of the radio state (favourites, recent stations, list context).</summary>
+    public static string RadioFile => Path.Combine(ConfigDirectory, "radio.json");
+
     /// <summary>
     /// Plik, którego wyłączna blokada rozstrzyga, która kopia programu działa. Leży w katalogu
     /// ustawień, bo ten jest ten sam bez względu na to, skąd program uruchomiono.

@@ -18,11 +18,10 @@ namespace Cewka.App.Tests;
 [Collection(UiCollection.Name)]
 public sealed class WindowLayoutTests
 {
-    private static MainWindow Open(double width, double height, bool panel = false, bool queue = false)
+    private static MainWindow Open(double width, double height, bool queue = false)
     {
         App.Settings.Current.Window = null;
-        App.Settings.Current.PanelOpen = panel;
-        App.Settings.Current.QueueOpen = queue;
+        App.Settings.Current.QueuePinned = queue;
         App.Settings.Current.WindowControls = WindowControlsPosition.Right;
 
         var window = new MainWindow { Width = width, Height = height };
@@ -82,15 +81,15 @@ public sealed class WindowLayoutTests
             {
                 // Zwężone okno nie nakrywa treści kolejką bez prośby.
                 Assert.True(window.QueueIsOverlay);
-                Assert.False(Player(window).QueueOpen);
+                Assert.False(Player(window).QueuePinned);
 
-                Player(window).QueueOpen = true;
+                Player(window).QueuePinned = true;
                 Settle(window);
                 Assert.True(window.QueueOverlayOpen);
                 Assert.True(window.FindControl<Border>("QueueDismiss")!.IsVisible);
 
                 Press(window, Key.Escape);
-                Assert.False(Player(window).QueueOpen);
+                Assert.False(Player(window).QueuePinned);
                 Assert.False(window.FindControl<Border>("QueueDismiss")!.IsVisible);
             }
             finally { window.Close(); }
@@ -107,20 +106,20 @@ public sealed class WindowLayoutTests
             try
             {
                 Assert.False(window.QueueIsOverlay);
-                Assert.True(Player(window).QueueOpen);
+                Assert.True(Player(window).QueuePinned);
 
                 window.Width = 900;
                 Settle(window);
                 Assert.True(window.QueueIsOverlay);
-                Assert.False(Player(window).QueueOpen);
+                Assert.False(Player(window).QueuePinned);
 
                 // Zwężenie nie zmienia zamiaru zapisanego w ustawieniach, także przed zamknięciem.
-                Assert.True(App.Settings.Current.QueueOpen);
+                Assert.True(App.Settings.Current.QueuePinned);
 
                 window.Width = 1200;
                 Settle(window);
                 Assert.False(window.QueueIsOverlay);
-                Assert.True(Player(window).QueueOpen);
+                Assert.True(Player(window).QueuePinned);
             }
             finally { window.Close(); }
         });
@@ -138,41 +137,20 @@ public sealed class WindowLayoutTests
                 window.Width = 900;
                 Settle(window);
 
-                Player(window).QueueOpen = true;
-                Player(window).QueueOpen = false;
-                Assert.False(App.Settings.Current.QueueOpen);
+                Player(window).QueuePinned = true;
+                Player(window).QueuePinned = false;
+                Assert.False(App.Settings.Current.QueuePinned);
 
                 window.Width = 1200;
                 Settle(window);
-                Assert.False(Player(window).QueueOpen);
+                Assert.False(Player(window).QueuePinned);
             }
             finally { window.Close(); }
         });
     }
 
     [Fact]
-    public void PokazaniePasaPrzeliczaPlyteBezZmianyRozmiaru()
-    {
-        Ui.Run(() =>
-        {
-            var window = Open(1200, 600);
-
-            try
-            {
-                var disc = window.FindControl<Panel>("DiscHost")!;
-                var without = disc.Width;
-
-                Player(window).PanelOpen = true;
-                Settle(window);
-
-                Assert.True(disc.Width < without, $"płyta {disc.Width} przy pasie, {without} bez pasa");
-            }
-            finally { window.Close(); }
-        });
-    }
-
-    [Fact]
-    public void PelnyEkranWracaDoMaksymalizacjiIEscZNiegoWychodzi()
+    public void ScenaWracaDoMaksymalizacjiIEscZNiejWychodzi()
     {
         Ui.Run(() =>
         {
@@ -181,10 +159,11 @@ public sealed class WindowLayoutTests
             try
             {
                 window.WindowState = WindowState.Maximized;
-                window.ToggleFullScreen();
+                window.EnterScene();
                 Assert.Equal(WindowState.FullScreen, window.WindowState);
 
                 Press(window, Key.Escape);
+                Assert.False(window.IsSceneOpen);
                 Assert.Equal(WindowState.Maximized, window.WindowState);
             }
             finally { window.Close(); }
@@ -192,7 +171,7 @@ public sealed class WindowLayoutTests
     }
 
     [Fact]
-    public void EscNajpierwZamykaNakladkePotemPelnyEkran()
+    public void KolejkaOknaNiePrzechodziDoScenyAEscZamykaScene()
     {
         Ui.Run(() =>
         {
@@ -200,16 +179,15 @@ public sealed class WindowLayoutTests
 
             try
             {
-                window.ToggleFullScreen();
-                Player(window).QueueOpen = true;
+                Player(window).QueuePinned = true;
                 Settle(window);
+                window.EnterScene();
 
+                // Kolejka zostaje w oknie pod sceną, więc Esc nie ma czego zamykać przed sceną.
                 Press(window, Key.Escape);
-                Assert.False(Player(window).QueueOpen);
-                Assert.Equal(WindowState.FullScreen, window.WindowState);
-
-                Press(window, Key.Escape);
+                Assert.False(window.IsSceneOpen);
                 Assert.Equal(WindowState.Normal, window.WindowState);
+                Assert.True(Player(window).QueuePinned);
             }
             finally { window.Close(); }
         });
@@ -246,7 +224,7 @@ public sealed class WindowLayoutTests
     }
 
     [Fact]
-    public void GeometriaZPelnegoEkranuToZwykleOknoIMaksymalizacja()
+    public void GeometriaZeScenyToZwykleOknoIStanSprzedNiej()
     {
         Ui.Run(() =>
         {
@@ -261,7 +239,7 @@ public sealed class WindowLayoutTests
                 window.Width = 1900;
                 window.Height = 1000;
                 Settle(window);
-                window.ToggleFullScreen();
+                window.EnterScene();
                 Settle(window);
 
                 window.PersistGeometry();
@@ -402,10 +380,11 @@ public sealed class WindowLayoutTests
     {
         Ui.Run(() =>
         {
-            var window = Open(1200, 680, panel: true);
+            var window = Open(1200, 680);
 
             try
             {
+                Player(window).PanelOpen = true;
                 var panel = window.FindControl<Avalonia.Controls.Primitives.ToggleButton>("PanelToggle")!;
                 var queue = window.FindControl<Avalonia.Controls.Primitives.ToggleButton>("QueueToggle")!;
 
@@ -414,31 +393,195 @@ public sealed class WindowLayoutTests
                 Assert.Equal(Strings.Current["TooltipTogglePanel"], AutomationProperties.GetName(panel));
                 Assert.Equal(Strings.Current["TooltipToggleQueue"], AutomationProperties.GetName(queue));
 
-                Player(window).QueueOpen = true;
+                Player(window).QueuePinned = true;
                 Assert.True(queue.IsChecked);
             }
             finally { window.Close(); }
         });
     }
 
+    /// <summary>Środek okna pomocniczego o rozmiarze w jednostkach, postawionego w punkcie w pikselach.</summary>
+    private static (double X, double Y) CentreOf(PixelPoint place, Size size, double scaling) =>
+        (place.X + Math.Ceiling(size.Width * scaling) / 2, place.Y + Math.Ceiling(size.Height * scaling) / 2);
+
+    private static (double X, double Y) CentreOf(PixelRect rect) =>
+        (rect.X + rect.Width / 2.0, rect.Y + rect.Height / 2.0);
+
+    private static PixelRect Placed(PixelPoint place, Size size, double scaling) =>
+        new(place, new PixelSize((int)Math.Ceiling(size.Width * scaling), (int)Math.Ceiling(size.Height * scaling)));
+
     [Fact]
-    public void OknoUstawienOtwieraSieObokGlownego()
+    public void OknoPomocniczeStajeNaSrodkuGlownego()
     {
         var owner = new PixelRect(100, 100, 1200, 680);
-        var size = new PixelSize(820, 640);
+        var size = new Size(820, 640);
+        var area = new PixelRect(0, 0, 2560, 1400);
 
-        // Miejsce po prawej.
-        Assert.Equal(new PixelPoint(1312, 100),
-            SettingsWindow.Beside(owner, size, new PixelRect(0, 0, 2560, 1400), 12));
+        var place = SettingsWindow.CentreOver(owner, size, 1, area);
 
-        // Brak miejsca po prawej, jest po lewej.
-        Assert.Equal(new PixelPoint(1800 - 12 - 820, 100),
-            SettingsWindow.Beside(new PixelRect(1800, 100, 1200, 680), size, new PixelRect(0, 0, 3000, 1400), 12));
+        Assert.Equal(new PixelPoint(290, 120), place);
+        Assert.Equal(CentreOf(owner), CentreOf(place, size, 1));
+    }
 
-        // Nigdzie się nie mieści: przy krawędzi po stronie z większą ilością miejsca.
-        var tight = SettingsWindow.Beside(new PixelRect(200, 50, 1200, 680), size, new PixelRect(0, 0, 1600, 900), 12);
-        Assert.Equal(1600 - 820, tight.X);
-        Assert.Equal(50, tight.Y);
+    [Theory]
+    [InlineData(1800, 100, 2560 - 820, 120)]   // przy prawej krawędzi
+    [InlineData(-300, 100, 0, 120)]            // częściowo poza lewą krawędzią
+    [InlineData(100, 1000, 290, 1400 - 640)]   // przy dolnej krawędzi
+    [InlineData(100, -200, 290, 0)]            // pasek tytułu nad obszarem roboczym
+    public void OknoPomocniczePrzyKrawedziZostajeWObszarzeRoboczym(int ownerX, int ownerY, int x, int y)
+    {
+        var size = new Size(820, 640);
+        var area = new PixelRect(0, 0, 2560, 1400);
+
+        var place = SettingsWindow.CentreOver(new PixelRect(ownerX, ownerY, 1200, 680), size, 1, area);
+
+        Assert.Equal(new PixelPoint(x, y), place);
+        Assert.True(area.Contains(Placed(place, size, 1)), $"{place}");
+    }
+
+    [Fact]
+    public void OknoPomocniczeWiekszeOdObszaruStajeWJegoLewymGornymRogu()
+    {
+        // Najmniejszy rozmiar okna bywa większy od obszaru roboczego małego ekranu: pasek tytułu
+        // zostaje wtedy w obszarze, żeby dało się okno chwycić.
+        var area = new PixelRect(0, 40, 1024, 560);
+
+        Assert.Equal(new PixelPoint(0, 40),
+            SettingsWindow.CentreOver(new PixelRect(0, 40, 1024, 560), new Size(1100, 600), 1, area));
+
+        // Mieści się w szerokości, nie mieści w wysokości: na środku w poziomie, u góry obszaru.
+        Assert.Equal(new PixelPoint(102, 40),
+            SettingsWindow.CentreOver(new PixelRect(0, 40, 1024, 560), new Size(820, 600), 1, area));
+    }
+
+    [Theory]
+    [InlineData(1.25)]
+    [InlineData(1.5)]
+    public void OknoPomocniczeNaSrodkuPrzySkalowaniu(double scaling)
+    {
+        // Okno główne 1100 × 650 jednostek, położenie i obszar w pikselach ekranu.
+        var owner = new PixelRect(200, 120, (int)Math.Round(1100 * scaling), (int)Math.Round(650 * scaling));
+        var area = new PixelRect(0, 0, 2560, 1400);
+        var size = new Size(820, 470);
+
+        var place = SettingsWindow.CentreOver(owner, size, scaling, area);
+        var (x, y) = CentreOf(place, size, scaling);
+        var (ownerX, ownerY) = CentreOf(owner);
+
+        Assert.InRange(x, ownerX - 1, ownerX + 1);
+        Assert.InRange(y, ownerY - 1, ownerY + 1);
+        Assert.True(area.Contains(Placed(place, size, scaling)), $"{place}");
+    }
+
+    [Fact]
+    public void OknoPomocniczeNaZmaksymalizowanymGlownymPrzy150Procentach()
+    {
+        // 1920 × 1080 przy 150 %: obszar roboczy 1920 × 1032 pikseli, czyli 1280 × 688 jednostek.
+        var area = new PixelRect(0, 0, 1920, 1032);
+        var size = new Size(900, 470);
+
+        var place = SettingsWindow.CentreOver(area, size, 1.5, area);
+
+        Assert.Equal(new PixelPoint((1920 - 1350) / 2, (1032 - 705) / 2), place);
+    }
+
+    [Fact]
+    public void OknoPomocniczeNaDrugimEkranieZUjemnymiWspolrzednymi()
+    {
+        // Drugi monitor na lewo od głównego i wyżej od niego.
+        var area = new PixelRect(-1920, -200, 1920, 1040);
+        var size = new Size(820, 640);
+
+        var place = SettingsWindow.CentreOver(new PixelRect(-1500, -150, 1200, 680), size, 1, area);
+        Assert.Equal(new PixelPoint(-1310, -130), place);
+
+        // Okno główne wystaje poza lewą krawędź drugiego ekranu.
+        var edge = SettingsWindow.CentreOver(new PixelRect(-2300, -190, 1200, 680), size, 1, area);
+        Assert.Equal(new PixelPoint(-1920, -170), edge);
+        Assert.True(area.Contains(Placed(edge, size, 1)), $"{edge}");
+    }
+
+    [Fact]
+    public void RamkaSystemowaPrzesuwaTrescWzgledemPolozeniaOkna()
+    {
+        // Windows: niewidoczna ramka do zmiany rozmiaru 7 px po bokach i u dołu, u góry żadnej,
+        // a w oknie zmaksymalizowanym ramka wystaje poza ekran ze wszystkich stron.
+        Assert.Equal(new PixelPoint(7, 0), SettingsWindow.FrameInset(new Size(974, 1047), new Size(960, 1040), 1));
+        Assert.Equal(new PixelPoint(7, 7), SettingsWindow.FrameInset(new Size(1934, 1054), new Size(1920, 1040), 1));
+
+        // Przy 150 % ramka ma 11 px; rozmiary w jednostkach, jak podaje je Avalonia.
+        Assert.Equal(new PixelPoint(11, 0), SettingsWindow.FrameInset(new Size(1302 / 1.5, 1043 / 1.5), new Size(1280 / 1.5, 1032 / 1.5), 1.5));
+
+        // Bez ramki systemowej (Linux, okna bez okien na pulpicie) treść zaczyna się w położeniu okna.
+        Assert.Equal(new PixelPoint(0, 0), SettingsWindow.FrameInset(null, new Size(960, 1040), 1));
+        Assert.Equal(new PixelPoint(0, 0), SettingsWindow.FrameInset(new Size(960, 1040), new Size(960, 1040), 1));
+    }
+
+    /// <summary>
+    /// Pierwsze otwarcie Ustawień i otwarcie z położeniem zapamiętanym na odłączonym ekranie: okno
+    /// na środku okna głównego, a nie obok niego.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OknoUstawienOtwieraSieNaSrodkuGlownego(bool savedOffScreen)
+    {
+        Ui.Run(() =>
+        {
+            var window = Open(1100, 600);
+            App.Settings.Current.SettingsWindow = savedOffScreen
+                ? new WindowGeometry { X = 100_000, Y = 0, Width = 832, Height = 640 }
+                : null;
+
+            try
+            {
+                window.Position = new PixelPoint(300, 200);
+                Settle(window);
+
+                window.OpenSettings();
+                var settings = window.OpenSettingsWindow!;
+                Settle(settings);
+
+                var owner = new PixelRect(window.Position, PixelSize.FromSize(window.ClientSize, window.RenderScaling));
+                var (x, y) = CentreOf(settings.Position, new Size(settings.Width, settings.Height), settings.RenderScaling);
+                var (ownerX, ownerY) = CentreOf(owner);
+                Assert.InRange(x, ownerX - 1, ownerX + 1);
+                Assert.InRange(y, ownerY - 1, ownerY + 1);
+
+                settings.Close();
+            }
+            finally
+            {
+                window.Close();
+                App.Settings.Current.SettingsWindow = null;
+            }
+        });
+    }
+
+    /// <summary>Okno przesunięte ręcznie wraca w zapamiętane miejsce, a nie na środek.</summary>
+    [Fact]
+    public void OknoUstawienWracaWZapamietaneMiejsce()
+    {
+        Ui.Run(() =>
+        {
+            var window = Open(1100, 600);
+            App.Settings.Current.SettingsWindow = new WindowGeometry { X = 40, Y = 60, Width = 832, Height = 640 };
+
+            try
+            {
+                window.OpenSettings();
+                var settings = window.OpenSettingsWindow!;
+                Settle(settings);
+
+                Assert.Equal(new PixelPoint(40, 60), settings.Position);
+                settings.Close();
+            }
+            finally
+            {
+                window.Close();
+                App.Settings.Current.SettingsWindow = null;
+            }
+        });
     }
 
     [Fact]
@@ -489,9 +632,10 @@ public sealed class WindowLayoutTests
 
         // Po przycięciu okno staje u góry obszaru i mieści się w nim całe.
         var area = new PixelRect(0, 0, 1366, 738);
-        var size = new PixelSize(1025, 738);
-        var place = SettingsWindow.Beside(new PixelRect(100, 0, 1100, 650), size, area, 15);
-        Assert.True(area.Contains(new PixelRect(place, size)), $"{place}");
+        var size = new Size(820, 590);
+        var place = SettingsWindow.CentreOver(new PixelRect(100, 0, 1100, 650), size, 1.25, area);
+        Assert.Equal(0, place.Y);
+        Assert.True(area.Contains(Placed(place, size, 1.25)), $"{place}");
     }
 
     [Fact]

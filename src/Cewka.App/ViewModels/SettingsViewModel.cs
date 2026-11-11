@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Media;
 using Cewka.App.Localisation;
 using Cewka.App.Models;
+using Cewka.App.Radio;
 using Cewka.App.Services;
 using Cewka.Audio.Decoding;
 using Cewka.Audio.Devices;
@@ -21,6 +22,18 @@ public sealed class DeviceOption(string label, string? name) : ObservableObject
     public string Label => label;
 
     public string? Name => name;
+
+    private bool _isSelected;
+
+    public bool IsSelected { get => _isSelected; set => Set(ref _isSelected, value); }
+}
+
+/// <summary>Pozycja listy ekranów sceny; <see cref="Key"/> równy <c>null</c> to ekran okna.</summary>
+public sealed class ScreenOption(string label, string? key) : ObservableObject
+{
+    public string Label { get; } = label;
+
+    public string? Key => key;
 
     private bool _isSelected;
 
@@ -77,33 +90,53 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 {
     private readonly SettingsStore _settings;
     private readonly MainViewModel _player;
+    private readonly SceneSettingsHost _scene;
     private readonly PropertyChangedEventHandler _languageWatcher;
 
     private string _associationStatus = string.Empty;
 
-    public SettingsViewModel(SettingsStore settings, MainViewModel player)
+    /// <param name="scene">Ekrany i polecenia sceny z okna głównego; bez niego ustawienia sceny dotyczą nieznanego ekranu.</param>
+    public SettingsViewModel(SettingsStore settings, MainViewModel player, SceneSettingsHost? scene = null)
     {
         _settings = settings;
         _player = player;
+        _scene = scene ?? new SceneSettingsHost();
 
         Appearance = new SettingsSection("SectionAppearance");
 
-        // Język osobno, zaraz po wyglądzie: lista ma trzynaście pozycji i będzie rosła, a przy
+        // Język osobno, zaraz po wyglądzie: lista ma kilkanaście pozycji i będzie rosła, a przy
         // takiej długości zajmowała w zakładce wyglądu więcej miejsca niż wszystkie ustawienia
         // wyglądu razem. Nazwa własności nie brzmi „Language", bo tak nazywa się już pasek
         // wyboru języka w tej samej klasie.
         LanguageSection = new SettingsSection("SectionLanguage");
-
-        // Korektor i efekty dźwiękowe mają jedno miejsce: pas w oknie głównym. Zakładka dźwięku
-        // odsyła do niego jednym zdaniem.
-        Audio = new SettingsSection("SectionAudio");
-
-        Playback = new SettingsSection("SectionPlayback");
         Integration = new SettingsSection("SectionSystem");
-        About = new SettingsSection("SectionAbout");
 
-        Sections = [Appearance, LanguageSection, Audio, Playback, Integration, About];
+        Audio = new SettingsSection("SectionAudioOutput");
+        Processing = new SettingsSection("SectionEqualiser");
+        Playback = new SettingsSection("SectionPlayback");
+
+        SceneFullScreen = new SettingsSection("SectionFullScreen");
+        SceneVisuals = new SettingsSection("SectionSceneVisuals");
+        SceneTelevision = new SettingsSection("SectionSceneTv");
+
+        RadioSection = new SettingsSection("SectionRadioStations");
+        RadioLogos = new SettingsSection("SectionRadioLogos");
+
+        About = new SettingsSection("SectionAboutInfo");
+        Licences = new SettingsSection("SectionLicences");
+
+        // Dotychczasowe zakładki są podkategoriami kategorii głównych, jak w ustawieniach macOS i Windows.
+        Categories =
+        [
+            new SettingsCategory("SectionGeneral", Appearance, LanguageSection, Integration),
+            new SettingsCategory("SectionAudio", Audio, Processing, Playback),
+            new SettingsCategory("SectionScene", SceneFullScreen, SceneVisuals, SceneTelevision),
+            new SettingsCategory("SectionRadio", RadioSection, RadioLogos),
+            new SettingsCategory("SectionAbout", About, Licences),
+        ];
+        Sections = [.. Categories.SelectMany(category => category.Sections)];
         Appearance.IsSelected = true;
+        Search = new SettingsSearch(Sections) { Entries = ModelSearchEntries };
 
         Theme = new SegmentGroup(
             value => ApplyTheme((ThemeMode)value),
@@ -115,7 +148,10 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         // w jakim języku jest reszta okna. Tłumaczy się tylko pozycja „zgodnie z systemem".
         var languages = new List<SegmentOption> { new("LanguageAuto", "auto") };
         languages.AddRange(Strings.Available
-            .Select(language => new SegmentOption(language.Name, language.Code, literal: true)));
+            .Select(language => new SegmentOption(language.Name, language.Code, literal: true)
+            {
+                Icon = LanguageFlags.For(language.Code),
+            }));
 
         Language = new SegmentGroup(value => ApplyLanguage((string)value), languages);
 
@@ -137,6 +173,33 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             ("ColoursRecommended", ColourIntensity.Recommended),
             ("ColoursIntense", ColourIntensity.Intense));
 
+        QueueRevealChoice = new SegmentGroup(
+            value =>
+            {
+                _player.QueueReveal = (QueueReveal)value;
+                Raise(nameof(QueueHoverOptionsEnabled));
+            },
+            ("QueueRevealHover", QueueReveal.Hover),
+            ("QueueRevealClick", QueueReveal.Click));
+
+        // Czasy całkowite są tylko liczbą z jednostką, jak krok przewijania; pół sekundy ma przecinek
+        // dziesiętny języka, więc idzie ze słownika.
+        QueueHideDelayChoice = new SegmentGroup(
+            value => _player.QueueHideDelay = (QueueHideDelay)value,
+            [
+                new SegmentOption("QueueHideHalf", QueueHideDelay.HalfSecond),
+                new SegmentOption("1 s", QueueHideDelay.OneSecond, literal: true),
+                new SegmentOption("2 s", QueueHideDelay.TwoSeconds, literal: true),
+                new SegmentOption("4 s", QueueHideDelay.FourSeconds, literal: true),
+                new SegmentOption("QueueHideNever", QueueHideDelay.Never),
+            ]);
+
+        QueueRevealDelayChoice = new SegmentGroup(
+            value => _player.QueueRevealDelay = (QueueRevealDelay)value,
+            ("QueueDelayShort", QueueRevealDelay.Short),
+            ("QueueDelayNormal", QueueRevealDelay.Normal),
+            ("QueueDelayLong", QueueRevealDelay.Long));
+
         // Lista z CoilCover.Fixed, żeby nowa para nie ominęła ustawień. Klucz językowy to nazwa
         // pozycji wyliczenia; test sprawdza, że jest w każdym pliku języka.
         Palettes =
@@ -152,6 +215,116 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             ("FileOpenAppend", FileOpenAction.Append),
             ("FileOpenAppendPlay", FileOpenAction.AppendAndPlay),
             ("FileOpenReplace", FileOpenAction.ReplaceAndPlay));
+
+        // Siedem wizualizacji nie mieści się w jednym pasku, więc są dwa paski jednego wyboru.
+        void ChooseVisual(object value)
+        {
+            _player.SceneVisual = (SceneVisual)value;
+            SceneVisualChoice!.Mark(value);
+            SceneVisualReactiveChoice!.Mark(value);
+        }
+
+        SceneVisualChoice = new SegmentGroup(
+            ChooseVisual,
+            ("SceneVisualDisc", SceneVisual.Disc),
+            ("SceneVisualCover", SceneVisual.Cover),
+            ("SceneVisualNight", SceneVisual.Night),
+            ("SceneVisualHorizon", SceneVisual.Horizon));
+
+        // Zorza ma kartę tylko przy wykrytym GPU; bez niego karta jest ukryta (RefreshAuroraOption).
+        SceneVisualReactiveChoice = new SegmentGroup(
+            ChooseVisual,
+            [
+                new SegmentOption("SceneVisualSpectrum", SceneVisual.Spectrum),
+                new SegmentOption("SceneVisualWaveform", SceneVisual.Waveform),
+            ]);
+        RefreshAuroraOption();
+
+        SpectrumShapeChoice = new SegmentGroup(
+            value => _player.SceneSpectrumShape = (SpectrumShape)value,
+            ("SpectrumShapeBars", SpectrumShape.Bars),
+            ("SpectrumShapeCurve", SpectrumShape.Curve));
+
+        WaveformKindChoice = new SegmentGroup(
+            value => _player.SceneWaveformKind = (WaveformKind)value,
+            ("WaveKindLine", WaveformKind.Line),
+            ("WaveKindStereo", WaveformKind.Stereo));
+
+        DiscRingChoice = new SegmentGroup(
+            value => _player.SceneDiscRing = (bool)value,
+            ("DiscRingOff", false),
+            ("DiscRingOn", true));
+
+        SceneTextSizeChoice = new SegmentGroup(
+            value => _player.SceneTextSize = (SceneTextSize)value,
+            ("SceneTextSizeNormal", SceneTextSize.Normal),
+            ("SceneTextSizeLarge", SceneTextSize.Large),
+            ("SceneTextSizeExtraLarge", SceneTextSize.ExtraLarge));
+
+        SceneTextPositionChoice = new SegmentGroup(
+            value => _player.SceneTextPosition = (SceneTextPosition)value,
+            ("SceneTextTop", SceneTextPosition.Top),
+            ("SceneTextMiddle", SceneTextPosition.Middle),
+            ("SceneTextBottom", SceneTextPosition.Bottom));
+
+        SceneTextAlignChoice = new SegmentGroup(
+            value => _player.SceneTextCentred = (bool)value,
+            ("SceneTextAlignLeft", false),
+            ("SceneTextAlignCentre", true));
+
+        SceneTextInsetChoice = new SegmentGroup(
+            value => _player.SceneTextInset = (SceneTextInset)value,
+            ("SceneTextInsetNormal", SceneTextInset.Normal),
+            ("SceneTextInsetWide", SceneTextInset.Wide));
+
+        SceneArtSizeChoice = new SegmentGroup(
+            value => _player.SceneArtSize = (SceneArtSize)value,
+            ("SceneArtSmall", SceneArtSize.Small),
+            ("SceneArtNormal", SceneArtSize.Normal),
+            ("SceneArtLarge", SceneArtSize.Large));
+
+        DiscSpinChoice = new SegmentGroup(
+            value => _player.DiscSpin = (DiscSpin)value,
+            ("DiscSpinSlow", DiscSpin.Slow),
+            ("DiscSpinNormal", DiscSpin.Normal),
+            ("DiscSpinFast", DiscSpin.Fast),
+            ("DiscSpinStill", DiscSpin.Still));
+
+        BackdropMotionChoice = new SegmentGroup(
+            value => _player.BackdropMotion = (BackdropMotion)value,
+            ("MotionSlow", BackdropMotion.Slow),
+            ("MotionNormal", BackdropMotion.Normal));
+
+        SpectrumResponseChoice = new SegmentGroup(
+            value => _player.SpectrumResponse = (SpectrumResponse)value,
+            ("SpectrumSmooth", SpectrumResponse.Smooth),
+            ("SpectrumNormal", SpectrumResponse.Normal),
+            ("SpectrumFast", SpectrumResponse.Fast));
+
+        // Płyta jest w cyklu zawsze, więc nie ma przełącznika.
+        SceneCycleOptions =
+        [
+            .. new[] { SceneVisual.Cover, SceneVisual.Night, SceneVisual.Spectrum, SceneVisual.Waveform, SceneVisual.Horizon, SceneVisual.Aurora }
+                .Select(visual => new SceneCycleOption(visual, _player)),
+        ];
+
+        SceneEffectOptions =
+        [
+            new SceneEffectOption("Blobs", () => _player.SceneBlobsOn, on => _player.SceneBlobsOn = on,
+                () => _player.SceneBlobsStrength, value => _player.SceneBlobsStrength = value),
+            new SceneEffectOption("Glow", () => _player.SceneGlowOn, on => _player.SceneGlowOn = on,
+                () => _player.SceneGlowStrength, value => _player.SceneGlowStrength = value),
+            new SceneEffectOption("Tint", () => _player.SceneTintOn, on => _player.SceneTintOn = on,
+                () => _player.SceneTintStrength, value => _player.SceneTintStrength = value),
+            new SceneEffectOption("Particles", () => _player.SceneParticlesOn, on => _player.SceneParticlesOn = on,
+                () => _player.SceneParticlesStrength, value => _player.SceneParticlesStrength = value),
+        ];
+
+        SceneMarginChoice = new SegmentGroup(
+            value => _player.SetSceneMargin(_scene.ScreenKey(), (SceneMargin)value),
+            ("SceneMarginNone", SceneMargin.None),
+            ("SceneMarginSmall", SceneMargin.Small),
+            ("SceneMarginLarge", SceneMargin.Large));
 
         Quality = new SegmentGroup(
             value => _player.SetResamplerQuality((ResamplerQuality)value),
@@ -187,8 +360,14 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             value => _player.SeekStep = (int)value,
             AudioPreferences.SeekSteps.Select(step => new SegmentOption($"{step} s", step, literal: true)));
 
+        RadioRecentLimitChoice = new SegmentGroup(
+            value => _player.Radio.RecentLimit = (int)value,
+            RecentLimits.Options.Select(limit => new SegmentOption(
+                limit.ToString(System.Globalization.CultureInfo.InvariantCulture), limit, literal: true)));
+
         Devices = new ObservableCollection<DeviceOption>();
         RefreshDevices();
+        RefreshScreens();
         MarkCurrentValues();
         RefreshAssociationStatus();
 
@@ -216,6 +395,9 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
                 case nameof(MainViewModel.LimiterEnabled):
                 case nameof(MainViewModel.LatencyDescription):
                     Raise(e.PropertyName);
+                    break;
+                case nameof(MainViewModel.SceneGpuAvailable):
+                    RefreshAuroraOption();
                     break;
                 case nameof(MainViewModel.IsOutputOpen):
                 case nameof(MainViewModel.ActiveDeviceName):
@@ -245,14 +427,53 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     // ---------- Zakładki ----------
 
+    /// <summary>Model odtwarzacza: korektor i efekty w Ustawieniach to ten sam panel co w oknie korektora.</summary>
+    public MainViewModel Player => _player;
+
+    /// <summary>Wyszukiwanie w ustawieniach: pole nad paskiem bocznym i lista wyników.</summary>
+    public SettingsSearch Search { get; }
+
+    /// <summary>
+    /// Hasła z list, które okno tworzy dopiero po pokazaniu strony (języki, urządzenia, efekty i inne),
+    /// więc nie da się ich odczytać z niewidocznej strony; okno dokłada do nich teksty stron.
+    /// </summary>
+    internal IEnumerable<SettingsSearchEntry> ModelSearchEntries()
+    {
+        // Celem jest sama pozycja listy: okno odnajduje jej kontrolkę dopiero po pokazaniu strony.
+        foreach (var option in Language.Options) yield return new(LanguageSection, option.Label, string.Empty, option);
+        foreach (var palette in Palettes) yield return new(Appearance, palette.Label, Strings.Current["SettingPlaceholder"], palette);
+        foreach (var device in Devices) yield return new(Audio, device.Label, Strings.Current["SettingOutputDevice"], device);
+        foreach (var effect in _player.SoundEffects) yield return new(Processing, effect.Label, effect.Description, effect);
+        foreach (var option in SceneCycleOptions) yield return new(SceneVisuals, option.Label, Strings.Current["SceneCycleHeading"], option);
+        foreach (var option in SceneEffectOptions) yield return new(SceneVisuals, option.Label, option.Hint, option);
+        foreach (var screen in ScreenOptions) yield return new(SceneTelevision, screen.Label, Strings.Current["SettingSceneScreen"], screen);
+        foreach (var row in Shortcuts) yield return new(About, row.Action, row.Keys, row);
+    }
+
+    /// <summary>Kategorie główne w kolejności paska bocznego.</summary>
+    public IReadOnlyList<SettingsCategory> Categories { get; }
+
+    /// <summary>Wszystkie podkategorie po kolei, bez podziału na kategorie.</summary>
     public IReadOnlyList<SettingsSection> Sections { get; }
 
     public SettingsSection Appearance { get; }
     public SettingsSection LanguageSection { get; }
-    public SettingsSection Audio { get; }
-    public SettingsSection Playback { get; }
     public SettingsSection Integration { get; }
+
+    /// <summary>Wyjście dźwięku: urządzenie, opóźnienie i jakość przeliczania.</summary>
+    public SettingsSection Audio { get; }
+
+    /// <summary>Korektor i efekty: przetwarzanie, korektor i efekty dźwiękowe.</summary>
+    public SettingsSection Processing { get; }
+
+    public SettingsSection Playback { get; }
+    public SettingsSection SceneFullScreen { get; }
+    public SettingsSection SceneVisuals { get; }
+    public SettingsSection SceneTelevision { get; }
+    public SettingsSection RadioSection { get; }
+    public SettingsSection RadioLogos { get; }
     public SettingsSection About { get; }
+    public SettingsSection Licences { get; }
 
     /// <summary>
     /// Przechodzi do wskazanej zakładki. Wybór nie jest zapamiętywany między uruchomieniami.
@@ -275,6 +496,18 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public SegmentGroup Effects { get; }
 
     public SegmentGroup Colours { get; }
+
+    /// <summary>Wysuwanie nieprzypiętego panelu kolejki: po najechaniu albo po kliknięciu uchwytu.</summary>
+    public SegmentGroup QueueRevealChoice { get; }
+
+    /// <summary>Czas chowania wysuniętego panelu po zjechaniu kursorem.</summary>
+    public SegmentGroup QueueHideDelayChoice { get; }
+
+    /// <summary>Zwłoka przed wysunięciem panelu.</summary>
+    public SegmentGroup QueueRevealDelayChoice { get; }
+
+    /// <summary>Czasy wysuwania i chowania mają sens tylko przy wysuwaniu po najechaniu.</summary>
+    public bool QueueHoverOptionsEnabled => _settings.Current.QueueReveal == QueueReveal.Hover;
 
     public IReadOnlyList<PaletteOption> Palettes { get; }
 
@@ -394,6 +627,137 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     public SegmentGroup FileOpen { get; }
 
+    // ---------- Pełny ekran ----------
+
+    /// <summary>Wizualizacja sceny. Nazwa różni się od typu, żeby rzutowanie nie było niejednoznaczne.</summary>
+    public SegmentGroup SceneVisualChoice { get; }
+
+    public SegmentGroup SceneVisualReactiveChoice { get; }
+
+    private readonly SegmentOption _auroraOption = new("SceneVisualAurora", SceneVisual.Aurora);
+
+    /// <summary>Dokłada kartę Zorzy, gdy GPU jest wykryty, a bez niego ją ukrywa. Zapisany wybór zostaje.</summary>
+    private void RefreshAuroraOption()
+    {
+        var options = SceneVisualReactiveChoice.Options;
+        var shown = options.Contains(_auroraOption);
+        if (_player.SceneGpuAvailable == shown) return;
+
+        if (shown) options.Remove(_auroraOption);
+        else
+        {
+            _auroraOption.IsSelected = _player.SceneVisual == SceneVisual.Aurora;
+            options.Add(_auroraOption);
+        }
+    }
+
+    public SegmentGroup SpectrumShapeChoice { get; }
+
+    public SegmentGroup WaveformKindChoice { get; }
+
+    public SegmentGroup DiscRingChoice { get; }
+
+    public SegmentGroup SceneTextSizeChoice { get; }
+
+    public SegmentGroup SceneTextPositionChoice { get; }
+
+    public SegmentGroup SceneTextAlignChoice { get; }
+
+    public SegmentGroup SceneTextInsetChoice { get; }
+
+    public SegmentGroup SceneArtSizeChoice { get; }
+
+    public SegmentGroup DiscSpinChoice { get; }
+
+    public SegmentGroup BackdropMotionChoice { get; }
+
+    public SegmentGroup SpectrumResponseChoice { get; }
+
+    /// <summary>Długość listy ostatnio słuchanych stacji.</summary>
+    public SegmentGroup RadioRecentLimitChoice { get; }
+
+    /// <summary>Pauza plików wycisza płynnie, a wznowienie podgłaśnia.</summary>
+    public bool SoftPause
+    {
+        get => _player.SoftPause;
+        set { _player.SoftPause = value; Raise(); }
+    }
+
+    /// <summary>Start w trybie radia od razu włącza ostatnią stację.</summary>
+    public bool RadioPlayAtStart
+    {
+        get => _player.RadioPlayAtStart;
+        set { _player.RadioPlayAtStart = value; Raise(); }
+    }
+
+    /// <summary>Wizualizacje w cyklu klawisza V, każda z przełącznikiem (bez Płyty).</summary>
+    public IReadOnlyList<SceneCycleOption> SceneCycleOptions { get; }
+
+    /// <summary>Efekty tła Płyty i Okładki w barwach okładki.</summary>
+    public IReadOnlyList<SceneEffectOption> SceneEffectOptions { get; }
+
+    /// <summary>Ekran sceny: ekran okna i ekrany podłączone, z nazwą i rozdzielczością.</summary>
+    public ObservableCollection<ScreenOption> ScreenOptions { get; } = [];
+
+    /// <summary>Wybiera ekran sceny; margines poniżej dotyczy od tej chwili wybranego ekranu.</summary>
+    public void ChooseScreen(ScreenOption option)
+    {
+        if (option.IsSelected) return;
+
+        foreach (var other in ScreenOptions) other.IsSelected = ReferenceEquals(other, option);
+
+        _player.SceneScreen = option.Key;
+        SceneMarginChoice.Mark(_player.GetSceneMargin(_scene.ScreenKey()));
+        RefreshScreens();
+    }
+
+    /// <summary>Czyta listę ekranów od nowa; monitor mógł zostać podłączony w międzyczasie.</summary>
+    public void RefreshScreens()
+    {
+        ScreenOptions.Clear();
+        ScreenOptions.Add(new ScreenOption(Strings.Current["SceneScreenWindow"], null));
+
+        var screens = _scene.Screens();
+        for (var i = 0; i < screens.Count; i++)
+        {
+            var screen = screens[i];
+            var name = screen.Name.Length == 0 ? string.Format(Strings.Current["SceneScreenUnnamed"], i + 1) : screen.Name;
+            ScreenOptions.Add(new ScreenOption($"{name} ({screen.Resolution})", screen.Key));
+        }
+
+        // Zapisany, a niepodłączony ekran zostaje na liście z dopiskiem, żeby wybór nie przeskoczył po cichu.
+        var chosen = _settings.Current.SceneScreen;
+        if (chosen is not null && ScreenOptions.All(option => option.Key != chosen))
+            ScreenOptions.Add(new ScreenOption($"{SceneScreens.Describe(chosen)} — {Strings.Current["DeviceMissing"]}", chosen));
+
+        var selected = ScreenOptions.FirstOrDefault(option => option.Key == chosen) ?? ScreenOptions[0];
+        foreach (var option in ScreenOptions) option.IsSelected = ReferenceEquals(option, selected);
+    }
+
+    /// <summary>Margines ekranu, na którym stanie scena.</summary>
+    public SegmentGroup SceneMarginChoice { get; }
+
+    /// <summary>Zamyka Ustawienia i otwiera scenę z ramką do dopasowania krawędzi.</summary>
+    public void FitEdges() => _scene.FitEdges();
+
+    public bool SceneShowNext
+    {
+        get => _player.SceneShowNext;
+        set { _player.SceneShowNext = value; Raise(); }
+    }
+
+    public bool KeepScreenAwake
+    {
+        get => _player.KeepScreenAwake;
+        set { _player.KeepScreenAwake = value; Raise(); }
+    }
+
+    public bool SceneOledCare
+    {
+        get => _player.SceneOledCare;
+        set { _player.SceneOledCare = value; Raise(); }
+    }
+
     public bool RestoreSessionEnabled
     {
         get => _player.RestoreSessionEnabled;
@@ -438,6 +802,58 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             Raise();
         }
     }
+
+    // ---------- Radio ----------
+
+    public bool RadioEnabled
+    {
+        get => _settings.Current.RadioEnabled;
+        set
+        {
+            if (_settings.Current.RadioEnabled == value) return;
+
+            _player.SetRadioEnabled(value);
+            Raise();
+            Raise(nameof(RadioOptionsEnabled));
+        }
+    }
+
+    /// <summary>Pozostałe ustawienia radia nie mają sensu, gdy radio jest wyłączone.</summary>
+    public bool RadioOptionsEnabled => _settings.Current.RadioEnabled;
+
+    public bool RadioLogosEnabled
+    {
+        get => _settings.Current.RadioLogos;
+        set
+        {
+            if (_settings.Current.RadioLogos == value) return;
+
+            _settings.Current.RadioLogos = value;
+            _settings.Touch();
+            _player.Radio.ApplyLogoPolicy();
+            Raise();
+        }
+    }
+
+    public string RadioLogoCacheText => string.Format(Strings.Current["RadioLogoCacheSize"], FormatSize(_player.Radio.LogoCacheBytes));
+
+    public void ClearRadioLogos()
+    {
+        _player.Radio.ClearLogoCache();
+        Raise(nameof(RadioLogoCacheText));
+    }
+
+    public void ClearRadioRecent()
+    {
+        _player.Radio.ClearRecent();
+    }
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        _ => $"{bytes / 1024.0 / 1024.0:0.#} MB",
+    };
 
     public bool AssociationsSupported => FileAssociations.IsSupported;
 
@@ -672,16 +1088,32 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         WindowControls.RefreshLabels();
         Effects.RefreshLabels();
         Colours.RefreshLabels();
+        QueueRevealChoice.RefreshLabels();
+        QueueHideDelayChoice.RefreshLabels();
+        QueueRevealDelayChoice.RefreshLabels();
         Quality.RefreshLabels();
         Latency.RefreshLabels();
         Loudness.RefreshLabels();
         FileOpen.RefreshLabels();
+        SceneTextSizeChoice.RefreshLabels();
+        SceneTextPositionChoice.RefreshLabels();
+        SceneTextAlignChoice.RefreshLabels();
+        SceneTextInsetChoice.RefreshLabels();
+        SceneArtSizeChoice.RefreshLabels();
+        DiscSpinChoice.RefreshLabels();
+        BackdropMotionChoice.RefreshLabels();
+        SpectrumResponseChoice.RefreshLabels();
+        foreach (var option in SceneCycleOptions) option.Refresh();
+        foreach (var option in SceneEffectOptions) option.Refresh();
+        SceneMarginChoice.RefreshLabels();
 
-        foreach (var section in Sections) section.RefreshLabel();
+        foreach (var category in Categories) category.RefreshLabel();
+        Search.RefreshLabels();
         foreach (var palette in Palettes) palette.RefreshLabel();
 
         RefreshAssociationStatus();
         RefreshDevices();
+        RefreshScreens();
 
         Raise(nameof(VersionText));
         Raise(nameof(DecodersText));
@@ -718,7 +1150,10 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
                 new("L", s["Queue"]),
                 new("T", s["SettingTheme"]),
                 new("F11", s["ShortcutFullScreen"]),
+                new($"V {KeyNames.Chord(KeyNames.Shift, "V")}", s["ShortcutSceneVisual"]),
                 new(KeyNames.Escape, s["ShortcutEscape"]),
+                new("← →", s["ShortcutEdgeFitMargin"]),
+                new($"{KeyNames.Enter} {KeyNames.Escape}", s["ShortcutEdgeFitEnd"]),
                 new(KeyNames.Chord(ctrl, "O"), s["OpenFilesTitle"]),
                 new(KeyNames.Chord(ctrl, KeyNames.Shift, "O"), s["OpenFolderTitle"]),
                 new(KeyNames.Chord(ctrl, ","), s["Settings"]),
@@ -737,11 +1172,29 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         WindowControls.Mark(_settings.Current.WindowControls);
         Effects.Mark(_settings.Current.Effects);
         Colours.Mark(_settings.Current.ColourIntensity);
+        QueueRevealChoice.Mark(_settings.Current.QueueReveal);
+        QueueHideDelayChoice.Mark(_settings.Current.QueueHideDelay);
+        QueueRevealDelayChoice.Mark(_settings.Current.QueueRevealDelay);
         Quality.Mark(_settings.Current.ResamplerQuality);
         Latency.Mark(_settings.Current.OutputLatency);
         Loudness.Mark(_settings.Current.LoudnessTarget);
         SeekStep.Mark(_settings.Current.SeekStep);
         FileOpen.Mark(_settings.Current.FileOpenAction);
+        SceneVisualChoice.Mark(_settings.Current.SceneVisual);
+        SceneVisualReactiveChoice.Mark(_settings.Current.SceneVisual);
+        SpectrumShapeChoice.Mark(_settings.Current.SpectrumShape);
+        WaveformKindChoice.Mark(_settings.Current.WaveformKind);
+        DiscRingChoice.Mark(_settings.Current.DiscRing);
+        SceneTextSizeChoice.Mark(_settings.Current.SceneTextSize);
+        SceneTextPositionChoice.Mark(_settings.Current.SceneTextPosition);
+        SceneTextAlignChoice.Mark(_settings.Current.SceneTextCentred);
+        SceneTextInsetChoice.Mark(_settings.Current.SceneTextInset);
+        SceneArtSizeChoice.Mark(_settings.Current.SceneArtSize);
+        DiscSpinChoice.Mark(_settings.Current.DiscSpin);
+        BackdropMotionChoice.Mark(_settings.Current.BackdropMotion);
+        SpectrumResponseChoice.Mark(_settings.Current.SpectrumResponse);
+        RadioRecentLimitChoice.Mark(_settings.Current.RadioRecentLimit);
+        SceneMarginChoice.Mark(_player.GetSceneMargin(_scene.ScreenKey()));
 
         foreach (var palette in Palettes)
             palette.IsSelected = palette.Value == _settings.Current.PlaceholderPalette;

@@ -196,10 +196,10 @@ public sealed class SettingsTests
         Assert.Equal(defaults.CrossfeedStrength, loaded.CrossfeedStrength);
         Assert.Equal(defaults.LoudnessStrength, loaded.LoudnessStrength);
 
-        // Plik bez osobnego stanu kolejki niesie tylko wartość pasa dolnego, a kolejka ma wyjść
-        // widoczna.
-        Assert.False(loaded.PanelOpen);
-        Assert.True(loaded.QueueOpen);
+        // Dawna wartość pasa korektora w oknie głównym jest pomijana. Plik bez pola kolejki nie przypina
+        // panelu: zostaje uchwyt przy krawędzi, jak przy nowej instalacji.
+        Assert.False(loaded.QueuePinned);
+        Assert.Null(loaded.QueueOpen);
     }
 
     /// <summary>
@@ -260,6 +260,33 @@ public sealed class SettingsTests
         Assert.Equal(30, loaded.SeekStep);
     }
 
+    /// <summary>
+    /// Pełny ekran domyślnie pokazuje płytę, z kartą następnego utworu i z blokadą wygaszania ekranu;
+    /// zapis i odczyt zachowuje każdą z trzech wartości, także dla pliku sprzed tych pól.
+    /// </summary>
+    [Fact]
+    public void UstawieniaPelnegoEkranuMajaDomysleIPrzechodzaZapisIOdczyt()
+    {
+        var defaults = new AppSettings();
+        Assert.Equal(SceneVisual.Disc, defaults.SceneVisual);
+        Assert.True(defaults.SceneShowNext);
+        Assert.True(defaults.KeepScreenAwake);
+
+        var older = JsonSerializer.Deserialize<AppSettings>("""{ "theme": "Dark" }""", FileFormat);
+        Assert.NotNull(older);
+        Assert.Equal(SceneVisual.Disc, older.SceneVisual);
+        Assert.True(older.SceneShowNext);
+        Assert.True(older.KeepScreenAwake);
+
+        var source = new AppSettings { SceneVisual = SceneVisual.Night, SceneShowNext = false, KeepScreenAwake = false };
+        var loaded = JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(source, FileFormat), FileFormat);
+
+        Assert.NotNull(loaded);
+        Assert.Equal(SceneVisual.Night, loaded.SceneVisual);
+        Assert.False(loaded.SceneShowNext);
+        Assert.False(loaded.KeepScreenAwake);
+    }
+
     /// <summary>Wartość różna od podanej, dobrana według typu własności.</summary>
     private static object? Vary(PropertyInfo property, object? current) => current switch
     {
@@ -269,9 +296,13 @@ public sealed class SettingsTests
         string value => value + "-inne",
         double[] value => value.Select(gain => gain - 1).ToArray(),
         Enum value => NextEnumValue(value),
+        List<SceneVisual> value => new List<SceneVisual>(value) { SceneVisual.Spectrum },
+        Dictionary<string, SceneMargin> value => new Dictionary<string, SceneMargin>(value) { ["ekran|1920x1080"] = SceneMargin.Large },
         DateTimeOffset value => value.AddDays(1),
         null when property.PropertyType == typeof(string) => "cokolwiek",
         null when property.PropertyType == typeof(DateTimeOffset?) => DateTimeOffset.UnixEpoch.AddDays(1),
+        null when property.PropertyType == typeof(bool?) => true,
+        null when property.PropertyType == typeof(double?) => 333.0,
         null when property.PropertyType == typeof(WindowGeometry) =>
             new WindowGeometry { X = 3, Y = 4, Width = 1280, Height = 800, Maximized = true },
         _ => current,

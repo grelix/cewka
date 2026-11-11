@@ -220,6 +220,15 @@ public sealed unsafe class SystemMediaControls : IMediaPanel
         Check(Call(_updater, SlotUpdate), "odświeżenie");
     }
 
+    /// <summary>Wstecz i Dalej w panelu systemu działają tylko, gdy jest dokąd przejść (lista stacji dłuższa niż jedna).</summary>
+    public void SetNavigation(bool enabled)
+    {
+        if (_disposed || !OperatingSystem.IsWindows() || _controls == nint.Zero) return;
+
+        SetBoolean(_controls, SlotPutIsNextEnabled, enabled);
+        SetBoolean(_controls, SlotPutIsPreviousEnabled, enabled);
+    }
+
     public void SetStatus(MediaPanelStatus status)
     {
         if (_disposed || !OperatingSystem.IsWindows()) return;

@@ -2,9 +2,21 @@ using Avalonia.Media.Imaging;
 
 namespace Cewka.App.Services;
 
-/// <summary>Okładka gotowa do pokazania: obraz w rozdzielczości płyty i mała próbka pikseli do palety.</summary>
+/// <summary>
+/// Okładka gotowa do pokazania: obraz w rozdzielczości płyty, mała próbka pikseli do palety
+/// i rozmyta wersja pod scenę.
+/// </summary>
 /// <param name="Pixels">Piksele BGRA próbki do <see cref="CoverPalette.FromPixels"/>; null, gdy próbki nie dało się pobrać.</param>
-public sealed record DecodedCover(Bitmap Display, byte[]? Pixels);
+/// <param name="Backdrop">Rozmyta okładka z <see cref="CoverBlur"/>; null, gdy nie powstała.</param>
+public sealed record DecodedCover(Bitmap Display, byte[]? Pixels, Bitmap? Backdrop = null)
+{
+    /// <summary>Zwalnia obrazy wyniku, który nie trafił na ekran.</summary>
+    public void Discard()
+    {
+        Display.Dispose();
+        Backdrop?.Dispose();
+    }
+}
 
 /// <summary>
 /// Odczyt okładki bieżącego utworu poza wątkiem interfejsu. Wynik trafia dalej tylko wtedy,

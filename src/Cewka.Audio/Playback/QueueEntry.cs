@@ -1,7 +1,11 @@
 using Cewka.Audio.Decoding;
 using Cewka.Audio.Metadata;
+using Cewka.Audio.Streaming;
 
 namespace Cewka.Audio.Playback;
+
+/// <summary>Stacja i jej połączenie: wpis stacji powstaje przy każdym łączeniu od nowa.</summary>
+internal sealed record LiveBinding(LiveSource Source, ILiveSession Session);
 
 /// <summary>One item in the playback queue, with whatever is known about it so far.</summary>
 public sealed class QueueEntry
@@ -10,6 +14,11 @@ public sealed class QueueEntry
     private TrackMetadata? _metadata;
 
     public required string Path { get; init; }
+
+    /// <summary>Tylko dla stacji; ta nigdy nie trafia do kolejki.</summary>
+    internal LiveBinding? Live { get; init; }
+
+    public bool IsLive => Live is not null;
 
     /// <summary>Read lazily; null until the file has been examined.</summary>
     public TrackMetadata? Metadata
@@ -50,7 +59,7 @@ public sealed class QueueEntry
     /// </summary>
     public void EnsureMetadata()
     {
-        if (Metadata is not null) return;
+        if (IsLive || Metadata is not null) return;
 
         lock (_metadataLock)
         {

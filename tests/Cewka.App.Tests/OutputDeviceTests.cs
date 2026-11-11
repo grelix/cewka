@@ -12,7 +12,7 @@ public sealed class OutputDeviceTests
     public void NieudaneOtwarcieWybranegoUrzadzeniaPrzechodziNaDomyslne() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a")]);
+        h.OpenPaths([h.Track("a")]);
         Assert.True(h.Player.IsPlaying);
 
         h.FailingDevice = "Zepsute";
@@ -28,7 +28,7 @@ public sealed class OutputDeviceTests
     public void GdyUrzadzenieDomyslneTezZawodziKomunikatNieTwierdziZeGra() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a")]);
+        h.OpenPaths([h.Track("a")]);
         Assert.True(h.Player.IsPlaying);
 
         h.FailAll = true;
@@ -42,7 +42,7 @@ public sealed class OutputDeviceTests
     public void WstrzymaneOdtwarzanieNiePrzechodziNaDomyslne() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a")]);
+        h.OpenPaths([h.Track("a")]);
         h.Player.Pause();
 
         h.FailingDevice = "Zepsute";
@@ -56,7 +56,7 @@ public sealed class OutputDeviceTests
     public void KomunikatOUrzadzeniuDomyslnymZostajePrzyNastepnymUtworze() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a"), h.Track("b")]);
+        h.OpenPaths([h.Track("a"), h.Track("b")]);
         h.FailingDevice = "Zepsute";
         h.Player.SetOutputDevice("Zepsute");
 
@@ -70,7 +70,7 @@ public sealed class OutputDeviceTests
     public void PonownaProbaWracaNaWybraneUrzadzenie() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a")]);
+        h.OpenPaths([h.Track("a")]);
         h.FailingDevice = "Zepsute";
         h.Player.SetOutputDevice("Zepsute");
         Assert.Null(h.Engine.PreferredDeviceName);
@@ -87,7 +87,7 @@ public sealed class OutputDeviceTests
     public void NieudanaZmianaOpoznieniaZostawiaKomunikat() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a")]);
+        h.OpenPaths([h.Track("a")]);
 
         h.FailAll = true;
         h.Player.SetOutputLatency(OutputLatency.Low);

@@ -52,6 +52,8 @@ internal static partial class Gst
 
     internal const ulong TwoHundredMilliseconds = 200UL * 1000 * 1000;
 
+    internal const ulong TwentyMilliseconds = 20UL * 1000 * 1000;
+
     [LibraryImport(Core, EntryPoint = "gst_init")]
     internal static partial void Init(nint argc, nint argv);
 
@@ -122,6 +124,25 @@ internal static partial class Gst
 
     [LibraryImport(Glib, EntryPoint = "g_free")]
     internal static partial void Free(nint memory);
+
+    /// <summary>Value of <c>GST_FLOW_OK</c>.</summary>
+    internal const int FlowOk = 0;
+
+    [LibraryImport(Core, EntryPoint = "gst_buffer_new_allocate")]
+    internal static partial nint BufferNewAllocate(nint allocator, nuint size, nint parameters);
+
+    [LibraryImport(Core, EntryPoint = "gst_buffer_fill")]
+    internal static unsafe partial nuint BufferFill(nint buffer, nuint offset, byte* source, nuint size);
+
+    [LibraryImport(App, EntryPoint = "gst_app_src_get_current_level_bytes")]
+    internal static partial ulong AppSrcCurrentLevelBytes(nint appsrc);
+
+    [LibraryImport(App, EntryPoint = "gst_app_src_end_of_stream")]
+    internal static partial int AppSrcEndOfStream(nint appsrc);
+
+    /// <summary>Takes ownership of the buffer.</summary>
+    [LibraryImport(App, EntryPoint = "gst_app_src_push_buffer")]
+    internal static partial int AppSrcPushBuffer(nint appsrc, nint buffer);
 
     [LibraryImport(App, EntryPoint = "gst_app_sink_is_eos")]
     [return: MarshalAs(UnmanagedType.I1)]

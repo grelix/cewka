@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Cewka.RadioProbe</RootNamespace>
+    <AssemblyName>Cewka.RadioProbe</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Cewka.Audio\Cewka.Audio.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Cewka.Audio.Tests" />
+  </ItemGroup>
+
+</Project>

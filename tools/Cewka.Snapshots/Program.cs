@@ -37,7 +37,9 @@ internal static class Program
         bool QueueOpen = true,
         PlaceholderPalette Palette = PlaceholderPalette.BlueViolet,
         bool QueueOverlay = false,
-        string? Focus = null);
+        string? Focus = null,
+        bool SceneChrome = false,
+        string? Search = null);
 
     private static readonly Shot[] Shots =
     [
@@ -103,10 +105,21 @@ internal static class Program
         // Fokus z klawiatury: pierścień wokół przycisku, fadera i wiersza kolejki w obu motywach.
         new("fokus-odtwarzanie-ciemny", 1200, 680, ThemeVariant.Dark, true, Focus: "PlayButton"),
         new("fokus-odtwarzanie-jasny", 1200, 680, ThemeVariant.Light, true, Focus: "PlayButton"),
-        new("fokus-fader-ciemny", 1200, 680, ThemeVariant.Dark, true, Focus: "EqFader"),
-        new("fokus-fader-jasny", 1200, 680, ThemeVariant.Light, true, Focus: "EqFader"),
         new("fokus-kolejka-ciemny", 1200, 680, ThemeVariant.Dark, true, Focus: "QueueRow"),
         new("fokus-przelacznik-jasny", 1200, 680, ThemeVariant.Light, true, Focus: "PanelToggle"),
+    ];
+
+    /// <summary>
+    /// Plansza sceny w rozmiarze telewizora: spoczynek (bez rzędu przycisków, uchwytu paska
+    /// i wyjścia), aktywność, jasny motyw okna, pod którym scena zostaje ciemna, i ekran 21:9
+    /// z kadrem 1920 × 1080 w środku. Płyta stoi prosto, plamy w ustalonym punkcie, bez przenikań.
+    /// </summary>
+    private static readonly Shot[] SceneShots =
+    [
+        new("scena-ciemna", 1920, 1080, ThemeVariant.Dark, false, QueueOpen: false),
+        new("scena-sterowanie", 1920, 1080, ThemeVariant.Dark, false, QueueOpen: false, SceneChrome: true),
+        new("scena-jasny-motyw", 1920, 1080, ThemeVariant.Light, false, QueueOpen: false, SceneChrome: true),
+        new("scena-ultraszeroka", 2560, 1080, ThemeVariant.Dark, false, QueueOpen: false, SceneChrome: true),
     ];
 
     /// <summary>
@@ -181,6 +194,10 @@ internal static class Program
         new("ustawienia-jezyk-waski", 700, 640, ThemeVariant.Dark, true, Section: "Language"),
         new("ustawienia-jezyk-rosyjski", 820, 640, ThemeVariant.Dark, true, Language: "ru", Section: "Language"),
         new("ustawienia-jezyk-wietnamski", 820, 640, ThemeVariant.Dark, true, Language: "vi", Section: "Language"),
+        new("ustawienia-chinski", 832, 640, ThemeVariant.Dark, true, Language: "zh-hans", Section: "Audio"),
+        new("ustawienia-japonski", 832, 640, ThemeVariant.Dark, true, Language: "ja", Section: "Audio"),
+        new("ustawienia-brazylijski", 832, 640, ThemeVariant.Dark, true, Language: "pt-br", Section: "Audio"),
+        new("ustawienia-japonski-wyglad", 832, 1000, ThemeVariant.Dark, true, Language: "ja"),
         new("ustawienia-jezyk-grecki", 820, 640, ThemeVariant.Dark, true, Language: "el", Section: "Language"),
 
         // Pisma inne niż łacińskie: grecki i cyrylica.
@@ -194,6 +211,22 @@ internal static class Program
         // Cyrylica także w zakładce wyglądu, przy nazwach par barw.
         new("ustawienia-rosyjski-wyglad", 820, 940, ThemeVariant.Dark, true, Language: "ru"),
         new("ustawienia-ukrainski-odtwarzanie", 820, 640, ThemeVariant.Dark, true, Language: "uk", Section: "Playback"),
+
+        // Podkategorie dodane z podziałem ustawień na kategorie główne.
+        new("ustawienia-korektor", 820, 1000, ThemeVariant.Dark, true, Section: "Processing"),
+        new("ustawienia-korektor-jasny", 820, 1000, ThemeVariant.Light, true, Section: "Processing"),
+        new("ustawienia-pelny-ekran", 820, 1000, ThemeVariant.Dark, true, Section: "SceneFullScreen"),
+        new("ustawienia-scena", 820, 1400, ThemeVariant.Dark, true, Section: "SceneVisuals"),
+        new("ustawienia-scena-jasny", 820, 1400, ThemeVariant.Light, true, Section: "SceneVisuals"),
+        new("ustawienia-telewizor", 820, 640, ThemeVariant.Dark, true, Section: "SceneTelevision"),
+        new("ustawienia-radio", 820, 640, ThemeVariant.Dark, true, Section: "RadioSection"),
+        new("ustawienia-logo", 820, 640, ThemeVariant.Dark, true, Section: "RadioLogos"),
+        new("ustawienia-licencje", 820, 640, ThemeVariant.Dark, true, Section: "Licences"),
+        new("ustawienia-licencje-jasny", 820, 640, ThemeVariant.Light, true, Section: "Licences"),
+
+        // Wyszukiwanie: wyniki zamiast paska bocznego.
+        new("ustawienia-szukaj", 820, 640, ThemeVariant.Dark, true, Search: "efekt"),
+        new("ustawienia-szukaj-jasny", 820, 640, ThemeVariant.Light, true, Search: "efekt"),
     ];
 
     [STAThread]
@@ -207,6 +240,7 @@ internal static class Program
         string? materialDo = null;
         string? odniesienieW = null;
         var tylkoSprawdzenia = false;
+        var tylkoUstawienia = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -237,6 +271,11 @@ internal static class Program
                 // pierwszą bramkę i na powtarzanie przy podejrzeniu niestabilności.
                 case "--sprawdzenia":
                     tylkoSprawdzenia = true;
+                    break;
+
+                // Same zrzuty okna ustawień, bez sprawdzianów i pozostałych zrzutów.
+                case "--ustawienia":
+                    tylkoUstawienia = true;
                     break;
 
                 default:
@@ -288,9 +327,24 @@ internal static class Program
             .With(CewkaApplication.FontOptions)
             .SetupWithoutStarting();
 
+        // Wynik sprawdzania ścieżek w tle wraca na ten wątek, jak w działającym programie.
+        AvaloniaSynchronizationContext.InstallIfNeeded();
+
         // Bez cyklu życia pulpitu wspólne usługi trzeba utworzyć ręcznie.
         ((CewkaApplication)Application.Current!).InitialiseServicesForHeadless(
             new SettingsStore(AppPaths.SettingsFile), track is null ? null : [track]);
+
+        if (tylkoUstawienia)
+        {
+            foreach (var shot in SettingsShots)
+            {
+                CaptureSettings(shot, outputDirectory);
+                Console.WriteLine($"  ok   {shot.Name}.png  ({shot.Width}x{shot.Height})");
+            }
+
+            Console.WriteLine($"Zrzuty zapisane w: {outputDirectory}");
+            return 0;
+        }
 
         // Sprawdziany zachowania okna idą przed zrzutami: obracają stanem panelu i rozmiarem,
         // a zrzuty mają zastać ustawienia takie, jakie sobie ustawiają same.
@@ -308,12 +362,13 @@ internal static class Program
         CaptureBackdropPulse(outputDirectory);
         CaptureWaveform(outputDirectory);
 
-        foreach (var shot in Shots.Concat(SettingsShots).Concat(BackdropShots))
+        foreach (var shot in Shots.Concat(SettingsShots).Concat(BackdropShots).Concat(SceneShots))
         {
             try
             {
                 if (SettingsShots.Contains(shot)) CaptureSettings(shot, outputDirectory);
                 else if (BackdropShots.Contains(shot)) CaptureBackdrop(shot, outputDirectory);
+                else if (SceneShots.Contains(shot)) CaptureScene(shot, outputDirectory);
                 else Capture(shot, outputDirectory);
 
                 Console.WriteLine($"  ok   {shot.Name}.png  ({shot.Width}x{shot.Height})");
@@ -382,6 +437,8 @@ internal static class Program
         {
             var viewModel = new SettingsViewModel(CewkaApplication.Settings, player);
             viewModel.SelectSection(SectionOf(viewModel, shot.Section));
+            if (shot.Search is not null)
+                viewModel.Search.Text = shot.Search;
 
             var window = new SettingsWindow(viewModel)
             {
@@ -572,9 +629,25 @@ internal static class Program
     private static string Odcienie(IReadOnlyList<Color> colours) =>
         string.Join(" ", colours.Select(c => $"{c}({c.ToHsl().H:F0})"));
 
+    /// <summary>Plik z wiersza poleceń sprawdza się w tle, a zrzut ma go zastać już w kolejce.</summary>
+    private static void WaitForOpens(Window window)
+    {
+        if (window.DataContext is not MainViewModel player) return;
+
+        var zegar = System.Diagnostics.Stopwatch.StartNew();
+
+        while (!player.OpensFinished.IsCompleted && zegar.ElapsedMilliseconds < DurationWaitMilliseconds)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(5);
+        }
+    }
+
     /// <summary>Daje układowi okna ustalić się przy zadanym rozmiarze, bez robienia zdjęcia.</summary>
     private static void Settle(Window window, double width, double height)
     {
+        WaitForOpens(window);
+
         for (var i = 0; i < 8; i++)
         {
             Dispatcher.UIThread.RunJobs();
@@ -590,8 +663,7 @@ internal static class Program
     private static bool CheckAreasKeepWindowSize()
     {
         CewkaApplication.Settings.Current.Window = null;
-        CewkaApplication.Settings.Current.PanelOpen = false;
-        CewkaApplication.Settings.Current.QueueOpen = false;
+        CewkaApplication.Settings.Current.QueuePinned = false;
 
         const double width = 1000, height = 560;
         var window = new MainWindow { Width = width, Height = height };
@@ -652,8 +724,7 @@ internal static class Program
         foreach (var width in QueueSweep)
         {
             CewkaApplication.Settings.Current.Window = null;
-            CewkaApplication.Settings.Current.PanelOpen = true;
-            CewkaApplication.Settings.Current.QueueOpen = true;
+            CewkaApplication.Settings.Current.QueuePinned = true;
 
             const double height = 680;
             var window = new MainWindow { Width = width, Height = height };
@@ -675,13 +746,13 @@ internal static class Program
                         dobrze = false;
                     }
 
-                    if (player.QueueOpen)
+                    if (player.QueuePinned)
                     {
                         Console.Error.WriteLine($"  BLAD: przy {width} px nakladka kolejki otworzyla sie sama.");
                         dobrze = false;
                     }
 
-                    player.QueueOpen = true;
+                    player.QueuePinned = true;
                     Settle(window, width, height);
                 }
                 else
@@ -706,7 +777,7 @@ internal static class Program
                     window.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
                     Settle(window, width, height);
 
-                    if (player.QueueOpen)
+                    if (player.QueuePinned)
                     {
                         Console.Error.WriteLine($"  BLAD: przy {width} px Esc nie zamknal nakladki kolejki.");
                         dobrze = false;
@@ -729,8 +800,8 @@ internal static class Program
     }
 
     /// <summary>
-    /// Niskie okna z pasem dolnym: rząd transportu mieści się w obszarze nad pasem, a pas przewija
-    /// to, czego nie zmieści.
+    /// Niskie okna: rząd transportu mieści się w obszarze bloku odtwarzania (pas korektora jest już
+    /// osobnym oknem).
     /// </summary>
     private static bool CheckLowWindows()
     {
@@ -739,8 +810,7 @@ internal static class Program
         foreach (var (width, height) in new[] { (760, 520), (900, 520), (1200, 520), (1200, 560), (1200, 680), (1600, 600) })
         {
             CewkaApplication.Settings.Current.Window = null;
-            CewkaApplication.Settings.Current.PanelOpen = true;
-            CewkaApplication.Settings.Current.QueueOpen = false;
+            CewkaApplication.Settings.Current.QueuePinned = false;
 
             var window = new MainWindow { Width = width, Height = height };
 
@@ -752,7 +822,6 @@ internal static class Program
                 var host = window.FindControl<Panel>("CentreHost")!;
                 var transport = window.FindControl<Grid>("TransportRow")!;
                 var info = window.FindControl<StackPanel>("TrackInfo")!;
-                var scroll = window.FindControl<ScrollViewer>("PanelScroll")!;
                 var disc = window.FindControl<Panel>("DiscHost")!;
 
                 var hostTop = host.TranslatePoint(new Point(0, 0), window)!.Value.Y;
@@ -761,11 +830,9 @@ internal static class Program
                 var transportBottom = transport.TranslatePoint(new Point(0, transport.Bounds.Height), window)!.Value.Y;
 
                 var zapas = Math.Min(hostBottom - transportBottom, infoTop - hostTop);
-                var przewijanie = scroll.Extent.Height > scroll.Viewport.Height + 0.5;
 
                 Console.WriteLine(
-                    $"       {width}x{height}: obszar {host.Bounds.Height:F0}  pas {scroll.Bounds.Height:F0}" +
-                    $"{(przewijanie ? " (przewija)" : "")}  plyta {(disc.IsVisible ? disc.Bounds.Width : 0):F0}  zapas {zapas:F1} px");
+                    $"       {width}x{height}: obszar {host.Bounds.Height:F0}  plyta {(disc.IsVisible ? disc.Bounds.Width : 0):F0}  zapas {zapas:F1} px");
 
                 if (zapas < -0.5)
                 {
@@ -850,9 +917,16 @@ internal static class Program
     {
         "Language" => viewModel.LanguageSection,
         "Audio" => viewModel.Audio,
+        "Processing" => viewModel.Processing,
         "Playback" => viewModel.Playback,
         "Integration" => viewModel.Integration,
+        "SceneFullScreen" => viewModel.SceneFullScreen,
+        "SceneVisuals" => viewModel.SceneVisuals,
+        "SceneTelevision" => viewModel.SceneTelevision,
+        "RadioSection" => viewModel.RadioSection,
+        "RadioLogos" => viewModel.RadioLogos,
         "About" => viewModel.About,
+        "Licences" => viewModel.Licences,
         _ => viewModel.Appearance,
     };
 
@@ -977,8 +1051,7 @@ internal static class Program
     private static void Capture(Shot shot, string outputDirectory)
     {
         Application.Current!.RequestedThemeVariant = shot.Variant;
-        CewkaApplication.Settings.Current.PanelOpen = shot.PanelOpen;
-        CewkaApplication.Settings.Current.QueueOpen = shot.QueueOpen;
+        CewkaApplication.Settings.Current.QueuePinned = shot.QueueOpen;
         CewkaApplication.Settings.Current.PlaceholderPalette = shot.Palette;
         CewkaApplication.Settings.Current.WindowControls = shot.Controls;
         CewkaApplication.Settings.Current.Language = shot.Language;
@@ -1000,7 +1073,9 @@ internal static class Program
                 PrepareTrack(window);
 
                 // Nakładka kolejki otwiera się tylko na żądanie, więc zrzut otwiera ją sam.
-                if (shot.QueueOverlay && window.DataContext is MainViewModel player) player.QueueOpen = true;
+                // Fokus na wierszu kolejki wymaga panelu kolejki na ekranie, więc ten zrzut też go przypina.
+                if ((shot.QueueOverlay || shot.Focus == "QueueRow") && window.DataContext is MainViewModel player)
+                    player.QueuePinned = true;
             },
             beforeCapture: () =>
             {
@@ -1015,6 +1090,22 @@ internal static class Program
             });
     }
 
+    /// <summary>Pierwszy wiersz kolejki; lista dopiero co przypiętego panelu tworzy wiersze w kolejnym przebiegu układu.</summary>
+    private static InputElement? QueueRow(MainWindow window)
+    {
+        var list = window.FindControl<ListBox>("QueueList");
+        if (list is null) return null;
+
+        for (var i = 0; i < 4 && list.ContainerFromIndex(0) is null; i++)
+        {
+            window.UpdateLayout();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        }
+
+        Console.WriteLine($"       wiersze kolejki: {list.ItemCount}, widoczna: {list.IsEffectivelyVisible}");
+        return list.ContainerFromIndex(0);
+    }
+
     /// <summary>Fokus z klawiatury na wskazanej kontrolce, żeby zrzut pokazał pierścień fokusu.</summary>
     private static void FocusForCapture(MainWindow window, Shot shot)
     {
@@ -1022,7 +1113,7 @@ internal static class Program
         InputElement? target = shot.Focus switch
         {
             "EqFader" => descendants.OfType<EqFader>().Skip(3).FirstOrDefault(),
-            "QueueRow" => window.FindControl<ListBox>("QueueList")?.ContainerFromIndex(0),
+            "QueueRow" => QueueRow(window),
             var name => window.FindControl<Control>(name!),
         };
 
@@ -1114,12 +1205,38 @@ internal static class Program
     /// </summary>
     private const double HeadingTolerance = 0.5;
 
+    /// <summary>
+    /// Okno główne ze sceną otwartą na wierzchu. Zamrożenie idzie przed otwarciem sceny, bo
+    /// wyłącza też przenikania, które zrzut złapałby w połowie.
+    /// </summary>
+    private static void CaptureScene(Shot shot, string outputDirectory)
+    {
+        Application.Current!.RequestedThemeVariant = shot.Variant;
+        CewkaApplication.Settings.Current.QueuePinned = shot.QueueOpen;
+        CewkaApplication.Settings.Current.PlaceholderPalette = shot.Palette;
+        CewkaApplication.Settings.Current.WindowControls = shot.Controls;
+        CewkaApplication.Settings.Current.Language = shot.Language;
+        CewkaApplication.Settings.Current.ColourIntensity = shot.Intensity;
+        Cewka.App.Localisation.Strings.Current.SetLanguage(shot.Language);
+
+        var window = new MainWindow { Width = shot.Width, Height = shot.Height };
+
+        Render(window, shot, outputDirectory,
+            afterShow: () =>
+            {
+                PrepareTrack(window);
+                window.FreezeAnimationsForCapture();
+                window.OpenSceneForCapture(shot.SceneChrome);
+            });
+    }
+
     private static void Render(Window window, Shot shot, string outputDirectory,
         Action? afterShow = null, Action? beforeCapture = null)
     {
         window.Show();
 
         // Okno wczytuje zawartość w OnOpened, więc wszystko, co jej dotyczy, dzieje się tutaj.
+        WaitForOpens(window);
         Dispatcher.UIThread.RunJobs();
         afterShow?.Invoke();
 

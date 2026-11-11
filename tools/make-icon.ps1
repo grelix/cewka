@@ -1,130 +1,226 @@
-# Buduje ikonę aplikacji: src/Cewka.App/Assets/cewka.ico
+﻿# Buduje ikonę aplikacji z rysunków w assets/ikona:
 #
-# Ikona rysowana jest proceduralnie, a nie skalowana z jednego obrazu, ponieważ spirala
-# o pięciu zwojach zlewa się w plamę przy szesnastu pikselach. Każdy rozmiar dostaje
-# liczbę zwojów i grubość kreski dobrane do siebie, dzięki czemu ikona pozostaje
-# czytelna zarówno na pasku zadań, jak i w oknie właściwości pliku.
+#   src/Cewka.App/Assets/cewka.ico     plik wykonywalny i okna w Windows, 16–256 px, wpisy PNG
+#   src/Cewka.App/Assets/cewka.png     ikona okna w innych systemach, 256 px
+#   packaging/linux/icons/cewka-*.png  katalogi rozmiarów motywu hicolor w pakietach Linuksa
+#
+# Każdy rozmiar jest renderowany osobno z wektora, a nie zmniejszany z jednego obrazu.
+# Rozmiary do 32 px biorą uproszczony rysunek cewka-maly.svg: pięć cienkich zwojów
+# i wyprowadzenia pełnego rysunku zlewają się przy tej skali w miedzianą plamę, dlatego
+# mały rysunek ma trzy grubsze zwoje, szersze obrzeże membrany, wyraźniejszy obrys kafla
+# i nie ma wyprowadzeń. Jego kafel generator dopasowuje do każdego rozmiaru tak, by krawędź
+# wypadała na całych pikselach.
+#
+# Renderuje Microsoft Edge w trybie bez okna, z wyciszonym dźwiękiem i profilem w katalogu
+# tymczasowym, więc otwarta przeglądarka nie jest naruszana. Każdy rozmiar dostaje świeży
+# profil: drugie uruchomienie na tym samym profilu potrafi zawisnąć bez zrzutu.
 #
 # Uruchamianie (Windows, PowerShell):  powershell -File tools/make-icon.ps1
+# Inna ścieżka przeglądarki:          powershell -File tools/make-icon.ps1 -Edge "D:\Edge\msedge.exe"
 
-Add-Type -AssemblyName System.Drawing
+param([string]$Edge)
 
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Drawing
 
 $repozytorium = Split-Path -Parent $PSScriptRoot
-$wynik = Join-Path $repozytorium 'src\Cewka.App\Assets\cewka.ico'
+$rysunekPelny = Join-Path $repozytorium 'assets\ikona\cewka.svg'
+$rysunekMaly  = Join-Path $repozytorium 'assets\ikona\cewka-maly.svg'
+$wynikIco     = Join-Path $repozytorium 'src\Cewka.App\Assets\cewka.ico'
+$wynikPng     = Join-Path $repozytorium 'src\Cewka.App\Assets\cewka.png'
+$katalogIkon  = Join-Path $repozytorium 'packaging\linux\icons'
 
-# Barwy z motywu ciemnego: tło pulpitu i akcent interfejsu.
-$tlo     = [System.Drawing.Color]::FromArgb(255, 22, 22, 26)
-$akcent  = [System.Drawing.Color]::FromArgb(255, 127, 182, 239)
-$srodek  = [System.Drawing.Color]::FromArgb(255, 246, 246, 250)
+# Windows wybiera z pliku ICO rozmiar najbliższy bieżącemu skalowaniu ekranu.
+$rozmiaryIco = 16, 20, 24, 32, 40, 48, 64, 96, 128, 256
+# Do tego rozmiaru włącznie obowiązuje rysunek uproszczony.
+$granicaMalego = 32
+# Standardowe katalogi rozmiarów motywu hicolor; 22 px biorą panele KDE i XFCE, większe
+# od 256 px pokrywa ikona skalowalna.
+$rozmiaryLinux = 16, 22, 24, 32, 48, 64, 128, 256
 
-# Rozmiar, liczba zwojów spirali, promień środkowej kropki jako ułamek rozmiaru.
-#
-# Liczba zwojów jest dobrana tak, aby odstęp między nimi pozostawał wyraźnie większy od
-# grubości kreski. Przy pięciu zwojach na szesnastu pikselach kreska wypełnia cały odstęp
-# i spirala zlewa się w jednolitą plamę — dlatego małe rozmiary dostają jeden zwój,
-# co przy tej skali czyta się po prostu jako pierścień z przerwą.
-$warianty = @(
-    @{ Rozmiar = 16;  Zwoje = 1.00; Kropka = 0.130 }
-    @{ Rozmiar = 24;  Zwoje = 1.50; Kropka = 0.115 }
-    @{ Rozmiar = 32;  Zwoje = 2.00; Kropka = 0.105 }
-    @{ Rozmiar = 48;  Zwoje = 2.50; Kropka = 0.100 }
-    @{ Rozmiar = 64;  Zwoje = 3.00; Kropka = 0.095 }
-    @{ Rozmiar = 128; Zwoje = 3.50; Kropka = 0.090 }
-    @{ Rozmiar = 256; Zwoje = 4.00; Kropka = 0.085 }
-)
-
-function New-SciezkaZaokraglona {
-    param([single]$Rozmiar, [single]$Promien)
-
-    $sciezka = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $srednica = $Promien * 2
-    $sciezka.AddArc(0, 0, $srednica, $srednica, 180, 90)
-    $sciezka.AddArc($Rozmiar - $srednica, 0, $srednica, $srednica, 270, 90)
-    $sciezka.AddArc($Rozmiar - $srednica, $Rozmiar - $srednica, $srednica, $srednica, 0, 90)
-    $sciezka.AddArc(0, $Rozmiar - $srednica, $srednica, $srednica, 90, 90)
-    $sciezka.CloseFigure()
-    return $sciezka
+if (-not $Edge) {
+    $kandydaci = @()
+    if (${env:ProgramFiles(x86)}) { $kandydaci += Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe' }
+    if ($env:ProgramFiles) { $kandydaci += Join-Path $env:ProgramFiles 'Microsoft\Edge\Application\msedge.exe' }
+    $Edge = $kandydaci | Where-Object { Test-Path $_ } | Select-Object -First 1
+}
+if (-not $Edge -or -not (Test-Path $Edge)) {
+    throw 'Nie znaleziono msedge.exe. Ścieżkę można podać parametrem -Edge.'
+}
+foreach ($rysunek in $rysunekPelny, $rysunekMaly) {
+    if (-not (Test-Path $rysunek)) { throw "Brak rysunku $rysunek" }
 }
 
-function New-Obraz {
-    param([int]$Rozmiar, [double]$Zwoje, [double]$Kropka)
+$robocze = Join-Path ([IO.Path]::GetTempPath()) ('cewka-ikona-' + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force $robocze | Out-Null
 
-    $obraz = New-Object System.Drawing.Bitmap($Rozmiar, $Rozmiar, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-    $g = [System.Drawing.Graphics]::FromImage($obraz)
-    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-    $g.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+# Krawędź kafla na całych pikselach: margines zaokrąglony w dół do pełnego piksela (co najmniej
+# jednego), a viewBox skaluje rysunek równo w obu osiach, tak by kafel wypełnił resztę obrazu.
+# Margines w ułamku piksela zostawia wzdłuż krawędzi półprzezroczysty pas.
+function Get-RysunekNaPikselach {
+    param([string]$Rysunek, [int]$Rozmiar)
 
-    # Tło: zaokrąglony kwadrat, tak jak przystoi ikonie w systemie Windows 11.
-    $ksztalt = New-SciezkaZaokraglona -Rozmiar $Rozmiar -Promien ([single]($Rozmiar * 0.22))
-    $pedzel = New-Object System.Drawing.SolidBrush($tlo)
-    $g.FillPath($pedzel, $ksztalt)
-    $pedzel.Dispose()
-    $ksztalt.Dispose()
+    $liczby = [Globalization.CultureInfo]::InvariantCulture
+    $svg = New-Object Xml.XmlDocument
+    $svg.PreserveWhitespace = $true
+    $svg.Load($Rysunek)
+    $przestrzen = New-Object Xml.XmlNamespaceManager($svg.NameTable)
+    $przestrzen.AddNamespace('s', 'http://www.w3.org/2000/svg')
+    $kafel = $svg.SelectSingleNode("/s:svg/s:rect[@fill='url(#kafel)']", $przestrzen)
+    if (-not $kafel) { throw "Brak kafla (rect z fill=url(#kafel)) w $Rysunek" }
 
-    # Spirala Archimedesa od środka na zewnątrz.
-    $srodekXY = $Rozmiar / 2.0
-    $promienMax = $Rozmiar * 0.375
-    $promienMin = $Rozmiar * $Kropka * 1.75
-    $kroki = [int]([Math]::Max(64, $Rozmiar * 4))
-    $kat = $Zwoje * 2 * [Math]::PI
-
-    $punkty = New-Object System.Collections.Generic.List[System.Drawing.PointF]
-    for ($i = 0; $i -le $kroki; $i++) {
-        $t = $i / [double]$kroki
-        $r = $promienMin + ($promienMax - $promienMin) * $t
-        $a = $kat * $t
-        $punkty.Add((New-Object System.Drawing.PointF(
-            [single]($srodekXY + $r * [Math]::Cos($a)),
-            [single]($srodekXY + $r * [Math]::Sin($a)))))
+    $widok = $svg.DocumentElement.GetAttribute('viewBox') -split '\s+' | ForEach-Object { [double]::Parse($_, $liczby) }
+    $x, $y, $szerokosc, $wysokosc = 'x', 'y', 'width', 'height' | ForEach-Object { [double]::Parse($kafel.GetAttribute($_), $liczby) }
+    $bok = $widok[2]
+    if ($widok[0] -ne 0 -or $widok[1] -ne 0 -or $widok[3] -ne $bok -or $x -ne $y -or $szerokosc -ne $wysokosc -or 2 * $x + $szerokosc -ne $bok) {
+        throw "Kafel w $Rysunek nie jest kwadratem na środku kwadratowego rysunku"
     }
 
-    # Grubość kreski wyprowadzona z odstępu między zwojami, nie z samego rozmiaru: dopiero
-    # ta proporcja decyduje o tym, czy spirala pozostaje spiralą, czy zlewa się w krążek.
-    $odstep = ($promienMax - $promienMin) / [Math]::Max(1.0, $Zwoje)
-    $grubosc = [single]([Math]::Max(1.0, [Math]::Min($odstep * 0.34, $Rozmiar * 0.030)))
-    $pioro = New-Object System.Drawing.Pen($akcent, $grubosc)
-    $pioro.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $pioro.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $pioro.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
-    # Odcinki proste, a nie krzywa sklejana: przy tej gęstości punktów różnicy nie widać,
-    # a interpolacja splajnem potrafi wyjść poza tor i zafalować przy małych rozmiarach.
-    $g.DrawLines($pioro, $punkty.ToArray())
-    $pioro.Dispose()
+    $margines = [Math]::Max(1, [Math]::Floor($Rozmiar * $x / $bok))
+    $pikseliNaJednostke = ($Rozmiar - 2 * $margines) / $szerokosc
+    $poczatek = $x - $margines / $pikseliNaJednostke
+    $bokWidoku = $Rozmiar / $pikseliNaJednostke
+    $svg.DocumentElement.SetAttribute('viewBox', [string]::Format($liczby, '{0:R} {0:R} {1:R} {1:R}', $poczatek, $bokWidoku))
 
-    # Kropka pośrodku - odpowiednik otworu płyty, jak na okładce domyślnej.
-    $rKropki = [single]($Rozmiar * $Kropka)
-    $pedzelSrodka = New-Object System.Drawing.SolidBrush($srodek)
-    $g.FillEllipse($pedzelSrodka, $srodekXY - $rKropki, $srodekXY - $rKropki, $rKropki * 2, $rKropki * 2)
-    $pedzelSrodka.Dispose()
+    return @{ Svg = [Text.Encoding]::UTF8.GetBytes($svg.OuterXml); Margines = [int]$margines }
+}
 
-    $g.Dispose()
-    return $obraz
+function Invoke-Render {
+    param([byte[]]$Svg, [int]$Rozmiar, [int]$Margines)
+
+    $html = Join-Path $robocze "ikona-$Rozmiar.html"
+    $obraz = Join-Path $robocze "ikona-$Rozmiar.png"
+    $profil = Join-Path $robocze "profil-$Rozmiar"
+
+    # Rysunek jako adres data:, bo strona z pliku lokalnego nie powinna sięgać po inne pliki.
+    $dane = [Convert]::ToBase64String($Svg)
+    $tresc = '<!doctype html><html><head><meta charset="utf-8"><style>' +
+        'html,body{margin:0;padding:0;background:transparent;overflow:hidden}' +
+        "img{display:block;width:${Rozmiar}px;height:${Rozmiar}px}" +
+        "</style></head><body><img alt=`"`" src=`"data:image/svg+xml;base64,$dane`"></body></html>"
+    [IO.File]::WriteAllText($html, $tresc, (New-Object Text.UTF8Encoding($false)))
+
+    # Skala 1 niezależnie od skalowania ekranu, inaczej zrzut miałby więcej pikseli niż ikona.
+    $argumenty = @(
+        '--headless=new', '--disable-gpu', '--mute-audio', '--hide-scrollbars',
+        '--default-background-color=00000000', '--force-device-scale-factor=1',
+        "--window-size=$Rozmiar,$Rozmiar",
+        "--user-data-dir=`"$profil`"",
+        '--no-first-run', '--no-default-browser-check', '--disable-extensions',
+        '--disable-background-networking', '--disable-component-update', '--disable-sync',
+        "--screenshot=`"$obraz`"",
+        ([Uri]$html).AbsoluteUri
+    )
+    try {
+        $proces = Start-Process -FilePath $Edge -ArgumentList $argumenty -PassThru `
+            -RedirectStandardOutput (Join-Path $robocze 'edge-wyjscie.txt') `
+            -RedirectStandardError (Join-Path $robocze 'edge-bledy.txt')
+        if (-not $proces.WaitForExit(60000)) {
+            $proces.Kill()
+            throw "Edge nie skończył renderowania $Rozmiar px w ciągu minuty"
+        }
+        if (-not (Test-Path $obraz)) { throw "Edge nie zapisał obrazu $Rozmiar px" }
+
+        Test-Obraz -Plik $obraz -Rozmiar $Rozmiar -Margines $Margines
+        # Przecinek oddaje tablicę w całości; bez niego potok rozbiłby ją na pojedyncze bajty.
+        return , [IO.File]::ReadAllBytes($obraz)
+    }
+    finally {
+        # Profil ma kilkadziesiąt megabajtów, więc znika od razu, a nie po wszystkich rozmiarach.
+        Remove-Katalog $profil
+    }
+}
+
+# Edge zamyka procesy pomocnicze chwilę po głównym, więc katalog bywa jeszcze zajęty.
+function Remove-Katalog {
+    param([string]$Sciezka)
+
+    $czas = [Diagnostics.Stopwatch]::StartNew()
+    while (Test-Path $Sciezka) {
+        try {
+            Remove-Item -Recurse -Force $Sciezka -ErrorAction Stop
+        }
+        catch {
+            if ($czas.Elapsed.TotalSeconds -ge 10) {
+                Write-Warning "Nie usunięto katalogu $Sciezka"
+                return
+            }
+            Start-Sleep -Milliseconds 250
+        }
+    }
+}
+
+# Dokładny rozmiar, kanał alfa, przezroczyste narożniki i kryjący środek, a przy podanym marginesie
+# także ostra krawędź kafla w połowie każdego boku.
+function Test-Obraz {
+    param([string]$Plik, [int]$Rozmiar, [int]$Margines)
+
+    $obraz = New-Object System.Drawing.Bitmap($Plik)
+    try {
+        if ($obraz.Width -ne $Rozmiar -or $obraz.Height -ne $Rozmiar) {
+            throw "Obraz $Plik ma $($obraz.Width)x$($obraz.Height) px zamiast $Rozmiar px"
+        }
+        if (-not [System.Drawing.Image]::IsAlphaPixelFormat($obraz.PixelFormat)) {
+            throw "Obraz $Plik nie ma kanału alfa"
+        }
+        $skraj = $Rozmiar - 1
+        foreach ($punkt in @(@(0, 0), @($skraj, 0), @(0, $skraj), @($skraj, $skraj))) {
+            if ($obraz.GetPixel($punkt[0], $punkt[1]).A -ne 0) {
+                throw "Obraz $Plik ma nieprzezroczysty narożnik"
+            }
+        }
+        $polowa = [int][Math]::Floor($Rozmiar / 2)
+        if ($obraz.GetPixel($polowa, $polowa).A -ne 255) {
+            throw "Obraz $Plik ma przezroczysty środek; rysunek się nie wyrenderował"
+        }
+        if ($Margines -gt 0) {
+            foreach ($glebokosc in ($Margines - 1), $Margines) {
+                $daleka = $skraj - $glebokosc
+                foreach ($punkt in @(@($polowa, $glebokosc), @($polowa, $daleka), @($glebokosc, $polowa), @($daleka, $polowa))) {
+                    $krycie = $obraz.GetPixel($punkt[0], $punkt[1]).A
+                    $poza = $glebokosc -lt $Margines
+                    if (($poza -and $krycie -gt 8) -or (-not $poza -and $krycie -lt 250)) {
+                        throw "Obraz $Plik ma rozmytą krawędź kafla: krycie $krycie w ($($punkt -join ', '))"
+                    }
+                }
+            }
+        }
+    }
+    finally {
+        $obraz.Dispose()
+    }
+}
+
+try {
+    $obrazy = [ordered]@{}
+    foreach ($rozmiar in ($rozmiaryIco + $rozmiaryLinux | Sort-Object -Unique)) {
+        if ($rozmiar -le $granicaMalego) {
+            $rysunek = Get-RysunekNaPikselach -Rysunek $rysunekMaly -Rozmiar $rozmiar
+            $png = Invoke-Render -Svg $rysunek.Svg -Rozmiar $rozmiar -Margines $rysunek.Margines
+        }
+        else {
+            $png = Invoke-Render -Svg ([IO.File]::ReadAllBytes($rysunekPelny)) -Rozmiar $rozmiar
+        }
+        $obrazy[[string]$rozmiar] = [byte[]]$png
+    }
+}
+finally {
+    Remove-Katalog $robocze
 }
 
 # Złożenie pliku ICO: nagłówek, tablica wpisów, a następnie obrazy zapisane jako PNG.
-$obrazy = @()
-foreach ($wariant in $warianty) {
-    $obraz = New-Obraz -Rozmiar $wariant.Rozmiar -Zwoje $wariant.Zwoje -Kropka $wariant.Kropka
-    $strumien = New-Object System.IO.MemoryStream
-    $obraz.Save($strumien, [System.Drawing.Imaging.ImageFormat]::Png)
-    $obrazy += , @{ Rozmiar = $wariant.Rozmiar; Dane = $strumien.ToArray() }
-    $strumien.Dispose()
-    $obraz.Dispose()
-}
-
 $plik = New-Object System.IO.MemoryStream
 $zapis = New-Object System.IO.BinaryWriter($plik)
 
 $zapis.Write([UInt16]0)                 # zarezerwowane
 $zapis.Write([UInt16]1)                 # typ: ikona
-$zapis.Write([UInt16]$obrazy.Count)
+$zapis.Write([UInt16]$rozmiaryIco.Count)
 
-$przesuniecie = 6 + 16 * $obrazy.Count
-foreach ($obraz in $obrazy) {
+$przesuniecie = 6 + 16 * $rozmiaryIco.Count
+foreach ($rozmiar in $rozmiaryIco) {
+    $dane = $obrazy[[string]$rozmiar]
     # Rozmiar 256 zapisuje się jako zero - jeden bajt nie pomieściłby tej liczby.
-    $bajtRozmiaru = if ($obraz.Rozmiar -ge 256) { 0 } else { $obraz.Rozmiar }
+    $bajtRozmiaru = if ($rozmiar -ge 256) { 0 } else { $rozmiar }
 
     $zapis.Write([Byte]$bajtRozmiaru)    # szerokość
     $zapis.Write([Byte]$bajtRozmiaru)    # wysokość
@@ -132,40 +228,28 @@ foreach ($obraz in $obrazy) {
     $zapis.Write([Byte]0)                # zarezerwowane
     $zapis.Write([UInt16]1)              # płaszczyzny
     $zapis.Write([UInt16]32)             # bitów na piksel
-    $zapis.Write([UInt32]$obraz.Dane.Length)
+    $zapis.Write([UInt32]$dane.Length)
     $zapis.Write([UInt32]$przesuniecie)
 
-    $przesuniecie += $obraz.Dane.Length
+    $przesuniecie += $dane.Length
 }
 
-foreach ($obraz in $obrazy) { $zapis.Write($obraz.Dane) }
+foreach ($rozmiar in $rozmiaryIco) { $zapis.Write($obrazy[[string]$rozmiar]) }
 
 $zapis.Flush()
-[System.IO.File]::WriteAllBytes($wynik, $plik.ToArray())
+[IO.File]::WriteAllBytes($wynikIco, $plik.ToArray())
 $zapis.Dispose()
 $plik.Dispose()
 
-# Ten sam znak jako PNG: ikona okna ładowana jest przez Avalonię, a dekodowanie formatu ICO
-# zależy tam od zaplecza graficznego, więc pewniejszy jest zwykły obraz.
-$png = Join-Path $repozytorium 'src\Cewka.App\Assets\cewka.png'
-$obrazPng = New-Obraz -Rozmiar 256 -Zwoje 4.0 -Kropka 0.085
-$obrazPng.Save($png, [System.Drawing.Imaging.ImageFormat]::Png)
-$obrazPng.Dispose()
+# Ikona okna poza Windows jako zwykły PNG: dekodowanie formatu ICO zależy tam od zaplecza graficznego.
+[IO.File]::WriteAllBytes($wynikPng, $obrazy['256'])
 
-# Osobne pliki PNG dla pakietów linuksowych. Motywy ikon w systemie Linux trzymają każdy
-# rozmiar w swoim katalogu, więc pojedynczy obraz 256 px nie wystarczy: pulpit skalowałby go
-# w dół i spirala straciłaby to, po co każdy rozmiar rysowany jest osobno.
-$katalogIkon = Join-Path $repozytorium 'packaging\linux\icons'
+# Każdy rozmiar we własnym pliku, bo motyw ikon Linuksa trzyma rozmiary w osobnych katalogach;
+# bez nich pulpit zmniejszałby duży obraz i mały rysunek nie trafiłby na panel.
 New-Item -ItemType Directory -Force $katalogIkon | Out-Null
-
-$dlaLinuksa = $warianty | Where-Object { $_.Rozmiar -ge 48 }
-foreach ($wariant in $dlaLinuksa) {
-    $obraz = New-Obraz -Rozmiar $wariant.Rozmiar -Zwoje $wariant.Zwoje -Kropka $wariant.Kropka
-    $obraz.Save((Join-Path $katalogIkon "cewka-$($wariant.Rozmiar).png"), [System.Drawing.Imaging.ImageFormat]::Png)
-    $obraz.Dispose()
+foreach ($rozmiar in $rozmiaryLinux) {
+    [IO.File]::WriteAllBytes((Join-Path $katalogIkon "cewka-$rozmiar.png"), $obrazy[[string]$rozmiar])
 }
 
-$rozmiary = ($warianty | ForEach-Object { $_.Rozmiar }) -join ', '
-$rozmiaryLinux = ($dlaLinuksa | ForEach-Object { $_.Rozmiar }) -join ', '
-Write-Output "Zapisano $wynik ($rozmiary px) oraz $png"
-Write-Output "Ikony dla pakietów linuksowych w $katalogIkon ($rozmiaryLinux px)"
+Write-Output "Zapisano $wynikIco ($($rozmiaryIco -join ', ') px) oraz $wynikPng"
+Write-Output "Ikony dla pakietów linuksowych w $katalogIkon ($($rozmiaryLinux -join ', ') px)"

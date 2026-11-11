@@ -82,6 +82,25 @@ public sealed class SettingsStoreTests
         Assert.Equal(10, store.Current.EqualiserGains.Length);
     });
 
+    /// <summary>Wskaźniki wycofano: zapisany wybór daje Płytę, a plik nie jest odrzucany razem z resztą ustawień.</summary>
+    [Fact]
+    public void WycofaneWskaznikiDajaPlyteBezUtratyUstawien() => Ui.Run(() =>
+    {
+        var store = Store("""{ "language": "en", "sceneVisual": "Meters" }""");
+
+        Assert.Equal("en", store.Current.Language);
+        Assert.Equal(SceneVisual.Disc, store.Current.SceneVisual);
+    });
+
+    /// <summary>Płyty nie da się pominąć w cyklu V; wycofane i powtórzone wartości znikają z listy.</summary>
+    [Fact]
+    public void ListaPominietychWizualizacjiBezPlytyIPowtorzen() => Ui.Run(() =>
+    {
+        var store = Store("""{ "sceneCycleOff": ["Disc", "Meters", "Night", "Night", "Cover"] }""");
+
+        Assert.Equal([SceneVisual.Night, SceneVisual.Cover], store.Current.SceneCycleOff);
+    });
+
     [Fact]
     public void NieczytelnyPlikZostajeZachowanyObokDomyslnych() => Ui.Run(() =>
     {

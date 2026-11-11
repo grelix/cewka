@@ -41,7 +41,10 @@ public sealed unsafe class MprisService : IMediaPanel
         long LengthMicroseconds,
         string TrackId,
         MediaPanelStatus Status,
-        double Volume);
+        double Volume,
+        bool Live = false,
+        string ArtUrl = "",
+        bool CanNavigate = true);
 
     private readonly nint _connection;
     private readonly string _identity;
@@ -216,6 +219,23 @@ public sealed unsafe class MprisService : IMediaPanel
         _changed = true;
     }
 
+    public void SetLive(bool live, string? artFile)
+    {
+        var art = MprisRules.ArtUrl(artFile);
+        if (_state.Live == live && _state.ArtUrl == art) return;
+
+        _state = _state with { Live = live, ArtUrl = art };
+        _changed = true;
+    }
+
+    public void SetNavigation(bool enabled)
+    {
+        if (_state.CanNavigate == enabled) return;
+
+        _state = _state with { CanNavigate = enabled };
+        _changed = true;
+    }
+
     public void SetStatus(MediaPanelStatus status)
     {
         if (_state.Status == status) return;
@@ -340,6 +360,9 @@ public sealed unsafe class MprisService : IMediaPanel
             AppendEntry(&changed, "PlaybackStatus", PlayerInterface, state);
             AppendEntry(&changed, "Metadata", PlayerInterface, state);
             AppendEntry(&changed, "Volume", PlayerInterface, state);
+            AppendEntry(&changed, "CanSeek", PlayerInterface, state);
+            AppendEntry(&changed, "CanGoNext", PlayerInterface, state);
+            AppendEntry(&changed, "CanGoPrevious", PlayerInterface, state);
 
             DBus.dbus_message_iter_close_container(&iter, &changed);
 
@@ -633,9 +656,15 @@ public sealed unsafe class MprisService : IMediaPanel
 
                 case "CanGoNext":
                 case "CanGoPrevious":
+                    AppendVariantBoolean(iter, state.CanNavigate);
+                    return true;
+
+                case "CanSeek":
+                    AppendVariantBoolean(iter, MprisRules.CanSeek(state.Live));
+                    return true;
+
                 case "CanPlay":
                 case "CanPause":
-                case "CanSeek":
                 case "CanControl":
                     AppendVariantBoolean(iter, true);
                     return true;
@@ -670,7 +699,8 @@ public sealed unsafe class MprisService : IMediaPanel
         DBus.dbus_message_iter_open_container(&variant, DBus.TypeArray, entrySignature.Pointer, &array);
 
         AppendMetadataPath(&array, "mpris:trackid", state.TrackId);
-        AppendMetadataInt64(&array, "mpris:length", state.LengthMicroseconds);
+        if (!state.Live) AppendMetadataInt64(&array, "mpris:length", state.LengthMicroseconds);
+        if (state.ArtUrl.Length > 0) AppendMetadataString(&array, "mpris:artUrl", state.ArtUrl);
 
         if (state.Title.Length > 0) AppendMetadataString(&array, "xesam:title", state.Title);
         if (state.Album.Length > 0) AppendMetadataString(&array, "xesam:album", state.Album);

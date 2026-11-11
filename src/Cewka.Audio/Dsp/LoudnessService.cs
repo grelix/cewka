@@ -17,10 +17,23 @@ public sealed class LoudnessRecord
 
     /// <summary>Największa bezwzględna wartość próbki; brak we wpisach zapisanych przed pomiarem szczytu.</summary>
     public double? SamplePeak { get; init; }
+
+    /// <summary>Szczyty obwiedni pliku; brak we wpisach zapisanych przed obwiednią.</summary>
+    public byte[]? EnvelopePeak { get; init; }
+
+    /// <summary>RMS obwiedni pliku, tej samej długości co <see cref="EnvelopePeak"/>.</summary>
+    public byte[]? EnvelopeRms { get; init; }
+
+    /// <summary>Obwiednia z wpisu; null, gdy jej brak albo zapis jest uszkodzony.</summary>
+    [JsonIgnore]
+    public FileEnvelope? Envelope =>
+        EnvelopePeak is { Length: > 0 } peak && EnvelopeRms is { } rms && rms.Length == peak.Length
+            ? new FileEnvelope(peak, rms)
+            : null;
 }
 
 /// <summary>Wynik analizy jednego pliku.</summary>
-public readonly record struct LoudnessMeasurement(double IntegratedLufs, double SamplePeak);
+public readonly record struct LoudnessMeasurement(double IntegratedLufs, double SamplePeak, FileEnvelope? Envelope = null);
 
 [JsonSourceGenerationOptions(WriteIndented = false, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(List<LoudnessRecord>))]
@@ -109,6 +122,9 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
 
     public TrackGain? GetTrackGain(QueueEntry entry)
     {
+        // Stacja nie ma pliku do odczytu ani końca, do którego dałoby się ją zmierzyć.
+        if (entry.IsLive) return null;
+
         entry.EnsureMetadata();
 
         // 1. Tagi. Ich wzmocnienie odnosi się do poziomu ReplayGain, więc inny poziom docelowy
@@ -138,6 +154,21 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
         // 3. Do kolejki; ten odsłuch zagra bez wyrównania.
         Enqueue(entry.Path);
         return null;
+    }
+
+    /// <summary>Obwiednia pliku z pamięci podręcznej; null, gdy jej jeszcze nie policzono.</summary>
+    public FileEnvelope? GetEnvelope(string path) =>
+        TryGetCached(path, out var record) ? record.Envelope : null;
+
+    /// <summary>
+    /// Obwiednia z pamięci podręcznej albo null: wtedy plik trafia do analizy w tle, a po jej końcu
+    /// zgłasza to <see cref="Measured"/>. Wpis sprzed obwiedni jest liczony ponownie, bez błędu.
+    /// </summary>
+    public FileEnvelope? RequestEnvelope(string path)
+    {
+        var envelope = GetEnvelope(path);
+        if (envelope is null) Enqueue(path);
+        return envelope;
     }
 
     /// <summary>Wzmocnienie z tagu ReplayGain dla zadanego poziomu docelowego, ograniczone szczytem.</summary>
@@ -225,6 +256,8 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
                 ModifiedTicks = info.LastWriteTimeUtc.Ticks,
                 IntegratedLufs = measurement.Value.IntegratedLufs,
                 SamplePeak = measurement.Value.SamplePeak,
+                EnvelopePeak = measurement.Value.Envelope?.Peak,
+                EnvelopeRms = measurement.Value.Envelope?.Rms,
             };
 
             _cache[path] = record;
@@ -254,6 +287,7 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
         using var decoder = DecoderFactory.Open(path, AnalysisRate, AnalysisChannels);
 
         var analyser = new LoudnessAnalyser(AnalysisRate, AnalysisChannels);
+        var envelope = new EnvelopeBuilder();
         var buffer = new float[8192 * AnalysisChannels];
 
         while (true)
@@ -264,12 +298,13 @@ public sealed class LoudnessService : ITrackGainSource, IDisposable
             var frames = decoder.Read(buffer);
             if (frames == 0) break;
             analyser.Add(buffer, frames);
+            envelope.Add(buffer, frames, AnalysisChannels);
         }
 
         // Wartości nieskończonej nie da się zapisać w JSON; zablokowałaby zapis całej pamięci podręcznej.
         var loudness = analyser.ComputeIntegratedLoudness();
         if (loudness is not { } lufs || !double.IsFinite(lufs) || !double.IsFinite(analyser.SamplePeak)) return null;
-        return new LoudnessMeasurement(lufs, analyser.SamplePeak);
+        return new LoudnessMeasurement(lufs, analyser.SamplePeak, envelope.Build());
     }
 
     private void Load()

@@ -50,10 +50,10 @@ public sealed class QueueState
 /// <summary>Otwarcie plików przerwane zamknięciem okna.</summary>
 public sealed class PendingOpenState
 {
-    /// <summary>Ścieżki w postaci przysłanej: pliki i foldery.</summary>
+    /// <summary>Ścieżki w postaci przysłanej: pliki i foldery, a przy <c>Playlist</c> plik listy.</summary>
     public List<string> Paths { get; set; } = [];
 
-    /// <summary>Akcja otwierania: <c>Outside</c>, <c>Add</c>, <c>Replace</c> albo <c>Append</c>.</summary>
+    /// <summary>Akcja otwierania: <c>Outside</c>, <c>Add</c>, <c>Replace</c>, <c>Append</c> albo <c>Playlist</c>.</summary>
     public string? Action { get; set; }
 }
 

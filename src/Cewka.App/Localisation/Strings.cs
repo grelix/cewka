@@ -26,6 +26,9 @@ public sealed class Strings : INotifyPropertyChanged
     /// <summary>Language used when a key is missing anywhere else.</summary>
     public const string FallbackCode = "pl";
 
+    /// <summary>Nazwa, pod którą kompilator zapisuje indeksator <c>this[string]</c>.</summary>
+    private const string IndexerName = "Item";
+
     /// <summary>
     /// Języki, w jakich program jest dostępny. Kolejność jest kolejnością na liście wyboru:
     /// polski i angielski na początku, dalej alfabetycznie po kodzie.
@@ -33,7 +36,8 @@ public sealed class Strings : INotifyPropertyChanged
     private static readonly string[] Codes =
     [
         "pl", "en",
-        "cs", "de", "el", "es", "fr", "hu", "id", "it", "nl", "pt", "ro", "ru", "tr", "uk", "vi",
+        "cs", "de", "el", "es", "fr", "hu", "id", "it", "ja", "nl", "pt", "pt-br", "ro", "ru", "tr", "uk", "vi",
+        "zh-hans",
     ];
 
     private Dictionary<string, string> _active = [];
@@ -87,8 +91,10 @@ public sealed class Strings : INotifyPropertyChanged
         CurrentCode = resolved;
         Numbers = BuildNumbers();
 
-        // Pusta nazwa własności odświeża wszystkie wiązania, w tym indeksator.
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(null));
+        // Wiązanie Avalonii z indeksatorem odświeża się tylko na nazwę „Item”, zgłoszenie bez
+        // nazwy pomija. Obserwatorzy w kodzie reagują na każde zgłoszenie. CurrentCode i Numbers
+        // czyta się na żądanie, więc to zgłoszenie ich nie obejmuje.
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(IndexerName));
     }
 
     private static string Resolve(string? code)

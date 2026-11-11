@@ -105,7 +105,7 @@ public sealed class SettingsAccessibilityTests
 
             var rows = settings.Shortcuts;
 
-            Assert.Equal(19, rows.Count);
+            Assert.Equal(22, rows.Count);
             Assert.Equal(Strings.Current["KeySpace"], rows[0].Keys);
             Assert.All(rows, row =>
             {
@@ -114,6 +114,7 @@ public sealed class SettingsAccessibilityTests
             });
             Assert.Contains(rows, row => row.Keys == "S");
             Assert.Contains(rows, row => row.Keys == "R");
+            Assert.Contains(rows, row => row.Keys.StartsWith("V ", StringComparison.Ordinal));
         });
     }
 }

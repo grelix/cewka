@@ -37,6 +37,7 @@ public class NativeLayerTests
     [Fact]
     public void NativeLibraryMatchesTheExpectedInterface()
     {
+        Assert.Equal(3, NativeAudio.AbiVersion);
         NativeAudio.EnsureCompatible();
     }
 

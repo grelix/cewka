@@ -1,12 +1,4 @@
-# Testy, sprawdziany zachowania i porównanie wyglądu na Linuksie oraz testy na Windowsie.
-#
-# Osobny plik, bo tych samych testów potrzebuje każda zmiana w gałęzi głównej (build.yml)
-# i każde wydanie (release.yml). Wydanie nie może powstać z kodu, który ich nie przeszedł.
-#
-# Warstwa natywna nie jest trzymana w repozytorium, więc każdy przebieg kompiluje ją od zera
-# ze źródła i nie może trafić na bibliotekę z poprzedniej wersji.
-
-name: Testy
+name: Tests
 
 on:
   workflow_call:
@@ -17,10 +9,10 @@ permissions:
 
 jobs:
   linux:
-    name: Linux — testy i zrzuty
+    name: Linux
     runs-on: ubuntu-latest
 
-    # Puste wyjście silnika: maszyna nie ma karty dźwiękowej, a nic nie ma grać przez urządzenie.
+    # No sound card on the runner.
     env:
       CEWKA_NULL_AUDIO: '1'
 
@@ -29,28 +21,26 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '10.0.x'
 
-      - name: Zgodność numerów wersji
+      - name: Check version numbers
         run: ./tools/sprawdz-wersje.sh
 
-      - name: Zależności rysowania
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libfontconfig1
 
-      - name: Biblioteka natywna
+      - name: Build native library
         run: ./native/build-linux.sh
 
-      - name: Testy
+      - name: Test
         run: dotnet test Cewka.sln --configuration Release
 
-      - name: Materiał dźwiękowy
+      - name: Generate audio samples
         run: dotnet run --project tools/Cewka.Snapshots -c Release -- --material artifacts/material
 
-      - name: Sprawdziany zachowania
-        # Bez rysowania: stały rozmiar okna przy chowaniu korektora i kolejki, kolumna i nakładka
-        # kolejki, niskie okna, tło bez okładki oraz zastąpienie kolejki plikiem z zewnątrz.
+      - name: Check window behaviour
         run: |
           dotnet run --project tools/Cewka.Snapshots -c Release -- \
             artifacts/zrzuty \
@@ -58,7 +48,7 @@ jobs:
             artifacts/material/probka-krotka.wav \
             --sprawdzenia
 
-      - name: Zrzuty i porównanie z odniesieniem
+      - name: Compare screenshots
         run: |
           dotnet run --project tools/Cewka.Snapshots -c Release -- \
             artifacts/zrzuty \
@@ -66,45 +56,39 @@ jobs:
             artifacts/material/probka-krotka.wav \
             --porownaj tests/odniesienie
 
-      - name: Czy powstały nowe obrazy odniesienia
+      # A missing reference image is created and passes locally. Here the checkout is thrown
+      # away, so the run has to fail and hand the new images over for review.
+      - name: Look for new reference images
         if: always()
-        id: odniesienie
+        id: reference
         run: |
           if [ -n "$(git status --porcelain tests/odniesienie)" ]; then
-            echo "nowe=tak" >> "$GITHUB_OUTPUT"
-            echo "Katalog odniesienia zmienił się w tym przebiegu:"
+            echo "new=true" >> "$GITHUB_OUTPUT"
             git status --porcelain tests/odniesienie
-            echo
-            echo "Obrazy odniesienia muszą powstać na tej samej maszynie, która je potem"
-            echo "porównuje — rasteryzacja w Linuksie różni się od tej w Windowsie."
-            echo "Należy pobrać artefakt 'odniesienie', przejrzeć go i dodać do repozytorium."
           fi
 
-      - name: Odłóż obrazy odniesienia
-        if: always() && steps.odniesienie.outputs.nowe == 'tak'
+      - name: Upload new reference images
+        if: always() && steps.reference.outputs.new == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: odniesienie
+          name: reference-images
           path: tests/odniesienie
 
-      # Brak wzorca w lokalnym przebiegu tworzy go i przechodzi, tu ma zatrzymać przebieg:
-      # checkout jest ulotny, więc wzorzec powstawałby od nowa za każdym razem, a porównanie
-      # tego zrzutu niczego by nie pilnowało.
-      - name: Wymagaj kompletu odniesienia
-        if: always() && steps.odniesienie.outputs.nowe == 'tak'
+      - name: Fail on missing reference images
+        if: always() && steps.reference.outputs.new == 'true'
         run: |
-          echo "BLAD: brak obrazu odniesienia — porownanie nie pilnuje wygladu." >&2
+          echo "Reference images are missing. Review the reference-images artifact and commit it." >&2
           exit 1
 
-      - name: Odłóż zrzuty i obrazy różnicowe
+      - name: Upload screenshots
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: zrzuty
+          name: screenshots
           path: artifacts/zrzuty
 
   windows:
-    name: Windows — testy
+    name: Windows
     runs-on: windows-latest
 
     env:
@@ -115,13 +99,11 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '10.0.x'
 
-      - name: Biblioteka natywna
-        # Skrypt odnajduje kompilator przez vswhere; obraz maszyny ma Visual Studio 2022
-        # ze składnikiem narzędzi C++.
+      - name: Build native library
         run: native\build-windows.cmd
         shell: cmd
 
-      - name: Testy
+      - name: Test
         run: dotnet test Cewka.sln --configuration Release

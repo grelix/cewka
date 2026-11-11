@@ -22,7 +22,7 @@ internal static unsafe partial class NativeAudio
     /// Wersja zestawu funkcji, której oczekuje ten kod; ta sama stała jest w
     /// <c>native/cewka_audio.c</c>. Zmienia się przy każdej zmianie sygnatur lub znaczenia eksportów.
     /// </summary>
-    internal const int AbiVersion = 2;
+    internal const int AbiVersion = 3;
 
     [LibraryImport(Library, EntryPoint = "cewka_abi_version")]
     private static partial int NativeAbiVersion();
@@ -172,6 +172,23 @@ internal static unsafe partial class NativeAudio
 
     [LibraryImport(Library, EntryPoint = "cewka_decoder_close")]
     internal static partial void DecoderClose(nint handle);
+
+    // ---------- dekoder MP3 na żywo ----------
+
+    [LibraryImport(Library, EntryPoint = "cewka_mp3_stream_open")]
+    internal static partial int Mp3StreamOpen(out nint handle);
+
+    [LibraryImport(Library, EntryPoint = "cewka_mp3_stream_reset")]
+    internal static partial void Mp3StreamReset(nint handle);
+
+    [LibraryImport(Library, EntryPoint = "cewka_mp3_stream_close")]
+    internal static partial void Mp3StreamClose(nint handle);
+
+    /// <summary>Dekoduje najwyżej jedną ramkę i zwraca ramki PCM; −1 przy złych argumentach.</summary>
+    [LibraryImport(Library, EntryPoint = "cewka_mp3_stream_decode")]
+    internal static partial int Mp3StreamDecode(
+        nint handle, byte* input, int inputSize, float* output, int outputCapacitySamples,
+        out int consumed, out int sampleRate, out int channels, out int bitrateKbps);
 
     // ---------- resampler ----------
 

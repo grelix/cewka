@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Headless;
+using Cewka.App.Models;
 using Cewka.Audio.Devices;
 using Cewka.Platform;
 using Xunit;
@@ -25,6 +26,9 @@ internal static class TestEnvironment
         Directory.CreateDirectory(Root);
         AppPaths.Redirect(Root);
         AudioDevice.UseNullOutput = true;
+
+        // Testy układu sceny liczą kadr na całym ekranie; margines ma własne testy.
+        ScreenMargin.Default = SceneMargin.None;
     }
 
     /// <summary>Nowy, pusty katalog na pliki jednego testu.</summary>
@@ -39,9 +43,14 @@ internal static class TestEnvironment
 /// <summary>Aplikacja bez okna i bez urządzenia graficznego, z prawdziwym rysowaniem Skia.</summary>
 public static class TestApp
 {
+    /// <summary>
+    /// Zegar renderowania tyka sam raz na sekundę, a nie 60 razy: klatki wymuszają testy
+    /// (<c>ForceRenderTimerTick</c>). Przy 60 klatkach i wolnym rysowaniu programowym tyknięcia
+    /// zalewały kolejkę dyspozytora szybciej, niż dało się je wykonać (zob. <c>RenderTimerTests</c>).
+    /// </summary>
     public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>()
         .UseSkia()
-        .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+        .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false, Fps = 1 })
         .With(App.FontOptions);
 }
 
@@ -59,6 +68,31 @@ public static class Ui
 
     public static T Run<T>(Func<T> action) =>
         Session.Value.Dispatch(action, CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Test, który czeka przez <c>await</c>: w tym czasie pętla dyspozytora działa, więc
+    /// prawdziwe zegary (<c>DispatcherTimer</c>) tykają same.
+    /// </summary>
+    public static void RunAsync(Func<Task> action) =>
+        Session.Value.Dispatch<bool>(async () =>
+        {
+            await action();
+            return true;
+        }, CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <summary>Czeka z oddaniem pętli dyspozytora, dopóki warunek nie zostanie spełniony.</summary>
+    public static async Task<bool> UntilAsync(Func<bool> condition, int milliseconds = 5000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(milliseconds);
+
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline) return false;
+            await Task.Delay(10);
+        }
+
+        return true;
+    }
 
     /// <summary>
     /// Wykonuje zaległe zadania dyspozytora, dopóki warunek nie zostanie spełniony. Wołane

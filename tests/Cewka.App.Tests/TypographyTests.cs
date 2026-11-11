@@ -28,8 +28,7 @@ public sealed class TypographyTests
         App.Settings.Current.Window = null;
         var h = new PlayerHarness(s =>
         {
-            s.PanelOpen = true;
-            s.QueueOpen = true;
+            s.QueuePinned = true;
             s.WindowControls = WindowControlsPosition.Right;
         });
         var window = new MainWindow(false, h.Player) { Width = 1300, Height = 760 };
@@ -37,12 +36,17 @@ public sealed class TypographyTests
 
         try
         {
-            h.Player.OpenPaths(Enumerable.Range(0, 3).Select(i => h.Track("t" + i)));
+            h.OpenPaths(Enumerable.Range(0, 3).Select(i => h.Track("t" + i)));
             h.PumpUntil(() => h.Player.IsPlaying);
             h.Player.Pause();
             Settle();
 
-            var texts = window.GetVisualDescendants().OfType<TextBlock>().ToList();
+            // Teksty okna korektora i efektów też należą do okna odtwarzacza.
+            h.Player.PanelOpen = true;
+            Settle();
+
+            var texts = window.GetVisualDescendants().OfType<TextBlock>()
+                .Concat(window.OpenSoundWindow!.GetVisualDescendants().OfType<TextBlock>()).ToList();
             check(texts);
         }
         finally { window.Close(); }

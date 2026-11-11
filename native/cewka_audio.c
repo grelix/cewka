@@ -38,7 +38,7 @@
     kopia moze trafic do nowego programu, a wywolanie funkcji o innej sygnaturze konczy sie
     awaria procesu zamiast bledu.
 */
-#define CEWKA_ABI_VERSION 2
+#define CEWKA_ABI_VERSION 3
 
 CEWKA_API int cewka_abi_version(void)
 {
@@ -697,6 +697,103 @@ CEWKA_API void cewka_decoder_close(void* handle)
     cewka_decoder* self = (cewka_decoder*)handle;
     ma_decoder_uninit(&self->decoder);
     ma_free(self, NULL);
+}
+
+/* ============================================================================
+   Dekoder MP3 na zywo
+
+   Pchany ramka po ramce, bez wywolan zwrotnych. Odczyt przez onRead nie nadaje sie
+   do strumienia: 0 bajtow ustawia trwaly koniec, dr_mp3 czyta na zapas do 64 KB,
+   a przy zmianie kanalow miesza ramki. Tu format zna kazda ramka z osobna.
+   ============================================================================ */
+
+typedef struct
+{
+    ma_dr_mp3dec dec;
+    ma_int16     pcm[MA_DR_MP3_MAX_SAMPLES_PER_FRAME];
+} cewka_mp3_stream;
+
+CEWKA_API int cewka_mp3_stream_open(void** outHandle)
+{
+    if (outHandle == NULL) {
+        return (int)MA_INVALID_ARGS;
+    }
+    *outHandle = NULL;
+
+    cewka_mp3_stream* self = (cewka_mp3_stream*)ma_malloc(sizeof(cewka_mp3_stream), NULL);
+    if (self == NULL) {
+        return (int)MA_OUT_OF_MEMORY;
+    }
+
+    memset(self, 0, sizeof(*self));
+    ma_dr_mp3dec_init(&self->dec);
+
+    *outHandle = self;
+    return (int)MA_SUCCESS;
+}
+
+CEWKA_API void cewka_mp3_stream_reset(void* handle)
+{
+    if (handle == NULL) return;
+
+    /* Bez zapamietanego naglowka nastepna ramka wyzeruje caly stan dekodera. */
+    ma_dr_mp3dec_init(&((cewka_mp3_stream*)handle)->dec);
+}
+
+CEWKA_API void cewka_mp3_stream_close(void* handle)
+{
+    ma_free(handle, NULL);
+}
+
+/*
+    Dekoduje najwyzej jedna ramke. Zwraca ramki PCM, -1 przy zlych argumentach.
+    consumed = 0: za malo danych. consumed > 0 przy wyniku 0: smieci albo ramka bez rezerwy bitow.
+    Pulapka: krotka porcja zostaje zjedzona jako smieci; wejscie co najmniej 6000 B.
+*/
+CEWKA_API int cewka_mp3_stream_decode(void*           handle,
+                                      const ma_uint8* input,
+                                      int             inputSize,
+                                      float*          output,
+                                      int             outputCapacitySamples,
+                                      int*            consumed,
+                                      int*            sampleRate,
+                                      int*            channels,
+                                      int*            bitrateKbps)
+{
+    if (handle == NULL || inputSize < 0 || (input == NULL && inputSize > 0) || output == NULL ||
+        outputCapacitySamples < MA_DR_MP3_MAX_SAMPLES_PER_FRAME ||
+        consumed == NULL || sampleRate == NULL || channels == NULL || bitrateKbps == NULL) {
+        return -1;
+    }
+
+    *consumed = 0;
+    *sampleRate = 0;
+    *channels = 0;
+    *bitrateKbps = 0;
+
+    /* Pusta porcja zerowalaby stan dekodera tak samo jak smieci. */
+    if (inputSize == 0) {
+        return 0;
+    }
+
+    cewka_mp3_stream* self = (cewka_mp3_stream*)handle;
+
+    ma_dr_mp3dec_frame_info info;
+    memset(&info, 0, sizeof(info));
+
+    int frames = ma_dr_mp3dec_decode_frame(&self->dec, input, inputSize, self->pcm, &info);
+
+    *consumed = info.frame_bytes;
+    if (frames <= 0) {
+        return 0;
+    }
+
+    *sampleRate = info.sample_rate;
+    *channels = info.channels;
+    *bitrateKbps = info.bitrate_kbps;
+
+    ma_dr_mp3_s16_to_f32(output, self->pcm, (ma_uint64)frames * (ma_uint64)info.channels);
+    return frames;
 }
 
 /* ============================================================================

@@ -34,6 +34,8 @@ public sealed class SpectrumAnalyser : IAudioProcessor
     private int _channels = 2;
     private int _sampleRate = 48000;
 
+    private int _outputLatencyFrames;
+
     private float _level;
     private float _low;
     private float _mid;
@@ -60,6 +62,21 @@ public sealed class SpectrumAnalyser : IAudioProcessor
             _hann[i] = 0.5f * (1 - MathF.Cos(2 * MathF.PI * i / (size - 1)));
     }
 
+    /// <summary>Pierścień próbek L/P po korektorze, czytany przez <see cref="SceneAudio"/>.</summary>
+    public SampleRing Ring { get; } = new();
+
+    /// <summary>
+    /// Szacowane opóźnienie między zapisem do pierścienia a dźwiękiem z głośnika, w ramkach.
+    /// Ustawia silnik po otwarciu urządzenia; odczyty cofają się o tyle, żeby obraz nie wyprzedzał dźwięku.
+    /// </summary>
+    public int OutputLatencyFrames
+    {
+        get => Volatile.Read(ref _outputLatencyFrames);
+        set => Volatile.Write(ref _outputLatencyFrames, Math.Max(0, value));
+    }
+
+    public int SampleRate => _sampleRate;
+
     /// <summary>Overall envelope, 0 to 1.</summary>
     public float Level => _level;
 
@@ -82,6 +99,8 @@ public sealed class SpectrumAnalyser : IAudioProcessor
 
     public void Process(Span<float> buffer, int frames)
     {
+        Ring.Write(buffer, frames, _channels);
+
         for (var frame = 0; frame < frames; frame++)
         {
             // Mono sum: the display shows the piece, not the stereo image.
@@ -218,6 +237,7 @@ public sealed class SpectrumAnalyser : IAudioProcessor
 
     public void Reset()
     {
+        Ring.Clear();
         Array.Clear(_window);
         _writeIndex = 0;
         _framesSinceAnalysis = 0;

@@ -20,7 +20,8 @@ public sealed class LanguageFileTests
     private static readonly string[] Codes =
     [
         "pl", "en",
-        "cs", "de", "el", "es", "fr", "hu", "id", "it", "nl", "pt", "ro", "ru", "tr", "uk", "vi",
+        "cs", "de", "el", "es", "fr", "hu", "id", "it", "ja", "nl", "pt", "pt-br", "ro", "ru", "tr", "uk", "vi",
+        "zh-hans",
     ];
 
     /// <summary>Języki poza wzorcowym — te, które podlegają porównaniu z polskim.</summary>
@@ -38,6 +39,11 @@ public sealed class LanguageFileTests
         "ColoursSubtle", "ColoursRecommended", "ColoursIntense",
         "QualityOff", "QualityStandard", "QualityHigh",
         "LatencyLow", "LatencyBalanced", "LatencySafe",
+        "SceneVisualDisc", "SceneVisualCover", "SceneVisualNight",
+        "SceneVisualSpectrum", "SceneVisualWaveform", "SceneVisualHorizon", "SceneVisualAurora",
+        "SpectrumShapeBars", "SpectrumShapeCurve", "WaveKindLine", "WaveKindStereo", "DiscRingOff", "DiscRingOn",
+        "SceneTextSizeNormal", "SceneTextSizeLarge", "SceneTextSizeExtraLarge",
+        "SceneMarginNone", "SceneMarginSmall", "SceneMarginLarge",
     ];
 
     /// <summary>
@@ -67,19 +73,22 @@ public sealed class LanguageFileTests
     private const int PaletteLabelLimit = 20;
 
     /// <summary>
-    /// Nazwy zakładek w pionowym menu okna ustawień, które ma stałą szerokość 188 px.
+    /// Nazwy zakładek w pionowym menu okna ustawień, które ma stałą szerokość 200 px.
     /// Dotąd nie pilnowało ich nic, a doszła kolejna zakładka.
     /// </summary>
     private static readonly string[] SectionLabels =
     [
-        "SectionAppearance", "SectionLanguage", "SectionAudio",
-        "SectionPlayback", "SectionSystem", "SectionAbout",
+        "SectionGeneral", "SectionAppearance", "SectionLanguage", "SectionSystem",
+        "SectionAudio", "SectionAudioOutput", "SectionEqualiser", "SectionPlayback",
+        "SectionScene", "SectionFullScreen", "SectionSceneVisuals", "SectionSceneTv",
+        "SectionRadio", "SectionRadioStations", "SectionRadioLogos",
+        "SectionAbout", "SectionAboutInfo", "SectionLicences",
     ];
 
     /// <summary>
     /// Wartość zmierzona na renderze, nie wyliczona z szerokości menu. Najdłuższa istniejąca
     /// nazwa — hiszpańskie „Integración con el sistema", 26 znaków — zajmuje w menu około 160
-    /// z 188 px i mieści się w całości. Na tekst zostaje około 160 px, czyli mniej więcej
+    /// z 200 px i mieści się w całości. Na tekst zostaje około 160 px, czyli mniej więcej
     /// dwadzieścia osiem znaków przy tej wielkości pisma.
     /// </summary>
     private const int SectionLabelLimit = 28;
@@ -97,13 +106,16 @@ public sealed class LanguageFileTests
         ["hu"] = "Magyar",
         ["id"] = "Bahasa Indonesia",
         ["it"] = "Italiano",
+        ["ja"] = "日本語",
         ["nl"] = "Nederlands",
-        ["pt"] = "Português",
+        ["pt"] = "Português (Portugal)",
+        ["pt-br"] = "Português (Brasil)",
         ["ro"] = "Română",
         ["ru"] = "Русский",
         ["tr"] = "Türkçe",
         ["uk"] = "Українська",
         ["vi"] = "Tiếng Việt",
+        ["zh-hans"] = "简体中文",
     };
 
     private static string Directory => Path.Combine(AppContext.BaseDirectory, "Languages");
@@ -290,6 +302,9 @@ public sealed class LanguageFileTests
     /// <summary>Teksty z jednym symbolem zastępczym {0}.</summary>
     private static readonly string[] OneArgumentKeys = ["PlaylistSaved", "PlaylistMissing", "VolumeLevel", "EffectStrength"];
 
+    /// <summary>Teksty z dwoma symbolami zastępczymi {0} i {1}.</summary>
+    private static readonly string[] TwoArgumentKeys = ["SeekPositionValue"];
+
     [Theory]
     [MemberData(nameof(All))]
     public void SymboleZastepczePrzetrwalyTlumaczenie(string code)
@@ -308,6 +323,14 @@ public sealed class LanguageFileTests
             Assert.True(strings.TryGetValue(key, out var text), $"{code}.json nie ma klucza {key}");
             Assert.Contains("{0}", text);
             Assert.Contains("7", string.Format(text, 7));
+        }
+
+        foreach (var key in TwoArgumentKeys)
+        {
+            Assert.True(strings.TryGetValue(key, out var text), $"{code}.json nie ma klucza {key}");
+            var formatted = string.Format(text, "0:39", "3:59");
+            Assert.Contains("0:39", formatted);
+            Assert.Contains("3:59", formatted);
         }
     }
 
@@ -373,26 +396,29 @@ public sealed class LanguageFileTests
     }
 
     /// <summary>
-    /// Każdy znak w każdym tekście musi mieć glif w osadzonym foncie interfejsu.
+    /// Każdy znak w każdym tekście musi mieć glif w którymś z osadzonych fontów łańcucha pisma
+    /// interfejsu dla tego języka.
     ///
-    /// <para>Zakres znaków odczytywany jest z samego fontu, bo znak bez glifu wyświetla się jako
+    /// <para>Zakres znaków odczytywany jest z samych fontów, bo znak bez glifu wyświetla się jako
     /// pusty prostokąt, widoczny tylko na ekranie w danym języku.</para>
     /// </summary>
     [Theory]
     [MemberData(nameof(All))]
     public void TekstyUzywajaWylacznieZnakowObecnychWFoncie(string code)
     {
-        var font = FontCoverage.Load(Path.Combine(AppContext.BaseDirectory, "Fonts", "Cantarell-Regular.otf"));
+        var fonts = Themes.UiFonts.Families(code)
+            .Select(family => FontCoverage.Load(Path.Combine(AppContext.BaseDirectory, "Fonts", FontFile(family))))
+            .ToList();
 
         // Zabezpieczenie przed odczytem, który „udał się" i nie znalazł niczego: przy pustym
         // zbiorze każdy tekst przeszedłby jako pozbawiony znaków spoza fontu.
-        Assert.True(font.GlyphCount > 500, $"odczyt tablicy znaków fontu dał tylko {font.GlyphCount} pozycji");
+        Assert.True(fonts[0].GlyphCount > 500, $"odczyt tablicy znaków fontu dał tylko {fonts[0].GlyphCount} pozycji");
 
         var strings = Load(code);
 
         var offending = strings
             .SelectMany(pair => pair.Value.Select(character => (pair.Key, character)))
-            .Where(item => !char.IsControl(item.character) && !font.HasGlyph(item.character))
+            .Where(item => !char.IsControl(item.character) && !fonts.Any(font => font.HasGlyph(item.character)))
             .Select(item => $"{item.Key}: U+{(int)item.character:X4} '{item.character}'")
             .Distinct()
             .ToArray();
@@ -400,5 +426,37 @@ public sealed class LanguageFileTests
         Assert.True(
             offending.Length == 0,
             $"{code}.json ma znaki, których nie ma w foncie: {string.Join(", ", offending)}");
+    }
+
+    /// <summary>Plik odmiany zwykłej rodziny Noto: „Noto Sans SC” leży w NotoSansSC-Regular.otf.</summary>
+    private static string FontFile(string family)
+    {
+        var stem = family.Replace(" ", string.Empty);
+        var directory = Path.Combine(AppContext.BaseDirectory, "Fonts");
+        return Path.GetFileName(System.IO.Directory.GetFiles(directory, stem + "-Regular.*").Single());
+    }
+
+    /// <summary>
+    /// Każda rodzina z łańcucha pisma interfejsu leży w Assets/Fonts w odmianie zwykłej i pogrubionej,
+    /// a jej nazwa w pliku zgadza się z nazwą w łańcuchu. Literówka w nazwie rodziny nie wywraca programu,
+    /// tylko po cichu daje font systemowy.
+    /// </summary>
+    [Fact]
+    public void KazdaRodzinaPismaJestOsadzonaWObuOdmianach()
+    {
+        var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var fonts = Path.Combine(root, "src", "Cewka.App", "Assets", "Fonts");
+
+        foreach (var family in Themes.UiFonts.Families("ja").Union(Themes.UiFonts.Families("pl")))
+        {
+            var stem = family.Replace(" ", string.Empty);
+            foreach (var weight in (string[])["Regular", "Bold"])
+            {
+                var file = System.IO.Directory.GetFiles(fonts, $"{stem}-{weight}.*").SingleOrDefault();
+                Assert.True(file is not null, $"brak pliku {stem}-{weight} dla rodziny {family}");
+                using var typeface = SkiaSharp.SKTypeface.FromFile(file!);
+                Assert.Equal(family, typeface.FamilyName);
+            }
+        }
     }
 }

@@ -1,4 +1,5 @@
 using Cewka.App.Models;
+using Cewka.App.Radio;
 using Cewka.App.Services;
 using Cewka.App.ViewModels;
 using Cewka.Audio;
@@ -20,7 +21,11 @@ internal sealed class PlayerHarness : IDisposable
 
     private readonly Dictionary<string, double> _lengths = new(StringComparer.Ordinal);
 
-    public PlayerHarness(Action<AppSettings>? configure = null, string? directory = null)
+    /// <param name="configure">Ustawienia przed utworzeniem modelu widoku.</param>
+    /// <param name="directory">Katalog poprzedniego uruchomienia; bez niego nowy.</param>
+    /// <param name="random">Źródło losowości silnika; z ziarnem porażkę losowej kolejności da się powtórzyć.</param>
+    /// <param name="realDisk">Model widoku sprawdza ścieżki sondą produkcyjną, bez <see cref="PathChecking"/>.</param>
+    public PlayerHarness(Action<AppSettings>? configure = null, string? directory = null, Random? random = null, bool realDisk = false, Func<RadioCatalog>? radioCatalog = null, RadioLogoService? radioLogos = null)
     {
         Directory = directory ?? TestEnvironment.NewDirectory();
 
@@ -35,15 +40,50 @@ internal sealed class PlayerHarness : IDisposable
             var output = new TestOutput(1024, Rate, Channels);
             Outputs.Add(output);
             return output;
-        });
+        }, random);
 
         Engine.OpenDecoder = (path, _, _) => _lengths.TryGetValue(path, out var seconds)
             ? new SyntheticDecoder((long)(seconds * Rate), 0.1f, Channels, Rate)
             : throw new FileNotFoundException("Brak pliku.", path);
 
-        Loudness = new LoudnessService(System.IO.Path.Combine(Directory, "loudness.json"), (_, _) => null);
-        Player = new MainViewModel(Settings, Engine, Loudness, QueueFile);
+        // Stacje bez sieci: sesja i dekoder z atrap, zdarzenia podaje test.
+        Engine.OpenLiveSession = source =>
+        {
+            var session = new FakeLiveSession(source);
+            Sessions.Add(session);
+            return session;
+        };
+        Engine.OpenLiveDecoder = (_, _, _) => new ScriptedLiveDecoder().Feed(long.MaxValue / 2);
+
+        Loudness = new LoudnessService(System.IO.Path.Combine(Directory, "loudness.json"), (path, token) => Measurement?.Invoke(path, token));
+        Player = new MainViewModel(Settings, Engine, Loudness, QueueFile, realDisk ? null : new PathProbe(
+            path =>
+            {
+                PathChecking?.Invoke(path);
+                return File.Exists(path);
+            },
+            path =>
+            {
+                PathChecking?.Invoke(path);
+                return System.IO.Directory.Exists(path);
+            }),
+            RadioFile, radioCatalog ?? DefaultRadioCatalog, radioLogos);
+        Player.Radio.StepDelay = TimeSpan.Zero;
     }
+
+    public string RadioFile => System.IO.Path.Combine(Directory, "radio.json");
+
+    /// <summary>Sesje stacji otwarte przez silnik, w kolejności otwarcia.</summary>
+    public List<FakeLiveSession> Sessions { get; } = [];
+
+    /// <summary>Mała lista: dwie stacje w Polsce, jedna o tej samej nazwie w USA i jedna w Wielkiej Brytanii.</summary>
+    public static RadioCatalog DefaultRadioCatalog() => new(
+    [
+        Tests.Radio.RadioTestData.Station("pl-a", "Alfa FM", "PL", categories: [RadioCategories.Hits]),
+        Tests.Radio.RadioTestData.Station("pl-b", "Beta FM", "PL", categories: [RadioCategories.NewsTalk]),
+        Tests.Radio.RadioTestData.Station("us-a", "Alfa FM", "US", categories: [RadioCategories.Rock]),
+        Tests.Radio.RadioTestData.Station("gb-a", "Gamma FM", "GB", categories: [RadioCategories.Hits]),
+    ]);
 
     public string Directory { get; }
 
@@ -55,7 +95,13 @@ internal sealed class PlayerHarness : IDisposable
 
     public LoudnessService Loudness { get; }
 
+    /// <summary>Pomiar głośności i obwiedni dla plików testu; domyślnie brak, więc analiza niczego nie zapisuje.</summary>
+    public Func<string, CancellationToken, LoudnessMeasurement?>? Measurement { get; set; }
+
     public MainViewModel Player { get; }
+
+    /// <summary>Wołane przed każdym sprawdzeniem ścieżki, np. żeby udać wolny dysk sieciowy.</summary>
+    public Action<string>? PathChecking { get; set; }
 
     public List<TestOutput> Outputs { get; } = [];
 
@@ -105,6 +151,15 @@ internal sealed class PlayerHarness : IDisposable
         return path;
     }
 
+    /// <summary>Jak <see cref="Track"/>, z tytułem, wykonawcą i albumem w tagach.</summary>
+    public string TaggedTrack(string name, string title, string artist, string album, double seconds = 60)
+    {
+        var path = Track(name, seconds);
+        var track = new ATL.Track(path) { Title = title, Artist = artist, Album = album };
+        if (!track.Save()) throw new IOException($"Nie zapisano tagów: {path}");
+        return path;
+    }
+
     private static void WriteWav(string path)
     {
         using var writer = new BinaryWriter(File.Create(path));
@@ -126,6 +181,27 @@ internal sealed class PlayerHarness : IDisposable
         writer.Write(new byte[dataBytes]);
     }
 
+    /// <summary>Otwiera i czeka na dołożenie, bo ścieżki sprawdzają się poza wątkiem interfejsu.</summary>
+    public void OpenPaths(IEnumerable<string> paths, bool replace = true) => Settle(Player.OpenPaths(paths, replace));
+
+    /// <inheritdoc cref="OpenPaths"/>
+    public void AddPaths(IEnumerable<string> paths) => Settle(Player.AddPaths(paths));
+
+    /// <inheritdoc cref="OpenPaths"/>
+    public void OpenFromOutside(IEnumerable<string> paths) => Settle(Player.OpenFromOutside(paths));
+
+    /// <summary>Przywraca kolejkę i czeka, aż wróci.</summary>
+    public void RestoreQueueState() => Settle(Player.RestoreQueueState());
+
+    /// <summary>Wczytuje listę i czeka, aż zastąpi kolejkę.</summary>
+    public void LoadPlaylist(string path) => Settle(Player.LoadPlaylist(path));
+
+    private static void Settle(Task task)
+    {
+        if (!Ui.WaitUntil(() => task.IsCompleted, 20000)) throw new TimeoutException("Otwieranie się nie skończyło.");
+        task.GetAwaiter().GetResult();
+    }
+
     /// <summary>Pompuje wyjście i dyspozytora, aż warunek będzie spełniony.</summary>
     public bool PumpUntil(Func<bool> condition, int milliseconds = 5000)
     {
@@ -138,6 +214,19 @@ internal sealed class PlayerHarness : IDisposable
             if (condition()) return true;
             if (DateTime.UtcNow > deadline) return false;
             Thread.Sleep(2);
+        }
+    }
+
+    /// <summary>
+    /// Pompuje wyjście i dyspozytora przez stałą liczbę okresów, bez zegara: do kontroli, że coś się
+    /// nie stało, niezależnie od szybkości komputera.
+    /// </summary>
+    public void PumpPeriods(int periods)
+    {
+        for (var i = 0; i < periods; i++)
+        {
+            if (Outputs.Count > 0) Outputs[^1].Pump();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         }
     }
 

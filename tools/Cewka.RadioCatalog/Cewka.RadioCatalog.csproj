@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Generator pliku stacji w programie (src/Cewka.App/Radio/stations.json) z materiału rozpoznania.
+    Materiał leży poza repozytorium i jest podawany jako ścieżka; w repozytorium zostaje kod i plik wynikowy.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Cewka.Tools.StationList</RootNamespace>
+    <AssemblyName>Cewka.RadioCatalog</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Cewka.App\Cewka.App.csproj" />
+  </ItemGroup>
+
+</Project>

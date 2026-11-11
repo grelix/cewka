@@ -25,7 +25,6 @@ public sealed class TitleBarStateTests
         {
             using var h = new PlayerHarness(s =>
             {
-                s.PanelOpen = false;
                 s.EqualiserEnabled = false;
                 s.LimiterEnabled = false;
                 s.NormalisationEnabled = false;
@@ -46,7 +45,7 @@ public sealed class TitleBarStateTests
     {
         Ui.Run(() =>
         {
-            using var h = new PlayerHarness(s => s.PanelOpen = false);
+            using var h = new PlayerHarness();
 
             Assert.True(h.Player.EqualiserEnabled);
             Assert.True(h.Player.LimiterEnabled);
@@ -60,7 +59,7 @@ public sealed class TitleBarStateTests
     {
         Ui.Run(() =>
         {
-            using var h = new PlayerHarness(s => s.PanelOpen = false);
+            using var h = new PlayerHarness();
             var raised = new List<string?>();
             h.Player.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 

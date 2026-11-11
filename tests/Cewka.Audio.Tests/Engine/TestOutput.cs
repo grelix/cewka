@@ -35,12 +35,23 @@ internal sealed class TestOutput : IAudioOutput
 
     public event Action? Lost;
 
-    public void Start() => _running = true;
+    /// <summary>Urządzenie, które otworzyło się, ale nie chce ruszyć.</summary>
+    public bool FailStart { get; set; }
+
+    /// <summary>Urządzenie, którego zatrzymanie zgłasza błąd, a flaga i tak już stoi.</summary>
+    public bool FailStop { get; set; }
+
+    public void Start()
+    {
+        if (FailStart) throw new AudioException("Urządzenie nie ruszyło.");
+        _running = true;
+    }
 
     /// <summary>Jak w miniaudio: zatrzymanie czeka, aż trwające wywołanie zwrotne się skończy.</summary>
     public void Stop()
     {
         lock (_outputLock) _running = false;
+        if (FailStop) throw new AudioException("Urządzenie nie zatrzymało się.");
     }
 
     /// <summary>Jeden okres wątku dźwiękowego; nic, gdy urządzenie stoi.</summary>
@@ -57,7 +68,11 @@ internal sealed class TestOutput : IAudioOutput
     }
 
     /// <summary>Wątek naśladujący urządzenie: pompuje, dopóki trwa test.</summary>
-    public void StartAutoPump()
+    /// <param name="independentOfSystemClock">
+    /// Okres co milisekundę zamiast tyknięcia zegara systemu (15,6 ms w Windows), do pomiarów czasu:
+    /// wyciszenie to kilka okresów, a kilka tyknięć wyczerpywałoby sam limit pomiaru. Zajmuje rdzeń.
+    /// </param>
+    public void StartAutoPump(bool independentOfSystemClock = false)
     {
         _pumping = true;
         _pump = new Thread(() =>
@@ -65,7 +80,16 @@ internal sealed class TestOutput : IAudioOutput
             while (_pumping)
             {
                 Pump();
-                Thread.Sleep(1);
+
+                if (!independentOfSystemClock)
+                {
+                    Thread.Sleep(1);
+                    continue;
+                }
+
+                var started = System.Diagnostics.Stopwatch.GetTimestamp();
+                while (_pumping && System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds < 1)
+                    Thread.Yield();
             }
         }) { IsBackground = true };
         _pump.Start();

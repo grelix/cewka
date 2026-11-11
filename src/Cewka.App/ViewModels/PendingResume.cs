@@ -34,6 +34,12 @@ public sealed class PendingResume
         else if (index < _index) _index--;
     }
 
+    /// <summary>Wpis wstawiono na <paramref name="index"/>; czekający od tego miejsca przesuwa się dalej.</summary>
+    public void OnInserted(int index)
+    {
+        if (IsArmed && index <= _index) _index++;
+    }
+
     /// <summary>Wpis przeniesiono z <paramref name="from"/> na <paramref name="to"/>.</summary>
     public void OnMoved(int from, int to)
     {

@@ -18,18 +18,13 @@ public sealed partial class ThirdPartyNoticesTests
 
     private static readonly string[] FontExtensions = [".otf", ".ttf", ".ttc", ".woff", ".woff2"];
 
-    private const string AssetsTarget = "net9.0";
+    private const string AssetsTarget = "net10.0";
 
     // Pakiety z grafu zależności programu, które nie trafiają do wydania win-x64 ani linux-x64.
     private static readonly HashSet<string> OutsideRelease = new(StringComparer.OrdinalIgnoreCase)
     {
         // Potrzebny tylko przy budowaniu Avalonii.
         "Avalonia.BuildServices",
-        // W wydaniu samodzielnym zastępują je zestawy środowiska .NET.
-        "System.IO.Pipelines",
-        "System.Memory",
-        "System.Numerics.Vectors",
-        "System.ValueTuple",
     };
 
     // Biblioteki natywne dla platform, na które Cewka nie jest wydawana.

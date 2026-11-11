@@ -210,7 +210,7 @@ public sealed class ControlInputTests
         Ui.Run(() =>
         {
             using var h = new PlayerHarness();
-            h.Player.OpenPaths([h.Track("a", 100)]);
+            h.OpenPaths([h.Track("a", 100)]);
             Assert.True(h.PumpUntil(() => h.Player.IsPlaying));
 
             var slider = new TrackSlider { Width = 200, Height = 16, DataContext = h.Player };
@@ -348,7 +348,7 @@ public sealed class ControlInputTests
                 Assert.False(AdornerLayer.GetIsClipEnabled(ring));
                 Assert.True(window.TryFindResource("FocusRingBrush", window.ActualThemeVariant, out var brush));
                 Assert.Same(brush, ring.Brush);
-                Assert.True(ring.Bounds.Width >= button.Bounds.Width + 2 * (FocusRing.Gap + FocusRing.Thickness) - 0.5);
+                Assert.True(ring.Bounds.Width >= button.Bounds.Width + 2 * (FocusRing.Gap + FocusRing.DefaultThickness) - 0.5);
 
                 // Kliknięcie myszą nie pokazuje pierścienia.
                 other.Focus(NavigationMethod.Pointer);

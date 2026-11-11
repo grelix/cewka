@@ -1,6 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Cewka.App.Services;
 
 namespace Cewka.App.Controls;
 
@@ -60,6 +62,17 @@ public sealed class LiveBackdrop : Control
     public static readonly StyledProperty<bool> IsReducedProperty =
         AvaloniaProperty.Register<LiveBackdrop, bool>(nameof(IsReduced));
 
+    /// <summary>Mnożnik tempa dryfu i rytmu plam: 1 w oknie, wolniej w scenie.</summary>
+    public static readonly StyledProperty<double> TempoProperty =
+        AvaloniaProperty.Register<LiveBackdrop, double>(nameof(Tempo), 1.0);
+
+    /// <summary>
+    /// Czas, w jakim ruch wygasa po pauzie, w sekundach. Zero to łagodne wygasanie okna (kilka
+    /// sekund); scena wygasza ruch w sekundę, żeby pauza szybko przestała kosztować klatki.
+    /// </summary>
+    public static readonly StyledProperty<double> StopSecondsProperty =
+        AvaloniaProperty.Register<LiveBackdrop, double>(nameof(StopSeconds));
+
     public static readonly StyledProperty<IBrush?> BaseBrushProperty =
         AvaloniaProperty.Register<LiveBackdrop, IBrush?>(nameof(BaseBrush));
 
@@ -74,6 +87,7 @@ public sealed class LiveBackdrop : Control
         AvaloniaProperty.Register<LiveBackdrop, double>(nameof(MaximumStrength), 1.12);
 
     private readonly RenderLoop _loop;
+    private readonly RadialGradientBrush[] _brushes = new RadialGradientBrush[CoverPaletteSize];
     private readonly Color[] _shown = new Color[CoverPaletteSize];
     private readonly Color[] _from = new Color[CoverPaletteSize];
     private readonly Color[] _to = new Color[CoverPaletteSize];
@@ -94,6 +108,8 @@ public sealed class LiveBackdrop : Control
     private TimeSpan _lastFrame;
     private bool _hasPalette;
     private bool _frozen;
+    private readonly FrameBudget _budget = new();
+    private RenderTargetBitmap? _buffer;
 
     static LiveBackdrop()
     {
@@ -104,7 +120,23 @@ public sealed class LiveBackdrop : Control
     public LiveBackdrop()
     {
         IsHitTestVisible = false;
-        _loop = new RenderLoop(this, OnFrame);
+        _loop = new RenderLoop(this, OnFrame, OnShown);
+
+        // Pędzle wielokrotnego użytku: klatka zmienia ich środek, promień i barwy zamiast
+        // tworzyć nowe.
+        for (var i = 0; i < CoverPaletteSize; i++)
+        {
+            _brushes[i] = new RadialGradientBrush
+            {
+                GradientStops =
+                {
+                    new GradientStop(Colors.Transparent, 0),
+                    new GradientStop(Colors.Transparent, 0.30),
+                    new GradientStop(Colors.Transparent, 0.62),
+                    new GradientStop(Colors.Transparent, 1),
+                },
+            };
+        }
     }
 
     /// <summary>Barwy z bieżącej okładki.</summary>
@@ -120,6 +152,13 @@ public sealed class LiveBackdrop : Control
     public bool IsActive { get => GetValue(IsActiveProperty); set => SetValue(IsActiveProperty, value); }
 
     public bool IsReduced { get => GetValue(IsReducedProperty); set => SetValue(IsReducedProperty, value); }
+
+    public double Tempo { get => GetValue(TempoProperty); set => SetValue(TempoProperty, value); }
+
+    /// <summary>Mnożnik tempa z ustawień, niezależny od <see cref="Tempo"/> ustawionego w widoku.</summary>
+    public double MotionScale { get; set; } = 1;
+
+    public double StopSeconds { get => GetValue(StopSecondsProperty); set => SetValue(StopSecondsProperty, value); }
 
     /// <summary>Barwa pod plamami.</summary>
     public IBrush? BaseBrush { get => GetValue(BaseBrushProperty); set => SetValue(BaseBrushProperty, value); }
@@ -149,6 +188,15 @@ public sealed class LiveBackdrop : Control
     /// <summary>Pętla działa tylko wtedy, gdy coś na tle się porusza.</summary>
     public bool IsLooping => _loop.IsRunning;
 
+    /// <summary>Położenie na osi czasu dryfu, w sekundach; rośnie wolniej przy mniejszym tempie.</summary>
+    internal double DriftTime => _time;
+
+    /// <summary>Pętla zamawia klatki: działa i nie czeka na odsłonięcie tła.</summary>
+    public bool IsDrawing => _loop.IsRunning && !_loop.IsParked;
+
+    /// <summary>Barwy plam w tej chwili, z przenikaniem.</summary>
+    internal IReadOnlyList<Color> ShownColours => _shown;
+
     private void Wake()
     {
         if (_frozen || _loop.IsRunning || VisualRoot is null) return;
@@ -161,17 +209,23 @@ public sealed class LiveBackdrop : Control
     {
         if (palette is null || palette.Count == 0) return;
 
+        // Pierwsza paleta pojawia się od razu, każda następna przez przenikanie. Ukryte tło też
+        // przyjmuje ją od razu: przenikanie, którego nikt nie widzi, pokazałoby po odsłonięciu
+        // barwy dawnego utworu, a w pauzie trzymało pętlę dłużej. Ukryte jest też tło jeszcze
+        // poza oknem, jak w scenie przed pierwszym otwarciem: Avalonia ma je za widoczne,
+        // a pętla bez okna nie rusza, więc nie czeka na odsłonięcie.
+        var instant = !_hasPalette || VisualRoot is null || !_loop.IsOwnerShown || _loop.IsParked;
+
         for (var i = 0; i < CoverPaletteSize; i++)
         {
             var colour = palette[Math.Min(i, palette.Count - 1)];
 
-            // Pierwsza paleta pojawia się od razu, każda następna przez przenikanie.
-            _from[i] = _hasPalette ? _shown[i] : colour;
+            _from[i] = instant ? colour : _shown[i];
             _to[i] = colour;
-            if (!_hasPalette) _shown[i] = colour;
+            if (instant) _shown[i] = colour;
         }
 
-        _fade = _hasPalette ? 0 : 1;
+        _fade = instant ? 1 : 0;
         _hasPalette = true;
         InvalidateVisual();
         Wake();
@@ -187,18 +241,44 @@ public sealed class LiveBackdrop : Control
     {
         _loop.Stop();
         base.OnDetachedFromVisualTree(e);
+        _buffer?.Dispose();
+        _buffer = null;
+    }
+
+    /// <summary>Przenikanie przerwane ukryciem kończy się od razu, a czas klatek liczy się od nowa.</summary>
+    private void OnShown()
+    {
+        _lastFrame = TimeSpan.Zero;
+        if (_fade >= 1) return;
+
+        _fade = 1;
+        Array.Copy(_to, _shown, CoverPaletteSize);
+        InvalidateVisual();
     }
 
     private void OnFrame(TimeSpan timestamp)
     {
         var delta = _lastFrame == TimeSpan.Zero ? 0 : (timestamp - _lastFrame).TotalSeconds;
         _lastFrame = timestamp;
-        delta = Math.Clamp(delta, 0, 0.25);
+        if (delta > 0 && _budget.Observe(delta)) InvalidateVisual();
+
+        Advance(delta);
+    }
+
+    /// <summary>Jedna klatka ruchu; testy wołają ją wprost, z dowolnym krokiem czasu.</summary>
+    internal void Advance(double seconds)
+    {
+        var delta = Math.Clamp(seconds, 0, 0.25);
 
         // W pauzie dryf zwalnia do zatrzymania, a w trybie ograniczonym tło stoi od razu.
         var targetSpeed = IsActive && !IsReduced ? 1.0 : 0.0;
-        _speed = IsReduced ? 0 : _speed + (targetSpeed - _speed) * Math.Min(1, delta * SpeedEasing);
-        _time += delta * _speed;
+        var stop = StopSeconds;
+
+        if (IsReduced) _speed = 0;
+        else if (targetSpeed == 0 && stop > 0) _speed = Math.Max(0, _speed - delta / stop);
+        else _speed += (targetSpeed - _speed) * Math.Min(1, delta * SpeedEasing);
+
+        _time += delta * _speed * Tempo * MotionScale;
 
         if (_fade < 1)
         {
@@ -207,7 +287,8 @@ public sealed class LiveBackdrop : Control
         }
 
         var target = IsReduced || !IsActive ? 0 : Math.Clamp(Level, 0, 1);
-        _breathing += (target - _breathing) * Math.Min(1, delta * 4);
+        if (target == 0 && stop > 0) _breathing = Math.Max(0, _breathing - delta / stop);
+        else _breathing += (target - _breathing) * Math.Min(1, delta * 4);
 
         if (targetSpeed == 0 && _fade >= 1 && _speed < Settled && _breathing < Settled)
         {
@@ -262,8 +343,70 @@ public sealed class LiveBackdrop : Control
 
         var area = new Rect(0, 0, width, height);
 
+        if (!_hasPalette)
+        {
+            if (BaseBrush is { } plain) context.DrawRectangle(plain, null, area);
+            return;
+        }
+
+        // Przy przeciążeniu plamy trafiają do bufora o niższej rozdzielczości, rozciąganego na okno:
+        // gradienty są miękkie, więc utrata ostrości jest niewidoczna, a koszt rysowania spada.
+        if (_budget.Level > 0 && BaseBrush is { } baseFill && IsOpaque(baseFill) && TryRenderBuffered(context, width, height, area, baseFill)) return;
+
         if (BaseBrush is { } baseBrush) context.DrawRectangle(baseBrush, null, area);
-        if (!_hasPalette) return;
+        PaintBlobs(context, width, height, area);
+    }
+
+    /// <summary>Rozmiar bufora w pikselach dla poziomu obniżenia: 960 x 540 (nie większy od okna) razy mnożnik poziomu.</summary>
+    internal static PixelSize BufferSize(double width, double height, int level)
+    {
+        var fit = Math.Min(1, Math.Min(BufferWidth / width, BufferHeight / height)) * FrameBudget.ScaleFor(level);
+        return new PixelSize(Math.Max(1, (int)Math.Round(width * fit)), Math.Max(1, (int)Math.Round(height * fit)));
+    }
+
+    private const double BufferWidth = 960;
+    private const double BufferHeight = 540;
+
+    /// <summary>Poziom obniżenia rozdzielczości bufora; 0 to rysowanie wprost.</summary>
+    internal FrameBudget Budget => _budget;
+
+    /// <summary>Rozmiar bufora wewnętrznego; pusty, gdy tło rysuje wprost.</summary>
+    internal PixelSize? BufferPixels => _buffer?.PixelSize;
+
+    private static bool IsOpaque(IBrush brush) =>
+        brush.Opacity >= 1 && (brush is not ISolidColorBrush solid || solid.Color.A == 255);
+
+    private bool TryRenderBuffered(DrawingContext context, double width, double height, Rect area, IBrush baseBrush)
+    {
+        try
+        {
+            var size = BufferSize(width, height, _budget.Level);
+            if (_buffer is null || _buffer.PixelSize != size)
+            {
+                _buffer?.Dispose();
+                _buffer = new RenderTargetBitmap(size, new Vector(96, 96));
+            }
+
+            var scale = (double)size.Width / width;
+            using (var target = _buffer.CreateDrawingContext())
+            using (target.PushTransform(Matrix.CreateScale(scale, scale)))
+            {
+                target.DrawRectangle(baseBrush, null, area);
+                PaintBlobs(target, width, height, area);
+            }
+
+            context.DrawImage(_buffer, new Rect(0, 0, size.Width, size.Height), area);
+            return true;
+        }
+        catch (Exception)
+        {
+            _buffer = null;
+            return false;
+        }
+    }
+
+    private void PaintBlobs(DrawingContext context, double width, double height, Rect area)
+    {
 
         // Pułapka: promień liczony od krótszego boku. Od dłuższego plama zakrywałaby na szerokim
         // oknie całą wysokość.
@@ -290,20 +433,19 @@ public sealed class LiveBackdrop : Control
 
             // Barwa trzyma się przy środku i opada szybciej przy brzegu; równomierne przejście
             // dałoby mgłę bez kształtu, na której nie widać ruchu.
-            var brush = new RadialGradientBrush
-            {
-                Center = new RelativePoint(centreX, centreY, RelativeUnit.Absolute),
-                GradientOrigin = new RelativePoint(centreX, centreY, RelativeUnit.Absolute),
-                RadiusX = new RelativeScalar(radius, RelativeUnit.Absolute),
-                RadiusY = new RelativeScalar(radius, RelativeUnit.Absolute),
-                GradientStops =
-                {
-                    new GradientStop(WithAlpha(colour, strength), 0),
-                    new GradientStop(WithAlpha(colour, strength * 0.74), 0.30),
-                    new GradientStop(WithAlpha(colour, strength * 0.30), 0.62),
-                    new GradientStop(WithAlpha(colour, 0), 1),
-                },
-            };
+            var brush = _brushes[i];
+            var centre = new RelativePoint(centreX, centreY, RelativeUnit.Absolute);
+            var reach = new RelativeScalar(radius, RelativeUnit.Absolute);
+            brush.Center = centre;
+            brush.GradientOrigin = centre;
+            brush.RadiusX = reach;
+            brush.RadiusY = reach;
+
+            var stops = brush.GradientStops;
+            stops[0].Color = WithAlpha(colour, strength);
+            stops[1].Color = WithAlpha(colour, strength * 0.74);
+            stops[2].Color = WithAlpha(colour, strength * 0.30);
+            stops[3].Color = WithAlpha(colour, 0);
 
             context.DrawRectangle(brush, null, area);
         }

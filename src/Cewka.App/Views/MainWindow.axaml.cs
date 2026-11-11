@@ -1,3 +1,4 @@
+using Avalonia.Animation;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -21,15 +22,6 @@ namespace Cewka.App.Views;
 
 public partial class MainWindow : Window
 {
-    /// <summary>One revolution every nine seconds, as in the design.</summary>
-    private const double DegreesPerSecond = 360.0 / 9.0;
-
-    /// <summary>
-    /// Czas, w jakim płyta staje okładką prosto po ograniczeniu efektów: dość długi, żeby było
-    /// widać zwalnianie, i dość krótki, żeby nikt na to nie czekał.
-    /// </summary>
-    private const double UprightReturnSeconds = 0.45;
-
     /// <summary>
     /// Stopnie układu według szerokości okna, od wąskiego do zmaksymalizowanego na dużym ekranie.
     /// Avalonia nie ma odpowiednika zapytań o media z CSS, więc kilka właściwości ustawia się wprost.
@@ -47,14 +39,6 @@ public partial class MainWindow : Window
     /// <summary>Grab band along the window border for resizing, where the system gives none.</summary>
     private const double ResizeMargin = 6;
 
-    /// <summary>
-    /// Najmniejsza szerokość okna, przy której kolejka stoi w kolumnie obok bloku odtwarzania.
-    /// Węższe okno pokazuje ją jako panel nakładany nad treść. Wartość z pomiaru narzędziem
-    /// zrzutów: od 1040 px blok odtwarzania mieści się obok kolumny z płytą w rozmiarze
-    /// najmniejszego stopnia układu (228 px), a poniżej płyta musiałaby się kurczyć.
-    /// </summary>
-    internal const double QueueColumnMinWidth = 1040;
-
     /// <summary>Rozmiar projektowy okna przy pierwszym uruchomieniu, przycinany do ekranu.</summary>
     private const double DesignWidth = 1200;
     private const double DesignHeight = 680;
@@ -62,22 +46,14 @@ public partial class MainWindow : Window
     /// <summary>Szerokość, którą musi mieć opis utworu, żeby rząd transportu nie wychodził poza blok.</summary>
     private const double TrackInfoMinWidth = 440;
 
+    /// <summary>Pismo etykiety jakości w wierszu wykonawcy: cztery piąte wykonawcy, nie mniej niż napis „Na żywo”.</summary>
+    internal static double QualityFontSize(double artistFontSize) => Math.Max(11, Math.Round(artistFontSize * 0.8, 1));
+
     /// <summary>Płyta mniejsza od tego wygląda jak usterka, więc znika, oddając miejsce tekstowi.</summary>
     private const double SmallestDisc = 140;
 
-    /// <summary>Pas dolny nie maleje poniżej tej wysokości; resztę przewija.</summary>
-    private const double SmallestPanel = 150;
-
     private readonly MainViewModel _viewModel;
-    private readonly RenderLoop _rotation;
-    private TimeSpan _lastRotationFrame;
-    private double _angle;
-    private bool _animationsFrozen;
-
-    /// <summary>Set while the record is coasting to a stop at the top of its revolution.</summary>
-    private bool _returningUpright;
-    private double _returnFrom;
-    private double _returnElapsed;
+    private readonly DiscSpinner _spinner;
 
     /// <summary>
     /// W Windows okno ma systemową ramkę (bez paska tytułu): przyciąganie do krawędzi, Win+strzałki,
@@ -91,16 +67,26 @@ public partial class MainWindow : Window
     private Size _normalSize;
     private bool _normalPositionKnown;
 
-    /// <summary>Ostatni stan Normal albo Maximized: do niego wraca okno po pełnym ekranie i minimalizacji.</summary>
+    /// <summary>Ostatni stan Normal albo Maximized: do niego wraca okno po scenie i minimalizacji.</summary>
     private WindowState _lastRegularState = WindowState.Normal;
-    private WindowState _stateBeforeFullScreen = WindowState.Normal;
 
-    /// <summary>Kolejka jako panel nakładany nad treść (wąskie okno) zamiast kolumny.</summary>
+    /// <summary>Stan okna sprzed sceny, przywracany przy wyjściu z niej.</summary>
+    private WindowState _stateBeforeScene = WindowState.Normal;
+
+    /// <summary>Wskaźnik ostatniego naciśnięcia w oknie; wejście do sceny zwalnia jego przechwycenie.</summary>
+    private IPointer? _pressedPointer;
+
+    /// <summary>Stan okna zmienia scena, a nie system; taka zmiana nie zamyka sceny.</summary>
+    private bool _changingSceneState;
+
+    private readonly SceneWakeLock _wakeLock;
+
+    /// <summary>Okno za wąskie na kolumnę: przypięty panel kolejki jest nakładany nad treść.</summary>
     private bool _queueAsOverlay;
 
     /// <summary>
-    /// Kolejkę schowało zwężenie okna, a nie użytkownik. Po poszerzeniu wraca sama, a ustawienia
-    /// zachowują ją jako otwartą.
+    /// Panel odpięło zwężenie okna, a nie użytkownik. Po poszerzeniu wraca przypięty, a ustawienia
+    /// zachowują go jako przypięty.
     /// </summary>
     private bool _queueCollapsedByWidth;
     private bool _adjustingQueue;
@@ -121,11 +107,26 @@ public partial class MainWindow : Window
         // assigns the x:Name backing fields, and every piece of behaviour below depends
         // on them (disc rotation, queue scroll bar, responsive layout).
         InitializeComponent();
+        Icon = AppIcon.Window;
 
         _viewModel = viewModel;
         DataContext = _viewModel;
+        AttachQueuePanel();
 
-        _rotation = new RenderLoop(this, OnRotationFrame);
+        _spinner = new DiscSpinner(Disc);
+        _wakeLock = new SceneWakeLock(() => WakeLockFactory());
+        Scene.ExitRequested += ExitScene;
+        Scene.Covered += () =>
+        {
+            if (Scene.IsOpen) ShowWindowContent(false);
+        };
+        AddHandler(GotFocusEvent, RememberFocus, RoutingStrategies.Bubble, handledEventsToo: true);
+
+        ScreenSource = () => SceneScreens.Distinguish(Screens.All.Select(ScreenInfo.From));
+        WindowScreenSource = () => Screens.ScreenFromWindow(this) is { } screen
+            ? SceneScreens.At(ScreenSource(), screen.Bounds) ?? ScreenInfo.From(screen)
+            : null;
+        Screens.Changed += OnScreensChanged;
 
         _systemFrame = systemFrame;
         if (_systemFrame)
@@ -145,28 +146,54 @@ public partial class MainWindow : Window
         // przechwytuje Spację i powtarza swoje działanie.
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         AddHandler(KeyUpEvent, OnPreviewKeyUp, RoutingStrategies.Tunnel);
+        AddHandler(PointerPressedEvent, (_, e) => _pressedPointer = e.Pointer, RoutingStrategies.Tunnel, handledEventsToo: true);
+        AddHandler(PointerPressedEvent, OnMenuOutsidePressed, RoutingStrategies.Tunnel, handledEventsToo: true);
+        MenuTrayItems.AddHandler(Button.ClickEvent, OnMenuTrayClick, RoutingStrategies.Bubble, handledEventsToo: true);
+        _viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(MainViewModel.IsRadioMode) or nameof(MainViewModel.RadioAvailable)) UpdateMenuMark();
+        };
+        UpdateMenuMark();
 
         AttachQueueInput();
+        AttachRadioInput();
         _viewModel.DeviceSelectionRequested += () => OpenSettings(settings => settings.Audio);
 
         PositionChanged += (_, _) => RememberNormalBounds();
         CentreHost.SizeChanged += (_, _) => ApplyResponsiveLayout();
         TrackInfo.SizeChanged += (_, _) => ApplyResponsiveLayout();
 
+        // Wiersze zastąpione w trakcie przeciągania: pod tym samym numerem jest już inny utwór.
+        _viewModel.Queue.CollectionChanged += (_, e) =>
+        {
+            if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset) CancelQueueDrag();
+            UpdateQueueNumberWidth();
+        };
+        UpdateQueueNumberWidth();
+
         _viewModel.PropertyChanged += (_, e) =>
         {
             switch (e.PropertyName)
             {
                 case nameof(MainViewModel.CurrentIndex): RevealCurrent(); break;
-                case nameof(MainViewModel.QueueOpen): OnQueueOpenChanged(); break;
-                case nameof(MainViewModel.PanelOpen): ApplyResponsiveLayout(); break;
-                case nameof(MainViewModel.IsPlaying): UpdateRotationLoop(); break;
-                case nameof(MainViewModel.ReducedEffects):
-                    BeginUprightReturn();
+                case nameof(MainViewModel.QueuePinned): OnQueuePinnedChanged(); break;
+                case nameof(MainViewModel.QueueReveal):
+                case nameof(MainViewModel.QueueHideDelay):
+                case nameof(MainViewModel.QueueRevealDelay): UpdatePeekSettings(); break;
+                case nameof(MainViewModel.QueueWidth): ApplyResponsiveLayout(); break;
+                case nameof(MainViewModel.PanelOpen): ApplySoundWindow(); break;
+                case nameof(MainViewModel.IsPlaying):
                     UpdateRotationLoop();
+                    UpdateWakeLock();
                     break;
+                case nameof(MainViewModel.ReducedEffects): UpdateRotationLoop(); break;
+                case nameof(MainViewModel.DiscSpin): UpdateRotationLoop(); break;
+                case nameof(MainViewModel.BackdropMotion): Backdrop.MotionScale = _viewModel.BackdropMotionFactor; break;
+                case nameof(MainViewModel.KeepScreenAwake): UpdateWakeLock(); break;
             }
         };
+
+        Backdrop.MotionScale = _viewModel.BackdropMotionFactor;
     }
 
     // ================= Cykl zycia =================
@@ -177,6 +204,10 @@ public partial class MainWindow : Window
     /// </summary>
     internal bool AttachDesktopIntegration { get; init; } = true;
 
+    /// <summary>Blokada wygaszania ekranu dla sceny; testy podstawiają atrapę.</summary>
+    internal Func<IDisplayWakeLock> WakeLockFactory { get; init; } =
+        () => DisplayWakeLock.Create(Strings.Current["WakeLockReason"]);
+
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
@@ -184,17 +215,15 @@ public partial class MainWindow : Window
         ApplyResponsiveLayout();
         AttachQueueScrollBar();
 
-        // Ścieżki z wiersza poleceń mają pierwszeństwo przed kolejką z poprzedniej sesji:
-        // „Otwórz za pomocą” ma zagrać wskazany plik. Otwarcia niedokończone przy poprzednim
-        // zamknięciu dopisują się za nim, bez odtwarzania.
+        // „Otwórz za pomocą” ma zagrać wskazany plik zamiast kolejki z poprzedniej sesji.
         if (App.StartupPaths.Length > 0)
         {
-            _viewModel.OpenFromOutside(App.StartupPaths);
-            _viewModel.ResumeUnfinishedOpens();
+            _viewModel.OpenAtStart(App.StartupPaths);
         }
         else
         {
             _viewModel.RestoreQueueState();
+            _viewModel.PlayRadioAtStart();
         }
 
         RevealCurrent();
@@ -265,7 +294,8 @@ public partial class MainWindow : Window
         // Termin dokańczania otwarć biegnie od tej chwili, także dla ścieżek odebranych niżej.
         _viewModel.BeginClosing();
         App.BeginClosing();
-        _rotation.Stop();
+        _spinner.Stop();
+        _wakeLock.Dispose();
         PersistGeometry();
         _viewModel.FinishPendingOpens();
         _viewModel.SaveQueueState();
@@ -274,8 +304,11 @@ public partial class MainWindow : Window
         base.OnClosing(e);
     }
 
+    private void OnScreensChanged(object? sender, EventArgs e) => HandleScreensChanged(ListScreens());
+
     protected override void OnClosed(EventArgs e)
     {
+        Screens.Changed -= OnScreensChanged;
         _mediaPanel?.Dispose();
         _viewModel.Dispose();
         base.OnClosed(e);
@@ -301,8 +334,17 @@ public partial class MainWindow : Window
     {
         if (state is WindowState.Normal or WindowState.Maximized) _lastRegularState = state;
 
+        // Pełny ekran istnieje tylko razem ze sceną: zmiana stanu przez system (minimalizacja,
+        // skrót menedżera okien) zamyka scenę, a pełny ekran nadany z zewnątrz ją otwiera.
+        if (!_changingSceneState)
+        {
+            if (Scene.IsOpen && state != WindowState.FullScreen) CloseScene(restoreState: false);
+            else if (!Scene.IsOpen && state == WindowState.FullScreen) OpenScene(_lastRegularState);
+        }
+
         ApplyWindowShape();
         RememberNormalBounds();
+        UpdateWakeLock();
     }
 
     /// <summary>
@@ -331,7 +373,7 @@ public partial class MainWindow : Window
     {
         Dispatcher.UIThread.Post(() =>
         {
-            if (WindowState != WindowState.Normal || !IsVisible) return;
+            if (WindowState != WindowState.Normal || !IsVisible || _movedForScene) return;
 
             _normalPosition = Position;
             _normalPositionKnown = true;
@@ -419,13 +461,14 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Zapisuje geometrię zwykłego okna z ostatniej chwili w stanie Normal. Zamknięcie na pełnym
-    /// ekranie zapisuje się jak maksymalizacja, a w zminimalizowanym oknie liczy się stan sprzed.
+    /// Zapisuje geometrię zwykłego okna z ostatniej chwili w stanie Normal. Zamknięcie w scenie
+    /// zapisuje stan sprzed niej, a w zminimalizowanym oknie liczy się stan sprzed minimalizacji.
     /// </summary>
     internal void PersistGeometry()
     {
         var state = WindowState;
-        var maximized = state is WindowState.Maximized or WindowState.FullScreen
+        var maximized = state == WindowState.Maximized
+                        || (state == WindowState.FullScreen && _stateBeforeScene == WindowState.Maximized)
                         || (state == WindowState.Minimized && _lastRegularState == WindowState.Maximized);
 
         var previous = App.Settings.Current.Window;
@@ -446,17 +489,301 @@ public partial class MainWindow : Window
     private void ToggleMaximise() =>
         WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
 
-    /// <summary>Pełny ekran wraca do stanu sprzed niego: zmaksymalizowane okno zostaje zmaksymalizowane.</summary>
-    internal void ToggleFullScreen()
+    // ================= Scena =================
+
+    internal bool IsSceneOpen => Scene.IsOpen;
+
+    internal void ToggleScene()
     {
-        if (WindowState == WindowState.FullScreen)
+        if (Scene.IsOpen) ExitScene();
+        else EnterScene();
+    }
+
+    /// <summary>Otwiera scenę na pełnym ekranie; wyjście wraca do stanu okna sprzed niej.</summary>
+    internal void EnterScene() =>
+        OpenScene(WindowState == WindowState.Maximized ? WindowState.Maximized : WindowState.Normal);
+
+    internal void ExitScene() => CloseScene(restoreState: true);
+
+    /// <summary>Scena dla narzędzia zrzutów, z warstwą sterowania albo w spoczynku.</summary>
+    public void OpenSceneForCapture(bool showControls)
+    {
+        EnterScene();
+        if (showControls) Scene.Chrome.RevealByPointer();
+    }
+
+    /// <summary>
+    /// Scena przenika nad treścią okna, także w trybie ograniczonym. Pętle okna stają od razu,
+    /// a treść i tło znikają, gdy scena zakryje je w całości: niewidoczne nie liczy klatek.
+    /// </summary>
+    private void OpenScene(WindowState returnTo)
+    {
+        if (Scene.IsOpen) return;
+
+        // Suwak okna przeciągany w chwili wejścia przestałby być widoczny, a puszczenie nad sceną
+        // przewinęłoby utwór albo zmieniło głośność.
+        Seek.EndDrag();
+        VolumeSlider.EndDrag();
+
+        // Każda inna przeciągana kontrolka (suwak korektora, pasek przewijania, wiersz kolejki) znika
+        // pod sceną: ruch i puszczenie nad sceną nie mogą do niej trafić, a przeciąganie w kolejce
+        // nie może czekać na późniejsze puszczenie.
+        _pressedPointer?.Capture(null);
+        CancelQueueDrag();
+        EndQueueResize();
+
+        // Podgląd panelu nie wraca po scenie; przypięty panel zostaje pod nią.
+        _peek.Close();
+
+        _stateBeforeScene = returnTo;
+        RememberFocusBeforeScene();
+        SuspendWindowContent(true);
+        // Pełny ekran nadany z zewnątrz stoi na ekranie okna, niezależnie od zapisanego wyboru.
+        _sceneScreen = WindowState == WindowState.FullScreen ? WindowScreen() : SceneScreen();
+        Scene.ScreenKey = _sceneScreen?.Key;
+        Scene.ScreenBounds = _sceneScreen?.Bounds;
+        MoveToSceneScreen(_sceneScreen);
+        Scene.Open();
+        UpdatePeekSettings();
+        SetStateForScene(WindowState.FullScreen);
+        UpdateWakeLock();
+
+        // Okno korektora należy do okna głównego i stałoby nad sceną; wraca po jej zamknięciu.
+        _soundWindow?.Hide();
+    }
+
+    /// <summary>
+    /// Przenosi okno na ekran sceny przed pełnym ekranem, bo pełny ekran zajmuje ekran, na którym stoi
+    /// okno. Ze stanu zmaksymalizowanego najpierw zwykły, bo położenie zmaksymalizowanego okna jest
+    /// ignorowane. Scena nie ma osobnego okna.
+    /// </summary>
+    private void MoveToSceneScreen(ScreenInfo? target)
+    {
+        _movedForScene = false;
+
+        // Pełny ekran nadany z zewnątrz już stoi na swoim ekranie.
+        if (WindowState == WindowState.FullScreen) return;
+
+        var current = WindowScreen();
+        if (target is not { } screen || current is { } here && here.Bounds == screen.Bounds) return;
+
+        _positionBeforeScene = _stateBeforeScene == WindowState.Maximized && _normalPositionKnown ? _normalPosition : Position;
+        _movedForScene = true;
+
+        if (WindowState == WindowState.Maximized) SetStateForScene(WindowState.Normal);
+        Position = screen.Bounds.Position;
+    }
+
+    /// <summary>
+    /// Wyjście z pełnego ekranu: stan sprzed sceny, a po przeniesieniu także położenie. Gdy ekran sceny
+    /// zniknął, okno staje na ekranie głównym w obszarze roboczym.
+    /// </summary>
+    private void LeaveSceneState(ScreenInfo? home)
+    {
+        if (!_movedForScene && home is null)
         {
-            WindowState = _stateBeforeFullScreen;
+            SetStateForScene(_stateBeforeScene);
             return;
         }
 
-        _stateBeforeFullScreen = WindowState == WindowState.Maximized ? WindowState.Maximized : WindowState.Normal;
-        WindowState = WindowState.FullScreen;
+        SetStateForScene(WindowState.Normal);
+        Position = home is { } screen
+            ? SceneScreens.Centre(screen.WorkingArea, new PixelSize((int)(ClientSize.Width * screen.Scaling), (int)(ClientSize.Height * screen.Scaling)))
+            : _positionBeforeScene;
+        _movedForScene = false;
+
+        if (_stateBeforeScene == WindowState.Maximized) SetStateForScene(WindowState.Maximized);
+        RememberNormalBounds();
+    }
+
+    /// <summary>
+    /// Zmiana ekranów w systemie. Zniknięcie ekranu sceny zamyka scenę i sprowadza okno na ekran główny;
+    /// odłączenie innego ekranu nic nie zmienia.
+    /// </summary>
+    internal void HandleScreensChanged(IReadOnlyList<ScreenInfo> screens)
+    {
+        if (!Scene.IsOpen || _sceneScreen is not { } used) return;
+
+        // Numery jednakowych monitorów zależą od położenia, więc klucz może przejść na inny monitor. Monitor
+        // sceny to ten sam model: najpierw o tych samych granicach, potem o tym samym kluczu, a gdy odłączono
+        // jeden z jednakowych i nie wiadomo, który został, dowolny pozostały tego modelu.
+        var model = SceneScreens.Model(used.Key);
+        var same = screens.Where(screen => SceneScreens.Model(screen.Key) == model).ToArray();
+        if (same.Length > 0)
+        {
+            var current = SceneScreens.At(same, used.Bounds) ?? SceneScreens.WithKey(same, used.Key) ?? same[0];
+            if (current == used) return;
+
+            _sceneScreen = current;
+            Scene.ScreenKey = current.Key;
+            Scene.ScreenBounds = current.Bounds;
+
+            // System mógł przenieść okno pełnoekranowe na inny ekran, np. główny: wraca na monitor sceny.
+            if (WindowScreen() is not { } here || here.Bounds != current.Bounds)
+            {
+                SetStateForScene(WindowState.Normal);
+                Position = current.Bounds.Position;
+                SetStateForScene(WindowState.FullScreen);
+            }
+
+            return;
+        }
+
+        CloseScene(restoreState: true, home: SceneScreens.Home(screens));
+        _viewModel.ShowNotice(Strings.Current["SceneScreenLost"]);
+    }
+
+    /// <summary>Ekrany podłączone w tej chwili; testy podstawiają własną listę.</summary>
+    internal Func<IReadOnlyList<ScreenInfo>> ScreenSource { get; set; } = null!;
+
+    /// <summary>Ekran, na którym stoi okno; testy podstawiają własny.</summary>
+    internal Func<ScreenInfo?> WindowScreenSource { get; set; } = null!;
+
+    private IReadOnlyList<ScreenInfo> ListScreens() => ScreenSource();
+
+    private ScreenInfo? WindowScreen() => WindowScreenSource();
+
+    /// <summary>Ekran, na którym stanie scena: zapisany, gdy jest podłączony, inaczej ekran okna.</summary>
+    private ScreenInfo? SceneScreen() => SceneScreens.Pick(ListScreens(), _viewModel.SceneScreen, WindowScreen());
+
+    /// <summary>Ekran, na którym scena jest otwarta; do odłączenia ekranu.</summary>
+    private ScreenInfo? _sceneScreen;
+
+    /// <summary>Okno przeniesiono na ekran sceny: położenie sprzed niej wraca przy wyjściu.</summary>
+    private bool _movedForScene;
+
+    private PixelPoint _positionBeforeScene;
+
+    /// <summary>Most do ustawień sceny, które zależą od ekranów.</summary>
+    internal SceneSettingsHost SceneHost() => new()
+    {
+        // Przy otwartej scenie margines należy do ekranu, na którym ona stoi; po przesunięciu numerów
+        // jednakowych monitorów zapisany wybór może już wskazywać inny monitor.
+        ScreenKey = () => Scene.IsOpen && _sceneScreen is { } shown ? shown.Key : SceneScreen()?.Key,
+        Screens = ListScreens,
+        FitEdges = FitScreenEdges,
+    };
+
+    /// <summary>
+    /// Zamyka okno Ustawienia i pokazuje scenę z ramką na granicy marginesu; strzałki zmieniają margines,
+    /// Enter i Esc kończą tryb ramki, a scena zostaje otwarta.
+    /// </summary>
+    internal void FitScreenEdges()
+    {
+        _settingsWindow?.Close();
+        if (!Scene.IsOpen) EnterScene();
+        Scene.BeginEdgeFit();
+    }
+
+    private void CloseScene(bool restoreState, ScreenInfo? home = null)
+    {
+        if (!Scene.IsOpen) return;
+
+        try
+        {
+            Scene.Close();
+            UpdatePeekSettings();
+            ShowWindowContent(true);
+            SuspendWindowContent(false);
+            if (restoreState && WindowState == WindowState.FullScreen) LeaveSceneState(home);
+            else if (_movedForScene)
+            {
+                // Stan zmienił system: okno wraca na swoje miejsce, o ile da się je przesunąć.
+                _movedForScene = false;
+                if (WindowState == WindowState.Normal) Position = _positionBeforeScene;
+            }
+
+            RestoreFocusAfterScene();
+            if (_soundWindow is { IsVisible: false } sound) sound.Show(this);
+        }
+        finally
+        {
+            UpdateWakeLock();
+        }
+    }
+
+    private void SetStateForScene(WindowState state)
+    {
+        _changingSceneState = true;
+        try { WindowState = state; }
+        finally { _changingSceneState = false; }
+    }
+
+    private void ShowWindowContent(bool show)
+    {
+        Backdrop.IsVisible = show;
+        Scrim.IsVisible = show;
+        WindowContent.IsVisible = show;
+    }
+
+    /// <summary>Ostatni fokus w oknie poza sceną i poza przyciskiem „Pełny ekran” klikniętym myszą.</summary>
+    private IInputElement? _lastFocus;
+    private bool _lastFocusVisible;
+
+    private IInputElement? _focusBeforeScene;
+    private bool _focusBeforeSceneVisible;
+
+    private void RememberFocus(object? sender, FocusChangedEventArgs e)
+    {
+        if (e.Source is not IInputElement element
+            || e.Source is Visual visual && (ReferenceEquals(visual, Scene) || Scene.IsVisualAncestorOf(visual)))
+            return;
+
+        // Przycisk kliknięty myszą bierze fokus po drodze; wrócić trzeba tam, gdzie był wcześniej.
+        if (ReferenceEquals(element, FullScreenButton) && e.NavigationMethod == NavigationMethod.Pointer) return;
+
+        _lastFocus = element;
+        _lastFocusVisible = e.NavigationMethod is NavigationMethod.Tab or NavigationMethod.Directional;
+    }
+
+    private void RememberFocusBeforeScene()
+    {
+        var focused = FocusManager?.GetFocusedElement();
+        var visible = focused is StyledElement styled && styled.Classes.Contains(":focus-visible");
+
+        // „Pełny ekran” z fokusem bez pierścienia dostał go od myszy: Enter po wyjściu otwierałby
+        // scenę od nowa, więc fokus wraca do elementu sprzed kliknięcia.
+        if (ReferenceEquals(focused, FullScreenButton) && !visible)
+        {
+            focused = _lastFocus;
+            visible = _lastFocusVisible;
+        }
+
+        _focusBeforeScene = focused;
+        _focusBeforeSceneVisible = visible;
+    }
+
+    /// <summary>Fokus wraca tam, gdzie był przed sceną, z pierścieniem, jeśli go wtedy miał.</summary>
+    private void RestoreFocusAfterScene()
+    {
+        var target = _focusBeforeScene;
+        _focusBeforeScene = null;
+
+        if (target is InputElement { Focusable: true, IsEffectivelyVisible: true, IsEffectivelyEnabled: true } element
+            && ReferenceEquals(TopLevel.GetTopLevel(element), this)
+            && element.Focus(_focusBeforeSceneVisible ? NavigationMethod.Directional : NavigationMethod.Unspecified))
+            return;
+
+        // Nie ma dokąd wrócić (np. wiersz kolejki zniknął): fokus nie zostaje w ukrytej scenie.
+        FocusManager?.Focus(null);
+    }
+
+    private void SuspendWindowContent(bool suspend)
+    {
+        RenderLoop.SetIsSuspended(Backdrop, suspend);
+        RenderLoop.SetIsSuspended(WindowContent, suspend);
+    }
+
+    private void UpdateWakeLock() =>
+        _wakeLock.Update(Scene.IsOpen, _viewModel.IsPlaying, WindowState == WindowState.Minimized,
+            _viewModel.KeepScreenAwake);
+
+    private void OnFullScreen(object? sender, RoutedEventArgs e) => EnterScene();
+
+    private void OnDiscDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        EnterScene();
+        e.Handled = true;
     }
 
     // ================= Układ =================
@@ -474,17 +801,13 @@ public partial class MainWindow : Window
 
         var compact = width < LayoutSteps[1].MinWidth;
 
-        ApplyQueueMode(width);
+        var queueWidth = ApplyQueueMode(width, step.Queue);
 
-        var queueWidth = _queueAsOverlay ? Math.Min(step.Queue, width - 80) : step.Queue;
-        QueueColumn.Width = queueWidth;
+        // Podgląd i nakładka leżą nad treścią, więc miejsce zabiera tylko przypięta kolumna.
+        var contentWidth = width - (_queueAsColumn ? queueWidth : 0);
 
-        var contentWidth = width - (!_queueAsOverlay && _viewModel.QueueOpen ? queueWidth : 0);
-
-        // Pas dolny dostaje tyle, ile zostaje po bloku odtwarzania; nadmiar przewija.
         var body = height - (TitleBar.Bounds.Height > 0 ? TitleBar.Bounds.Height : 47);
         var info = TrackInfo.DesiredSize.Height > 0 ? TrackInfo.DesiredSize.Height : 300;
-        PanelScroll.MaxHeight = Math.Max(SmallestPanel, body - info - 22);
 
         var centreHeight = CentreHost.Bounds.Height > 0 ? CentreHost.Bounds.Height : body;
 
@@ -518,154 +841,36 @@ public partial class MainWindow : Window
         var titleSize = centreHeight < 330 ? Math.Min(step.Title, 30) : step.Title;
         TrackTitle.FontSize = titleSize;
         TrackArtist.FontSize = Math.Round(titleSize * 0.40, 1);
+        TrackQuality.FontSize = QualityFontSize(TrackArtist.FontSize);
 
         // Pasek głośności jako jedyny w rzędzie transportu ma swobodną szerokość, więc ustępuje
         // pierwszy, gdy rząd się nie mieści.
         VolumeSlider.Width = step.Volume;
     }
 
-    /// <summary>
-    /// Kolumna kolejki albo panel nakładany. Przejście w nakładkę chowa kolejkę: panel, który
-    /// sam nakrywa treść przy zwężaniu okna, zabierałby ją bez prośby.
-    /// </summary>
-    private void ApplyQueueMode(double width)
+    /// <summary>Ctrl+F w radiu: przypina panel stacji (także w nakładce) i ustawia fokus w polu wyszukiwania.</summary>
+    private void FocusRadioSearch()
     {
-        var overlay = width < QueueColumnMinWidth;
-
-        if (overlay != _queueAsOverlay)
+        if (!_viewModel.QueuePinned) _viewModel.QueuePinned = true;
+        Dispatcher.UIThread.Post(() =>
         {
-            _queueAsOverlay = overlay;
-
-            if (overlay && _viewModel.QueueOpen)
-            {
-                _queueCollapsedByWidth = true;
-                SetQueueOpen(false);
-            }
-            else if (!overlay && _queueCollapsedByWidth)
-            {
-                _queueCollapsedByWidth = false;
-                SetQueueOpen(true);
-            }
-
-            Grid.SetColumn(QueueColumn, overlay ? 0 : 1);
-            Grid.SetColumnSpan(QueueColumn, overlay ? 2 : 1);
-            QueueColumn.HorizontalAlignment = overlay ? HorizontalAlignment.Right : HorizontalAlignment.Stretch;
-            QueueColumn.Classes.Set("queue-overlay", overlay);
-        }
-
-        QueueDismiss.IsVisible = overlay && _viewModel.QueueOpen;
-    }
-
-    private void SetQueueOpen(bool open)
-    {
-        _adjustingQueue = true;
-        try { _viewModel.SetQueueOpen(open, remember: false); }
-        finally { _adjustingQueue = false; }
-    }
-
-    private void OnQueueOpenChanged()
-    {
-        if (!_adjustingQueue) _queueCollapsedByWidth = false;
-
-        QueueDismiss.IsVisible = _queueAsOverlay && _viewModel.QueueOpen;
-        ApplyResponsiveLayout();
-
-        // Zamknięta kolejka nie przewija się przy zmianie utworu, więc po otwarciu i ułożeniu listy pokazuje grany wiersz.
-        if (_viewModel.QueueOpen) Dispatcher.UIThread.Post(RevealCurrent, DispatcherPriority.Loaded);
-    }
-
-    /// <summary>Nakładana kolejka jest otwarta.</summary>
-    internal bool QueueOverlayOpen => _queueAsOverlay && _viewModel.QueueOpen;
-
-    internal bool QueueIsOverlay => _queueAsOverlay;
-
-    private void OnQueueDismissPressed(object? sender, PointerPressedEventArgs e)
-    {
-        _viewModel.QueueOpen = false;
-        e.Handled = true;
+            RadioSearch.Focus();
+            RadioSearch.SelectAll();
+        }, DispatcherPriority.Loaded);
     }
 
     // ================= Obrot plyty i tla =================
 
     /// <summary>Pętla obrotu działa tylko wtedy, gdy płyta się kręci albo dojeżdża do pionu.</summary>
-    private void UpdateRotationLoop()
-    {
-        if (_animationsFrozen || _rotation.IsRunning || !IsVisible) return;
-        if (!SpinNeeded) return;
+    private void UpdateRotationLoop() =>
+        _spinner.Update(_viewModel.IsPlaying, _viewModel.ReducedEffects, _viewModel.DiscSpinFactor);
 
-        _lastRotationFrame = TimeSpan.Zero;
-        _rotation.Start();
-    }
+    /// <summary>Mnożnik obrotu płyty w oknie, dla testów.</summary>
+    internal double DiscSpeed => _spinner.Speed;
 
-    private bool SpinNeeded => (_viewModel.IsPlaying && !_viewModel.ReducedEffects) || _returningUpright;
+    internal bool IsRotating => _spinner.IsDrawing;
 
-    internal bool IsRotating => _rotation.IsRunning;
-
-    private void OnRotationFrame(TimeSpan timestamp)
-    {
-        var delta = _lastRotationFrame == TimeSpan.Zero
-            ? 0
-            : (timestamp - _lastRotationFrame).TotalSeconds;
-        _lastRotationFrame = timestamp;
-
-        // A long stall (window dragged, machine asleep) must not fling the disc round.
-        delta = Math.Clamp(delta, 0, 0.25);
-
-        // W trybie ograniczonym plyta stoi: to najdrozszy element wystroju, bo kazda klatka
-        // to obrot bitmapy okladki.
-        if (_viewModel.IsPlaying && !_viewModel.ReducedEffects)
-        {
-            _returningUpright = false;
-            _angle = (_angle + delta * DegreesPerSecond) % 360;
-            ApplyAngle();
-        }
-        else if (_returningUpright)
-        {
-            AdvanceUprightReturn(delta);
-        }
-
-        if (!SpinNeeded) _rotation.Stop();
-    }
-
-    /// <summary>
-    /// Wytraca obrót płyty tak, żeby stanęła okładką prosto; przekrzywiona nieruchoma płyta
-    /// wygląda na błąd.
-    /// </summary>
-    private void BeginUprightReturn()
-    {
-        if (!_viewModel.ReducedEffects || _angle <= 0)
-        {
-            _returningUpright = false;
-            return;
-        }
-
-        _returningUpright = true;
-        _returnFrom = _angle;
-        _returnElapsed = 0;
-    }
-
-    /// <summary>
-    /// Jedna klatka wytracania obrotu. Wygładzanie sześcienne: płyta rusza z prędkością bliską
-    /// grania i staje łagodnie.
-    /// </summary>
-    private void AdvanceUprightReturn(double delta)
-    {
-        _returnElapsed += delta;
-
-        var progress = Math.Clamp(_returnElapsed / UprightReturnSeconds, 0, 1);
-        var eased = 1 - Math.Pow(1 - progress, 3);
-
-        // Zawsze w przód, do pełnego obrotu, żeby płyta nie cofała się do góry.
-        _angle = _returnFrom + (360 - _returnFrom) * eased;
-
-        if (progress >= 1)
-        {
-            _angle = 0;
-            _returningUpright = false;
-        }
-
-        ApplyAngle();
-    }
+    internal DiscSpinner Spinner => _spinner;
 
     /// <summary>
     /// Ustawia wszystko, co się rusza, w powtarzalnym stanie dla narzędzia zrzutów: płytę
@@ -673,19 +878,11 @@ public partial class MainWindow : Window
     /// </summary>
     public void FreezeAnimationsForCapture()
     {
-        _animationsFrozen = true;
-        _rotation.Stop();
-        _returningUpright = false;
-        _angle = 0;
-        ApplyAngle();
-
+        _spinner.Freeze();
         Backdrop?.FreezeForCapture();
         Wave?.FreezeForCapture();
-    }
-
-    private void ApplyAngle()
-    {
-        if (Disc is not null) Disc.Angle = _angle;
+        LiveDot?.FreezeForCapture();
+        Scene?.FreezeForCapture();
     }
 
     // ================= Poswiata pod kursorem =================
@@ -734,6 +931,37 @@ public partial class MainWindow : Window
         LayoutUpdated += Retry;
     }
 
+    /// <summary>Liczba cyfr numerów, dla której policzono szerokość kolumny numerów.</summary>
+    private int _queueNumberDigits;
+
+    /// <summary>
+    /// Kolumna numerów ma szerokość najdłuższego numeru w kolejce: tyle cyfr, ile ma jej długość.
+    /// Liczona tylko przy zmianie liczby cyfr, cyframi równej szerokości, z zapasem 4 px.
+    /// </summary>
+    private void UpdateQueueNumberWidth()
+    {
+        var digits = Math.Max(1, _viewModel.Queue.Count.ToString(System.Globalization.CultureInfo.InvariantCulture).Length);
+        if (digits == _queueNumberDigits) return;
+
+        _queueNumberDigits = digits;
+        QueueList.Resources["QueueNumberWidth"] = QueueNumberWidth(digits);
+    }
+
+    /// <summary>Szerokość kolumny numerów dla numeru o danej liczbie cyfr; co najmniej 16 px.</summary>
+    internal double QueueNumberWidth(int digits)
+    {
+        var probe = new TextBlock
+        {
+            Text = new string('8', digits),
+            FontSize = 10.5,
+            FontFeatures = [Avalonia.Media.FontFeature.Parse("tnum")],
+        };
+        if (this.TryFindResource("UiFont", out var font) && font is Avalonia.Media.FontFamily family) probe.FontFamily = family;
+
+        probe.Measure(Size.Infinity);
+        return Math.Max(16, Math.Ceiling(probe.DesiredSize.Width) + 4);
+    }
+
     private bool TryBindScrollBar()
     {
         if (QueueList is null || QueueScrollBar is null) return true;
@@ -767,7 +995,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void RevealCurrent()
     {
-        if (QueueList is null || !_viewModel.QueueOpen) return;
+        if (QueueList is null || !QueueColumn.IsVisible) return;
         if (_queueBrowsedByKeyboard && QueueList.IsKeyboardFocusWithin) return;
 
         if (_viewModel.Queue.FirstOrDefault(item => item.IsCurrent) is { } current) QueueList.ScrollIntoView(current);
@@ -776,8 +1004,6 @@ public partial class MainWindow : Window
     private void OnToggleRepeat(object? sender, RoutedEventArgs e) => _viewModel.CycleRepeat();
 
     private void OnToggleMute(object? sender, RoutedEventArgs e) => _viewModel.ToggleMute();
-
-    private void OnResetEqualiser(object? sender, RoutedEventArgs e) => _viewModel.ResetEqualiser();
 
     private void OnRetryAudio(object? sender, RoutedEventArgs e) => _viewModel.RetryAudio();
 
@@ -795,8 +1021,8 @@ public partial class MainWindow : Window
     internal SettingsWindow? OpenSettingsWindow => _settingsWindow;
 
     /// <summary>
-    /// Otwiera ustawienia albo wysuwa otwarte. Okno staje obok odtwarzacza, bo część ustawień
-    /// ocenia się słuchem.
+    /// Otwiera ustawienia albo wysuwa otwarte. Okno nie jest modalne, bo część ustawień ocenia się
+    /// słuchem; za pierwszym razem staje na środku odtwarzacza, potem w zapamiętanym miejscu.
     /// </summary>
     private void OnOpenSettings(object? sender, RoutedEventArgs e) => OpenSettings();
 
@@ -805,12 +1031,12 @@ public partial class MainWindow : Window
     {
         if (_settingsWindow is null)
         {
-            _settingsWindow = new SettingsWindow(new SettingsViewModel(App.Settings, _viewModel))
+            _settingsWindow = new SettingsWindow(new SettingsViewModel(App.Settings, _viewModel, SceneHost()))
             {
                 PlaybackShortcuts = HandlePlaybackShortcut,
             };
 
-            _settingsWindow.PlaceBeside(this);
+            _settingsWindow.PlaceOver(this);
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
             _settingsWindow.Show(this);
         }
@@ -820,6 +1046,36 @@ public partial class MainWindow : Window
         }
 
         if (section is not null) _settingsWindow.ShowSection(section);
+    }
+
+    private SoundWindow? _soundWindow;
+
+    /// <summary>Okno „Korektor i efekty”, gdy jest otwarte; dla testów.</summary>
+    internal SoundWindow? OpenSoundWindow => _soundWindow;
+
+    /// <summary>
+    /// Otwiera albo zamyka okno korektora według <see cref="MainViewModel.PanelOpen"/> (przycisk w pasku
+    /// tytułu i klawisz Q). Okno nie jest modalne, bo korektor ocenia się słuchem; za pierwszym razem
+    /// staje na środku odtwarzacza, a podczas sceny otwiera się dopiero po jej zamknięciu.
+    /// </summary>
+    private void ApplySoundWindow()
+    {
+        if (_viewModel.PanelOpen)
+        {
+            if (_soundWindow is not null)
+            {
+                if (_soundWindow.IsVisible) _soundWindow.Activate();
+                return;
+            }
+
+            _soundWindow = new SoundWindow(_viewModel) { PlaybackShortcuts = HandlePlaybackShortcut };
+            _soundWindow.PlaceOver(this);
+            _soundWindow.Closed += (_, _) => _soundWindow = null;
+            if (!Scene.IsOpen) _soundWindow.Show(this);
+            return;
+        }
+
+        _soundWindow?.Close();
     }
 
     // ================= Dodawanie plików =================
@@ -874,7 +1130,8 @@ public partial class MainWindow : Window
             var path = files.FirstOrDefault()?.TryGetLocalPath();
             if (string.IsNullOrEmpty(path)) return;
 
-            var load = _viewModel.LoadPlaylist(path);
+            // Okno zamknięte w trakcie sprawdzania listy: nie ma już czego zgłaszać.
+            if (await _viewModel.LoadPlaylist(path) is not { } load) return;
 
             if (load.Paths.Count == 0)
                 _viewModel.ShowNotice(Strings.Current["PlaylistEmpty"]);
@@ -953,12 +1210,14 @@ public partial class MainWindow : Window
             ? DragDropEffects.Copy
             : DragDropEffects.None;
 
+        NoteFileDrag(e);
         e.Handled = true;
     }
 
     private void OnDrop(object? sender, DragEventArgs e)
     {
         e.Handled = true;
+        EndFileDrag();
 
         var items = e.DataTransfer.TryGetFiles();
         if (items is null || items.Length == 0) return;
@@ -1008,8 +1267,8 @@ public partial class MainWindow : Window
     {
         switch (command)
         {
-            case MediaCommand.Play when !_viewModel.IsPlaying: _viewModel.TogglePlay(); break;
-            case MediaCommand.Pause when _viewModel.IsPlaying: _viewModel.Pause(); break;
+            case MediaCommand.Play: _viewModel.Play(); break;
+            case MediaCommand.Pause: _viewModel.Pause(); break;
             case MediaCommand.PlayPause: _viewModel.TogglePlay(); break;
             case MediaCommand.Stop: _viewModel.Pause(); break;
             case MediaCommand.Next: _viewModel.Next(); break;
@@ -1120,6 +1379,267 @@ public partial class MainWindow : Window
         AutomationProperties.SetAcceleratorKey(item, gesture);
     }
 
+    // ================= Radio: lista stacji =================
+
+    private void AttachRadioInput()
+    {
+        RadioList.AddHandler(KeyDownEvent, OnRadioKeyDown, RoutingStrategies.Tunnel);
+        RadioList.AddHandler(ContextRequestedEvent, OnRadioContextRequested, RoutingStrategies.Tunnel);
+        RadioList.DoubleTapped += OnRadioDoubleTapped;
+        RadioMenu.Opening += (_, _) => UpdateRadioMenu();
+    }
+
+    private StationRowViewModel? RadioRow => RadioList.SelectedItem as StationRowViewModel;
+
+    private static StationRowViewModel? RadioRowAt(object? source) =>
+        (source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as StationRowViewModel;
+
+    private void OnSourceFiles(object? sender, RoutedEventArgs e) => _viewModel.SetSource(SourceMode.Files);
+
+    private void OnSourceRadio(object? sender, RoutedEventArgs e) => _viewModel.SetSource(SourceMode.Radio);
+
+    private void OnRadioRetry(object? sender, RoutedEventArgs e) => _viewModel.Radio.Retry();
+
+    private void OnRadioAddToggle(object? sender, RoutedEventArgs e) => _viewModel.Radio.IsAdding = !_viewModel.Radio.IsAdding;
+
+    private void OnRadioAddConfirm(object? sender, RoutedEventArgs e)
+    {
+        if (!_viewModel.Radio.AddCustom(RadioAddName.Text ?? string.Empty, RadioAddUrl.Text ?? string.Empty)) return;
+
+        RadioAddName.Text = string.Empty;
+        RadioAddUrl.Text = string.Empty;
+    }
+
+    // ---------- Menu w pasku tytułu ----------
+
+    private static readonly TimeSpan MenuSlide = TimeSpan.FromMilliseconds(160);
+
+    private bool _menuOpen;
+    private Transitions? _menuTransitions;
+
+    /// <summary>Menu w pasku tytułu jest rozsunięte.</summary>
+    public bool IsMenuOpen => _menuOpen;
+
+    private void OnMenuButton(object? sender, RoutedEventArgs e) => SetMenuOpen(!_menuOpen);
+
+    /// <summary>
+    /// Rozsuwa albo zwija ikony menu. Z ograniczonymi efektami zmiana następuje od razu, bez animacji.
+    /// Zwinięte ikony są wyłączone, żeby nie brały fokusu ani kliknięć.
+    /// </summary>
+    public void SetMenuOpen(bool open)
+    {
+        if (_menuOpen == open && MenuTray.Opacity == (open ? 1 : 0)) return;
+
+        _menuOpen = open;
+        MenuButton.IsChecked = open;
+
+        _menuTransitions ??=
+        [
+            new DoubleTransition { Property = WidthProperty, Duration = MenuSlide, Easing = new Avalonia.Animation.Easings.CubicEaseOut() },
+            new DoubleTransition { Property = OpacityProperty, Duration = MenuSlide },
+        ];
+        MenuTray.Transitions = _viewModel.ReducedEffects ? null : _menuTransitions;
+
+        if (open)
+        {
+            MenuTrayItems.IsEnabled = true;
+            MenuTrayItems.Measure(Size.Infinity);
+            MenuTray.Width = MenuTrayItems.DesiredSize.Width;
+            MenuTray.Opacity = 1;
+            MenuTray.IsHitTestVisible = true;
+        }
+        else
+        {
+            MenuTrayItems.IsEnabled = false;
+            MenuTray.Width = 0;
+            MenuTray.Opacity = 0;
+            MenuTray.IsHitTestVisible = false;
+        }
+
+        UpdateMenuMark();
+    }
+
+    private void UpdateMenuMark() => MenuModeMark.IsVisible = _viewModel.IsRadioMode && !_menuOpen && _viewModel.RadioAvailable;
+
+    /// <summary>Kliknięcie poza ikonami menu i jego przyciskiem zwija je jak zwykłe menu.</summary>
+    private void OnMenuOutsidePressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!_menuOpen) return;
+
+        if (e.Source is Visual source && (MenuTray.IsVisualAncestorOf(source) || MenuButton.IsVisualAncestorOf(source)
+                                          || ReferenceEquals(source, MenuButton))) return;
+
+        SetMenuOpen(false);
+    }
+
+    /// <summary>Użycie którejkolwiek ikony menu zwija je.</summary>
+    private void OnMenuTrayClick(object? sender, RoutedEventArgs e) => SetMenuOpen(false);
+
+    private void OnRadioPrivacyDismiss(object? sender, RoutedEventArgs e) => _viewModel.Radio.AcknowledgePrivacy();
+
+    /// <summary>Wiersz listy trafił na ekran (lista jest wirtualizowana): dopiero wtedy prosi o logo.</summary>
+    private void OnRadioRowAttached(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        if (sender is Control { DataContext: StationRowViewModel row }) row.RequestLogo();
+    }
+
+    private void OnRadioHeart(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: StationRowViewModel row }) _viewModel.Radio.ToggleFavourite(row.Station);
+        e.Handled = true;
+    }
+
+    private void OnRadioDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (RadioRowAt(e.Source) is not { } row) return;
+
+        PlayRadioRow(row);
+        e.Handled = true;
+    }
+
+    private void PlayRadioRow(StationRowViewModel row)
+    {
+        if (_viewModel.Radio.Play(row.Station)) _viewModel.SyncPlayingState();
+    }
+
+    private void OnRadioKeyDown(object? sender, KeyEventArgs e)
+    {
+        var none = e.KeyModifiers == KeyModifiers.None;
+        var alt = e.KeyModifiers == KeyModifiers.Alt;
+
+        if (e.Key == Key.Space && none)
+        {
+            _viewModel.TogglePlay();
+            e.Handled = true;
+            return;
+        }
+
+        if (RadioRow is not { } row) return;
+
+        switch (e.Key)
+        {
+            case Key.Enter when none: PlayRadioRow(row); break;
+            case Key.Up when alt: _viewModel.Radio.MoveFavourite(row.Station, -1); break;
+            case Key.Down when alt: _viewModel.Radio.MoveFavourite(row.Station, 1); break;
+            default: return;
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnRadioContextRequested(object? sender, ContextRequestedEventArgs e)
+    {
+        if (!e.TryGetPosition(RadioList, out _)) return;
+
+        RadioList.SelectedItem = RadioRowAt(e.Source);
+    }
+
+    private void UpdateRadioMenu()
+    {
+        var s = Strings.Current;
+        var row = RadioRow;
+        var favourites = _viewModel.Radio.View == Radio.RadioListContext.ViewFavourites;
+
+        SetCommand(RadioPlayItem, s["QueuePlay"], KeyNames.Enter);
+        SetCommand(RadioFavouriteItem, s[row is { IsFavourite: true } ? "TooltipFavouriteRemove" : "TooltipFavouriteAdd"], string.Empty);
+        SetCommand(RadioWebsiteItem, s["RadioOpenWebsite"], string.Empty);
+        SetCommand(RadioMoveUpItem, s["QueueMoveUp"], KeyNames.Chord(KeyNames.Alt, "↑"));
+        SetCommand(RadioMoveDownItem, s["QueueMoveDown"], KeyNames.Chord(KeyNames.Alt, "↓"));
+
+        RadioPlayItem.IsEnabled = row is not null;
+        RadioFavouriteItem.IsEnabled = row is not null;
+        RadioWebsiteItem.IsVisible = row is not null && RadioViewModel.WebsiteUrl(row.Station) is not null;
+        RadioMoveUpItem.IsVisible = favourites;
+        RadioMoveDownItem.IsVisible = favourites;
+    }
+
+    private void OnRadioMenuPlay(object? sender, RoutedEventArgs e)
+    {
+        if (RadioRow is { } row) PlayRadioRow(row);
+    }
+
+    private void OnRadioMenuFavourite(object? sender, RoutedEventArgs e)
+    {
+        if (RadioRow is { } row) _viewModel.Radio.ToggleFavourite(row.Station);
+    }
+
+    private void OnRadioMenuWebsite(object? sender, RoutedEventArgs e)
+    {
+        if (RadioRow is { } row) _viewModel.Radio.OpenWebsite(row.Station, url => WebLink.Open(url));
+    }
+
+    private void OnRadioMenuMoveUp(object? sender, RoutedEventArgs e)
+    {
+        if (RadioRow is { } row) _viewModel.Radio.MoveFavourite(row.Station, -1);
+    }
+
+    private void OnRadioMenuMoveDown(object? sender, RoutedEventArgs e)
+    {
+        if (RadioRow is { } row) _viewModel.Radio.MoveFavourite(row.Station, 1);
+    }
+
+    private static FilePickerFileType BuildStationListFilter() => new(Strings.Current["RadioListFilter"])
+    {
+        Patterns = ["*.m3u", "*.m3u8", "*.pls"],
+    };
+
+    /// <summary>Dopisuje do ulubionych stacje z pliku M3U albo PLS.</summary>
+    private async void OnRadioImport(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = Strings.Current["RadioImportTitle"],
+                AllowMultiple = false,
+                FileTypeFilter = [BuildStationListFilter()],
+            });
+
+            var path = files.FirstOrDefault()?.TryGetLocalPath();
+            if (string.IsNullOrEmpty(path)) return;
+
+            // Plik większy niż rozsądna lista stacji nie jest listą stacji.
+            if (new FileInfo(path).Length > 2 * 1024 * 1024)
+            {
+                _viewModel.ShowNotice(Strings.Current["RadioImportFailed"]);
+                return;
+            }
+
+            _viewModel.Radio.Import(await File.ReadAllTextAsync(path));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cewka] import stacji: {ex.Message}");
+            _viewModel.ShowNotice(Strings.Current["RadioImportFailed"]);
+        }
+    }
+
+    /// <summary>Zapisuje ulubione jako rozszerzone M3U.</summary>
+    private async void OnRadioExport(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = Strings.Current["RadioExportTitle"],
+                SuggestedFileName = Strings.Current["RadioExportDefaultName"],
+                DefaultExtension = "m3u8",
+                FileTypeChoices = [BuildStationListFilter()],
+            });
+
+            var path = file?.TryGetLocalPath();
+            if (string.IsNullOrEmpty(path)) return;
+
+            await File.WriteAllTextAsync(path, _viewModel.Radio.ExportText(), new System.Text.UTF8Encoding(false));
+            _viewModel.ShowNotice(Strings.Current["RadioExported"]);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cewka] eksport stacji: {ex.Message}");
+            _viewModel.ShowNotice(Strings.Current["RadioExportFailed"]);
+        }
+    }
+
     private void OnQueuePlay(object? sender, RoutedEventArgs e)
     {
         if (SelectedRow is { } row) _viewModel.PlayItem(row);
@@ -1210,8 +1730,19 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Przerywa przeciąganie w kolejce bez przenoszenia utworu, np. gdy kolejkę zakrywa scena.</summary>
+    private void CancelQueueDrag()
+    {
+        QueueList.Cursor = Cursor.Default;
+        _dragSourceIndex = -1;
+        _dragging = false;
+    }
+
     private void OnQueuePointerReleased(object? sender, PointerReleasedEventArgs e)
     {
+        // Gest zaczyna się lewym przyciskiem i tylko jego puszczenie go kończy.
+        if (e.InitialPressMouseButton != MouseButton.Left) return;
+
         QueueList.Cursor = Cursor.Default;
 
         var source = _dragSourceIndex;
@@ -1288,6 +1819,21 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape && _menuOpen)
+        {
+            SetMenuOpen(false);
+            e.Handled = true;
+            return;
+        }
+
+        // Scena obsługuje klawisze przed skrótami okna; czego nie weźmie, idzie do kontrolki
+        // z fokusem albo do skrótów plików i ustawień w OnKeyDown.
+        if (Scene.IsOpen)
+        {
+            if (!e.Handled && Scene.HandleKey(e)) e.Handled = true;
+            return;
+        }
+
         if (e.Handled || e.Key is not (Key.Space or Key.Left or Key.Right or Key.Up or Key.Down)) return;
         var focused = FocusManager?.GetFocusedElement();
         if (KeepsArrowKeys(focused) || e.Key == Key.Space && KeepsSpace(focused)) return;
@@ -1298,6 +1844,12 @@ public partial class MainWindow : Window
     /// <summary>Puszczenie Spacji też nie dociera do przycisku, bo ten klika właśnie przy puszczeniu.</summary>
     private void OnPreviewKeyUp(object? sender, KeyEventArgs e)
     {
+        if (Scene.IsOpen)
+        {
+            if (e.Key == Key.Space && (e.KeyModifiers != KeyModifiers.None || !Scene.PassesSpaceToFocus)) e.Handled = true;
+            return;
+        }
+
         var focused = FocusManager?.GetFocusedElement();
         if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.None && !KeepsArrowKeys(focused) && !KeepsSpace(focused))
             e.Handled = true;
@@ -1326,12 +1878,20 @@ public partial class MainWindow : Window
         base.OnKeyDown(e);
         if (e.Handled) return;
 
-        // Transport i głośność wspólne z oknem ustawień, z tymi samymi modyfikatorami.
-        if (HandlePlaybackShortcut(e)) return;
-
         var modifiers = e.KeyModifiers;
         var none = modifiers == KeyModifiers.None;
         var control = modifiers == KeyModifiers.Control;
+
+        // Pisanie w polu tekstowym (szukanie stacji, adres) nie uruchamia skrótów literowych.
+        if ((none || modifiers == KeyModifiers.Shift) && FocusManager?.GetFocusedElement() is TextBox) return;
+
+        // W scenie z okna zostają tylko polecenia otwierające pliki i ustawienia.
+        if (Scene.IsOpen && !(e.Key == Key.O && (control || modifiers == (KeyModifiers.Control | KeyModifiers.Shift))
+                              || e.Key == Key.OemComma && control))
+            return;
+
+        // Transport i głośność wspólne z oknem ustawień, z tymi samymi modyfikatorami.
+        if (HandlePlaybackShortcut(e)) return;
 
         switch (e.Key)
         {
@@ -1340,22 +1900,26 @@ public partial class MainWindow : Window
             case Key.O when control: OnOpenFiles(this, new RoutedEventArgs()); break;
 
             // --- odtwarzanie ---
-            case Key.S when none: _viewModel.ShuffleEnabled = !_viewModel.ShuffleEnabled; break;
-            case Key.R when none: _viewModel.CycleRepeat(); break;
+            case Key.S when none: if (_viewModel.IsFilesMode) _viewModel.ShuffleEnabled = !_viewModel.ShuffleEnabled; break;
+            case Key.R when none: if (_viewModel.IsFilesMode) _viewModel.CycleRepeat(); break;
+
+            // --- źródło dźwięku i radio ---
+            case Key.D1 when control && _viewModel.RadioAvailable: _viewModel.SetSource(SourceMode.Files); break;
+            case Key.D2 when control: _viewModel.SetSource(SourceMode.Radio); break;
+            case Key.F when control && _viewModel.IsRadioMode: FocusRadioSearch(); break;
 
             // --- interfejs ---
             case Key.Q when none: _viewModel.TogglePanel(); break;
-            case Key.L when none: _viewModel.ToggleQueue(); break;
+            case Key.L when none: ToggleQueueByKey(); break;
             case Key.T when none: OnToggleTheme(this, new RoutedEventArgs()); break;
-            case Key.F11 when none: ToggleFullScreen(); break;
+            case Key.F11 when none: EnterScene(); break;
             case Key.OemComma when control: OpenSettings(); break;
 
-            // Esc najpierw zamyka nakładaną kolejkę, potem kończy pełny ekran.
-            case Key.Escape when none && QueueOverlayOpen: _viewModel.QueueOpen = false; break;
-            case Key.Escape when none && WindowState == WindowState.FullScreen: ToggleFullScreen(); break;
+            case Key.Escape when none && CloseQueueByKey(): break;
 
             // --- kolejka ---
-            case Key.Z when control && _viewModel.CanUndoQueue: _viewModel.UndoQueue(); break;
+            case Key.Z when control && _viewModel.IsRadioMode && _viewModel.Radio.CanUndo: _viewModel.Radio.Undo(); break;
+            case Key.Z when control && _viewModel.IsFilesMode && _viewModel.CanUndoQueue: _viewModel.UndoQueue(); break;
 
             default: return;
         }
@@ -1394,7 +1958,7 @@ public partial class MainWindow : Window
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
-        if (e.Handled) return;
+        if (e.Handled || Scene.IsOpen) return;
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
 
         var position = e.GetPosition(this);
@@ -1406,13 +1970,6 @@ public partial class MainWindow : Window
         }
 
         if (position.Y > TitleBar.Bounds.Height) return;
-
-        // Na pełnym ekranie pasek tytułu nie przesuwa okna; dwuklik z niego wychodzi.
-        if (WindowState == WindowState.FullScreen)
-        {
-            if (e.ClickCount == 2) ToggleFullScreen();
-            return;
-        }
 
         // W Windows przesuwanie i dwuklik obsługuje system, bo pasek jest oznaczony jako pasek tytułu.
         if (_systemFrame) return;

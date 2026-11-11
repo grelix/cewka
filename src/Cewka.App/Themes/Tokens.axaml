@@ -16,6 +16,74 @@
   -->
   <x:Double x:Key="PanelHeaderRowHeight">34</x:Double>
 
+  <!--
+    Plansza sceny: zawsze ciemna, z bielą TextBrush jako jedyną barwą stanu włączonego. Szarości
+    są kryjące, bo półprzezroczyste wyszłyby jaśniejsze na jasnej okładce.
+  -->
+  <!-- Tekst drugorzędny mały: album, czasy, podpisy i ikony wyłączone, pierścień fokusu. -->
+  <SolidColorBrush x:Key="SceneText2Brush" Color="#FFC7C7CC" />
+  <!-- Tekst drugorzędny duży: wykonawca. -->
+  <SolidColorBrush x:Key="SceneText3Brush" Color="#FFABABB0" />
+  <!-- Ikona na białym kole odtwarzania i otwór płyty. -->
+  <SolidColorBrush x:Key="SceneInkBrush" Color="#FF1C1C1E" />
+  <SolidColorBrush x:Key="SceneNightBrush" Color="#FF000000" />
+  <!-- Przyciemnienie poziome: strona tekstu ciemniejsza. -->
+  <LinearGradientBrush x:Key="SceneDimAcrossBrush" StartPoint="0%,50%" EndPoint="100%,50%">
+    <GradientStop Color="#80000000" Offset="0" />
+    <GradientStop Color="#B3000000" Offset="1" />
+  </LinearGradientBrush>
+  <!-- Przyciemnienie dolne, od 55 % wysokości. -->
+  <LinearGradientBrush x:Key="SceneDimBottomBrush" StartPoint="0%,0%" EndPoint="0%,100%">
+    <GradientStop Color="#00000000" Offset="0.55" />
+    <GradientStop Color="#47000000" Offset="1" />
+  </LinearGradientBrush>
+  <!-- Środek talerza płyty, pod naklejką. -->
+  <SolidColorBrush x:Key="SceneDiscCoreBrush" Color="#FF151517" />
+  <!-- Korpus płyty od brzegu naklejki. -->
+  <SolidColorBrush x:Key="SceneDiscBodyBrush" Color="#FF0C0C0E" />
+  <!-- Brzeg płyty, w który korpus przechodzi płynnie. -->
+  <SolidColorBrush x:Key="SceneDiscRimBrush" Color="#FF0F0F11" />
+  <!-- Rozdzielacze ścieżek na rowkach. -->
+  <SolidColorBrush x:Key="SceneDiscSeparatorBrush" Color="#80000000" />
+  <!-- Obrys naklejki z okładką. -->
+  <SolidColorBrush x:Key="SceneDiscLabelOutlineBrush" Color="#99000000" />
+  <!-- Obrys otworu. -->
+  <SolidColorBrush x:Key="SceneDiscHoleOutlineBrush" Color="#14FFFFFF" />
+  <!-- Obrys uchwytu paska postępu. -->
+  <SolidColorBrush x:Key="SceneThumbOutlineBrush" Color="#1AFFFFFF" />
+  <!-- Cień uchwytu paska postępu. -->
+  <SolidColorBrush x:Key="SceneThumbShadowBrush" Color="#4D000000" />
+  <!--
+    Cień pod płytą, przesunięty o 30 w dół: czerń 55 % opadająca jak rozmycie 60 wokół brzegu
+    płyty, w elipsie o promieniu 380. Gradient zamiast efektu rozmycia, liczonego w każdej klatce.
+  -->
+  <RadialGradientBrush x:Key="SceneDiscShadowBrush">
+    <GradientStop Color="#8C000000" Offset="0.684" />
+    <GradientStop Color="#80000000" Offset="0.737" />
+    <GradientStop Color="#69000000" Offset="0.789" />
+    <GradientStop Color="#46000000" Offset="0.842" />
+    <GradientStop Color="#23000000" Offset="0.895" />
+    <GradientStop Color="#0D000000" Offset="0.947" />
+    <GradientStop Color="#00000000" Offset="1" />
+  </RadialGradientBrush>
+  <!-- Nieruchomy połysk płyty: biel 9 % przy 28° i 7 % przy 208°, licząc od góry zgodnie z zegarem. -->
+  <ConicGradientBrush x:Key="SceneDiscSheenBrush">
+    <GradientStop Color="#00FFFFFF" Offset="0" />
+    <GradientStop Color="#17FFFFFF" Offset="0.0778" />
+    <GradientStop Color="#00FFFFFF" Offset="0.1611" />
+    <GradientStop Color="#00FFFFFF" Offset="0.5" />
+    <GradientStop Color="#12FFFFFF" Offset="0.5778" />
+    <GradientStop Color="#00FFFFFF" Offset="0.6611" />
+    <GradientStop Color="#00FFFFFF" Offset="1" />
+  </ConicGradientBrush>
+  <!-- Cień koła odtwarzania. -->
+  <!-- Okładka sceny: cień pod ostrą okładką w miejscu płyty i zaokrąglenie rogów. -->
+  <BoxShadows x:Key="SceneCoverShadow">0 24 64 0 #A6000000</BoxShadows>
+  <CornerRadius x:Key="SceneCoverRadius">6</CornerRadius>
+  <!-- Okładka utworu już zagranego w rzędzie kolejki. -->
+  <x:Double x:Key="SceneRowPlayedOpacity">0.45</x:Double>
+  <BoxShadows x:Key="ScenePlayShadow">0 1 3 0 #73000000</BoxShadows>
+
   <ResourceDictionary.ThemeDictionaries>
 
     <!-- ================= CIEMNY ================= -->
@@ -45,6 +113,11 @@
       <SolidColorBrush x:Key="AccentBrush" Color="#FF7FB6EF" />
       <!-- Pierścień fokusu: akcent o kontraście co najmniej 3:1 do najjaśniejszej powierzchni (Contrast.FocusRing). -->
       <SolidColorBrush x:Key="FocusRingBrush" Color="#FF7FB6EF" />
+      <!--
+        Kropka przed napisem „Na żywo”, w oknie i w zawsze ciemnej scenie: jasna czerwień o kontraście
+        co najmniej 3:1 do najjaśniejszego tła, na jakie pozwala Contrast.DarkBackdropCeiling (test kropki).
+      -->
+      <SolidColorBrush x:Key="LiveDotBrush" Color="#FFFF5F57" />
       <SolidColorBrush x:Key="AccentSoftBrush" Color="#387FB6EF" />
       <SolidColorBrush x:Key="AccentSoftHiBrush" Color="#527FB6EF" />
       <SolidColorBrush x:Key="OverlayBrush" Color="#FF18191D" />
@@ -91,6 +164,8 @@
       <SolidColorBrush x:Key="FillBrush" Color="#FF1B1B1D" />
       <SolidColorBrush x:Key="AccentBrush" Color="#FF2A75BA" />
       <SolidColorBrush x:Key="FocusRingBrush" Color="#FF2A75BA" />
+      <!-- Ciemna czerwień: co najmniej 3:1 do najciemniejszego tła z Contrast.LightBackdropFloor. -->
+      <SolidColorBrush x:Key="LiveDotBrush" Color="#FFB3261E" />
       <SolidColorBrush x:Key="AccentSoftBrush" Color="#2E2A75BA" />
       <SolidColorBrush x:Key="AccentSoftHiBrush" Color="#452A75BA" />
       <SolidColorBrush x:Key="OverlayBrush" Color="#FFF2F2F5" />

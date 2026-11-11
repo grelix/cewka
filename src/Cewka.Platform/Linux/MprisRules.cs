@@ -3,6 +3,13 @@ namespace Cewka.Platform.Linux;
 /// <summary>The parts of the MPRIS behaviour that need no bus, kept apart so they can be checked anywhere.</summary>
 internal static class MprisRules
 {
+    /// <summary>Adres <c>file://</c> grafiki do <c>mpris:artUrl</c>; pusty, gdy grafiki nie ma albo ścieżka nie jest bezwzględna.</summary>
+    public static string ArtUrl(string? path) =>
+        !string.IsNullOrEmpty(path) && Path.IsPathRooted(path) ? new Uri(path).AbsoluteUri : string.Empty;
+
+    /// <summary>Stacja radiowa nie ma osi czasu: przewijanie jest wyłączone.</summary>
+    public static bool CanSeek(bool live) => !live;
+
     /// <summary>
     /// Prefix of track identifiers. Specyfikacja zastrzega przestrzeń <c>/org/mpris</c> dla
     /// siebie, więc odtwarzacz nazywa utwory we własnej.

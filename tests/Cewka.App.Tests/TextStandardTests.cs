@@ -39,7 +39,7 @@ public sealed class TextStandardTests
     private static readonly Regex Shouting = new(@"(?<!\p{L})\p{Lu}{4,}(?!\p{L})");
 
     /// <summary>Skróty techniczne, które z natury piszą się wielkimi literami.</summary>
-    private static readonly string[] AllowedAbbreviations = ["LUFS", "FLAC", "ALAC", "MPRIS", "ReplayGain"];
+    private static readonly string[] AllowedAbbreviations = ["LUFS", "FLAC", "ALAC", "MPRIS", "ReplayGain", "OLED"];
 
     public static TheoryData<string> Written => new("pl", "en");
 

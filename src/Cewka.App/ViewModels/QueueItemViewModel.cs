@@ -44,7 +44,12 @@ public sealed class QueueItemViewModel : ObservableObject
     public required string Duration
     {
         get => _duration;
-        set { if (Set(ref _duration, value)) Raise(nameof(AccessibleName)); }
+        set
+        {
+            if (!Set(ref _duration, value)) return;
+            Raise(nameof(AccessibleName));
+            Raise(nameof(NarrowTooltip));
+        }
     }
 
     /// <summary>
@@ -96,6 +101,7 @@ public sealed class QueueItemViewModel : ObservableObject
         {
             if (!Set(ref _unsupportedReason, value)) return;
             Raise(nameof(Tooltip));
+            Raise(nameof(NarrowTooltip));
         }
     }
 
@@ -127,6 +133,9 @@ public sealed class QueueItemViewModel : ObservableObject
 
     /// <summary>Path normally; the reason instead when the file cannot be played.</summary>
     public string Tooltip => _unsupportedReason ?? Path;
+
+    /// <summary>Podpowiedź wiersza w wąskim panelu, gdzie nie ma kolumny czasu: ścieżka albo powód i czas.</summary>
+    public string NarrowTooltip => $"{Tooltip}\n{_duration}";
 
     public double RowOpacity => _isUnsupported ? 0.45 : 1.0;
 

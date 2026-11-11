@@ -18,7 +18,7 @@ public sealed class QueueSessionTests
     public void UsuniecieGrajacegoUtworuCzysciTytulIZaczynaOdNastepnego() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a"), h.Track("b"), h.Track("c")]);
+        h.OpenPaths([h.Track("a"), h.Track("b"), h.Track("c")]);
         h.Player.PlayItem(h.Player.Queue[1]);
         Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 1));
 
@@ -37,12 +37,12 @@ public sealed class QueueSessionTests
     public void WczytanieListyCzysciTytulPoprzedniegoUtworu() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a")]);
+        h.OpenPaths([h.Track("a")]);
         Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 0));
 
         var list = Path.Combine(h.Directory, "lista.m3u8");
         File.WriteAllText(list, $"#EXTM3U\n{h.Track("b")}\n{h.Track("c")}\n");
-        h.Player.LoadPlaylist(list);
+        h.LoadPlaylist(list);
 
         Assert.Equal(Idle, h.Player.Title);
         Assert.Equal(-1, h.Player.CurrentIndex);
@@ -52,7 +52,7 @@ public sealed class QueueSessionTests
     public void ZaleglaZmianaUtworuPoUsunieciuGrajacegoNieOznaczaInnegoWiersza() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a"), h.Track("b"), h.Track("c")]);
+        h.OpenPaths([h.Track("a"), h.Track("b"), h.Track("c")]);
         Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 0));
 
         QueueTrackChangeWithoutPumping(h, () => h.Player.MoveInQueue(2, 1));
@@ -66,14 +66,15 @@ public sealed class QueueSessionTests
     public void ZaleglaZmianaUtworuPoWczytaniuListyNieOznaczaWiersza() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a"), h.Track("b"), h.Track("c")]);
+        h.OpenPaths([h.Track("a"), h.Track("b"), h.Track("c")]);
         Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 0));
 
         var list = Path.Combine(h.Directory, "lista.m3u8");
         File.WriteAllText(list, $"#EXTM3U\n{h.Track("d")}\n{h.Track("e")}\n");
 
+        // Zastąpienie wprost: czekanie na wczytanie w tle obsłużyłoby zaległą zmianę przed nim.
         QueueTrackChangeWithoutPumping(h, () => h.Player.MoveInQueue(2, 1));
-        h.Player.LoadPlaylist(list);
+        h.Player.ReplaceWithPlaylist(PlaylistFile.Load(list));
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         AssertNothingCurrent(h);
@@ -117,7 +118,7 @@ public sealed class QueueSessionTests
         using var h = new PlayerHarness();
         Save(h, [h.Track("a"), h.Track("b"), h.Track("c")], 2, 42);
 
-        h.Player.RestoreQueueState();
+        h.RestoreQueueState();
         h.Player.SaveQueueState();
 
         var saved = QueueStateStore.Load(h.QueueFile)!;
@@ -131,7 +132,7 @@ public sealed class QueueSessionTests
         using var h = new PlayerHarness();
         Save(h, [h.Track("a"), h.Track("b")], 1, 5);
 
-        h.Player.RestoreQueueState();
+        h.RestoreQueueState();
 
         Assert.Equal(Idle, h.Player.Title);
     });
@@ -142,7 +143,7 @@ public sealed class QueueSessionTests
         using var h = new PlayerHarness();
         Save(h, [Path.Combine(h.Directory, "nie-ma.wav"), h.Track("b"), h.Track("c")], 2, 10);
 
-        h.Player.RestoreQueueState();
+        h.RestoreQueueState();
         h.Player.SaveQueueState();
 
         Assert.Equal(1, QueueStateStore.Load(h.QueueFile)!.CurrentIndex);
@@ -157,7 +158,7 @@ public sealed class QueueSessionTests
         using var h = new PlayerHarness();
         Save(h, [h.Track("a"), Path.Combine(h.Directory, "nie-ma.wav"), h.Track("c")], 1, 10);
 
-        h.Player.RestoreQueueState();
+        h.RestoreQueueState();
         h.Player.SaveQueueState();
 
         Assert.Equal(-1, QueueStateStore.Load(h.QueueFile)!.CurrentIndex);
@@ -167,9 +168,14 @@ public sealed class QueueSessionTests
     public void WznowienieZaczynaOdZapisanejPozycji() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        Save(h, [h.Track("a"), h.Track("b")], 1, 30);
+        Save(h, [h.TrackWithTaggedLength("a"), h.TrackWithTaggedLength("b")], 1, 30);
 
-        h.Player.RestoreQueueState();
+        h.RestoreQueueState();
+
+        // Długość z tagów decyduje, czy pozycja mieści się w utworze; bez czekania wynik
+        // zależałby od tego, czy odczyt w tle zdążył.
+        Assert.True(h.PumpUntil(() => h.Engine.Queue.All(entry => entry.Duration > TimeSpan.Zero)));
+
         h.Player.TogglePlay();
 
         Assert.True(h.Player.IsPlaying);
@@ -182,7 +188,7 @@ public sealed class QueueSessionTests
     {
         using var h = new PlayerHarness();
         Save(h, [h.TrackWithTaggedLength("a"), h.TrackWithTaggedLength("b")], 1, 30);
-        h.Player.RestoreQueueState();
+        h.RestoreQueueState();
 
         // Długość z tagów decyduje, czy pozycja mieści się w utworze; bez czekania wynik
         // zależałby od tego, czy odczyt w tle zdążył.
@@ -209,7 +215,7 @@ public sealed class QueueSessionTests
         using var h = new PlayerHarness();
         var c = h.Track("c");
         Save(h, [h.Track("a"), h.Track("b"), c], 2, 10);
-        h.Player.RestoreQueueState();
+        h.RestoreQueueState();
 
         h.Player.RemoveFromQueue(h.Player.Queue[0]);
         h.Player.SaveQueueState();
@@ -227,7 +233,7 @@ public sealed class QueueSessionTests
     {
         using var h = new PlayerHarness();
         Save(h, [h.Track("a"), h.Track("b")], 1, 10);
-        h.Player.RestoreQueueState();
+        h.RestoreQueueState();
 
         h.Player.RemoveFromQueue(h.Player.Queue[1]);
         h.Player.SaveQueueState();
@@ -240,7 +246,7 @@ public sealed class QueueSessionTests
     {
         using var h = new PlayerHarness();
         Save(h, [h.Track("a"), h.Track("b")], 1, 10);
-        h.Player.RestoreQueueState();
+        h.RestoreQueueState();
 
         h.Player.ClearQueue();
         h.Player.TogglePlay();
@@ -255,7 +261,7 @@ public sealed class QueueSessionTests
         using var h = new PlayerHarness();
         File.WriteAllText(h.QueueFile, """{"paths": null, "currentIndex": 0}""");
 
-        h.Player.RestoreQueueState();
+        h.RestoreQueueState();
 
         Assert.Empty(h.Player.Queue);
     });
@@ -266,7 +272,7 @@ public sealed class QueueSessionTests
         using var h = new PlayerHarness();
         Assert.False(h.Player.QueueSavePending);
 
-        h.Player.OpenPaths([h.Track("a"), h.Track("b")], replace: false);
+        h.OpenPaths([h.Track("a"), h.Track("b")], replace: false);
         Assert.True(h.Player.QueueSavePending);
 
         h.Player.SaveQueueState();
@@ -281,7 +287,7 @@ public sealed class QueueSessionTests
     public void ListaZKolejkiNieWpisujeZastepczegoWykonawcy() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a")], replace: false);
+        h.OpenPaths([h.Track("a")], replace: false);
 
         var entry = Assert.Single(h.Player.QueueAsPlaylist());
         Assert.Null(entry.Artist);
@@ -306,7 +312,7 @@ public sealed class QueueSessionTests
             PendingOpens = [new PendingOpenState { Paths = [folder], Action = "Add" }],
         }, h.QueueFile);
 
-        h.Player.RestoreQueueState();
+        h.RestoreQueueState();
 
         Assert.True(h.PumpUntil(() => h.Player.Queue.Count == 1));
         Assert.Equal([inFolder], h.Engine.QueuePaths.ToArray());
@@ -327,7 +333,7 @@ public sealed class QueueSessionTests
         Directory.CreateDirectory(folder);
         var inFolder = h.Track(Path.Combine("album", "b"));
 
-        MainViewModel.FolderExpanding = path =>
+        h.PathChecking = path =>
         {
             if (path == folder) release.Wait(TimeSpan.FromSeconds(10));
         };
@@ -344,7 +350,7 @@ public sealed class QueueSessionTests
         }
         finally
         {
-            MainViewModel.FolderExpanding = null;
+            h.PathChecking = null;
             release.Set();
         }
 
@@ -380,20 +386,21 @@ public sealed class QueueSessionTests
             PendingOpens = [new PendingOpenState { Paths = [folder], Action = savedAction }],
         }, h.QueueFile);
 
-        MainViewModel.FolderExpanding = path =>
+        h.PathChecking = path =>
         {
             if (path == folder) release.Wait(TimeSpan.FromSeconds(10));
         };
 
         try
         {
-            h.Player.RestoreQueueState();
+            _ = h.Player.RestoreQueueState();
+            Assert.True(h.PumpUntil(() => h.Player.Queue.Count == 1));
             h.Player.TogglePlay();
             Assert.True(h.Player.IsPlaying);
         }
         finally
         {
-            MainViewModel.FolderExpanding = null;
+            h.PathChecking = null;
             release.Set();
         }
 

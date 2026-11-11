@@ -11,17 +11,19 @@
     <PackageReference Include="NVorbis" Version="0.10.5" />
     <PackageReference Include="Concentus" Version="2.2.2" />
     <PackageReference Include="Concentus.OggFile" Version="1.0.7" />
-    <PackageReference Include="z440.atl.core" Version="7.16.0" />
+    <PackageReference Include="z440.atl.core" Version="7.19.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Cewka.Platform\Cewka.Platform.csproj" />
   </ItemGroup>
 
-  <!-- Testy podstawiaja atrape wyjscia i dekodera przez skladowe wewnetrzne. -->
+  <!-- Testy podstawiaja atrape wyjscia i dekodera przez skladowe wewnetrzne; narzedzie katalogu uzywa tej samej sieci co program. -->
   <ItemGroup>
     <InternalsVisibleTo Include="Cewka.Audio.Tests" />
     <InternalsVisibleTo Include="Cewka.App.Tests" />
+    <InternalsVisibleTo Include="Cewka.RadioProbe" />
+    <InternalsVisibleTo Include="Cewka.RadioCatalog" />
   </ItemGroup>
 
   <!--

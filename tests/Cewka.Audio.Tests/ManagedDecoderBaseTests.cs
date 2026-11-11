@@ -45,6 +45,54 @@ public sealed class ManagedDecoderBaseTests
         Assert.Equal(4800, decoder.Read(buffer));
     }
 
+    /// <summary>Źródło na żywo chwilowo bez danych nie kończy strumienia; plikowe kończy go jak dotąd.</summary>
+    [Fact]
+    public void WaitingSourceIsNotTakenForTheEnd()
+    {
+        using var decoder = new WaitingSource();
+        var buffer = new float[100 * 2];
+
+        Assert.Equal(0, decoder.Read(buffer));
+
+        decoder.Available = 40;
+        Assert.Equal(40, decoder.Read(buffer));
+        Assert.Equal(0, decoder.Read(buffer));
+
+        decoder.Available = 100;
+        Assert.Equal(100, decoder.Read(buffer));
+        Assert.Equal(140, decoder.Position);
+
+        decoder.Finished = true;
+        Assert.Equal(0, decoder.Read(buffer));
+
+        decoder.Available = 10;
+        Assert.Equal(0, decoder.Read(buffer));
+    }
+
+    private sealed class WaitingSource : ManagedDecoderBase
+    {
+        public int Available;
+        public bool Finished;
+
+        public WaitingSource() => Configure(48000, 2, 48000, 2, null, ChannelLayouts.Wave(2));
+
+        public override bool CanSeek => false;
+
+        protected override bool SourceWaiting => !Finished;
+
+        protected override int ReadSource(Span<float> destination, int frames)
+        {
+            if (Finished) return 0;
+
+            var take = Math.Min(frames, Available);
+            destination[..(take * 2)].Fill(0.25f);
+            Available -= take;
+            return take;
+        }
+
+        protected override void SeekSource(long sourceFrame) { }
+    }
+
     /// <summary>
     /// Źródło złożone z części o różnych formatach. Kolejną część zapowiada tak jak dekoder
     /// systemowy: przebudowa konwertera dopiero przy pustym buforze, potem zero i ponowne pytanie.

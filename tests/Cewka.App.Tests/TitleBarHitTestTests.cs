@@ -49,7 +49,7 @@ public sealed class TitleBarHitTestTests
             if (results.GetValueOrDefault(key) != expected.ToString()) failures.Add($"{key}: {results.GetValueOrDefault(key)}, oczekiwano {expected}");
         }
 
-        foreach (var button in new[] { "Korektor", "Kolejka", "Motyw", "Ustawienia", "Minimalizuj", "Zamknij" })
+        foreach (var button in new[] { "Korektor", "Kolejka", "Motyw", "Ustawienia", "PelnyEkran", "Minimalizuj", "Zamknij" })
             Expect($"glowne|{button}", HtClient);
 
         Expect("glowne|Maksymalizuj", HtMaxButton);

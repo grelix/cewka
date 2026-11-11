@@ -26,14 +26,23 @@ public sealed class LoudnessAnalyser
     private readonly int _blockFrames;
     private readonly int _hopFrames;
     private readonly double[] _accumulator;
-    private readonly List<double> _blockEnergies = [];
+    private readonly Queue<double> _blockEnergies = new();
+    private readonly int _maxBlocks;
+
+    /// <summary>Szczyty 100-milisekundowych odcinków; tylko przy oknie pomiaru, bo szczyt też z niego wypada.</summary>
+    private readonly Queue<double>? _hopPeaks;
+    private double _hopPeak;
+    private double _peak;
 
     private int _framesInHop;
     private int _hopsCollected;
     private readonly Queue<double[]> _pendingHops = new();
 
-    public LoudnessAnalyser(int sampleRate, int channels)
+    /// <param name="maxBlocks">Okno pomiaru strumienia bez końca: najstarsze bloki wypadają.</param>
+    public LoudnessAnalyser(int sampleRate, int channels, int maxBlocks = int.MaxValue)
     {
+        _maxBlocks = maxBlocks;
+        if (maxBlocks != int.MaxValue) _hopPeaks = new Queue<double>();
         _channels = channels;
         _shelf = new Biquad[channels];
         _highPass = new Biquad[channels];
@@ -52,8 +61,17 @@ public sealed class LoudnessAnalyser
     /// <summary>Number of 400 ms blocks measured so far.</summary>
     public int BlockCount => _blockEnergies.Count;
 
-    /// <summary>Największa bezwzględna wartość próbki we wszystkich kanałach, bez nadpróbkowania.</summary>
-    public double SamplePeak { get; private set; }
+    /// <summary>Największa bezwzględna wartość próbki we wszystkich kanałach, bez nadpróbkowania; przy oknie pomiaru z tego okna.</summary>
+    public double SamplePeak
+    {
+        get
+        {
+            var peak = Math.Max(_peak, _hopPeak);
+            if (_hopPeaks is not null)
+                foreach (var hop in _hopPeaks) peak = Math.Max(peak, hop);
+            return peak;
+        }
+    }
 
     /// <summary>Feeds interleaved samples. Can be called any number of times.</summary>
     public void Add(ReadOnlySpan<float> buffer, int frames)
@@ -67,7 +85,7 @@ public sealed class LoudnessAnalyser
                 // Próbka spoza liczb skończonych zatrułaby stan filtru K i szczyt na cały pomiar.
                 var sample = buffer[baseIndex + c];
                 if (!float.IsFinite(sample)) sample = 0;
-                if (Math.Abs(sample) > SamplePeak) SamplePeak = Math.Abs(sample);
+                if (Math.Abs(sample) > _hopPeak) _hopPeak = Math.Abs(sample);
 
                 var filtered = _highPass[c].ProcessDouble(_shelf[c].ProcessDouble(sample));
                 _accumulator[c] += filtered * filtered;
@@ -91,6 +109,18 @@ public sealed class LoudnessAnalyser
         Array.Clear(_accumulator);
         _framesInHop = 0;
 
+        if (_hopPeaks is null)
+        {
+            _peak = Math.Max(_peak, _hopPeak);
+        }
+        else
+        {
+            if (_hopPeaks.Count == _maxBlocks) _hopPeaks.Dequeue();
+            _hopPeaks.Enqueue(_hopPeak);
+        }
+
+        _hopPeak = 0;
+
         _pendingHops.Enqueue(hop);
         _hopsCollected++;
 
@@ -105,7 +135,8 @@ public sealed class LoudnessAnalyser
         var meanSquareSum = 0.0;
         for (var c = 0; c < _channels; c++) meanSquareSum += sum[c] / _blockFrames;
 
-        _blockEnergies.Add(meanSquareSum);
+        if (_blockEnergies.Count == _maxBlocks) _blockEnergies.Dequeue();
+        _blockEnergies.Enqueue(meanSquareSum);
         _pendingHops.Dequeue();
     }
 

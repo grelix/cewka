@@ -77,11 +77,14 @@ przygotuj_drzewo() {
     install -Dm644 "$REPO/packaging/linux/cewka.desktop" "$root/usr/share/applications/cewka.desktop"
 
     # Każdy rozmiar we własnym katalogu motywu, jak wymaga specyfikacja ikon freedesktop.
+    # Pliki 16–32 px mają uproszczony rysunek; bez nich pulpit zmniejszałby ikonę wektorową.
+    # 22 px biorą panele KDE i XFCE.
     local rozmiar
-    for rozmiar in 48 64 128 256; do
+    for rozmiar in 16 22 24 32 48 64 128 256; do
         install -Dm644 "$REPO/packaging/linux/icons/cewka-$rozmiar.png" \
             "$root/usr/share/icons/hicolor/${rozmiar}x${rozmiar}/apps/cewka.png"
     done
+    install -Dm644 "$REPO/assets/ikona/cewka.svg" "$root/usr/share/icons/hicolor/scalable/apps/cewka.svg"
 }
 
 # Odświeżenie baz pulpitu; bez tego wpis w menu pojawia się dopiero po przelogowaniu.
@@ -217,6 +220,7 @@ install -Dm644 $REPO/THIRD-PARTY-NOTICES.txt %{buildroot}/usr/share/licenses/cew
 /usr/bin/cewka
 /usr/share/applications/cewka.desktop
 /usr/share/icons/hicolor/*/apps/cewka.png
+/usr/share/icons/hicolor/scalable/apps/cewka.svg
 
 %post
 $SKRYPT_PO_INSTALACJI
@@ -270,7 +274,7 @@ depend = fontconfig
 optdepend = gst-plugins-base: potok dekodowania AAC, M4A i ALAC
 optdepend = gst-plugins-good: rozpakowanie kontenera M4A
 optdepend = gst-libav: dekoder AAC i ALAC
-optdepend = openssl: sprawdzanie nowszej wersji przez HTTPS
+optdepend = openssl: radio i sprawdzanie nowszej wersji przez HTTPS
 KONIEC
 
 # Skrypt instalacyjny pacmana odświeża bazy pulpitu jak w pozostałych pakietach.

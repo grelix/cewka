@@ -62,6 +62,45 @@ public sealed class PlatformTests : IDisposable
         Assert.Empty(SystemLanguage.ParseLanguageList(null));
     }
 
+    /// <summary>
+    /// Odmiany z własnym tłumaczeniem idą przed samym językiem: portugalski brazylijski przed portugalskim,
+    /// chiński uproszczony według pisma albo regionu. Odmiana bez tłumaczenia przechodzi dalej jako
+    /// sam język, więc portugalski z Portugalii zostaje przy „pt”.
+    /// </summary>
+    [Theory]
+    [InlineData("pt-BR", "pt-br,pt")]
+    [InlineData("pt-PT", "pt")]
+    [InlineData("zh-Hans-CN", "zh-hans,zh")]
+    [InlineData("zh-CN", "zh-hans,zh")]
+    [InlineData("zh-SG", "zh-hans,zh")]
+    [InlineData("zh-TW", "zh-hant,zh")]
+    [InlineData("zh-Hant-HK", "zh-hant,zh")]
+    [InlineData("ja-JP", "ja")]
+    public void OdmianyJezykaZWindows(string entry, string expected)
+    {
+        Assert.Equal(expected.Split(','), SystemLanguage.ParseLanguageList(entry + "\0\0"));
+    }
+
+    [Theory]
+    [InlineData("pt_BR.UTF-8", "pt-br,pt")]
+    [InlineData("zh_CN.UTF-8", "zh-hans,zh")]
+    [InlineData("zh_TW.UTF-8", "zh-hant,zh")]
+    [InlineData("ja_JP.UTF-8", "ja")]
+    public void OdmianyJezykaZLinuksa(string locale, string expected)
+    {
+        Assert.Equal(expected.Split(','), SystemLanguage.FromEnvironment(Variables(("LANG", locale))));
+    }
+
+    /// <summary>Brazylijczyk z językiem systemu pt_BR dostaje tłumaczenie brazylijskie, nie europejskie.</summary>
+    [Fact]
+    public void OdmianaZTlumaczeniemWygrywaZJezykiem()
+    {
+        // Bez sięgania do Strings: ten test nie działa w sesji Avalonii, a pierwsze użycie Strings poza nią
+        // zostawiłoby pusty słownik zapasowy dla wszystkich następnych testów.
+        var candidates = SystemLanguage.FromEnvironment(Variables(("LANGUAGE", "pt_BR:pt"), ("LANG", "pt_BR.UTF-8")));
+        Assert.Equal(["pt-br", "pt"], candidates);
+    }
+
     /// <summary>Lista z LANGUAGE jest przeglądana cała: pierwszy nieprzetłumaczony język nie przekreśla reszty.</summary>
     [Fact]
     public void LinuxPrzegladaCalaListeLanguage()

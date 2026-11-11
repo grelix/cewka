@@ -14,7 +14,7 @@ public sealed class MessageTests
         var missing = Path.Combine(h.Directory, "zniknal.wav");
         File.Copy(h.Track("wzor"), missing);
 
-        h.Player.OpenPaths([missing, h.Track("b")]);
+        h.OpenPaths([missing, h.Track("b")]);
 
         Assert.True(h.PumpUntil(() => h.Player.HasNotice));
         var reason = Strings.Current["TrackFailureFileMissing"];
@@ -33,7 +33,7 @@ public sealed class MessageTests
         File.Copy(h.Track("wzor"), first);
         File.Copy(h.Track("wzor2"), second);
 
-        h.Player.OpenPaths([first, second, h.Track("c")]);
+        h.OpenPaths([first, second, h.Track("c")]);
 
         var summary = string.Format(Strings.Current["TracksSkipped"], 2);
         Assert.True(h.PumpUntil(() => h.Player.Notice == summary), h.Player.Notice);
@@ -45,7 +45,7 @@ public sealed class MessageTests
         using var h = new PlayerHarness();
         h.FailAll = true;
 
-        h.Player.OpenPaths([h.Track("a")]);
+        h.OpenPaths([h.Track("a")]);
 
         Assert.True(h.Player.HasAudioFailure);
         Assert.Equal(Strings.Current["AudioFailureDevice"], h.Player.AudioFailure);
@@ -67,7 +67,7 @@ public sealed class MessageTests
     {
         using var h = new PlayerHarness();
         h.FailAll = true;
-        h.Player.OpenPaths([h.Track("a")]);
+        h.OpenPaths([h.Track("a")]);
         Assert.False(h.Player.IsPlaying);
 
         h.FailAll = false;
@@ -94,7 +94,7 @@ public sealed class MessageTests
     public void UtrataUrzadzeniaZatrzymujeIInformuje() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a")]);
+        h.OpenPaths([h.Track("a")]);
         Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 0));
 
         h.Outputs[^1].Lose();
@@ -107,7 +107,7 @@ public sealed class MessageTests
     public void OpoznieniePodaneZSeparatoremJezyka() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a")]);
+        h.OpenPaths([h.Track("a")]);
         var previous = Strings.Current.CurrentCode;
 
         try

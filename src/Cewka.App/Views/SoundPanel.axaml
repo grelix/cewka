@@ -1,0 +1,153 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:Cewka.App.Controls"
+             xmlns:l="using:Cewka.App.Localisation"
+             xmlns:vm="using:Cewka.App.ViewModels"
+             xmlns:v="using:Cewka.App.Views"
+             x:Class="Cewka.App.Views.SoundPanel"
+             x:DataType="vm:MainViewModel">
+
+  <!--
+    Korektor i efekty dźwiękowe: jedna kontrolka w oknie „Korektor i efekty” (karty obok siebie)
+    i w Ustawieniach (karty jedna pod drugą). Karty, przełączniki i suwaki jak w ustawieniach.
+    Układ kart ustawia kod według właściwości Stacked.
+  -->
+  <Grid x:Name="Cards" ColumnDefinitions="3*,2*" ColumnSpacing="14" RowSpacing="18">
+
+    <!-- ========== Korektor ========== -->
+    <Border x:Name="EqualiserCard" Classes="section" Grid.Column="0">
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,14"
+              MinHeight="{StaticResource PanelHeaderRowHeight}">
+          <TextBlock x:Name="EqHeading" Grid.Column="0" Classes="section-title"
+                     Text="{l:Translate Equaliser}" VerticalAlignment="Center" />
+
+          <!-- Ikona, bo w wąskim oknie napis nie zmieściłby się obok przełącznika. Aktywna
+               tylko wtedy, gdy jest co zerować. -->
+          <Button x:Name="EqResetButton" Grid.Column="1" Classes="icon" Width="28" Height="28"
+                  VerticalAlignment="Center" Margin="0,0,10,0"
+                  Click="OnResetEqualiser"
+                  IsEnabled="{Binding CanResetEqualiser}"
+                  ToolTip.Tip="{l:Translate TooltipEqualiserReset}"
+                  ToolTip.ShowOnDisabled="True"
+                  AutomationProperties.Name="{l:Translate TooltipEqualiserReset}">
+            <Viewbox Width="15" Height="15">
+              <Path Classes="stroke" Data="{StaticResource IconResetStroke}"
+                    Width="16" Height="16" StrokeThickness="1.3" />
+            </Viewbox>
+          </Button>
+
+          <c:GlassSwitch x:Name="EqSwitch" Grid.Column="2" VerticalAlignment="Center"
+                         IsChecked="{Binding EqualiserEnabled, Mode=TwoWay}"
+                         OffBrush="{DynamicResource TrackBrush}"
+                         OnBrush="{DynamicResource AccentBrush}"
+                         BorderBrush="{DynamicResource StrokeBrush}"
+                         ToolTip.Tip="{l:Translate TooltipEqualiserSwitch}"
+                         AutomationProperties.Name="{l:Translate Equaliser}" />
+        </Grid>
+
+        <Grid ColumnDefinitions="Auto,Auto,*" Opacity="{Binding EqualiserOpacity}">
+
+          <!-- Przedwzmacniacz -->
+          <StackPanel Grid.Column="0" Spacing="8" MinWidth="46">
+            <TextBlock Classes="tabular dim" Text="{Binding Preamp.GainText}"
+                       FontSize="10.5" HorizontalAlignment="Center" />
+            <c:EqFader Height="116" HorizontalAlignment="Center"
+                       Classes="accent" Classes.off="{Binding !EqualiserEnabled}"
+                       Value="{Binding Preamp.Gain, Mode=TwoWay}"
+                       AutomationProperties.Name="{l:Translate PreampName}"
+                       ShowCentreLine="False"
+                       TrackBrush="{DynamicResource TrackBrush}"
+                       ThumbBrush="{DynamicResource FaderThumbBrush}"
+                       ThumbBorderBrush="{DynamicResource FaderThumbBorderBrush}" />
+            <TextBlock Classes="faint" Text="{l:Translate PreampName}" FontSize="9.5"
+                       MaxWidth="88" TextWrapping="Wrap" TextAlignment="Center"
+                       HorizontalAlignment="Center" />
+          </StackPanel>
+
+          <Rectangle Grid.Column="1" Width="1" Margin="16,0"
+                     Fill="{DynamicResource StrokeBrush}"
+                     VerticalAlignment="Stretch" />
+
+          <!-- Pasma -->
+          <ItemsControl Grid.Column="2" ItemsSource="{Binding Bands}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <UniformGrid Rows="1" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:EqBandViewModel">
+                <StackPanel Spacing="8">
+                  <TextBlock Classes="tabular dim" Text="{Binding GainText}"
+                             FontSize="10.5" HorizontalAlignment="Center" />
+                  <c:EqFader Height="116" HorizontalAlignment="Center"
+                             Value="{Binding Gain, Mode=TwoWay}"
+                             AutomationProperties.Name="{Binding AccessibleName}"
+                             TrackBrush="{DynamicResource TrackBrush}"
+                             FillBrush="{DynamicResource FillBrush}"
+                             CentreLineBrush="{DynamicResource StrokeBrush}"
+                             ThumbBrush="{DynamicResource FaderThumbBrush}"
+                             ThumbBorderBrush="{DynamicResource FaderThumbBorderBrush}" />
+                  <TextBlock Classes="tabular faint" Text="{Binding Label}"
+                             FontSize="9.5" HorizontalAlignment="Center" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Grid>
+      </DockPanel>
+    </Border>
+
+    <!-- ========== Efekty dźwiękowe ========== -->
+    <Border x:Name="EffectsCard" Classes="section" Grid.Column="1">
+      <StackPanel Spacing="14">
+        <TextBlock x:Name="EffectsHeading" Classes="section-title" Text="{l:Translate Effects}"
+                   MinHeight="{StaticResource PanelHeaderRowHeight}" VerticalAlignment="Center"
+                   Padding="0,7,0,0" />
+
+        <ItemsControl x:Name="EffectList" ItemsSource="{Binding SoundEffects}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Spacing="14" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:EffectViewModel">
+              <!-- Wiersz jak w ustawieniach: nazwa (i opis) po lewej, przełącznik po prawej, siła pod spodem. -->
+              <StackPanel Spacing="6">
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0" VerticalAlignment="Center">
+                    <TextBlock Classes="setting-label" Text="{Binding Label}"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Description}" />
+                    <TextBlock Classes="setting-hint" Text="{Binding Description}"
+                               IsVisible="{Binding $parent[v:SoundPanel].ShowDescriptions}" />
+                  </StackPanel>
+                  <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
+                                 IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                 OffBrush="{DynamicResource TrackBrush}"
+                                 OnBrush="{DynamicResource AccentBrush}"
+                                 BorderBrush="{DynamicResource StrokeBrush}"
+                                 ToolTip.Tip="{Binding Description}"
+                                 AutomationProperties.Name="{Binding Label}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Opacity="{Binding RowOpacity}">
+                  <c:TrackSlider Grid.Column="0" Height="14"
+                                 Classes="accent" Classes.off="{Binding !Enabled}"
+                                 Value="{Binding Strength, Mode=TwoWay}" Step="0.1"
+                                 KeyboardStep="0.1"
+                                 AutomationProperties.Name="{Binding StrengthName}"
+                                 TrackThickness="4" ThumbDiameter="11"
+                                 TrackBrush="{DynamicResource TrackBrush}" />
+                  <TextBlock Grid.Column="1" Classes="tabular faint" MinWidth="34" TextAlignment="Right"
+                             Text="{Binding StrengthText}" FontSize="10.5" VerticalAlignment="Center" />
+                </Grid>
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

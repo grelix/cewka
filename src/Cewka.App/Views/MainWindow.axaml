@@ -3,10 +3,10 @@
         xmlns:c="using:Cewka.App.Controls"
         xmlns:l="using:Cewka.App.Localisation"
         xmlns:vm="using:Cewka.App.ViewModels"
+        xmlns:v="using:Cewka.App.Views"
         x:Class="Cewka.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="Cewka"
-        Icon="avares://Cewka/Assets/cewka.png"
         Width="1200" Height="680"
         MinWidth="760" MinHeight="520"
         WindowStartupLocation="CenterScreen"
@@ -31,10 +31,10 @@
                       BaseBrush="{DynamicResource DeskBrush}" />
 
       <!-- ============ Warstwa 1: przyciemnienie ============ -->
-      <Border Background="{DynamicResource ScrimBrush}" />
+      <Border x:Name="Scrim" Background="{DynamicResource ScrimBrush}" />
 
       <!-- ============ Warstwa 2: treść ============ -->
-      <DockPanel>
+      <DockPanel x:Name="WindowContent">
 
         <!-- Pasek tytułu: po prawej polecenia i przyciski okna, po lewej nic albo przyciski okna. -->
         <Border x:Name="TitleBar"
@@ -61,30 +61,95 @@
                           VerticalAlignment="Center">
 
                 <!--
-                  Dwa przełączniki dla dwóch niezależnych obszarów: suwaki to pas dolny
-                  z korektorem i efektami, lista to kolejka po prawej.
+                  Przycisk menu (decyzja 9a): ustawienia, korektor, kolejka i wybór źródła rozsuwają się w bok,
+                  z krótką animacją, a zwijają po użyciu ikony, kliknięciu poza nimi i klawiszu Esc.
                 -->
-                <ToggleButton x:Name="PanelToggle" Classes="icon" Width="30" Height="30"
-                              IsChecked="{Binding PanelOpen, Mode=TwoWay}"
-                              ToolTip.Tip="{l:Translate TooltipTogglePanel}"
-                              AutomationProperties.Name="{l:Translate TooltipTogglePanel}">
+                <Border x:Name="MenuTray" Width="0" Opacity="0" ClipToBounds="True" IsHitTestVisible="False">
+                  <StackPanel x:Name="MenuTrayItems" Orientation="Horizontal" Spacing="6" IsEnabled="False"
+                              HorizontalAlignment="Right">
+                    <Button x:Name="SettingsButton" Classes="icon" Width="30" Height="30"
+                            Click="OnOpenSettings"
+                            ToolTip.Tip="{l:Translate TooltipSettings}"
+                            AutomationProperties.Name="{l:Translate TooltipSettings}">
+                      <Viewbox Width="15" Height="15">
+                        <Path Classes="stroke" Data="{StaticResource IconGearStroke}"
+                              Width="16" Height="16" StrokeThickness="1.2" />
+                      </Viewbox>
+                    </Button>
+
+                    <ToggleButton x:Name="PanelToggle" Classes="icon" Width="30" Height="30"
+                                  IsChecked="{Binding PanelOpen, Mode=TwoWay}"
+                                  ToolTip.Tip="{l:Translate TooltipTogglePanel}"
+                                  AutomationProperties.Name="{l:Translate TooltipTogglePanel}">
+                      <Panel Width="30" Height="30">
+                        <Viewbox Width="15" Height="15">
+                          <Path Classes="stroke" Data="{StaticResource IconFadersStroke}"
+                                Width="16" Height="16" StrokeThickness="1.3" />
+                        </Viewbox>
+                        <Ellipse Classes="indicator" IsVisible="{Binding ShowProcessingDot}" />
+                      </Panel>
+                    </ToggleButton>
+
+                    <ToggleButton x:Name="QueueToggle" Classes="icon" Width="30" Height="30"
+                                  IsChecked="{Binding QueuePinned, Mode=TwoWay}"
+                                  ToolTip.Tip="{l:Translate TooltipToggleQueue}"
+                                  AutomationProperties.Name="{l:Translate TooltipToggleQueue}">
+                      <Viewbox Width="15" Height="15">
+                        <Path Classes="stroke" Data="{StaticResource IconQueueStroke}"
+                              Width="16" Height="16" StrokeThickness="1.3" />
+                      </Viewbox>
+                    </ToggleButton>
+
+                    <!--
+                      Dwa przełączniki dla dwóch niezależnych obszarów: suwaki to pas dolny
+                      z korektorem i efektami, lista to kolejka po prawej.
+                    -->
+                    <!-- Źródło dźwięku: dwie ikony obok siebie, włączona podświetlona. -->
+                    <StackPanel x:Name="SourceSwitch" Orientation="Horizontal" Spacing="2" Margin="0,0,0,0" IsVisible="{Binding RadioAvailable}"
+                                AutomationProperties.Name="{l:Translate SourceGroup}">
+                      <Button x:Name="SourceFilesButton" Classes="icon" Classes.active="{Binding IsFilesMode}"
+                              Width="30" Height="30" Click="OnSourceFiles"
+                              ToolTip.Tip="{Binding SourceFilesTooltip}"
+                              AutomationProperties.Name="{Binding SourceFilesTooltip}">
+                        <Viewbox Width="15" Height="15">
+                          <Path Classes="stroke" Data="{StaticResource IconFolderStroke}"
+                                Width="16" Height="16" StrokeThickness="1.2" />
+                        </Viewbox>
+                      </Button>
+                      <Button x:Name="SourceRadioButton" Classes="icon" Classes.active="{Binding IsRadioMode}"
+                              Width="30" Height="30" Click="OnSourceRadio"
+                              ToolTip.Tip="{Binding SourceRadioTooltip}"
+                              AutomationProperties.Name="{Binding SourceRadioTooltip}">
+                        <Viewbox Width="15" Height="15">
+                          <Path Classes="stroke" Data="{StaticResource IconRadioStroke}"
+                                Width="16" Height="16" StrokeThickness="1.2" />
+                        </Viewbox>
+                      </Button>
+                    </StackPanel>
+
+                  </StackPanel>
+                </Border>
+
+                <ToggleButton x:Name="MenuButton" Classes="icon" Width="30" Height="30"
+                              Click="OnMenuButton"
+                              ToolTip.Tip="{l:Translate TooltipMenu}"
+                              AutomationProperties.Name="{l:Translate TooltipMenu}">
                   <Panel Width="30" Height="30">
                     <Viewbox Width="15" Height="15">
-                      <Path Classes="stroke" Data="{StaticResource IconFadersStroke}"
+                      <Path Classes="stroke" Data="{StaticResource IconMenuStroke}"
                             Width="16" Height="16" StrokeThickness="1.3" />
                     </Viewbox>
-                    <Ellipse Classes="indicator" IsVisible="{Binding ShowProcessingDot}" />
+                    <!-- Znak trybu przy zwiniętym menu: mała ikona radia, gdy gra radio. -->
+                    <Border x:Name="MenuModeMark" IsVisible="False" IsHitTestVisible="False"
+                            Width="13" Height="13" CornerRadius="7" Margin="0,2,2,0"
+                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Background="{DynamicResource AccentBrush}">
+                      <Viewbox Width="9" Height="9">
+                        <Path Data="{StaticResource IconRadioStroke}" Width="16" Height="16" StrokeThickness="1.6"
+                              Stroke="White" Fill="Transparent" />
+                      </Viewbox>
+                    </Border>
                   </Panel>
-                </ToggleButton>
-
-                <ToggleButton x:Name="QueueToggle" Classes="icon" Width="30" Height="30"
-                              IsChecked="{Binding QueueOpen, Mode=TwoWay}"
-                              ToolTip.Tip="{l:Translate TooltipToggleQueue}"
-                              AutomationProperties.Name="{l:Translate TooltipToggleQueue}">
-                  <Viewbox Width="15" Height="15">
-                    <Path Classes="stroke" Data="{StaticResource IconQueueStroke}"
-                          Width="16" Height="16" StrokeThickness="1.3" />
-                  </Viewbox>
                 </ToggleButton>
 
                 <!-- Ikona pokazuje bieżący tryb: słońce, księżyc albo koło w połowie wypełnione. -->
@@ -112,13 +177,13 @@
                   </Panel>
                 </Button>
 
-                <Button x:Name="SettingsButton" Classes="icon" Width="30" Height="30"
-                        Click="OnOpenSettings"
-                        ToolTip.Tip="{l:Translate TooltipSettings}"
-                        AutomationProperties.Name="{l:Translate TooltipSettings}">
+                <Button x:Name="FullScreenButton" Classes="icon" Width="30" Height="30"
+                        Click="OnFullScreen"
+                        ToolTip.Tip="{l:Translate TooltipFullScreen}"
+                        AutomationProperties.Name="{l:Translate TooltipFullScreen}">
                   <Viewbox Width="15" Height="15">
-                    <Path Classes="stroke" Data="{StaticResource IconGearStroke}"
-                          Width="16" Height="16" StrokeThickness="1.2" />
+                    <Path Classes="stroke" Data="{StaticResource IconFullScreenStroke}"
+                          Width="16" Height="16" StrokeThickness="1.3" />
                   </Viewbox>
                 </Button>
 
@@ -158,12 +223,14 @@
                       PointerMoved="OnDiscPointerMoved" PointerExited="OnDiscPointerExited">
 
                   <!-- Płyta -->
-                  <Panel x:Name="DiscHost" Grid.Column="0" Width="300" Height="300">
+                  <!-- Dwuklik w płytę otwiera scenę pełnoekranową. -->
+                  <Panel x:Name="DiscHost" Grid.Column="0" Width="300" Height="300"
+                         Background="Transparent" DoubleTapped="OnDiscDoubleTapped">
 
                     <!-- Cień pod płytą: miękki gradient, bo rozmycie liczyłoby się od nowa
                          przy każdej klatce obrotu. -->
                     <Ellipse Margin="0,0,0,-22" Height="64" VerticalAlignment="Bottom"
-                             IsHitTestVisible="False">
+                             IsVisible="{Binding IsFilesMode}" IsHitTestVisible="False">
                       <Ellipse.Fill>
                         <RadialGradientBrush>
                           <GradientStop Color="#66000000" Offset="0" />
@@ -173,7 +240,27 @@
                       </Ellipse.Fill>
                     </Ellipse>
 
-                    <c:VinylDisc x:Name="Disc"
+                    <!-- Tryb radia: bez płyty winylowej, logo stoi w ramce z lekkim cieniem (decyzja 14.3). -->
+                    <Border x:Name="RadioLogoFrame" IsVisible="{Binding IsRadioMode}"
+                            Width="260" Height="260" CornerRadius="22" ClipToBounds="True"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Background="{DynamicResource Glass2Brush}"
+                            BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1"
+                            BoxShadow="0 14 34 0 #33000000, 0 3 8 0 #1F000000">
+                      <Panel>
+                        <Image x:Name="RadioLogoImage" Source="{Binding Radio.StageLogo}"
+                               IsVisible="{Binding Radio.HasStageLogo}" Stretch="Uniform" Margin="22"
+                               RenderOptions.BitmapInterpolationMode="HighQuality" />
+                        <Viewbox x:Name="RadioLogoPlaceholder" Width="96" Height="96"
+                                 IsVisible="{Binding Radio.ShowsStagePlaceholder}"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center">
+                          <Path Classes="stroke" Data="{StaticResource IconRadioStroke}" Width="16" Height="16"
+                                StrokeThickness="0.7" Stroke="{DynamicResource Text3Brush}" />
+                        </Viewbox>
+                      </Panel>
+                    </Border>
+
+                    <c:VinylDisc x:Name="Disc" IsVisible="{Binding IsFilesMode}"
                                  Cover="{Binding Cover}"
                                  CoreBrush="{DynamicResource DiscInnerBrush}"
                                  BodyBrush="{DynamicResource DiscOuterBrush}"
@@ -182,7 +269,7 @@
                                  HoleBrush="{DynamicResource DeskBrush}" />
 
                     <!-- Refleks świetlny, nieruchomy względem obracającej się płyty -->
-                    <Ellipse IsHitTestVisible="False">
+                    <Ellipse IsVisible="{Binding IsFilesMode}" IsHitTestVisible="False">
                       <Ellipse.Fill>
                         <LinearGradientBrush StartPoint="5.9%,26.5%" EndPoint="94.1%,73.5%">
                           <GradientStop Color="#29FFFFFF" Offset="0" />
@@ -195,30 +282,52 @@
                       </Ellipse.Fill>
                     </Ellipse>
 
-                    <c:DiscGlow x:Name="Glow" Margin="-6" />
+                    <c:DiscGlow x:Name="Glow" Margin="-6" IsVisible="{Binding IsFilesMode}" />
                   </Panel>
 
                   <!-- Opis utworu i sterowanie -->
                   <StackPanel x:Name="TrackInfo" Grid.Column="1" Spacing="5" VerticalAlignment="Center"
                               MaxWidth="900" HorizontalAlignment="Stretch">
 
-                    <Border HorizontalAlignment="Left" CornerRadius="5" Padding="7,3" Margin="0,0,0,3"
-                            IsVisible="{Binding HasFormatBadge}"
-                            Background="{DynamicResource Glass2Brush}"
-                            BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1">
-                      <TextBlock Classes="tabular dim" Text="{Binding FormatBadge}"
-                                 FontSize="9.5" LetterSpacing="0.57" />
-                    </Border>
-
                     <!-- Bez jawnej wysokości wiersza, bo narzucona obcina dolne wydłużenia
                          liter przy większych rozmiarach pisma. -->
-                    <TextBlock x:Name="TrackTitle" Text="{Binding Title}"
+                    <TextBlock x:Name="TrackTitle" Text="{Binding ShownTitle}"
                                FontSize="42" FontWeight="Bold"
                                LetterSpacing="-0.84" TextTrimming="CharacterEllipsis" />
 
-                    <TextBlock x:Name="TrackArtist" Classes="dim" Text="{Binding ArtistLine}" FontSize="17"
-                               IsVisible="{Binding HasArtistLine}"
-                               TextTrimming="CharacterEllipsis" />
+                    <!-- Wykonawca, a przy plikach zaraz za nim jakość źródła: mniejszym i cieńszym pismem,
+                         przygaszona. Długi wiersz skraca wykonawcę, etykieta zostaje w całości. -->
+                    <c:QualityRow x:Name="TrackLine">
+                      <c:QualityRow.IsVisible>
+                        <MultiBinding Converter="{x:Static BoolConverters.Or}">
+                          <Binding Path="HasShownLine" />
+                          <Binding Path="ShowsTrackQuality" />
+                        </MultiBinding>
+                      </c:QualityRow.IsVisible>
+                      <TextBlock x:Name="TrackArtist" Classes="dim" Text="{Binding ShownLine}" FontSize="17"
+                                 IsVisible="{Binding HasShownLine}"
+                                 TextTrimming="CharacterEllipsis" />
+                      <TextBlock x:Name="TrackQuality" Classes="faint" Text="{Binding FormatBadge}" FontSize="13.6"
+                                 FontWeight="Light" IsVisible="{Binding ShowsTrackQuality}" />
+                    </c:QualityRow>
+
+                    <!-- Radio: błąd stacji z przyciskiem ponowienia, gdy ponowienie ma sens. -->
+                    <Border x:Name="RadioFailure" IsVisible="{Binding Radio.HasError}"
+                            Margin="0,10,0,0" Padding="12,9" CornerRadius="9"
+                            HorizontalAlignment="Left" MaxWidth="640"
+                            Background="{DynamicResource Glass2Brush}"
+                            BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1">
+                      <StackPanel Spacing="8">
+                        <TextBlock x:Name="RadioFailureText" Text="{Binding Radio.ErrorText}"
+                                   FontSize="11.5" LineHeight="17"
+                                   TextWrapping="Wrap" Foreground="{DynamicResource Text2Brush}"
+                                   AutomationProperties.LiveSetting="Assertive" />
+                        <Button x:Name="RadioRetryButton" Classes="pill" Click="OnRadioRetry"
+                                IsVisible="{Binding Radio.CanRetry}"
+                                HorizontalAlignment="Left"
+                                Content="{l:Translate AudioRetry}" />
+                      </StackPanel>
+                    </Border>
 
                     <!-- Widoczne tylko wtedy, gdy nie udało się otworzyć wyjścia dźwięku. -->
                     <Border IsVisible="{Binding HasAudioFailure}"
@@ -268,7 +377,7 @@
                     </Border>
 
                     <!-- Widoczne tylko przy pustej kolejce: podpowiada, jak dodać muzykę. -->
-                    <StackPanel IsVisible="{Binding IsQueueEmpty}" Spacing="10" Margin="0,10,0,0">
+                    <StackPanel x:Name="AddPrompt" IsVisible="{Binding ShowsAddPrompt}" Spacing="10" Margin="0,10,0,0">
                       <WrapPanel Orientation="Horizontal" ItemSpacing="10" LineSpacing="8">
                         <Button Classes="pill primary" Click="OnOpenFiles"
                                 Content="{l:Translate OpenFiles}" />
@@ -280,7 +389,8 @@
                     </StackPanel>
 
                     <!-- Pasek postępu -->
-                    <StackPanel x:Name="ProgressBlock" Spacing="7" Margin="0,22,0,0">
+                    <StackPanel x:Name="ProgressBlock" Spacing="7" Margin="0,22,0,0"
+                                IsVisible="{Binding IsFilesMode}">
                       <Panel Height="44">
                         <c:WaveformView x:Name="Wave" Stroke="{DynamicResource Text2Brush}"
                                         IsActive="{Binding IsPlaying}"
@@ -300,12 +410,32 @@
                       </Grid>
                     </StackPanel>
 
+                    <!-- Radio: zamiast suwaka postępu i czasu napis „Na żywo”, bez fokusu. -->
+                    <Grid x:Name="LiveBlock" Margin="0,22,0,0" Height="67" IsVisible="{Binding IsRadioMode}">
+                      <StackPanel VerticalAlignment="Center" Spacing="7">
+                        <Border Height="2" CornerRadius="1" Background="{DynamicResource TrackBrush}" />
+                        <!-- Przed napisem czerwona kropka, która pulsuje przy graniu; za nim jakość strumienia,
+                             przygaszona mocniej niż napis. -->
+                        <c:QualityRow x:Name="LiveLine" IsVisible="{Binding Radio.ShowsLiveCaption}">
+                          <StackPanel Orientation="Horizontal">
+                            <c:LiveDot x:Name="LiveDot" FontSize="{Binding #LiveCaption.FontSize}"
+                                       Fill="{DynamicResource LiveDotBrush}"
+                                       IsActive="{Binding IsPlaying}" IsReduced="{Binding ReducedEffects}" />
+                            <TextBlock x:Name="LiveCaption" Classes="dim" Text="{l:Translate RadioLive}" FontSize="11" />
+                          </StackPanel>
+                          <TextBlock x:Name="LiveQuality" Classes="faint" Text="{Binding FormatBadge}" FontSize="11"
+                                     IsVisible="{Binding HasFormatBadge}" />
+                        </c:QualityRow>
+                      </StackPanel>
+                    </Grid>
+
                     <!-- Transport -->
                     <Grid x:Name="TransportRow" ColumnDefinitions="Auto,*,Auto" Margin="0,18,0,0">
 
                       <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="14"
                                   VerticalAlignment="Center">
                         <ToggleButton x:Name="ShuffleToggle" Classes="icon flat" Classes.active="{Binding ShuffleEnabled}"
+                                      Opacity="{Binding FilesOnlyOpacity}" IsHitTestVisible="{Binding IsFilesMode}" Focusable="{Binding IsFilesMode}"
                                       Width="36" Height="36"
                                       IsChecked="{Binding ShuffleEnabled, Mode=TwoWay}"
                                       ToolTip.Tip="{l:Translate TooltipShuffle}"
@@ -331,8 +461,11 @@
                                 ToolTip.Tip="{Binding PlayPauseTooltip}"
                                 AutomationProperties.Name="{Binding PlayPauseTooltip}">
                           <Panel>
-                            <Viewbox Width="20" Height="20" IsVisible="{Binding IsPlaying}">
+                            <Viewbox Width="20" Height="20" IsVisible="{Binding ShowsPauseIcon}">
                               <Path Classes="fill" Data="{StaticResource IconPause}" Width="16" Height="16" />
+                            </Viewbox>
+                            <Viewbox Width="20" Height="20" IsVisible="{Binding ShowsStopIcon}">
+                              <Path Classes="fill" Data="{StaticResource IconStop}" Width="16" Height="16" />
                             </Viewbox>
                             <Viewbox Width="20" Height="20" Margin="2,0,0,0" IsVisible="{Binding IsPaused}">
                               <Path Classes="fill" Data="{StaticResource IconPlay}" Width="16" Height="16" />
@@ -351,6 +484,7 @@
                         <!-- Trzy stany: bez powtarzania, kolejka, jeden utwór. Ostatni odróżnia
                              ikona z jedynką, bo sam akcent tego nie pokaże. -->
                         <Button x:Name="RepeatModeButton" Classes="icon" Classes.active="{Binding RepeatEnabled}"
+                                Opacity="{Binding FilesOnlyOpacity}" IsHitTestVisible="{Binding IsFilesMode}" Focusable="{Binding IsFilesMode}"
                                 Width="36" Height="36"
                                 Click="OnToggleRepeat" ToolTip.Tip="{Binding RepeatTooltip}"
                                 AutomationProperties.Name="{Binding RepeatTooltip}">
@@ -419,11 +553,125 @@
                   Background="Transparent" IsVisible="False"
                   PointerPressed="OnQueueDismissPressed" />
 
+          <!--
+            Uchwyt panelu przy prawej krawędzi: strefa najechania, cel dotykowy i przycisk dla klawiatury
+            i czytnika ekranu. Najechanie wysuwa panel jako podgląd, kliknięcie przypina go jak klawisz L.
+            Leży pod panelem, więc wysunięty panel go zakrywa, a kursor nad nim wciąż trzyma panel.
+          -->
+          <ToggleButton x:Name="QueueHandle" Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" Grid.ColumnSpan="2"
+                        Classes="queue-handle" ZIndex="3"
+                        Width="14" HorizontalAlignment="Right" VerticalAlignment="Stretch"
+                        IsChecked="{Binding QueuePinned, Mode=TwoWay}"
+                        ToolTip.Tip="{Binding QueueHandleName}"
+                        AutomationProperties.Name="{Binding QueueHandleName}">
+            <Panel>
+              <StackPanel VerticalAlignment="Center" Spacing="7">
+                <!-- Znak radia nad pastylką, jak na przycisku menu. -->
+                <Border x:Name="QueueHandleMark" IsVisible="{Binding IsRadioMode}" IsHitTestVisible="False"
+                        Width="10" Height="10" CornerRadius="5" HorizontalAlignment="Right" Margin="0,0,3,0"
+                        Background="{DynamicResource AccentBrush}">
+                  <Viewbox Width="7" Height="7">
+                    <Path Data="{StaticResource IconRadioStroke}" Width="16" Height="16" StrokeThickness="1.8"
+                          Stroke="White" Fill="Transparent" />
+                  </Viewbox>
+                </Border>
+                <Border x:Name="QueueHandlePill" Classes="handle-pill" HorizontalAlignment="Right" />
+              </StackPanel>
+            </Panel>
+          </ToggleButton>
+
           <Border x:Name="QueueColumn" Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Classes="queue-column"
-                  ZIndex="2"
+                  ZIndex="4"
                   Width="320"
-                  IsVisible="{Binding QueueOpen}">
-            <DockPanel Margin="18,16,14,16">
+                  IsVisible="False">
+           <Border.RenderTransform>
+             <TranslateTransform />
+           </Border.RenderTransform>
+           <Panel>
+           <!--
+             Nakładany panel stoi nad treścią, więc pod nim nie ma tła okna. Ta warstwa rysuje kopię
+             fragmentu żywego tła spod panelu z tym samym przyciemnieniem i szkłem co przypięta kolumna;
+             treść okna pod panelem nie prześwituje. Wycinek ustawia kod (MainWindow.QueuePanel.cs).
+           -->
+           <Panel x:Name="QueueBackdropLayer" IsVisible="False" IsHitTestVisible="False">
+             <Border x:Name="QueueBackdropCopy" />
+             <Border Background="{DynamicResource ScrimBrush}" />
+             <Border Background="{DynamicResource GlassBrush}" />
+           </Panel>
+           <DockPanel>
+
+            <!--
+              Stopka wspólna dla kolejki i stacji: polecenia z menu w pasku tytułu, żeby były pod ręką
+              bez sięgania do niego. Przypinka zastępuje tu przełącznik kolejki.
+            -->
+            <Border x:Name="QueueFooter" DockPanel.Dock="Bottom" Height="44" Padding="18,0,14,0"
+                    BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="0,1,0,0">
+              <DockPanel VerticalAlignment="Center">
+                <StackPanel x:Name="FooterSourceSwitch" DockPanel.Dock="Left" Orientation="Horizontal" Spacing="2"
+                            IsVisible="{Binding RadioAvailable}"
+                            AutomationProperties.Name="{l:Translate SourceGroup}">
+                  <Button x:Name="FooterFilesButton" Classes="icon" Classes.active="{Binding IsFilesMode}"
+                          Width="30" Height="30" Click="OnSourceFiles"
+                          ToolTip.Tip="{Binding SourceFilesTooltip}"
+                          AutomationProperties.Name="{Binding SourceFilesTooltip}">
+                    <Viewbox Width="15" Height="15">
+                      <Path Classes="stroke" Data="{StaticResource IconFolderStroke}"
+                            Width="16" Height="16" StrokeThickness="1.2" />
+                    </Viewbox>
+                  </Button>
+                  <Button x:Name="FooterRadioButton" Classes="icon" Classes.active="{Binding IsRadioMode}"
+                          Width="30" Height="30" Click="OnSourceRadio"
+                          ToolTip.Tip="{Binding SourceRadioTooltip}"
+                          AutomationProperties.Name="{Binding SourceRadioTooltip}">
+                    <Viewbox Width="15" Height="15">
+                      <Path Classes="stroke" Data="{StaticResource IconRadioStroke}"
+                            Width="16" Height="16" StrokeThickness="1.2" />
+                    </Viewbox>
+                  </Button>
+                </StackPanel>
+
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right">
+                  <ToggleButton x:Name="FooterPanelToggle" Classes="icon" Width="30" Height="30"
+                                IsChecked="{Binding PanelOpen, Mode=TwoWay}"
+                                Click="OnFooterOpensWindow"
+                                ToolTip.Tip="{l:Translate TooltipTogglePanel}"
+                                AutomationProperties.Name="{l:Translate TooltipTogglePanel}">
+                    <Panel Width="30" Height="30">
+                      <Viewbox Width="15" Height="15">
+                        <Path Classes="stroke" Data="{StaticResource IconFadersStroke}"
+                              Width="16" Height="16" StrokeThickness="1.3" />
+                      </Viewbox>
+                      <Ellipse Classes="indicator" IsVisible="{Binding ShowProcessingDot}" />
+                    </Panel>
+                  </ToggleButton>
+
+                  <Button x:Name="FooterSettingsButton" Classes="icon" Width="30" Height="30"
+                          Click="OnFooterSettings"
+                          ToolTip.Tip="{l:Translate TooltipSettings}"
+                          AutomationProperties.Name="{l:Translate TooltipSettings}">
+                    <Viewbox Width="15" Height="15">
+                      <Path Classes="stroke" Data="{StaticResource IconGearStroke}"
+                            Width="16" Height="16" StrokeThickness="1.2" />
+                    </Viewbox>
+                  </Button>
+
+                  <ToggleButton x:Name="QueuePinToggle" Classes="icon" Width="30" Height="30"
+                                IsChecked="{Binding QueuePinned, Mode=TwoWay}"
+                                ToolTip.Tip="{l:Translate TooltipQueuePin}"
+                                AutomationProperties.Name="{l:Translate TooltipQueuePin}">
+                    <Viewbox Width="15" Height="15">
+                      <Path Classes="stroke" Data="{StaticResource IconPinStroke}"
+                            Width="16" Height="16" StrokeThickness="1.3" />
+                    </Viewbox>
+                  </ToggleButton>
+                </StackPanel>
+
+                <Panel />
+              </DockPanel>
+            </Border>
+
+           <Panel>
+            <DockPanel x:Name="QueueContent" Margin="18,16,14,12" IsVisible="{Binding IsFilesMode}">
 
               <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*,Auto" Margin="6,0,6,10"
                     MinHeight="{StaticResource PanelHeaderRowHeight}">
@@ -453,7 +701,8 @@
                   </Button>
                 </StackPanel>
 
-                <TextBlock Grid.Column="3" Classes="tabular faint" Text="{Binding QueueSummary}"
+                <TextBlock x:Name="QueueSummaryText" Grid.Column="3" Classes="tabular faint queue-summary"
+                           Text="{Binding QueueSummary}"
                            FontSize="10" VerticalAlignment="Center" Margin="0,3,0,0" />
               </Grid>
 
@@ -474,6 +723,13 @@
                   <ListBox.Styles>
                     <Style Selector="ListBoxItem" x:DataType="vm:QueueItemViewModel">
                       <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+                    </Style>
+                    <!-- W wąskim panelu kolumna czasu znika, a czas przechodzi do podpowiedzi wiersza. -->
+                    <Style Selector="Grid.queue-row" x:DataType="vm:QueueItemViewModel">
+                      <Setter Property="ToolTip.Tip" Value="{Binding Tooltip}" />
+                    </Style>
+                    <Style Selector="Border.queue-narrow Grid.queue-row" x:DataType="vm:QueueItemViewModel">
+                      <Setter Property="ToolTip.Tip" Value="{Binding NarrowTooltip}" />
                     </Style>
                   </ListBox.Styles>
                   <ListBox.ContextMenu>
@@ -504,16 +760,23 @@
                                 IsEnabled="{Binding !IsQueueEmpty}" />
                     </ContextMenu>
                   </ListBox.ContextMenu>
+                  <!--
+                    Szerokość kolumny numerów liczy kod z liczby cyfr długości kolejki: jedna dla wszystkich
+                    wierszy, więc numery stoją w równym rzędzie i żaden nie jest ucinany.
+                  -->
+                  <ListBox.Resources>
+                    <x:Double x:Key="QueueNumberWidth">16</x:Double>
+                  </ListBox.Resources>
                   <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:QueueItemViewModel">
-                      <Grid ColumnDefinitions="16,*,Auto" Margin="10,9" ColumnSpacing="11"
+                      <Grid Classes="queue-row" ColumnDefinitions="Auto,*,Auto" Margin="10,9" ColumnSpacing="11"
                             Background="Transparent"
                             Classes.current="{Binding IsCurrent}"
-                            ToolTip.Tip="{Binding Tooltip}" Opacity="{Binding RowOpacity}">
-                        <Panel Grid.Column="0" Width="16" Height="16">
+                            Opacity="{Binding RowOpacity}">
+                        <Panel Grid.Column="0" Width="{DynamicResource QueueNumberWidth}" Height="16">
                           <TextBlock Classes="tabular faint" Text="{Binding Number}"
                                      FontSize="10.5"
-                                     HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     HorizontalAlignment="Right" VerticalAlignment="Center"
                                      Opacity="{Binding NumberOpacity}" />
                           <Ellipse Width="6" Height="6"
                                    Fill="{DynamicResource AccentBrush}"
@@ -543,212 +806,182 @@
                                  ThumbBrush="{DynamicResource Text3Brush}" />
               </Panel>
             </DockPanel>
-          </Border>
 
-            <!-- Pas dolny: korektor i efekty. W niskim oknie przewija się, żeby nie ściskać odtwarzacza. -->
-            <Border x:Name="PanelHost" Grid.Row="1" Grid.Column="0"
-                    IsVisible="{Binding PanelOpen}"
-                    Background="{DynamicResource GlassBrush}"
-                    BorderBrush="{DynamicResource StrokeBrush}"
-                    BorderThickness="0,1,0,0">
-              <ScrollViewer x:Name="PanelScroll"
-                            HorizontalScrollBarVisibility="Disabled"
-                            VerticalScrollBarVisibility="Auto">
-                <!--
-                  Trzy do dwóch, czyli 60 % na korektor i 40 % na efekty. Proporcja, bo szerokość
-                  pasa zależy od tego, czy obok stoi kolejka.
-                -->
-                <Grid x:Name="PanelGrid">
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="3*" />
-                    <ColumnDefinition Width="2*" />
-                  </Grid.ColumnDefinitions>
+            <!-- Radio: lista stacji w miejscu kolejki (ten sam klawisz L i ta sama nakładka w wąskim oknie). -->
+            <Panel x:Name="RadioHost" IsVisible="{Binding IsRadioMode}">
+            <DockPanel x:Name="RadioContent" Margin="18,16,14,12"
+                       DataContext="{Binding Radio}" x:DataType="vm:RadioViewModel">
 
-                  <!-- Korektor -->
-                  <Border Grid.Column="0" Padding="26,18,26,22"
-                          BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="0,0,1,0">
-                    <DockPanel>
+              <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="6,0,6,10"
+                    MinHeight="{StaticResource PanelHeaderRowHeight}">
+                <TextBlock Grid.Column="0" Text="{l:Translate RadioHeading}" FontSize="13.5" FontWeight="Bold"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Classes="tabular faint queue-summary" Text="{Binding Summary}"
+                           FontSize="10" VerticalAlignment="Center" Margin="10,3,6,0" TextTrimming="CharacterEllipsis" />
+                <Button x:Name="RadioAddButton" Grid.Column="2" Classes="icon" Width="26" Height="26"
+                        Click="OnRadioAddToggle" ToolTip.Tip="{l:Translate TooltipRadioAdd}"
+                        AutomationProperties.Name="{l:Translate TooltipRadioAdd}">
+                  <Viewbox Width="13" Height="13">
+                    <Path Classes="stroke" Data="{StaticResource IconPlusStroke}" Width="16" Height="16" StrokeThickness="1.4" />
+                  </Viewbox>
+                </Button>
+                <Button x:Name="RadioImportButton" Grid.Column="3" Classes="icon" Width="26" Height="26"
+                        Click="OnRadioImport" ToolTip.Tip="{l:Translate TooltipRadioImport}"
+                        AutomationProperties.Name="{l:Translate TooltipRadioImport}">
+                  <Viewbox Width="14" Height="14">
+                    <Path Classes="stroke" Data="{StaticResource IconFolderStroke}" Width="16" Height="16" />
+                  </Viewbox>
+                </Button>
+                <Button x:Name="RadioExportButton" Grid.Column="4" Classes="icon" Width="26" Height="26"
+                        Click="OnRadioExport" ToolTip.Tip="{l:Translate TooltipRadioExport}"
+                        AutomationProperties.Name="{l:Translate TooltipRadioExport}">
+                  <Viewbox Width="13" Height="13">
+                    <Path Classes="fill" Data="{StaticResource IconSave}" Width="16" Height="16" />
+                  </Viewbox>
+                </Button>
+              </Grid>
 
-                      <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,0,0,15"
-                            MinHeight="{StaticResource PanelHeaderRowHeight}">
-                        <c:GlassSwitch Grid.Column="0"
-                                       IsChecked="{Binding EqualiserEnabled, Mode=TwoWay}"
-                                       OffBrush="{DynamicResource TrackBrush}"
-                                       OnBrush="{DynamicResource AccentBrush}"
-                                       BorderBrush="{DynamicResource StrokeBrush}"
-                                       ToolTip.Tip="{l:Translate TooltipEqualiserSwitch}"
-                                       AutomationProperties.Name="{l:Translate Equaliser}" />
+              <!-- Jednorazowy baner o połączeniach radia; do jego zamknięcia nie pobiera się logo. -->
+              <Border x:Name="RadioPrivacyBanner" DockPanel.Dock="Top" IsVisible="{Binding ShowsPrivacyBanner}"
+                      Margin="0,0,0,10" Padding="12,10" CornerRadius="9"
+                      Background="{DynamicResource Glass2Brush}"
+                      BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1">
+                <StackPanel Spacing="8">
+                  <TextBlock x:Name="RadioPrivacyText" Text="{l:Translate RadioPrivacyBanner}"
+                             FontSize="11.5" LineHeight="17" TextWrapping="Wrap"
+                             Foreground="{DynamicResource Text2Brush}" />
+                  <Button x:Name="RadioPrivacyDismiss" Classes="pill" HorizontalAlignment="Left"
+                          Click="OnRadioPrivacyDismiss" Content="{l:Translate RadioPrivacyDismiss}" />
+                </StackPanel>
+              </Border>
 
-                        <TextBlock x:Name="EqHeading" Grid.Column="1"
-                                   Text="{l:Translate Equaliser}" Margin="12,0,0,0"
-                                   FontSize="13.5" FontWeight="Bold" VerticalAlignment="Center" />
+              <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+                <c:SegmentBar Group="{Binding ViewGroup}" />
 
-                        <!-- Ikona, bo w wąskim oknie napis nie zmieściłby się obok przełączników. Aktywne
-                             tylko wtedy, gdy jest co zerować. -->
-                        <Button x:Name="EqResetButton" Grid.Column="2" Classes="icon" Width="28" Height="28"
-                                HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,8,0"
-                                Click="OnResetEqualiser"
-                                IsEnabled="{Binding CanResetEqualiser}"
-                                ToolTip.Tip="{l:Translate TooltipEqualiserReset}"
-                                ToolTip.ShowOnDisabled="True"
-                                AutomationProperties.Name="{l:Translate TooltipEqualiserReset}">
-                          <Viewbox Width="15" Height="15">
-                            <Path Classes="stroke" Data="{StaticResource IconResetStroke}"
-                                  Width="16" Height="16" StrokeThickness="1.3" />
-                          </Viewbox>
-                        </Button>
+                <TextBox x:Name="RadioSearch" Text="{Binding SearchText, Mode=TwoWay}"
+                         PlaceholderText="{l:Translate RadioSearchPlaceholder}"
+                         AutomationProperties.Name="{l:Translate RadioSearchPlaceholder}"
+                         MinHeight="32" CornerRadius="9" FontSize="12.5"
+                         Background="{DynamicResource Glass2Brush}"
+                         BorderBrush="{DynamicResource StrokeBrush}" />
 
-                        <Border Grid.Column="3" Padding="3" CornerRadius="11"
-                                Background="{DynamicResource GlassBrush}"
+                <StackPanel Spacing="6" IsVisible="{Binding ShowsFilters}">
+                  <ComboBox x:Name="RadioCountryBox" ItemsSource="{Binding Countries}"
+                            SelectedItem="{Binding SelectedCountry, Mode=TwoWay}"
+                            HorizontalAlignment="Stretch" MinHeight="32" CornerRadius="9" FontSize="12.5"
+                            AutomationProperties.Name="{l:Translate RadioCountryLabel}" />
+                  <ComboBox x:Name="RadioCategoryBox" ItemsSource="{Binding Categories}"
+                            SelectedItem="{Binding SelectedCategory, Mode=TwoWay}"
+                            HorizontalAlignment="Stretch" MinHeight="32" CornerRadius="9" FontSize="12.5"
+                            AutomationProperties.Name="{l:Translate RadioCategoryLabel}" />
+                </StackPanel>
+
+                <!-- Własny adres strumienia: nazwa i adres, „Dodaj” zapisuje do ulubionych i gra. -->
+                <StackPanel x:Name="RadioAddForm" Spacing="6" IsVisible="{Binding IsAdding}">
+                  <TextBox x:Name="RadioAddName" PlaceholderText="{l:Translate RadioStationName}"
+                           AutomationProperties.Name="{l:Translate RadioStationName}"
+                           MinHeight="32" CornerRadius="9" FontSize="12.5"
+                           Background="{DynamicResource Glass2Brush}" BorderBrush="{DynamicResource StrokeBrush}" />
+                  <TextBox x:Name="RadioAddUrl" PlaceholderText="{l:Translate RadioStationUrl}"
+                           AutomationProperties.Name="{l:Translate RadioStationUrl}"
+                           MinHeight="32" CornerRadius="9" FontSize="12.5"
+                           Background="{DynamicResource Glass2Brush}" BorderBrush="{DynamicResource StrokeBrush}" />
+                  <Button Classes="pill primary" HorizontalAlignment="Left" Click="OnRadioAddConfirm"
+                          Content="{l:Translate RadioAdd}" />
+                </StackPanel>
+              </StackPanel>
+
+              <Panel>
+                <ListBox x:Name="RadioList" Classes="queue"
+                         ItemsSource="{Binding Rows}"
+                         SelectedItem="{Binding SelectedRow, Mode=TwoWay}"
+                         AutomationProperties.Name="{l:Translate RadioHeading}">
+                  <ListBox.ContextMenu>
+                    <ContextMenu x:Name="RadioMenu">
+                      <MenuItem x:Name="RadioPlayItem" Click="OnRadioMenuPlay" />
+                      <MenuItem x:Name="RadioFavouriteItem" Click="OnRadioMenuFavourite" />
+                      <MenuItem x:Name="RadioWebsiteItem" Click="OnRadioMenuWebsite" />
+                      <MenuItem x:Name="RadioMoveUpItem" Click="OnRadioMenuMoveUp" />
+                      <MenuItem x:Name="RadioMoveDownItem" Click="OnRadioMenuMoveDown" />
+                    </ContextMenu>
+                  </ListBox.ContextMenu>
+                  <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:StationRowViewModel">
+                      <Grid ColumnDefinitions="32,*,Auto" Margin="10,7" ColumnSpacing="11" AttachedToVisualTree="OnRadioRowAttached"
+                            Background="Transparent"
+                            Classes.current="{Binding IsCurrent}"
+                            AutomationProperties.Name="{Binding AccessibleName}">
+                        <!-- Miejsce na logo o stałej wielkości; do czasu pobierania logo znak zastępczy. -->
+                        <Border Grid.Column="0" Width="32" Height="32" CornerRadius="8" ClipToBounds="True"
+                                Background="{DynamicResource Glass2Brush}"
                                 BorderBrush="{DynamicResource StrokeBrush}" BorderThickness="1">
-                          <StackPanel Orientation="Horizontal" Spacing="4">
-                            <ToggleButton x:Name="LimiterToggle" Classes="option" Classes.on="{Binding LimiterEnabled}"
-                                          IsChecked="{Binding LimiterEnabled, Mode=TwoWay}"
-                                          ToolTip.Tip="{l:Translate TooltipLimiter}"
-                                          AutomationProperties.Name="{l:Translate OptionLimiter}">
-                              <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Ellipse Width="7" Height="7" VerticalAlignment="Center" />
-                                <TextBlock Text="{l:Translate OptionLimiter}" FontSize="11" FontWeight="Bold"
-                                           Foreground="{Binding $parent[ToggleButton].Foreground}" />
-                              </StackPanel>
-                            </ToggleButton>
-                            <ToggleButton x:Name="NormalisationToggle" Classes="option" Classes.on="{Binding NormalisationEnabled}"
-                                          IsChecked="{Binding NormalisationEnabled, Mode=TwoWay}"
-                                          ToolTip.Tip="{l:Translate TooltipNormalisation}"
-                                          AutomationProperties.Name="{l:Translate OptionNormalisation}">
-                              <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Ellipse Width="7" Height="7" VerticalAlignment="Center" />
-                                <TextBlock Text="{l:Translate OptionNormalisation}" FontSize="11" FontWeight="Bold"
-                                           Foreground="{Binding $parent[ToggleButton].Foreground}" />
-                              </StackPanel>
-                            </ToggleButton>
-                          </StackPanel>
+                          <Panel>
+                            <Image Source="{Binding Logo}" IsVisible="{Binding HasLogo}" Stretch="Uniform" Margin="2"
+                                   RenderOptions.BitmapInterpolationMode="HighQuality" />
+                            <Viewbox Width="15" Height="15" IsVisible="{Binding ShowsPlaceholder}"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center">
+                              <Path Classes="stroke" Data="{StaticResource IconRadioStroke}" Width="16" Height="16"
+                                    StrokeThickness="1.2" Stroke="{DynamicResource Text3Brush}" />
+                            </Viewbox>
+                          </Panel>
                         </Border>
-                      </Grid>
 
-                      <Grid ColumnDefinitions="Auto,Auto,*" Opacity="{Binding EqualiserOpacity}">
-
-                        <!-- Preamp -->
-                        <StackPanel Grid.Column="0" Spacing="8" MinWidth="46">
-                          <TextBlock Classes="tabular dim" Text="{Binding Preamp.GainText}"
-                                     FontSize="10.5" HorizontalAlignment="Center" />
-                          <c:EqFader Height="116" HorizontalAlignment="Center"
-                                     Classes="accent" Classes.off="{Binding !EqualiserEnabled}"
-                                     Value="{Binding Preamp.Gain, Mode=TwoWay}"
-                                     AutomationProperties.Name="{l:Translate PreampName}"
-                                     ShowCentreLine="False"
-                                     TrackBrush="{DynamicResource TrackBrush}"
-                                     ThumbBrush="{DynamicResource FaderThumbBrush}"
-                                     ThumbBorderBrush="{DynamicResource FaderThumbBorderBrush}" />
-                          <TextBlock Classes="faint" Text="{l:Translate PreampName}" FontSize="9.5"
-                                     MaxWidth="88" TextWrapping="Wrap" TextAlignment="Center"
-                                     HorizontalAlignment="Center" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                          <TextBlock Classes="row-title" Text="{Binding Name}"
+                                     FontSize="12.5" LineHeight="17" TextTrimming="CharacterEllipsis" />
+                          <TextBlock Classes="faint" Text="{Binding Detail}" FontSize="10.5"
+                                     LineHeight="15" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
 
-                        <Rectangle Grid.Column="1" Width="1" Margin="16,0"
-                                   Fill="{DynamicResource StrokeBrush}"
-                                   VerticalAlignment="Stretch" />
-
-                        <!-- Pasma -->
-                        <ItemsControl Grid.Column="2" ItemsSource="{Binding Bands}">
-                          <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                              <UniformGrid Rows="1" />
-                            </ItemsPanelTemplate>
-                          </ItemsControl.ItemsPanel>
-                          <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:EqBandViewModel">
-                              <StackPanel Spacing="8">
-                                <TextBlock Classes="tabular dim" Text="{Binding GainText}"
-                                           FontSize="10.5" HorizontalAlignment="Center" />
-                                <c:EqFader Height="116" HorizontalAlignment="Center"
-                                           Value="{Binding Gain, Mode=TwoWay}"
-                                           AutomationProperties.Name="{Binding AccessibleName}"
-                                           TrackBrush="{DynamicResource TrackBrush}"
-                                           FillBrush="{DynamicResource FillBrush}"
-                                           CentreLineBrush="{DynamicResource StrokeBrush}"
-                                           ThumbBrush="{DynamicResource FaderThumbBrush}"
-                                           ThumbBorderBrush="{DynamicResource FaderThumbBorderBrush}" />
-                                <TextBlock Classes="tabular faint" Text="{Binding Label}"
-                                           FontSize="9.5" HorizontalAlignment="Center" />
-                              </StackPanel>
-                            </DataTemplate>
-                          </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                          <Ellipse Width="6" Height="6" Fill="{DynamicResource AccentBrush}"
+                                   IsVisible="{Binding IsCurrent}" />
+                          <Button Classes="icon" Width="26" Height="26" Click="OnRadioHeart"
+                                  Opacity="{Binding HeartOpacity}"
+                                  ToolTip.Tip="{Binding FavouriteTooltip}"
+                                  AutomationProperties.Name="{Binding FavouriteTooltip}">
+                            <Panel>
+                              <Viewbox Width="14" Height="14" IsVisible="{Binding !IsFavourite}">
+                                <Path Classes="stroke" Data="{StaticResource IconHeart}" Width="16" Height="16" StrokeThickness="1.3" />
+                              </Viewbox>
+                              <Viewbox Width="14" Height="14" IsVisible="{Binding IsFavourite}">
+                                <Path Classes="fill" Data="{StaticResource IconHeart}" Width="16" Height="16"
+                                      Fill="{DynamicResource AccentBrush}" />
+                              </Viewbox>
+                            </Panel>
+                          </Button>
+                        </StackPanel>
                       </Grid>
-                    </DockPanel>
-                  </Border>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
 
-                  <!-- Efekty dźwiękowe -->
-                  <Border Grid.Column="1" Padding="24,18,26,22">
-                    <DockPanel>
+                <TextBlock Classes="faint" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}"
+                           FontSize="11.5" TextWrapping="Wrap" Margin="8,12" VerticalAlignment="Top" />
+              </Panel>
+            </DockPanel>
+            </Panel>
+           </Panel>
+           </DockPanel>
 
-                      <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" Margin="0,0,0,15"
-                            MinHeight="{StaticResource PanelHeaderRowHeight}">
-                        <TextBlock x:Name="EffectsHeading" Grid.Column="0"
-                                   Text="{l:Translate Effects}" FontSize="13.5" FontWeight="Bold"
-                                   VerticalAlignment="Center" />
-                      </Grid>
-
-                      <ItemsControl ItemsSource="{Binding SoundEffects}" VerticalAlignment="Top">
-                        <ItemsControl.ItemsPanel>
-                          <ItemsPanelTemplate>
-                            <StackPanel Spacing="10" />
-                          </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="vm:EffectViewModel">
-                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-
-                              <!--
-                                Przełącznik stoi poza obszarem przygaszanym, bo to on włącza efekt.
-                              -->
-                              <c:GlassSwitch Grid.Column="0" VerticalAlignment="Center"
-                                             IsChecked="{Binding Enabled, Mode=TwoWay}"
-                                             OffBrush="{DynamicResource TrackBrush}"
-                                             OnBrush="{DynamicResource AccentBrush}"
-                                             BorderBrush="{DynamicResource StrokeBrush}"
-                                             ToolTip.Tip="{Binding Description}"
-                                             AutomationProperties.Name="{Binding Label}" />
-
-                              <!-- Nazwa nad suwakiem, bo w jednym wierszu suwak byłby za krótki. -->
-                              <StackPanel Grid.Column="1" Spacing="4" Opacity="{Binding RowOpacity}">
-                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                  <TextBlock Grid.Column="0" Text="{Binding Label}"
-                                             FontSize="12" VerticalAlignment="Center"
-                                             TextTrimming="CharacterEllipsis"
-                                             ToolTip.Tip="{Binding Description}" />
-
-                                  <TextBlock Grid.Column="1" Classes="tabular faint"
-                                             Text="{Binding StrengthText}" FontSize="10.5"
-                                             VerticalAlignment="Center" />
-                                </Grid>
-
-                                <c:TrackSlider Height="14"
-                                               Classes="accent" Classes.off="{Binding !Enabled}"
-                                               Value="{Binding Strength, Mode=TwoWay}" Step="0.1"
-                                               KeyboardStep="0.1"
-                                               AutomationProperties.Name="{Binding StrengthName}"
-                                               TrackThickness="4" ThumbDiameter="11"
-                                               TrackBrush="{DynamicResource TrackBrush}" />
-                              </StackPanel>
-                            </Grid>
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-
-                    </DockPanel>
-                  </Border>
-                </Grid>
-              </ScrollViewer>
+            <!--
+              Krawędź do zmiany szerokości: przeciąganie zmienia szerokość, dwuklik przywraca domyślną.
+              Linia 1 px rysuje obramowanie kolumny; nad krawędzią pojawia się linia w barwie akcentu.
+            -->
+            <Border x:Name="QueueResizeGrip" Classes="queue-grip" Width="6" HorizontalAlignment="Left"
+                    Background="Transparent"
+                    ToolTip.Tip="{l:Translate TooltipQueueResize}">
+              <Border Classes="grip-line" Width="2" HorizontalAlignment="Left" />
             </Border>
-
-
+           </Panel>
+          </Border>
 
         </Grid>
 
       </DockPanel>
+
+      <!-- ============ Scena pełnoekranowa: na wierzchu, okno pod nią ukryte ============ -->
+      <v:SceneView x:Name="Scene" />
     </Panel>
   </Border>
 

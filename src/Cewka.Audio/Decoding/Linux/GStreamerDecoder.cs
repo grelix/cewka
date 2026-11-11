@@ -145,7 +145,7 @@ internal sealed class GStreamerDecoder : ManagedDecoderBase
 
     public override bool CanSeek => true;
 
-    private static void EnsureStarted()
+    internal static void EnsureStarted()
     {
         lock (StartupLock)
         {
@@ -158,7 +158,7 @@ internal sealed class GStreamerDecoder : ManagedDecoderBase
     }
 
     /// <summary>Reads the negotiated rate and channel count of a sample.</summary>
-    private static bool TryReadFormat(nint sample, out int rate, out int channels)
+    internal static bool TryReadFormat(nint sample, out int rate, out int channels)
     {
         rate = 0;
         channels = 0;

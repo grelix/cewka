@@ -13,7 +13,7 @@ public sealed class QueueRowsTests
     public void PrzesuniecieNiePrzebudowujeWierszy() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a"), h.Track("b"), h.Track("c")]);
+        h.OpenPaths([h.Track("a"), h.Track("b"), h.Track("c")]);
         Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 0));
         var rows = h.Player.Queue.ToArray();
 
@@ -30,7 +30,7 @@ public sealed class QueueRowsTests
     public void UsuniecieNiePrzebudowujePozostalychWierszy() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a"), h.Track("b"), h.Track("c")]);
+        h.OpenPaths([h.Track("a"), h.Track("b"), h.Track("c")]);
         Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 0));
         var rows = h.Player.Queue.ToArray();
 
@@ -45,7 +45,7 @@ public sealed class QueueRowsTests
     public void NazwaGranegoWierszaMowiOOdtwarzaniu() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a"), h.Track("b")]);
+        h.OpenPaths([h.Track("a"), h.Track("b")]);
         Assert.True(h.PumpUntil(() => h.Player.CurrentIndex == 0));
         var (first, second) = (h.Player.Queue[0], h.Player.Queue[1]);
         var changed = new List<string?>();
@@ -66,7 +66,7 @@ public sealed class QueueRowsTests
     public void UsuniecieOstatniegoWierszaBezOdtwarzaniaZmieniaTytul() => Ui.Run(() =>
     {
         using var h = new PlayerHarness();
-        h.Player.OpenPaths([h.Track("a")], replace: false);
+        h.OpenPaths([h.Track("a")], replace: false);
         Assert.Equal(Strings.Current["NothingPlaying"], h.Player.Title);
 
         h.Player.RemoveFromQueue(h.Player.Queue[0]);

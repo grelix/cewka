@@ -250,7 +250,7 @@ public sealed class AppClosingTests
         Directory.CreateDirectory(folder);
         var inFolder = h.Track(Path.Combine("album", "b"));
 
-        MainViewModel.FolderExpanding = path =>
+        h.PathChecking = path =>
         {
             if (path == folder) release.Wait(TimeSpan.FromSeconds(10));
         };
@@ -263,12 +263,10 @@ public sealed class AppClosingTests
                 Assert.True(SingleInstance.TryHandOff(address, [track]));
                 Thread.Sleep(200);
 
-                var closing = Stopwatch.StartNew();
-                window.Close();
-                closing.Stop();
+                var released = CloseUntilRoleReleased(window);
 
-                Assert.True(closing.Elapsed < SingleInstance.ClosingGrace + TimeSpan.FromSeconds(1.5),
-                    $"Zamykanie trwało {closing.Elapsed.TotalSeconds:0.0} s.");
+                Assert.True(released < SingleInstance.ClosingGrace + TimeSpan.FromSeconds(1.5),
+                    $"Zamykanie trwało {released.TotalSeconds:0.0} s.");
 
                 // Plik przysłany po folderze czeka za nim, żeby go nie wyprzedzić w kolejce.
                 var saved = QueueStateStore.Load(h.QueueFile)!;
@@ -278,7 +276,7 @@ public sealed class AppClosingTests
         }
         finally
         {
-            MainViewModel.FolderExpanding = null;
+            h.PathChecking = null;
             release.Set();
         }
 
@@ -298,6 +296,217 @@ public sealed class AppClosingTests
         var after = QueueStateStore.Load(next.QueueFile)!;
         Assert.Equal([inFolder, track], after.Paths.ToArray());
         Assert.Null(after.PendingOpens);
+    });
+
+    /// <summary>
+    /// Plik na niedostępnym dysku sieciowym, przysłany w chwili zamykania: samo sprawdzenie, czy
+    /// istnieje, potrafi czekać kilkanaście sekund. Zamykanie nie czeka na nie dłużej niż
+    /// <see cref="SingleInstance.ClosingGrace"/>, a otwarcie dokańcza się przy następnym uruchomieniu.
+    /// </summary>
+    [Fact]
+    public void PlikNaWolnymDyskuNieWstrzymujeZamykania() => Ui.Run(() =>
+    {
+        using var release = new ManualResetEventSlim();
+        var h = new PlayerHarness();
+        var track = h.Track("a");
+
+        h.PathChecking = path =>
+        {
+            if (path == track) release.Wait(TimeSpan.FromSeconds(10));
+        };
+
+        try
+        {
+            WithClosingWindow(h, (address, window) =>
+            {
+                Assert.True(SingleInstance.TryHandOff(address, [track]));
+                Thread.Sleep(200);
+
+                var released = CloseUntilRoleReleased(window);
+
+                Assert.True(released < SingleInstance.ClosingGrace + TimeSpan.FromSeconds(1.5),
+                    $"Zamykanie trwało {released.TotalSeconds:0.0} s.");
+
+                var saved = QueueStateStore.Load(h.QueueFile)!;
+                Assert.Empty(saved.Paths);
+                Assert.Equal([track], saved.PendingOpens?.SelectMany(open => open.Paths) ?? []);
+            });
+        }
+        finally
+        {
+            h.PathChecking = null;
+            release.Set();
+        }
+
+        using var next = new PlayerHarness(directory: h.Directory);
+        next.Track("a");
+        next.Player.RestoreQueueState();
+
+        Assert.True(next.PumpUntil(() => next.Player.Queue.Count == 1), $"w kolejce {next.Player.Queue.Count}");
+        Assert.Equal([track], next.Engine.QueuePaths.ToArray());
+    });
+
+    /// <summary>
+    /// Kolejka z poprzedniej sesji sprawdzana jeszcze na niedostępnym dysku w chwili zamykania okna:
+    /// zamykanie nie czeka na nią dłużej niż <see cref="SingleInstance.ClosingGrace"/>, a jej zapis zostaje
+    /// bez zmian, z bieżącym wpisem i pozycją. Plik przysłany w tym czasie czeka za nią i dokłada się
+    /// przy następnym uruchomieniu.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PrzywracanieNaWolnymDyskuNiePrzepadaPrzyZamknieciu(bool fileDuringClosing) => Ui.Run(() =>
+    {
+        using var release = new ManualResetEventSlim();
+        var h = new PlayerHarness();
+
+        var a = h.Track("a");
+        var b = h.Track("b");
+        var sent = h.Track("c");
+        QueueStateStore.Save(new QueueState { Paths = [a, b], CurrentIndex = 1, PositionSeconds = 30, Shuffle = true }, h.QueueFile);
+
+        h.PathChecking = path =>
+        {
+            if (path == a) release.Wait(TimeSpan.FromSeconds(10));
+        };
+
+        try
+        {
+            WithClosingWindow(h, (address, window) =>
+            {
+                Assert.Empty(h.Player.Queue);
+
+                if (fileDuringClosing)
+                {
+                    Assert.True(SingleInstance.TryHandOff(address, [sent]));
+                    Thread.Sleep(200);
+                }
+
+                var released = CloseUntilRoleReleased(window);
+
+                Assert.True(released < SingleInstance.ClosingGrace + TimeSpan.FromSeconds(1.5),
+                    $"Zamykanie trwało {released.TotalSeconds:0.0} s.");
+
+                var saved = QueueStateStore.Load(h.QueueFile)!;
+                Assert.Equal([a, b], saved.Paths.ToArray());
+                Assert.Equal(1, saved.CurrentIndex);
+                Assert.Equal(30, saved.PositionSeconds);
+                Assert.True(saved.Shuffle);
+                Assert.Equal(fileDuringClosing ? [sent] : [], saved.PendingOpens?.SelectMany(open => open.Paths) ?? []);
+            });
+        }
+        finally
+        {
+            h.PathChecking = null;
+            release.Set();
+        }
+
+        // Spóźniony wynik sprawdzania nie zmienia już niczego w zamkniętym oknie.
+        Assert.True(h.PumpUntil(() => h.Player.OpensFinished.IsCompleted));
+        Assert.Empty(h.Player.Queue);
+
+        using var next = new PlayerHarness(directory: h.Directory);
+        next.Track("a");
+        next.Track("b");
+        next.Track("c");
+        next.RestoreQueueState();
+
+        Assert.Equal(fileDuringClosing ? [a, b, sent] : [a, b], next.Engine.QueuePaths.ToArray());
+        Assert.Empty(next.Outputs);
+
+        next.Player.SaveQueueState();
+        var after = QueueStateStore.Load(next.QueueFile)!;
+        Assert.Equal(1, after.CurrentIndex);
+        Assert.Equal(30, after.PositionSeconds);
+        Assert.Null(after.PendingOpens);
+    });
+
+    /// <summary>
+    /// Lista z niedostępnego dysku, a po niej plik od innej kopii, przy zamykaniu okna: zamykanie nie
+    /// czeka dłużej niż <see cref="SingleInstance.ClosingGrace"/>, oba otwarcia trafiają do zapisu
+    /// w kolejności przybycia, a następne uruchomienie dopisuje je za kolejką, bez odtwarzania.
+    /// </summary>
+    [Fact]
+    public void ListaNaWolnymDyskuNiePrzepadaPrzyZamknieciuOkna() => Ui.Run(() =>
+    {
+        using var release = new ManualResetEventSlim();
+        var h = new PlayerHarness();
+
+        var a = h.Track("a");
+        var inList = h.Track("x");
+        var sent = h.Track("c");
+        var list = Path.Combine(h.Directory, "lista.m3u8");
+        File.WriteAllText(list, $"#EXTM3U\n{inList}\n");
+        QueueStateStore.Save(new QueueState { Paths = [a], CurrentIndex = 0, PositionSeconds = 30 }, h.QueueFile);
+
+        h.PathChecking = path =>
+        {
+            if (path == inList) release.Wait(TimeSpan.FromSeconds(10));
+        };
+
+        try
+        {
+            WithClosingWindow(h, (address, window) =>
+            {
+                Assert.True(h.PumpUntil(() => h.Player.Queue.Count == 1));
+
+                var loading = h.Player.LoadPlaylist(list);
+
+                Assert.True(SingleInstance.TryHandOff(address, [sent]));
+                Thread.Sleep(200);
+
+                var released = CloseUntilRoleReleased(window);
+
+                Assert.True(released < SingleInstance.ClosingGrace + TimeSpan.FromSeconds(1.5),
+                    $"Zamykanie trwało {released.TotalSeconds:0.0} s.");
+
+                var saved = QueueStateStore.Load(h.QueueFile)!;
+                Assert.Equal([a], saved.Paths.ToArray());
+                Assert.Equal(30, saved.PositionSeconds);
+                Assert.Equal(
+                    [$"Playlist: {list}", $"Outside: {sent}"],
+                    saved.PendingOpens?.Select(open => $"{open.Action}: {string.Join("|", open.Paths)}") ?? []);
+
+                release.Set();
+                Assert.True(Ui.WaitUntil(() => loading.IsCompleted));
+                Assert.Null(loading.Result);
+            });
+        }
+        finally
+        {
+            h.PathChecking = null;
+            release.Set();
+        }
+
+        using var next = new PlayerHarness(directory: h.Directory);
+        next.RestoreQueueState();
+
+        Assert.Equal([a, inList, sent], next.Engine.QueuePaths.ToArray());
+        Assert.False(next.Player.IsPlaying);
+        Assert.Empty(next.Outputs);
+    });
+
+    /// <summary>
+    /// Sprawdzenie skończone przed terminem: kolejka wraca przy zamykaniu i zapisuje się po
+    /// odfiltrowaniu, tak jak po zwykłym przywróceniu.
+    /// </summary>
+    [Fact]
+    public void PrzywracanieSkonczoneWTerminieZapisujeOdfiltrowanaKolejke() => Ui.Run(() =>
+    {
+        var h = new PlayerHarness();
+        var a = h.Track("a");
+        var b = h.Track("b");
+        QueueStateStore.Save(new QueueState { Paths = [Path.Combine(h.Directory, "nie-ma.wav"), a, b], CurrentIndex = 2, PositionSeconds = 30 }, h.QueueFile);
+
+        WithClosingWindow(h, (_, window) =>
+        {
+            window.Close();
+
+            var saved = QueueStateStore.Load(h.QueueFile)!;
+            Assert.Equal([a, b], saved.Paths.ToArray());
+            Assert.Equal(1, saved.CurrentIndex);
+            Assert.Equal(30, saved.PositionSeconds);
+        });
     });
 
     /// <summary>
@@ -365,11 +574,11 @@ public sealed class AppClosingTests
 
         // Kolejka z poprzedniej sesji wraca przy otwarciu okna bez odtwarzania.
         if (existingQueue)
-            QueueStateStore.Save(new QueueState { Paths = [existing], CurrentIndex = 0 }, h.QueueFile);
+            QueueStateStore.Save(new QueueState { Paths = [existing], CurrentIndex = 0, PositionSeconds = 42 }, h.QueueFile);
 
         WithClosingWindow(h, (address, window) =>
         {
-            Assert.Equal(existingQueue ? 1 : 0, h.Player.Queue.Count);
+            Assert.True(h.PumpUntil(() => h.Player.Queue.Count == (existingQueue ? 1 : 0)));
             Assert.True(SingleInstance.TryHandOff(address, [sent]));
             Thread.Sleep(200);
 
@@ -397,8 +606,95 @@ public sealed class AppClosingTests
             var saved = QueueStateStore.Load(h.QueueFile)!;
             Assert.Equal(expected, saved.Paths.ToArray());
             Assert.Equal(expectedIndex, saved.CurrentIndex);
+
+            // Nowy bieżący utwór jeszcze nie grał, więc zacznie od początku; samo dopisanie
+            // zostawia pozycję poprzedniego.
+            var keepsPosition = existingQueue && action == FileOpenAction.Append;
+            Assert.Equal(keepsPosition ? 42 : 0, saved.PositionSeconds);
         });
     });
+
+    /// <summary>Okno otwarte ze ścieżką, która nie daje plików, wraca do kolejki z poprzedniej sesji i jej nie kasuje.</summary>
+    [Fact]
+    public void OknoOtwarteZeSciezkaBezPlikowNieKasujeZapisanejKolejki() => Ui.Run(() =>
+    {
+        var h = new PlayerHarness();
+        var a = h.Track("a");
+        var b = h.Track("b");
+        QueueStateStore.Save(new QueueState { Paths = [a, b], CurrentIndex = 1, PositionSeconds = 30 }, h.QueueFile);
+
+        var startupPaths = typeof(App).GetProperty(nameof(App.StartupPaths))!;
+        startupPaths.SetValue(null, new[] { Path.Combine(h.Directory, "nie-ma.wav") });
+
+        try
+        {
+            WithClosingWindow(h, (_, window) =>
+            {
+                Assert.True(h.PumpUntil(() => h.Player.Queue.Count == 2));
+
+                window.Close();
+
+                var saved = QueueStateStore.Load(h.QueueFile)!;
+                Assert.Equal([a, b], saved.Paths.ToArray());
+                Assert.Equal(1, saved.CurrentIndex);
+                Assert.Equal(30, saved.PositionSeconds);
+            });
+        }
+        finally
+        {
+            startupPaths.SetValue(null, Array.Empty<string>());
+        }
+    });
+
+    /// <summary>Okno nie pokazuje podpowiedzi dodawania muzyki nad kolejką, która dopiero wraca z poprzedniej sesji.</summary>
+    [Fact]
+    public void PodpowiedzDodawaniaWOknieCzekaNaKoniecPrzywracania() => Ui.Run(() =>
+    {
+        using var release = new ManualResetEventSlim();
+        var h = new PlayerHarness();
+        var missing = Path.Combine(h.Directory, "nie-ma.wav");
+        QueueStateStore.Save(new QueueState { Paths = [missing], CurrentIndex = 0, PositionSeconds = 10 }, h.QueueFile);
+
+        h.PathChecking = path =>
+        {
+            if (path == missing) release.Wait(TimeSpan.FromSeconds(10));
+        };
+
+        try
+        {
+            WithClosingWindow(h, (_, window) =>
+            {
+                var prompt = window.AddPrompt;
+                Assert.False(prompt.IsVisible);
+
+                release.Set();
+
+                Assert.True(h.PumpUntil(() => h.Player.OpensFinished.IsCompleted));
+                Assert.True(prompt.IsVisible);
+            });
+        }
+        finally
+        {
+            h.PathChecking = null;
+            release.Set();
+        }
+    });
+
+    /// <summary>
+    /// Zamyka okno i podaje czas do oddania roli działającej kopii, bo na to czeka następna kopia.
+    /// Zwalnianie modelu widoku po zamknięciu czeka z limitem na wątki o niskim priorytecie,
+    /// które pod obciążeniem głodują, i nie należy już do tego terminu.
+    /// </summary>
+    private static TimeSpan CloseUntilRoleReleased(MainWindow window)
+    {
+        var closing = Stopwatch.StartNew();
+        var released = TimeSpan.MaxValue;
+        window.Closing += (_, _) => released = closing.Elapsed;
+
+        window.Close();
+
+        return released;
+    }
 
     /// <summary>Okno z nasłuchem pojedynczej instancji; po zakończeniu przywraca stan aplikacji.</summary>
     private static void WithClosingWindow(PlayerHarness h, Action<InstanceAddress, MainWindow> body)

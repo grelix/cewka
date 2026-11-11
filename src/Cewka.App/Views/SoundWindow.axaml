@@ -1,0 +1,84 @@
+<v:AuxiliaryWindow xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="using:Cewka.App.Controls"
+        xmlns:l="using:Cewka.App.Localisation"
+        xmlns:vm="using:Cewka.App.ViewModels"
+        xmlns:v="using:Cewka.App.Views"
+        x:Class="Cewka.App.Views.SoundWindow"
+        x:DataType="vm:MainViewModel"
+        Title="{l:Translate SoundWindowTitle}"
+        Width="900" Height="470"
+        MinWidth="760" MinHeight="380"
+        CanMaximize="False"
+        WindowStartupLocation="Manual"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        WindowDecorations="None"
+        ExtendClientAreaToDecorationsHint="True">
+
+  <Border x:Name="Shell" Classes="shell">
+    <DockPanel>
+
+      <!-- Pasek tytułu, jak w oknie ustawień -->
+      <Border x:Name="TitleBar"
+              DockPanel.Dock="Top"
+              Height="47"
+              Background="{DynamicResource HeaderBarBrush}"
+              BorderBrush="{DynamicResource StrokeBrush}"
+              BorderThickness="0,0,0,1">
+        <Panel>
+          <TextBlock Text="{l:Translate SectionEqualiser}" FontSize="13" FontWeight="Bold"
+                     LetterSpacing="0.13"
+                     HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+          <DockPanel Margin="12,0,12,0">
+            <c:WindowButtons x:Name="ControlsLeft" DockPanel.Dock="Left"
+                             CloseOnly="True" IsVisible="False" VerticalAlignment="Center" />
+            <c:WindowButtons x:Name="ControlsRight" DockPanel.Dock="Right"
+                             CloseOnly="True" VerticalAlignment="Center" />
+            <Panel />
+          </DockPanel>
+        </Panel>
+      </Border>
+
+      <Panel>
+        <ScrollViewer x:Name="ContentArea"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Hidden">
+          <StackPanel Spacing="14" Margin="20,18,22,20">
+            <v:SoundPanel x:Name="Sound" />
+
+            <!-- Przetwarzanie: dwa przełączniki, które dotąd stały w nagłówku korektora. -->
+            <Border Classes="section" Padding="18,12,18,12">
+              <Grid ColumnDefinitions="*,Auto,32,*,Auto">
+                <TextBlock Grid.Column="0" Classes="setting-label" VerticalAlignment="Center"
+                           Text="{l:Translate OptionLimiter}" ToolTip.Tip="{l:Translate TooltipLimiter}" />
+                <c:GlassSwitch x:Name="LimiterSwitch" Grid.Column="1" VerticalAlignment="Center"
+                               IsChecked="{Binding LimiterEnabled, Mode=TwoWay}"
+                               ToolTip.Tip="{l:Translate TooltipLimiter}"
+                               AutomationProperties.Name="{l:Translate OptionLimiter}"
+                               OffBrush="{DynamicResource TrackBrush}"
+                               OnBrush="{DynamicResource AccentBrush}"
+                               BorderBrush="{DynamicResource StrokeBrush}" />
+                <TextBlock Grid.Column="3" Classes="setting-label" VerticalAlignment="Center"
+                           Text="{l:Translate OptionNormalisation}" ToolTip.Tip="{l:Translate TooltipNormalisation}" />
+                <c:GlassSwitch x:Name="NormalisationSwitch" Grid.Column="4" VerticalAlignment="Center"
+                               IsChecked="{Binding NormalisationEnabled, Mode=TwoWay}"
+                               ToolTip.Tip="{l:Translate TooltipNormalisation}"
+                               AutomationProperties.Name="{l:Translate OptionNormalisation}"
+                               OffBrush="{DynamicResource TrackBrush}"
+                               OnBrush="{DynamicResource AccentBrush}"
+                               BorderBrush="{DynamicResource StrokeBrush}" />
+              </Grid>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+
+        <c:ThinScrollBar x:Name="ContentScrollBar"
+                         HorizontalAlignment="Right" Margin="0,8,7,8"
+                         TrackBrush="{DynamicResource TrackBrush}"
+                         ThumbBrush="{DynamicResource Text3Brush}" />
+      </Panel>
+    </DockPanel>
+  </Border>
+</v:AuxiliaryWindow>

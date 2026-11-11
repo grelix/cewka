@@ -33,7 +33,7 @@ public sealed class SettingsTrackingTests
         var raised = new List<string?>();
         settings.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 
-        h.Player.OpenPaths([h.Track("a")]);
+        h.OpenPaths([h.Track("a")]);
 
         Assert.Contains(nameof(SettingsViewModel.ActiveDeviceName), raised);
         Assert.Contains(nameof(SettingsViewModel.LatencyDescription), raised);

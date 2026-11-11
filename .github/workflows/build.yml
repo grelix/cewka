@@ -1,6 +1,4 @@
-# Budowa i testy przy każdej zmianie w gałęzi głównej.
-
-name: Budowa i testy
+name: Build
 
 on:
   push:
@@ -12,19 +10,15 @@ on:
 permissions:
   contents: read
 
-# Kolejne wypchnięcie tej samej gałęzi zastępuje poprzedni przebieg zamiast czekać w kolejce.
 concurrency:
-  group: budowa-${{ github.ref }}
+  group: build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # Te same testy uruchamia potok wydania, dlatego mieszkają we wspólnym pliku.
-  testy:
-    name: Testy
+  tests:
+    name: Tests
     uses: ./.github/workflows/tests.yml
 
-  # Pakiety i próby instalacyjne w kontenerach, z tego samego pliku co potok wydania, żeby
-  # zepsute pakowanie wyszło przy zmianie.
-  pakiety:
-    name: Linux
+  packages:
+    name: Packages
     uses: ./.github/workflows/packages.yml

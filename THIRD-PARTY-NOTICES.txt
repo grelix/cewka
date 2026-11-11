@@ -22,26 +22,28 @@ Spis / Contents:
   10. Concentus.OggFile
   11. ATL.NET
   12. Ude.NetStandard
-  13. Środowisko uruchomieniowe .NET 9
-  14. Font Cantarell
+  13. Środowisko uruchomieniowe .NET 10
+  14. Fonty Noto Sans
   15. miniaudio
+  16. flag-icons
+  17. Fonty Noto Sans CJK
 
 
 ================================================================================
 1. Avalonia
 ================================================================================
 
-Pakiet NuGet:    Avalonia 12.1.1
-Pakiet NuGet:    Avalonia.Desktop 12.1.1
-Pakiet NuGet:    Avalonia.Themes.Fluent 12.1.1
-Pakiet NuGet:    Avalonia.Win32 12.1.1
-Pakiet NuGet:    Avalonia.X11 12.1.1
-Pakiet NuGet:    Avalonia.Native 12.1.1
-Pakiet NuGet:    Avalonia.Skia 12.1.1
-Pakiet NuGet:    Avalonia.HarfBuzz 12.1.1
-Pakiet NuGet:    Avalonia.FreeDesktop 12.1.1
-Pakiet NuGet:    Avalonia.FreeDesktop.AtSpi 12.1.1
-Pakiet NuGet:    Avalonia.Remote.Protocol 12.1.1
+Pakiet NuGet:    Avalonia 12.1.6
+Pakiet NuGet:    Avalonia.Desktop 12.1.6
+Pakiet NuGet:    Avalonia.Themes.Fluent 12.1.6
+Pakiet NuGet:    Avalonia.Win32 12.1.6
+Pakiet NuGet:    Avalonia.X11 12.1.6
+Pakiet NuGet:    Avalonia.Native 12.1.6
+Pakiet NuGet:    Avalonia.Skia 12.1.6
+Pakiet NuGet:    Avalonia.HarfBuzz 12.1.6
+Pakiet NuGet:    Avalonia.FreeDesktop 12.1.6
+Pakiet NuGet:    Avalonia.FreeDesktop.AtSpi 12.1.6
+Pakiet NuGet:    Avalonia.Remote.Protocol 12.1.6
 Projekt:         https://github.com/AvaloniaUI/Avalonia
 Prawa autorskie: Copyright (c) AvaloniaUI OÜ
                  Copyright 2013-2026 © The AvaloniaUI Project
@@ -225,6 +227,7 @@ Zawartość:  kod Skii, HarfBuzz, FreeType, libpng, libjpeg-turbo, libwebp,
             expat, zlib, danych ICU i innych projektów wymienionych niżej
 Źródło not: plik THIRD-PARTY-NOTICES.txt pakietów SkiaSharp.NativeAssets.*
             3.119.4 i HarfBuzzSharp.NativeAssets.* 8.3.1.3, przytoczony w całości
+Licencja:   wiele licencji (BSD, MIT, FreeType, IJG, zlib, ICU i inne; teksty niżej)
 
 --------------------------------------------------------------------------------
 
@@ -3119,7 +3122,7 @@ SOFTWARE.
 11. ATL.NET
 ================================================================================
 
-Pakiet NuGet:    z440.atl.core 7.16.0
+Pakiet NuGet:    z440.atl.core 7.19.0
 Projekt:         https://github.com/Zeugma440/atldotnet
 Prawa autorskie: Copyright (c) 2017 Zeugma440
 Licencja:        MIT (plik LICENSE repozytorium; pakiet nie zawiera tekstu)
@@ -3670,11 +3673,11 @@ EXHIBIT A -Mozilla Public License.
 
 
 ================================================================================
-13. Środowisko uruchomieniowe .NET 9
+13. Środowisko uruchomieniowe .NET 10
 ================================================================================
 
-Pakiet NuGet:    Microsoft.NETCore.App.Runtime.win-x64 9.0 (teksty z 9.0.20)
-Pakiet NuGet:    Microsoft.NETCore.App.Runtime.linux-x64 9.0 (teksty z 9.0.20)
+Pakiet NuGet:    Microsoft.NETCore.App.Runtime.win-x64 10.0 (teksty z 10.0.12)
+Pakiet NuGet:    Microsoft.NETCore.App.Runtime.linux-x64 10.0 (teksty z 10.0.12)
 Zastosowanie:    wydanie samodzielne zawiera środowisko .NET z pakietu
                  Microsoft.NETCore.App.Runtime dla swojej platformy
 Projekt:         https://github.com/dotnet/runtime
@@ -3745,37 +3748,36 @@ License notice for Unicode data
 
 https://www.unicode.org/license.html
 
-Copyright © 1991-2022 Unicode, Inc. All rights reserved.
+Copyright © 1991-2024 Unicode, Inc. All rights reserved.
 Distributed under the Terms of Use in https://www.unicode.org/copyright.html.
 
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of the Unicode data files and any associated documentation
-(the "Data Files") or Unicode software and any associated documentation
-(the "Software") to deal in the Data Files or Software
-without restriction, including without limitation the rights to use,
-copy, modify, merge, publish, distribute, and/or sell copies of
-the Data Files or Software, and to permit persons to whom the Data Files
-or Software are furnished to do so, provided that either
-(a) this copyright and permission notice appear with all copies
-of the Data Files or Software, or
-(b) this copyright and permission notice appear in associated
-Documentation.
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of data files and any associated documentation (the "Data Files") or
+software and any associated documentation (the "Software") to deal in the
+Data Files or Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, and/or sell
+copies of the Data Files or Software, and to permit persons to whom the
+Data Files or Software are furnished to do so, provided that either (a)
+this copyright and permission notice appear with all copies of the Data
+Files or Software, or (b) this copyright and permission notice appear in
+associated Documentation.
 
-THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-NONINFRINGEMENT OF THIRD PARTY RIGHTS.
-IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS INCLUDED IN THIS
-NOTICE BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL
-DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE,
-DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
-TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
-PERFORMANCE OF THE DATA FILES OR SOFTWARE.
+THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF
+THIRD PARTY RIGHTS.
 
-Except as contained in this notice, the name of a copyright holder
-shall not be used in advertising or otherwise to promote the sale,
-use or other dealings in these Data Files or Software without prior
-written authorization of the copyright holder.
+IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS INCLUDED IN THIS NOTICE
+BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL DAMAGES,
+OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
+WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
+ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THE DATA
+FILES OR SOFTWARE.
+
+Except as contained in this notice, the name of a copyright holder shall
+not be used in advertising or otherwise to promote the sale, use or other
+dealings in these Data Files or Software without prior written
+authorization of the copyright holder.
 
 License notice for zlib-ng
 -----------------------
@@ -3801,6 +3803,18 @@ freely, subject to the following restrictions:
    misrepresented as being the original software.
 
 3. This notice may not be removed or altered from any source distribution.
+
+License notice for opentelemetry-dotnet
+---------------------------------------
+
+https://github.com/open-telemetry/opentelemetry-dotnet/blob/805dd6b4abfa18ef2706d04c30d0ed28dbc2955e/LICENSE.TXT#L1
+
+Apache License
+Version 2.0, January 2004
+http://www.apache.org/licenses/
+
+Copyright The OpenTelemetry Authors
+
 
 License notice for LinuxTracepoints
 -----------------------------------
@@ -5106,22 +5120,45 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+License for National Institute of Standards and Technology ACVP Data
+--------------------------------------------------------------------
+Available at https://github.com/usnistgov/ACVP-Server/blob/85f8742965b2691862079172982683757d8d91db/README.md#License
+
+NIST-developed software is provided by NIST as a public service. You may use, copy, and distribute copies of the software in any medium, provided that you keep intact this entire notice. You may improve, modify, and create derivative works of the software or any portion of the software, and you may copy and distribute such modifications or works. Modified works should carry a notice stating that you changed the software and should note the date and nature of any such change. Please explicitly acknowledge the National Institute of Standards and Technology as the source of the software.
+
+NIST-developed software is expressly provided "AS IS." NIST MAKES NO WARRANTY OF ANY KIND, EXPRESS, IMPLIED, IN FACT, OR ARISING BY OPERATION OF LAW, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTY OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND DATA ACCURACY. NIST NEITHER REPRESENTS NOR WARRANTS THAT THE OPERATION OF THE SOFTWARE WILL BE UNINTERRUPTED OR ERROR-FREE, OR THAT ANY DEFECTS WILL BE CORRECTED. NIST DOES NOT WARRANT OR MAKE ANY REPRESENTATIONS REGARDING THE USE OF THE SOFTWARE OR THE RESULTS THEREOF, INCLUDING BUT NOT LIMITED TO THE CORRECTNESS, ACCURACY, RELIABILITY, OR USEFULNESS OF THE SOFTWARE.
+
+You are solely responsible for determining the appropriateness of using and distributing the software and you assume all risks associated with its use, including but not limited to the risks and costs of program errors, compliance with applicable laws, damage to or loss of data, programs or equipment, and the unavailability or interruption of operation. This software is not intended to be used in any situation where a failure could cause risk of injury or damage to property. The software developed by NIST employees is not subject to copyright protection within the United States.
+
 
 ================================================================================
-14. Font Cantarell
+14. Fonty Noto Sans
 ================================================================================
 
-Plik:            Cantarell-Regular.otf
-Plik:            Cantarell-Bold.otf
-Wersja:          0.303
-Zastosowanie:    osadzony w pliku wykonywalnym
-Projekt:         https://gitlab.gnome.org/GNOME/cantarell-fonts
-Prawa autorskie: Copyright 2019 The Cantarell Project Authors
+Plik:            NotoSans-Regular.ttf
+Plik:            NotoSans-Bold.ttf
+Plik:            NotoSans-Light.ttf
+Plik:            NotoSansArabic-Regular.ttf
+Plik:            NotoSansArabic-Bold.ttf
+Plik:            NotoSansHebrew-Regular.ttf
+Plik:            NotoSansHebrew-Bold.ttf
+Plik:            NotoSansDevanagari-Regular.ttf
+Plik:            NotoSansDevanagari-Bold.ttf
+Plik:            NotoSansThai-Regular.ttf
+Plik:            NotoSansThai-Bold.ttf
+Wersja:          Noto Sans 2.015, Noto Sans Arabic 2.013, Noto Sans Hebrew 3.001, Noto Sans Devanagari 2.007, Noto Sans Thai 2.002
+Zastosowanie:    osadzone w pliku wykonywalnym; pismo interfejsu i pisma zastępcze
+Projekt:         https://github.com/notofonts
+Prawa autorskie: Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
+                 Copyright 2022 The Noto Project Authors (https://github.com/notofonts/arabic)
+                 Copyright 2024 The Noto Project Authors (https://github.com/notofonts/hebrew)
+                 Copyright 2022 The Noto Project Authors (https://github.com/notofonts/devanagari)
+                 Copyright 2022 The Noto Project Authors (https://github.com/notofonts/thai)
 Licencja:        SIL Open Font License 1.1
 
 --------------------------------------------------------------------------------
 
-Copyright 2019 The Cantarell Project Authors (https://gitlab.gnome.org/GNOME/cantarell-fonts)
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts/latin-greek-cyrillic)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
@@ -5141,7 +5178,7 @@ with others.
 
 The OFL allows the licensed fonts to be used, studied, modified and
 redistributed freely as long as they are not sold by themselves. The
-fonts, including any derivative works, can be bundled, embedded,
+fonts, including any derivative works, can be bundled, embedded, 
 redistributed and/or sold with any software provided that any reserved
 names are not used by derivative works. The fonts and derivatives,
 however, cannot be released under any other type of license. The
@@ -5220,7 +5257,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 15. miniaudio
 ================================================================================
 
-Składnik: miniaudio 0.11.25, w bibliotece cewka_audio
+Składnik: miniaudio 0.11.26, w bibliotece cewka_audio
 Projekt:  https://github.com/mackron/miniaudio
 Autor:    David Reid
 Licencja: Unlicense albo MIT-0, do wyboru (plik LICENSE projektu)
@@ -5278,3 +5315,147 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+================================================================================
+16. flag-icons
+================================================================================
+
+Składnik:        flag-icons 7.6.0 — flagi przy językach w ustawieniach (pliki PNG
+                 zrobione z SVG, src/Cewka.App/Assets/Flags)
+Projekt:         https://github.com/lipis/flag-icons
+Prawa autorskie: Copyright (c) 2013 Panayiotis Lipiridis
+Licencja:        MIT (plik LICENSE projektu)
+
+--------------------------------------------------------------------------------
+
+The MIT License (MIT)
+
+Copyright (c) 2013 Panayiotis Lipiridis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+================================================================================
+17. Fonty Noto Sans CJK
+================================================================================
+
+Plik:            NotoSansSC-Regular.otf
+Plik:            NotoSansSC-Bold.otf
+Plik:            NotoSansJP-Regular.otf
+Plik:            NotoSansJP-Bold.otf
+Wersja:          Noto Sans SC 2.004, Noto Sans JP 2.004
+Zastosowanie:    osadzone w pliku wykonywalnym; chiński uproszczony i japoński
+Projekt:         https://github.com/notofonts/noto-cjk
+Prawa autorskie: © 2014-2021 Adobe (http://www.adobe.com/).
+Licencja:        SIL Open Font License 1.1
+
+--------------------------------------------------------------------------------
+
+This Font Software is licensed under the SIL Open Font License,
+Version 1.1.
+
+This license is copied below, and is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font
+creation efforts of academic and linguistic communities, and to
+provide a free and open framework in which fonts may be shared and
+improved in partnership with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded,
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply to
+any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software
+components as distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to,
+deleting, or substituting -- in part or in whole -- any of the
+components of the Original Version, by changing formats or by porting
+the Font Software to a new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed,
+modify, redistribute, and sell modified and unmodified copies of the
+Font Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components, in
+Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the
+corresponding Copyright Holder. This restriction only applies to the
+primary font name as presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created using
+the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.

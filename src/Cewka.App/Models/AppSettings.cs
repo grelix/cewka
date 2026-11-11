@@ -135,6 +135,13 @@ public enum FileOpenAction
     ReplaceAndPlay,
 }
 
+/// <summary>Skąd gra odtwarzacz: z plików w kolejce albo ze stacji radiowej.</summary>
+public enum SourceMode
+{
+    Files,
+    Radio,
+}
+
 /// <summary>Where the minimise, maximise and close buttons sit.</summary>
 public enum WindowControlsPosition
 {
@@ -149,6 +156,196 @@ public enum WindowControlsPosition
     /// desktop themed after macOS, or simply for anyone who prefers it.
     /// </summary>
     MacOs,
+}
+
+/// <summary>Wizualizacja pełnego ekranu: co zajmuje scenę obok tytułu i sterowania.</summary>
+public enum SceneVisual
+{
+    /// <summary>Obracająca się płyta z okładką. Wygląd dotychczasowy.</summary>
+    Disc,
+
+    /// <summary>Okładka bez płyty.</summary>
+    Cover,
+
+    /// <summary>Przyciemniona scena nocna.</summary>
+    Night,
+
+    /// <summary>Analizator widma: 48 słupków.</summary>
+    Spectrum,
+
+    /// <summary>Oscyloskop: przebieg ostatnich milisekund.</summary>
+    Waveform,
+
+    /// <summary>Obwiednia całego utworu z głowicą postępu. Niedostępna dla stacji radiowych.</summary>
+    Horizon,
+
+    /// <summary>
+    /// Wolne wstęgi światła w barwach okładki (shader). Wymaga GPU i zasilania sieciowego; bez nich,
+    /// przy ograniczonym ruchu, scena rysuje Płytę, a zapisany wybór zostaje.
+    /// </summary>
+    Aurora,
+
+    /// <summary>
+    /// Wycofane wskaźniki wysterowania. Nazwa zostaje tylko po to, żeby plik ustawień z tym wyborem dał się
+    /// przeczytać; odczyt zamienia ją na <see cref="Disc"/>, a żadne miejsce programu jej nie oferuje.
+    /// </summary>
+    Meters,
+}
+
+/// <summary>Wielkość tekstu sceny: kolumny z tytułem, karty „Następny” i bloku Nocy.</summary>
+public enum SceneTextSize
+{
+    /// <summary>Mnożnik 1,0.</summary>
+    Normal,
+
+    /// <summary>Mnożnik 1,15.</summary>
+    Large,
+
+    /// <summary>Mnożnik 1,3.</summary>
+    ExtraLarge,
+}
+
+/// <summary>Położenie kolumny napisów w Płycie, Okładce i radiu.</summary>
+public enum SceneTextPosition
+{
+    /// <summary>Kolumna od górnego marginesu.</summary>
+    Top,
+
+    /// <summary>Wspólny środek z płytą, jak dotąd.</summary>
+    Middle,
+
+    /// <summary>Kolumna przy dolnym marginesie; karta „Następny” przechodzi wtedy na górę.</summary>
+    Bottom,
+}
+
+/// <summary>Marginesy kolumny napisów sceny.</summary>
+public enum SceneTextInset
+{
+    /// <summary>Kolumna jak dotąd.</summary>
+    Normal,
+
+    /// <summary>Kolumna o 60 px węższa z każdej strony.</summary>
+    Wide,
+}
+
+/// <summary>Wielkość płyty, okładki i logo stacji w scenie.</summary>
+public enum SceneArtSize
+{
+    /// <summary>Mnożnik 0,85.</summary>
+    Small,
+
+    /// <summary>Mnożnik 1,0.</summary>
+    Normal,
+
+    /// <summary>Mnożnik 1,1 — większy nie mieści się obok kolumny napisów.</summary>
+    Large,
+}
+
+/// <summary>Siła efektu tła sceny.</summary>
+public enum SceneEffectStrength
+{
+    Subtle,
+    Normal,
+    Strong,
+}
+
+/// <summary>Tempo obrotu płyty, w oknie i w scenie.</summary>
+public enum DiscSpin
+{
+    /// <summary>Jeden obrót na 9 sekund. Wygląd dotychczasowy.</summary>
+    Normal,
+
+    /// <summary>Jeden obrót na 15 sekund.</summary>
+    Slow,
+
+    /// <summary>Jeden obrót na 5 sekund.</summary>
+    Fast,
+
+    /// <summary>Płyta stoi okładką prosto.</summary>
+    Still,
+}
+
+/// <summary>Tempo ruchu tła: plam barw, przesuwania okładki i drobinek.</summary>
+public enum BackdropMotion
+{
+    Normal,
+
+    /// <summary>Połowa tempa dotychczasowego.</summary>
+    Slow,
+}
+
+/// <summary>Szybkość opadania słupków i szczytów widma.</summary>
+public enum SpectrumResponse
+{
+    Normal,
+
+    /// <summary>Opadanie prawie dwa razy wolniejsze.</summary>
+    Smooth,
+
+    /// <summary>Opadanie dwa razy szybsze.</summary>
+    Fast,
+}
+
+/// <summary>Margines ekranu sceny, liczony z każdej strony.</summary>
+public enum SceneMargin
+{
+    /// <summary>Kadr zajmuje cały ekran.</summary>
+    None,
+
+    /// <summary>2,5% szerokości i wysokości z każdej strony.</summary>
+    Small,
+
+    /// <summary>5% szerokości i wysokości z każdej strony.</summary>
+    Large,
+}
+
+/// <summary>Kształt widma na scenie.</summary>
+public enum SpectrumShape
+{
+    Bars,
+    Curve,
+}
+
+/// <summary>Rodzaj obrazu fali na scenie.</summary>
+public enum WaveformKind
+{
+    Line,
+    Stereo,
+}
+
+/// <summary>Jak wysuwa się nieprzypięty panel kolejki i stacji.</summary>
+public enum QueueReveal
+{
+    /// <summary>Po najechaniu kursorem na uchwyt przy prawej krawędzi okna.</summary>
+    Hover,
+
+    /// <summary>Dopiero po kliknięciu uchwytu, które przypina panel.</summary>
+    Click,
+}
+
+/// <summary>Po jakim czasie wysunięty panel chowa się, gdy kursor z niego zjedzie.</summary>
+public enum QueueHideDelay
+{
+    HalfSecond,
+    OneSecond,
+    TwoSeconds,
+    FourSeconds,
+
+    /// <summary>Panel nie chowa się sam: zamyka go Esc, klawisz L albo kliknięcie obok.</summary>
+    Never,
+}
+
+/// <summary>Zwłoka między najechaniem na uchwyt a wysunięciem panelu.</summary>
+public enum QueueRevealDelay
+{
+    /// <summary>150 ms.</summary>
+    Short,
+
+    /// <summary>300 ms.</summary>
+    Normal,
+
+    /// <summary>600 ms.</summary>
+    Long,
 }
 
 /// <summary>Persisted window placement. Stored in logical units, not device pixels.</summary>
@@ -196,13 +393,38 @@ public sealed class AppSettings
     public WindowGeometry? SettingsWindow { get; set; }
 
     /// <summary>
-    /// Czy pas dolny z korektorem i efektami jest rozwinięty. Kolejka ma własny stan
-    /// (<see cref="QueueOpen"/>); w starszym pliku ustawień ta wartość dotyczyła obu.
+    /// Położenie i rozmiar okna „Korektor i efekty”. Samo okno po uruchomieniu jest zamknięte; dawne pole
+    /// panelOpen (pas korektora w oknie głównym) z starszego pliku jest przy odczycie pomijane.
     /// </summary>
-    public bool PanelOpen { get; set; } = true;
+    public WindowGeometry? SoundWindow { get; set; }
 
-    /// <summary>Czy widać kolumnę kolejki po prawej.</summary>
-    public bool QueueOpen { get; set; } = true;
+    /// <summary>
+    /// Panel kolejki (w radiu: stacji) przypięty: stoi w kolumnie po prawej albo, w wąskim oknie, jako
+    /// nakładka, i nie chowa się po zjechaniu kursorem. Nieprzypięty wysuwa się z uchwytu przy krawędzi.
+    /// </summary>
+    public bool QueuePinned { get; set; }
+
+    /// <summary>
+    /// Dawne pole „kolejka otwarta” sprzed wysuwanego panelu. Odczyt przenosi jego wartość do
+    /// <see cref="QueuePinned"/> i zeruje je, więc zapis go już nie zawiera.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? QueueOpen { get; set; }
+
+    /// <summary>Jak wysuwa się nieprzypięty panel kolejki: po najechaniu na uchwyt albo po kliknięciu.</summary>
+    public QueueReveal QueueReveal { get; set; } = QueueReveal.Hover;
+
+    /// <summary>Czas, po którym wysunięty panel chowa się po zjechaniu z niego kursorem.</summary>
+    public QueueHideDelay QueueHideDelay { get; set; } = QueueHideDelay.TwoSeconds;
+
+    /// <summary>Zwłoka między najechaniem na uchwyt a wysunięciem panelu.</summary>
+    public QueueRevealDelay QueueRevealDelay { get; set; } = QueueRevealDelay.Normal;
+
+    /// <summary>
+    /// Szerokość panelu kolejki ustawiona przeciąganiem krawędzi; <c>null</c> to szerokość zależna od
+    /// szerokości okna. Zapisywana bez obcinania do bieżącego okna, obcinana dopiero przy wyświetlaniu.
+    /// </summary>
+    public double? QueueWidth { get; set; }
 
     /// <summary>
     /// Położenie suwaka głośności od zera do jedności, w skali <see cref="VolumeCurve"/>.
@@ -270,6 +492,87 @@ public sealed class AppSettings
 
     public FileOpenAction FileOpenAction { get; set; } = FileOpenAction.Append;
 
+    /// <summary>Wizualizacja pełnego ekranu; klawisz V przełącza ją w scenie.</summary>
+    public SceneVisual SceneVisual { get; set; } = SceneVisual.Disc;
+
+    /// <summary>Kształt widma: słupki albo krzywa.</summary>
+    public SpectrumShape SpectrumShape { get; set; } = SpectrumShape.Bars;
+
+    /// <summary>Rodzaj fali: linia albo stereo (wektorskop).</summary>
+    public WaveformKind WaveformKind { get; set; } = WaveformKind.Line;
+
+    /// <summary>Pierścień widma wokół płyty.</summary>
+    public bool DiscRing { get; set; }
+
+    /// <summary>Czy pełny ekran pokazuje kartę następnego utworu z kolejki.</summary>
+    public bool SceneShowNext { get; set; } = true;
+
+    /// <summary>
+    /// Ochrona ekranu OLED w scenie: powolny dryf obrazu, przygaszanie stałych napisów po 3 minutach
+    /// bez obsługi i zmiana strony układu przy każdym utworze. W Nocy dryf działa zawsze.
+    /// </summary>
+    public bool SceneOledCare { get; set; } = true;
+
+    /// <summary>Wielkość tekstu w scenie; działa od razu w otwartej scenie.</summary>
+    public SceneTextSize SceneTextSize { get; set; } = SceneTextSize.Normal;
+
+    /// <summary>Położenie kolumny napisów w Płycie, Okładce i radiu.</summary>
+    public SceneTextPosition SceneTextPosition { get; set; } = SceneTextPosition.Middle;
+
+    /// <summary>Napisy wyśrodkowane w kolumnie zamiast wyrównanych do lewej.</summary>
+    public bool SceneTextCentred { get; set; }
+
+    public SceneTextInset SceneTextInset { get; set; } = SceneTextInset.Normal;
+
+    public SceneArtSize SceneArtSize { get; set; } = SceneArtSize.Normal;
+
+    /// <summary>Wizualizacje pomijane przez klawisz V; Płyty nie da się pominąć.</summary>
+    public List<SceneVisual> SceneCycleOff { get; set; } = [];
+
+    /// <summary>Plamy barw okładki w tle sceny (dotychczasowy wygląd).</summary>
+    public bool SceneBlobs { get; set; } = true;
+
+    public SceneEffectStrength SceneBlobsStrength { get; set; } = SceneEffectStrength.Normal;
+
+    /// <summary>Poświata w barwach okładki za płytą, okładką i logo.</summary>
+    public bool SceneGlow { get; set; }
+
+    public SceneEffectStrength SceneGlowStrength { get; set; } = SceneEffectStrength.Normal;
+
+    /// <summary>Gradient i winieta w barwach okładki na rozmytym tle.</summary>
+    public bool SceneTint { get; set; }
+
+    public SceneEffectStrength SceneTintStrength { get; set; } = SceneEffectStrength.Normal;
+
+    /// <summary>Powoli unoszące się drobinki światła w barwach okładki.</summary>
+    public bool SceneParticles { get; set; }
+
+    public SceneEffectStrength SceneParticlesStrength { get; set; } = SceneEffectStrength.Normal;
+
+    /// <summary>Tempo obrotu płyty.</summary>
+    public DiscSpin DiscSpin { get; set; } = DiscSpin.Normal;
+
+    /// <summary>Tempo ruchu tła w oknie i w scenie.</summary>
+    public BackdropMotion BackdropMotion { get; set; } = BackdropMotion.Normal;
+
+    /// <summary>Opadanie słupków widma w scenie.</summary>
+    public SpectrumResponse SpectrumResponse { get; set; } = SpectrumResponse.Normal;
+
+    /// <summary>
+    /// Margines sceny osobno dla każdego ekranu: klucz ekranu (<see cref="SceneScreens.KeyOf"/>) na
+    /// wybór. Ekran bez wpisu ma 2,5%.
+    /// </summary>
+    public Dictionary<string, SceneMargin> SceneMargins { get; set; } = new();
+
+    /// <summary>
+    /// Klucz ekranu, na którym otwiera się scena (<see cref="SceneScreens.KeyOf"/>); <c>null</c> to ekran
+    /// okna. Zapisany, a niepodłączony ekran zastępuje ekran okna.
+    /// </summary>
+    public string? SceneScreen { get; set; }
+
+    /// <summary>Czy ekran nie wygasa, gdy scena jest otwarta i gra muzyka.</summary>
+    public bool KeepScreenAwake { get; set; } = true;
+
     /// <summary>
     /// Nazwa urządzenia wyjściowego, dokładnie jak podaje ją system; <c>null</c> to urządzenie
     /// domyślne. Zapisywana nazwa, bo numery zmieniają się przy odłączaniu sprzętu.
@@ -291,6 +594,9 @@ public sealed class AppSettings
     /// <summary>Seconds the arrow keys move playback by.</summary>
     public int SeekStep { get; set; } = 5;
 
+    /// <summary>Pauza wycisza dźwięk płynnie, a wznowienie podgłaśnia; dotyczy plików.</summary>
+    public bool SoftPause { get; set; }
+
     /// <summary>Whether the multimedia keys on the keyboard control playback.</summary>
     public bool MediaKeys { get; set; } = true;
 
@@ -311,6 +617,30 @@ public sealed class AppSettings
     /// </summary>
     public DateTimeOffset? LastUpdateCheck { get; set; }
 
+    /// <summary>Ostatnie źródło dźwięku; po uruchomieniu wraca bez samoczynnej gry.</summary>
+    public SourceMode Source { get; set; } = SourceMode.Files;
+
+    /// <summary>Kraj ostatnio wybrany na liście stacji (kod ISO); null, dopóki słuchacz nie wybierał.</summary>
+    public string? RadioCountry { get; set; }
+
+    /// <summary>Klucz kategorii ostatnio wybranej na liście stacji; null oznacza wszystkie.</summary>
+    public string? RadioCategory { get; set; }
+
+    /// <summary>Radio internetowe włączone; wyłączone ukrywa przełącznik źródła i skróty, i wyklucza połączenia radia.</summary>
+    public bool RadioEnabled { get; set; } = true;
+
+    /// <summary>Pobieranie logo stacji z serwerów nadawców; wyłączone zostawia wszędzie obraz zastępczy.</summary>
+    public bool RadioLogos { get; set; } = true;
+
+    /// <summary>Baner o połączeniach radia został zamknięty albo stacja została już uruchomiona.</summary>
+    public bool RadioPrivacyAcknowledged { get; set; }
+
+    /// <summary>Ile stacji pamięta lista ostatnich: 5, 10 albo 20.</summary>
+    public int RadioRecentLimit { get; set; } = 10;
+
+    /// <summary>Program uruchomiony w trybie radia od razu włącza ostatnią stację.</summary>
+    public bool RadioPlayAtStart { get; set; }
+
     public AppSettings Clone() => new()
     {
         SchemaVersion = SchemaVersion,
@@ -319,8 +649,13 @@ public sealed class AppSettings
         WindowControls = WindowControls,
         Window = Window?.Clone(),
         SettingsWindow = SettingsWindow?.Clone(),
-        PanelOpen = PanelOpen,
+        SoundWindow = SoundWindow?.Clone(),
+        QueuePinned = QueuePinned,
         QueueOpen = QueueOpen,
+        QueueReveal = QueueReveal,
+        QueueHideDelay = QueueHideDelay,
+        QueueRevealDelay = QueueRevealDelay,
+        QueueWidth = QueueWidth,
         Volume = Volume,
         IsMuted = IsMuted,
         EqualiserEnabled = EqualiserEnabled,
@@ -343,6 +678,32 @@ public sealed class AppSettings
         PlaceholderPalette = PlaceholderPalette,
         ShowFormatBadge = ShowFormatBadge,
         FileOpenAction = FileOpenAction,
+        SceneVisual = SceneVisual,
+        SpectrumShape = SpectrumShape,
+        WaveformKind = WaveformKind,
+        DiscRing = DiscRing,
+        SceneShowNext = SceneShowNext,
+        SceneOledCare = SceneOledCare,
+        SceneTextSize = SceneTextSize,
+        SceneTextPosition = SceneTextPosition,
+        SceneTextCentred = SceneTextCentred,
+        SceneTextInset = SceneTextInset,
+        SceneArtSize = SceneArtSize,
+        SceneCycleOff = [.. SceneCycleOff ?? []],
+        SceneBlobs = SceneBlobs,
+        SceneBlobsStrength = SceneBlobsStrength,
+        SceneGlow = SceneGlow,
+        SceneGlowStrength = SceneGlowStrength,
+        SceneTint = SceneTint,
+        SceneTintStrength = SceneTintStrength,
+        SceneParticles = SceneParticles,
+        SceneParticlesStrength = SceneParticlesStrength,
+        DiscSpin = DiscSpin,
+        BackdropMotion = BackdropMotion,
+        SpectrumResponse = SpectrumResponse,
+        SceneMargins = new Dictionary<string, SceneMargin>(SceneMargins ?? []),
+        SceneScreen = SceneScreen,
+        KeepScreenAwake = KeepScreenAwake,
         OutputDevice = OutputDevice,
         ResamplerQuality = ResamplerQuality,
         OutputLatency = OutputLatency,
@@ -350,10 +711,19 @@ public sealed class AppSettings
         AlwaysAnalyse = AlwaysAnalyse,
         RestoreSession = RestoreSession,
         SeekStep = SeekStep,
+        SoftPause = SoftPause,
         MediaKeys = MediaKeys,
         SingleInstance = SingleInstance,
         CheckForUpdates = CheckForUpdates,
         LastUpdateCheck = LastUpdateCheck,
+        Source = Source,
+        RadioCountry = RadioCountry,
+        RadioCategory = RadioCategory,
+        RadioEnabled = RadioEnabled,
+        RadioLogos = RadioLogos,
+        RadioPrivacyAcknowledged = RadioPrivacyAcknowledged,
+        RadioRecentLimit = RadioRecentLimit,
+        RadioPlayAtStart = RadioPlayAtStart,
     };
 }
 

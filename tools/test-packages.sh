@@ -55,9 +55,10 @@ WSPOLNE='
 echo "--- pliki ---"
 test -x /usr/bin/cewka || { echo "BLAD: brak /usr/bin/cewka"; exit 1; }
 test -f /usr/share/applications/cewka.desktop || { echo "BLAD: brak wpisu w menu"; exit 1; }
-for R in 48 64 128 256; do
+for R in 16 22 24 32 48 64 128 256; do
     test -f "/usr/share/icons/hicolor/${R}x${R}/apps/cewka.png" || { echo "BLAD: brak ikony ${R}"; exit 1; }
 done
+test -f /usr/share/icons/hicolor/scalable/apps/cewka.svg || { echo "BLAD: brak ikony skalowalnej"; exit 1; }
 echo "plik wykonywalny: $(stat -c %s /usr/bin/cewka) B"
 
 echo "--- wpis w menu ---"
@@ -98,7 +99,7 @@ echo "dziennik bez bledow ladowania bibliotek"
 
 POZOSTALOSCI='
 echo "--- pozostalosci ---"
-for P in /usr/bin/cewka /usr/share/applications/cewka.desktop /usr/share/icons/hicolor/128x128/apps/cewka.png; do
+for P in /usr/bin/cewka /usr/share/applications/cewka.desktop /usr/share/icons/hicolor/128x128/apps/cewka.png /usr/share/icons/hicolor/scalable/apps/cewka.svg; do
     if [ -e "${P}" ]; then echo "BLAD: po odinstalowaniu zostalo ${P}"; exit 1; fi
 done
 echo "nic nie zostalo"

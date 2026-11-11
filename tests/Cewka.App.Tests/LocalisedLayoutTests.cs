@@ -80,7 +80,8 @@ public sealed class LocalisedLayoutTests
         {
             using var h = new PlayerHarness();
             var settings = new SettingsViewModel(h.Settings, h.Player);
-            var window = new SettingsWindow(settings) { Width = 700, Height = 640 };
+            var window = new SettingsWindow(settings) { Height = 640 };
+            window.Width = window.MinWidth;
             window.Show();
 
             try
@@ -132,8 +133,7 @@ public sealed class LocalisedLayoutTests
             App.Settings.Current.Window = null;
             using var h = new PlayerHarness(s =>
             {
-                s.PanelOpen = true;
-                s.QueueOpen = false;
+                s.QueuePinned = false;
                 s.WindowControls = WindowControlsPosition.Right;
             });
 
@@ -142,15 +142,19 @@ public sealed class LocalisedLayoutTests
 
             try
             {
+                // Korektor jest w osobnym oknie; tu w jego najmniejszej szerokości.
+                h.Player.PanelOpen = true;
+                var sound = window.OpenSoundWindow!;
+                sound.Width = sound.MinWidth;
                 Settle();
 
-                var faders = window.GetVisualDescendants().OfType<EqFader>().Where(f => f.IsEffectivelyVisible).ToList();
+                var faders = sound.GetVisualDescendants().OfType<EqFader>().Where(f => f.IsEffectivelyVisible).ToList();
                 Assert.Equal(11, faders.Count);
 
                 var narrow = faders.Where(f => f.Bounds.Width < 26 - 0.5).Select(f => $"{f.Bounds.Width:F1}").ToArray();
                 Assert.True(narrow.Length == 0, $"{code}: suwaki węższe niż 26 px: {string.Join(", ", narrow)}");
 
-                var caption = window.GetVisualDescendants().OfType<TextBlock>()
+                var caption = sound.GetVisualDescendants().OfType<TextBlock>()
                     .Single(t => t.Text == Strings.Current["PreampName"]);
                 Assert.True(caption.Bounds.Width > 0, $"{code}: podpis preampu nie ma szerokości");
 

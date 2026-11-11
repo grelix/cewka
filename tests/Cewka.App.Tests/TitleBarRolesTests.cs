@@ -33,7 +33,7 @@ public sealed class TitleBarRolesTests
             {
                 Assert.Equal(WindowDecorationsElementRole.TitleBar, Role(window.TitleBar));
 
-                foreach (var button in new Control[] { window.PanelToggle, window.QueueToggle, window.ThemeButton, window.SettingsButton })
+                foreach (var button in new Control[] { window.PanelToggle, window.QueueToggle, window.ThemeButton, window.SettingsButton, window.FullScreenButton })
                     Assert.Equal(WindowDecorationsElementRole.User, Role(button));
 
                 foreach (var buttons in window.GetLogicalDescendants().OfType<WindowButtons>())

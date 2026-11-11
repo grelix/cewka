@@ -15,6 +15,13 @@ namespace Cewka.App.Controls;
 /// </summary>
 public sealed class TrackSlider : Control, ICustomHitTest
 {
+    /// <summary>Grubość obrysu uchwytu.</summary>
+    private const double ThumbOutlineThickness = 0.5;
+
+    /// <summary>Cień uchwytu: przesunięcie w dół i promień rozmycia.</summary>
+    private const double ThumbShadowOffset = 1.0;
+    private const double ThumbShadowBlur = 1.5;
+
     public static readonly StyledProperty<double> ValueProperty =
         AvaloniaProperty.Register<TrackSlider, double>(
             nameof(Value), defaultBindingMode: Avalonia.Data.BindingMode.TwoWay);
@@ -31,6 +38,24 @@ public sealed class TrackSlider : Control, ICustomHitTest
     public static readonly StyledProperty<double> ThumbDiameterProperty =
         AvaloniaProperty.Register<TrackSlider, double>(nameof(ThumbDiameter), 13.0);
 
+    public static readonly StyledProperty<bool> ThumbInTrackProperty =
+        AvaloniaProperty.Register<TrackSlider, bool>(nameof(ThumbInTrack));
+
+    public static readonly StyledProperty<double> ThumbOpacityProperty =
+        AvaloniaProperty.Register<TrackSlider, double>(nameof(ThumbOpacity), 1.0);
+
+    public static readonly StyledProperty<IBrush?> ThumbBrushProperty =
+        AvaloniaProperty.Register<TrackSlider, IBrush?>(nameof(ThumbBrush));
+
+    public static readonly StyledProperty<IBrush?> ThumbOutlineBrushProperty =
+        AvaloniaProperty.Register<TrackSlider, IBrush?>(nameof(ThumbOutlineBrush));
+
+    public static readonly StyledProperty<IBrush?> ThumbShadowBrushProperty =
+        AvaloniaProperty.Register<TrackSlider, IBrush?>(nameof(ThumbShadowBrush));
+
+    public static readonly StyledProperty<string?> ValueTextProperty =
+        AvaloniaProperty.Register<TrackSlider, string?>(nameof(ValueText));
+
     public static readonly StyledProperty<double> StepProperty =
         AvaloniaProperty.Register<TrackSlider, double>(nameof(Step));
 
@@ -44,7 +69,8 @@ public sealed class TrackSlider : Control, ICustomHitTest
     {
         AffectsRender<TrackSlider>(
             ValueProperty, TrackBrushProperty, FillBrushProperty,
-            TrackThicknessProperty, ThumbDiameterProperty);
+            TrackThicknessProperty, ThumbDiameterProperty, ThumbInTrackProperty, ThumbOpacityProperty,
+            ThumbBrushProperty, ThumbOutlineBrushProperty, ThumbShadowBrushProperty);
     }
 
     public TrackSlider()
@@ -59,6 +85,38 @@ public sealed class TrackSlider : Control, ICustomHitTest
     public IBrush? FillBrush { get => GetValue(FillBrushProperty); set => SetValue(FillBrushProperty, value); }
     public double TrackThickness { get => GetValue(TrackThicknessProperty); set => SetValue(TrackThicknessProperty, value); }
     public double ThumbDiameter { get => GetValue(ThumbDiameterProperty); set => SetValue(ThumbDiameterProperty, value); }
+
+    /// <summary>
+    /// Uchwyt w torze, jak suwak range w przeglądarce: przy 0 i 1 jego brzeg stoi na końcu toru,
+    /// a środek odsuwa się od końca o bieżący promień, także gdy uchwyt rośnie. Bez tego środek
+    /// stoi na końcu wypełnienia. Wypełnienie się nie zmienia, a wskaźnik ustawia wartość tak,
+    /// żeby uchwyt stał pod nim.
+    /// </summary>
+    public bool ThumbInTrack { get => GetValue(ThumbInTrackProperty); set => SetValue(ThumbInTrackProperty, value); }
+
+    /// <summary>
+    /// Krycie uchwytu razem z obrysem i cieniem, od 0 do 1; tor i wypełnienie zostają kryjące. Można je przenikać
+    /// przejściem <see cref="Avalonia.Animation.DoubleTransition"/>.
+    /// </summary>
+    public double ThumbOpacity { get => GetValue(ThumbOpacityProperty); set => SetValue(ThumbOpacityProperty, value); }
+
+    /// <summary>Barwa uchwytu; bez niej uchwyt ma barwę wypełnienia.</summary>
+    public IBrush? ThumbBrush { get => GetValue(ThumbBrushProperty); set => SetValue(ThumbBrushProperty, value); }
+
+    /// <summary>Obrys uchwytu linią 0,5 tuż za jego brzegiem, więc wychodzi o 0,5 poza średnicę.</summary>
+    public IBrush? ThumbOutlineBrush { get => GetValue(ThumbOutlineBrushProperty); set => SetValue(ThumbOutlineBrushProperty, value); }
+
+    /// <summary>
+    /// Barwa cienia pod uchwytem, przesuniętego o 1 w dół i rozmytego o 1,5. Liczy się tylko
+    /// pędzel jednolity; bez niego uchwyt nie ma cienia.
+    /// </summary>
+    public IBrush? ThumbShadowBrush { get => GetValue(ThumbShadowBrushProperty); set => SetValue(ThumbShadowBrushProperty, value); }
+
+    /// <summary>
+    /// Wartość słowami dla czytnika ekranu, np. „0:39 z 3:59”. Bez niej czytnik dostaje tylko
+    /// położenie w procentach.
+    /// </summary>
+    public string? ValueText { get => GetValue(ValueTextProperty); set => SetValue(ValueTextProperty, value); }
 
     /// <summary>
     /// Odstęp stopni, na które przeskakuje wskaźnik; zero oznacza suwak ciągły. Model widoku
@@ -83,7 +141,16 @@ public sealed class TrackSlider : Control, ICustomHitTest
     public event EventHandler<double>? Committed;
 
     private bool _dragging;
+    private IPointer? _dragPointer;
     private double _wheel;
+
+    // Pióro obrysu i pędzel cienia powstają przy zmianie właściwości, nie w każdym rysowaniu:
+    // suwak postępu rysuje się przy każdej zmianie położenia. Pióro trzyma pędzel źródłowy, więc
+    // idzie za jego barwą samo; pędzel cienia pamięta barwę, z której powstał, bo pędzel źródłowy
+    // można przebarwić bez zmiany właściwości suwaka.
+    private Pen? _thumbOutline;
+    private RadialGradientBrush? _thumbShadow;
+    private Color _thumbShadowColour;
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
@@ -99,6 +166,20 @@ public sealed class TrackSlider : Control, ICustomHitTest
             peer.RaisePropertyChangedEvent(RangeValuePatternIdentifiers.ValueProperty,
                 Percent(change.GetOldValue<double>()), Percent(change.GetNewValue<double>()));
         }
+        else if (change.Property == ValueTextProperty
+                 && ControlAutomationPeer.FromElement(this) is { } textPeer)
+        {
+            textPeer.RaisePropertyChangedEvent(ValuePatternIdentifiers.ValueProperty,
+                change.GetOldValue<string?>(), change.GetNewValue<string?>());
+        }
+        else if (change.Property == ThumbOutlineBrushProperty)
+        {
+            _thumbOutline = ThumbOutlineBrush is { } outline ? new Pen(outline, ThumbOutlineThickness) : null;
+        }
+        else if (change.Property == ThumbShadowBrushProperty || change.Property == ThumbDiameterProperty)
+        {
+            _thumbShadow = null;
+        }
     }
 
     private static double Percent(double value) => Math.Round(Math.Clamp(value, 0, 1) * 100, 1);
@@ -109,6 +190,7 @@ public sealed class TrackSlider : Control, ICustomHitTest
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
 
         _dragging = true;
+        _dragPointer = e.Pointer;
         e.Pointer.Capture(this);
         ApplyPointer(e.GetPosition(this).X);
         e.Handled = true;
@@ -129,6 +211,7 @@ public sealed class TrackSlider : Control, ICustomHitTest
         if (!_dragging) return;
 
         _dragging = false;
+        _dragPointer = null;
         e.Pointer.Capture(null);
         Committed?.Invoke(this, Value);
         e.Handled = true;
@@ -142,6 +225,23 @@ public sealed class TrackSlider : Control, ICustomHitTest
         if (!_dragging) return;
 
         _dragging = false;
+        _dragPointer = null;
+        Committed?.Invoke(this, Value);
+    }
+
+    /// <summary>
+    /// Kończy przeciąganie jak puszczenie przycisku, np. gdy suwak znika z widoku w trakcie
+    /// przeciągania: zwalnia przechwycenie wskaźnika i zatwierdza bieżącą wartość. Dalszy ruch
+    /// i puszczenie trafiają już tam, gdzie jest wskaźnik.
+    /// </summary>
+    public void EndDrag()
+    {
+        if (!_dragging) return;
+
+        var pointer = _dragPointer;
+        _dragging = false;
+        _dragPointer = null;
+        if (ReferenceEquals(pointer?.Captured, this)) pointer!.Capture(null);
         Committed?.Invoke(this, Value);
     }
 
@@ -213,12 +313,20 @@ public sealed class TrackSlider : Control, ICustomHitTest
     /// </summary>
     private void ApplyPointer(double x)
     {
-        var usable = Math.Max(1, Bounds.Width);
-        var value = Snap(Math.Clamp(x / usable, 0, 1));
+        var inset = Inset(Bounds.Width);
+        var usable = Math.Max(1, Bounds.Width - 2 * inset);
+        var value = Snap(Math.Clamp((x - inset) / usable, 0, 1));
 
         Scrubbing?.Invoke(this, value);
         Value = value;
     }
+
+    /// <summary>
+    /// Odległość środka uchwytu od końca toru przy 0 i 1: promień uchwytu w torze, przycięty tak,
+    /// żeby między skrajnymi położeniami zostało miejsce.
+    /// </summary>
+    private double Inset(double width) =>
+        ThumbInTrack ? Math.Clamp(ThumbDiameter / 2, 0, Math.Max(0, width / 2 - 0.5)) : 0;
 
     protected override AutomationPeer OnCreateAutomationPeer() => new TrackSliderAutomationPeer(this);
 
@@ -250,20 +358,95 @@ public sealed class TrackSlider : Control, ICustomHitTest
                 context.DrawRectangle(fill, null,
                     new RoundedRect(new Rect(0, top, filled, thickness), radius));
             }
+        }
 
-            var thumb = ThumbDiameter;
-            if (thumb > 0)
-            {
-                context.DrawEllipse(fill, null,
-                    new Point(width * value, height / 2), thumb / 2, thumb / 2);
-            }
+        var thumbBrush = ThumbBrush ?? FillBrush;
+        var thumbOpacity = Math.Clamp(ThumbOpacity, 0, 1);
+        if (thumbBrush is null || ThumbDiameter <= 0 || !(thumbOpacity > 0)) return;
+
+        var inset = Inset(width);
+        var centre = new Point(inset + value * (width - 2 * inset), height / 2);
+        if (thumbOpacity < 1)
+        {
+            // Uchwyt z obrysem i cieniem gaśnie jako całość, we własnej warstwie. Bez niej krycie
+            // trafia do każdego kształtu osobno i cień prześwituje przez przygaszony uchwyt.
+            using (context.PushRenderOptions(new RenderOptions { RequiresFullOpacityHandling = true }))
+            using (context.PushOpacity(thumbOpacity))
+                DrawThumb(context, thumbBrush, centre);
+        }
+        else
+        {
+            DrawThumb(context, thumbBrush, centre);
         }
     }
 
-    /// <summary>Suwak dla czytnika ekranu, z wartością w procentach.</summary>
-    private sealed class TrackSliderAutomationPeer(TrackSlider owner) : ControlAutomationPeer(owner), IRangeValueProvider
+    private void DrawThumb(DrawingContext context, IBrush brush, Point centre)
+    {
+        var radius = ThumbDiameter / 2;
+
+        if (ThumbShadow(radius) is { } shadow)
+        {
+            var spread = radius + ThumbShadowBlur;
+            context.DrawEllipse(shadow, null,
+                new Point(centre.X, centre.Y + ThumbShadowOffset), spread, spread);
+        }
+
+        context.DrawEllipse(brush, null, centre, radius, radius);
+
+        // Obrys tuż za brzegiem, jak box-shadow 0 0 0 0.5px: uchwyt zachowuje swoją średnicę.
+        if (_thumbOutline is { } outline)
+        {
+            var ring = radius + ThumbOutlineThickness / 2;
+            context.DrawEllipse(null, outline, centre, ring, ring);
+        }
+    }
+
+    /// <summary>
+    /// Cień jako gradient promienisty w kole większym o rozmycie: pełna barwa do promienia
+    /// uchwytu pomniejszonego o rozmycie, zero na brzegu. Przy tak małym rozmyciu to wystarcza,
+    /// a rysuje się jak zwykłe koło, bez filtra rozmycia.
+    /// </summary>
+    private RadialGradientBrush? ThumbShadow(double radius)
+    {
+        if (ThumbShadowBrush is not ISolidColorBrush solid) return null;
+
+        var source = solid.Color;
+        var alpha = (byte)Math.Round(source.A * Math.Clamp(solid.Opacity, 0, 1));
+        var colour = Color.FromArgb(alpha, source.R, source.G, source.B);
+        if (_thumbShadow is not null && colour == _thumbShadowColour) return _thumbShadow;
+
+        var solidTo = Math.Max(0, radius - ThumbShadowBlur) / (radius + ThumbShadowBlur);
+
+        _thumbShadowColour = colour;
+        _thumbShadow = new RadialGradientBrush
+        {
+            GradientStops =
+            {
+                new GradientStop(colour, solidTo),
+                new GradientStop(Color.FromArgb(0, colour.R, colour.G, colour.B), 1),
+            },
+        };
+
+        return _thumbShadow;
+    }
+
+    /// <summary>
+    /// Suwak dla czytnika ekranu: położenie w procentach przez wzorzec zakresu, a przy ustawionym
+    /// tekście wartości dodatkowo ten tekst przez wzorzec wartości.
+    /// </summary>
+    private sealed class TrackSliderAutomationPeer(TrackSlider owner)
+        : ControlAutomationPeer(owner), IRangeValueProvider, IValueProvider
     {
         private TrackSlider Slider => (TrackSlider)Owner;
+
+        /// <summary>
+        /// Bez tekstu wartości suwak nie zgłasza wzorca wartości, żeby czytnik nie dostał pustego
+        /// napisu obok procentu.
+        /// </summary>
+        protected override object? GetProviderCore(Type providerType) =>
+            providerType == typeof(IValueProvider) && string.IsNullOrEmpty(Slider.ValueText)
+                ? null
+                : base.GetProviderCore(providerType);
 
         protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Slider;
 
@@ -284,6 +467,16 @@ public sealed class TrackSlider : Control, ICustomHitTest
         public double LargeChange => SmallChange * 3;
 
         public void SetValue(double value) => Slider.SetFromUser(value / 100);
+
+        // Tylko do odczytu tak samo jak zakres: inaczej czytnik mógłby ogłosić przesuwany suwak
+        // jako tylko do odczytu.
+        bool IValueProvider.IsReadOnly => IsReadOnly;
+
+        string? IValueProvider.Value => Slider.ValueText;
+
+        // Tekst wartości tylko opisuje położenie; zmienia się je przez zakres.
+        void IValueProvider.SetValue(string? value) =>
+            throw new InvalidOperationException("Tekstu wartości suwaka nie da się wpisać.");
     }
 }
 
