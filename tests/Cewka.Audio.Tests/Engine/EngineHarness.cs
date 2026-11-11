@@ -19,7 +19,11 @@ internal sealed class EngineHarness : IDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "cewka-silnik-" + Guid.NewGuid().ToString("N"));
     private readonly Dictionary<string, Func<IAudioDecoder>> _decoders = new(StringComparer.Ordinal);
 
-    public EngineHarness(int periodFrames = 1024, int seed = 1234)
+    /// <param name="trackChangeDelay">
+    /// Opóźnienie, z jakim zgłoszenia zmiany utworu trafiają do <see cref="TrackChanges"/>, w ms.
+    /// Na zajętej maszynie pula wątków doręcza je z takim opóźnieniem.
+    /// </param>
+    public EngineHarness(int periodFrames = 1024, int seed = 1234, int trackChangeDelay = 0)
     {
         Directory.CreateDirectory(_directory);
 
@@ -42,7 +46,11 @@ internal sealed class EngineHarness : IDisposable
         Engine.Graph.Limiter.Enabled = false;
         Engine.Graph.Equaliser.Enabled = false;
 
-        Engine.TrackChanged += index => TrackChanges.Enqueue(index);
+        Engine.TrackChanged += index =>
+        {
+            if (trackChangeDelay <= 0) TrackChanges.Enqueue(index);
+            else _ = Task.Delay(trackChangeDelay).ContinueWith(_ => TrackChanges.Enqueue(index), TaskScheduler.Default);
+        };
         Engine.TrackFailed += (index, failure) => Failures.Enqueue((index, failure));
         Engine.QueueFinished += () => Interlocked.Increment(ref _finished);
         Engine.DeviceLost += () => Interlocked.Increment(ref _lost);
@@ -56,6 +64,11 @@ internal sealed class EngineHarness : IDisposable
 
     public ConcurrentQueue<string> Opened { get; } = new();
 
+    /// <summary>
+    /// Zgłoszenia zmiany utworu. Przychodzą z puli wątków, czasem z opóźnieniem, a pompowanie
+    /// w tym czasie przesuwa dźwięk o całe sekundy. Na stan silnika czeka się więc przez
+    /// <see cref="PumpUntil"/>, a na zgłoszenia przez <see cref="WaitUntil"/>, bez pompowania.
+    /// </summary>
     public ConcurrentQueue<int> TrackChanges { get; } = new();
 
     public ConcurrentQueue<(int Index, TrackFailure Failure)> Failures { get; } = new();

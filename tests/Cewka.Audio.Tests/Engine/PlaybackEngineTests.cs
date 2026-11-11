@@ -415,29 +415,32 @@ public class PlaybackEngineTests
     // ---------- przewijanie ----------
 
     /// <summary>Przewinięcie zaraz po PlayIndex dotyczy wpisu, który dopiero zacznie grać.</summary>
-    [Fact]
-    public void SeekImmediatelyAfterPlayIndexIsKept()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(500)]
+    public void SeekImmediatelyAfterPlayIndexIsKept(int trackChangeDelay)
     {
-        using var h = new EngineHarness();
+        using var h = new EngineHarness(trackChangeDelay: trackChangeDelay);
         var a = h.Track("a", 10, A);
         var b = h.Track("b", 10, B);
 
         h.Engine.SetQueue([a, b]);
+        h.PumpUntil(() => !h.Engine.IsSeeking && h.Engine.Position > TimeSpan.FromSeconds(0.1));
 
         // Zgłoszenie startu pierwszego wpisu idzie przez pulę wątków; liczone przed nim, przyszłoby
         // po PlayIndex i wyglądało jak zmiana na inny wpis.
-        h.PumpUntil(() => h.Engine.Position > TimeSpan.FromSeconds(0.1) && h.TrackChanges.Contains(0));
+        EngineHarness.WaitUntil(() => h.TrackChanges.Contains(0));
 
         var before = h.TrackChanges.Count;
         h.Engine.PlayIndex(1);
         h.Engine.SeekTo(TimeSpan.FromSeconds(5));
 
-        h.PumpUntil(() => h.TrackChanges.Count > before);
-        Assert.Equal(1, h.TrackChanges.ElementAt(before));
-
-        h.PumpUntil(() => h.Engine.Position > TimeSpan.FromSeconds(5.05));
+        h.PumpUntil(() => !h.Engine.IsSeeking && h.Engine.Position > TimeSpan.FromSeconds(5.05));
         Assert.Equal(1, h.Engine.CurrentIndex);
         Assert.InRange(h.Engine.Position.TotalSeconds, 5.0, 5.5);
+
+        EngineHarness.WaitUntil(() => h.TrackChanges.Count > before);
+        Assert.Equal(1, h.TrackChanges.ElementAt(before));
     }
 
     [Fact]
@@ -861,30 +864,39 @@ public class PlaybackEngineTests
     // ---------- losowanie ----------
 
     /// <summary>„Poprzedni” w trybie losowym wraca do utworu granego wcześniej.</summary>
-    [Fact]
-    public void PreviousInShuffleReturnsToThePreviousTrack()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(500)]
+    public void PreviousInShuffleReturnsToThePreviousTrack(int trackChangeDelay)
     {
-        using var h = new EngineHarness();
+        using var h = new EngineHarness(trackChangeDelay: trackChangeDelay);
         var paths = Enumerable.Range(0, 6).Select(i => h.Track("t" + i, 10, 0.1f * (i + 1))).ToArray();
 
+        // Każdy krok czeka na koniec przewinięcia, nie na zgłoszenie zmiany utworu. Pompowanie do
+        // spóźnionego zgłoszenia przesuwałoby utwór o sekundy, a po trzech „Poprzedni” cofa na początek.
         h.Engine.Shuffle = true;
         h.Engine.SetQueue(paths, startIndex: 2);
-        h.PumpUntil(() => h.TrackChanges.Contains(2));
+        h.PumpUntil(() => !h.Engine.IsSeeking);
+        Assert.Equal(2, h.Engine.CurrentIndex);
 
         h.Engine.Next();
-        h.PumpUntil(() => h.Engine.CurrentIndex != 2 && h.TrackChanges.Count >= 2);
+        h.PumpUntil(() => !h.Engine.IsSeeking);
         var second = h.Engine.CurrentIndex;
+        Assert.NotEqual(2, second);
 
         h.Engine.Next();
-        h.PumpUntil(() => h.Engine.CurrentIndex != second && h.TrackChanges.Count >= 3);
+        h.PumpUntil(() => !h.Engine.IsSeeking);
+        Assert.NotEqual(second, h.Engine.CurrentIndex);
 
         h.Engine.Previous();
-        h.PumpUntil(() => h.TrackChanges.Count >= 4);
+        h.PumpUntil(() => !h.Engine.IsSeeking);
         Assert.Equal(second, h.Engine.CurrentIndex);
 
         h.Engine.Previous();
-        h.PumpUntil(() => h.TrackChanges.Count >= 5);
+        h.PumpUntil(() => !h.Engine.IsSeeking);
         Assert.Equal(2, h.Engine.CurrentIndex);
+
+        EngineHarness.WaitUntil(() => h.TrackChanges.Count >= 5);
     }
 
     /// <summary>Losowanie bez powtarzania gra każdy utwór dokładnie raz i kończy kolejkę.</summary>
