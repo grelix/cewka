@@ -33,12 +33,14 @@ internal interface ITimedSampleSource : IDisposable
 /// zostawia tylko nagranie: ramki od opóźnienia kodera do końca nagrania, bez rozbiegu
 /// i dopełnienia ostatniej ramki, które między utworami albumu grałyby jako cisza.
 ///
-/// <para>Miejsce próbki w pliku to jej czas plus przesunięcie osi. Media Foundation w części
-/// wydań Windows liczy czas od początku ścieżki, w innych od początku edycji z listy edycji,
-/// czyli za rozbiegiem. Który układ obowiązuje, mówi koniec osi czasu systemu, porównany
-/// przy otwarciu z sumą czasów próbek pliku (<see cref="ProbeEnd"/>). Gdy cokolwiek się nie
-/// zgadza, dekoder nie przycina niczego: zbędny rozbieg jest mniejszą szkodą niż utracony
-/// początek nagrania.</para>
+/// <para>Media Foundation różnych wydań Windows podaje czas próbek pliku z listą edycji
+/// inaczej: od początku ścieżki (z rozbiegiem na początku), od początku edycji z pominiętym
+/// rozbiegiem albo od początku edycji z rozbiegiem oddanym z czasem zero. Układ rozpoznawany
+/// jest przy otwarciu z zachowania systemu: koniec osi czasu (<see cref="ProbeEnd"/>) mówi,
+/// od czego liczony jest czas, a pierwsza porcja o czasie dodatnim (<see cref="ProbeStart"/>),
+/// czy przed nią przyszedł rozbieg. W trakcie każda porcja z czasem jest sprawdzana z licznikiem
+/// ramek. Gdy cokolwiek się nie zgadza, dekoder przestaje przycinać: zbędny rozbieg jest
+/// mniejszą szkodą niż utracony początek nagrania.</para>
 /// </summary>
 internal class TimedSampleDecoder : ManagedDecoderBase
 {
@@ -48,10 +50,10 @@ internal class TimedSampleDecoder : ManagedDecoderBase
     /// </summary>
     private const int SeekPreRollFrames = 4096;
 
-    /// <summary>Sonda czyta od tylu sekund przed spodziewanym końcem osi.</summary>
+    /// <summary>Sonda końca czyta od tylu sekund przed spodziewanym końcem osi.</summary>
     private const double ProbeLeadSeconds = 0.5;
 
-    /// <summary>Sonda, która zdekodowała tyle dźwięku i nie doszła do końca, nie daje wyniku.</summary>
+    /// <summary>Sonda, która zdekodowała tyle dźwięku i nie znalazła tego, czego szuka, nie daje wyniku.</summary>
     private const double ProbeLimitSeconds = 10;
 
     private enum Timeline
@@ -59,11 +61,14 @@ internal class TimedSampleDecoder : ManagedDecoderBase
         /// <summary>Bez przycinania, jak przed odczytem opisu rozbiegu.</summary>
         Untrimmed,
 
-        /// <summary>Czas liczony od początku ścieżki.</summary>
-        Absolute,
+        /// <summary>Miejsce porcji w pliku to jej czas plus przesunięcie osi.</summary>
+        Stated,
 
-        /// <summary>Czas liczony od początku edycji, za rozbiegiem.</summary>
-        Edited,
+        /// <summary>
+        /// Czas od początku edycji, a rozbieg przychodzi z czasem zero albo ujemnym: miejsce
+        /// porcji bez czasu dodatniego wynika z licznika ramek od początku strumienia.
+        /// </summary>
+        Counted,
     }
 
     private readonly ITimedSampleSource _source;
@@ -74,11 +79,14 @@ internal class TimedSampleDecoder : ManagedDecoderBase
     /// <summary>Sekundy do dodania do czasu źródła, żeby dostać miejsce w pliku.</summary>
     private double _offset;
 
+    /// <summary>Największa rozbieżność czasu porcji z licznikiem: ćwierć ramki kodera.</summary>
+    private double _tolerance;
+
     /// <summary>Pierwsza chwila pliku, która gra: początek nagrania albo cel przewinięcia.</summary>
     private double _keepFrom;
 
-    /// <summary>Koniec poprzedniej porcji w pliku; porcja zaczynająca się wcześniej znaczy, że czasy się cofają.</summary>
-    private double? _previousEnd;
+    /// <summary>Miejsce w pliku (s), w którym powinna zacząć się następna porcja; null po otwarciu i przewinięciu.</summary>
+    private double? _nextPosition;
 
     private int _blockOffset;
     private int _blockFrames;
@@ -87,6 +95,7 @@ internal class TimedSampleDecoder : ManagedDecoderBase
     private (int Rate, int Channels, uint Mask)? _formatChange;
 
     private double? _probeEnd;
+    private (double Before, double Time)? _probeStart;
     private string _decision = "";
     private readonly List<long> _firstTicks = [];
     private bool _seeked;
@@ -128,8 +137,8 @@ internal class TimedSampleDecoder : ManagedDecoderBase
     public override bool CanSeek => true;
 
     /// <summary>
-    /// Surowe liczby rozpoznania osi czasu: wynik sondy, decyzja, czasy pierwszych porcji
-    /// i liczba ramek oddanych przez system. Do komunikatów testów i dziennika.
+    /// Surowe liczby rozpoznania osi czasu: sondy końca i początku, decyzja, czasy pierwszych
+    /// porcji i liczba ramek oddanych przez system. Do komunikatów testów i dziennika.
     /// </summary>
     internal string TimelineReport
     {
@@ -137,16 +146,19 @@ internal class TimedSampleDecoder : ManagedDecoderBase
         {
             var inv = CultureInfo.InvariantCulture;
             var g = _gapless;
+            var scale = g?.Timescale ?? 0;
             var file = g is { } x
                 ? string.Create(inv, $"skala {x.Timescale}, rozbieg {x.Delay}, nagranie {x.Length}, źródło {x.Source}, " +
                     $"suma stts {x.Samples}, próbek {x.SampleCount}, ramka {x.FrameDuration}, edycja od {x.EditDelay}")
                 : "brak opisu";
-            var probe = _probeEnd is { } end && g is { } y
-                ? string.Create(inv, $"{end * y.Timescale:F1} jedn. ścieżki")
+            var end = _probeEnd is { } e ? string.Create(inv, $"{e * scale:F1} jedn. ścieżki") : "nie było";
+            var start = _probeStart is { } s
+                ? string.Create(inv, $"przed pierwszą porcją z czasem dodatnim C = {s.Before * scale:F1}, jej czas t = {s.Time * scale:F1}")
                 : "nie było";
             return string.Create(inv,
-                $"plik: {file}; sonda końca osi: {probe}; decyzja: {_decision}; przesunięcie {_offset * (g?.Timescale ?? 0):F0}; " +
-                $"czasy pierwszych porcji (100 ns): [{string.Join(", ", _firstTicks)}]; ramek od systemu: {_systemFrames}");
+                $"plik: {file}; sonda końca osi: {end}; sonda początku: {start}; decyzja: {_decision}; " +
+                $"przesunięcie {_offset * scale:F0}; czasy pierwszych porcji (100 ns): [{string.Join(", ", _firstTicks)}]; " +
+                $"ramek od systemu: {_systemFrames}");
         }
     }
 
@@ -158,15 +170,19 @@ internal class TimedSampleDecoder : ManagedDecoderBase
             return;
         }
 
+        _tolerance = Math.Max(g.FrameDuration, 1) / 4.0 / g.Timescale;
+
         // Bez edycji przesuniętej za początek oba układy czasu są tym samym.
         if (g.EditDelay <= 0)
         {
-            Choose(Timeline.Absolute, 0, "brak edycji, czas od początku ścieżki");
+            Choose(Timeline.Stated, 0, "brak edycji, czas od początku ścieżki");
             return;
         }
 
         _probeEnd = ProbeEnd(g);
-        if (_probeEnd is not { } probe)
+        _probeStart = ProbeStart();
+
+        if (_probeEnd is not { } probe || _probeStart is not { } first)
         {
             Choose(Timeline.Untrimmed, 0, "sonda bez wyniku");
             return;
@@ -176,15 +192,30 @@ internal class TimedSampleDecoder : ManagedDecoderBase
         // ostatniej ramce, a przy czasie po edycji obie wartości są mniejsze o początek edycji.
         var end = probe * g.Timescale;
         var frame = Math.Max(g.FrameDuration, 1);
-        var tolerance = frame / 4.0;
         double[] whole = [g.Samples, g.SampleCount * (double)frame];
 
-        var absolute = whole.Any(candidate => Math.Abs(end - candidate) <= tolerance);
-        var edited = whole.Any(candidate => Math.Abs(end - (candidate - g.EditDelay)) <= tolerance);
+        var absolute = whole.Any(candidate => Math.Abs(end - candidate) <= frame / 4.0);
+        var edited = whole.Any(candidate => Math.Abs(end - (candidate - g.EditDelay)) <= frame / 4.0);
 
-        if (absolute && !edited) Choose(Timeline.Absolute, 0, "czas od początku ścieżki");
-        else if (edited && !absolute) Choose(Timeline.Edited, g.EditDelay / (double)g.Timescale, "czas od początku edycji");
-        else Choose(Timeline.Untrimmed, 0, absolute ? "sonda pasuje do obu układów" : "sonda nie pasuje do żadnego układu");
+        var edit = g.EditDelay / (double)g.Timescale;
+        var timeMatches = Math.Abs(first.Time - first.Before) <= _tolerance;
+        var primingDelivered = Math.Abs(first.Time + edit - first.Before) <= _tolerance;
+
+        if (absolute && !edited)
+        {
+            if (timeMatches) Choose(Timeline.Stated, 0, "czas od początku ścieżki");
+            else Choose(Timeline.Untrimmed, 0, "czas od początku ścieżki, ale początek nie zgadza się z licznikiem");
+        }
+        else if (edited && !absolute)
+        {
+            if (primingDelivered && !timeMatches) Choose(Timeline.Counted, edit, "czas od początku edycji, rozbieg oddawany");
+            else if (timeMatches && !primingDelivered) Choose(Timeline.Stated, edit, "czas od początku edycji, rozbieg pominięty");
+            else Choose(Timeline.Untrimmed, 0, "czas od początku edycji, ale początek nie pasuje do żadnego przypadku");
+        }
+        else
+        {
+            Choose(Timeline.Untrimmed, 0, absolute ? "sonda końca pasuje do obu układów" : "sonda końca nie pasuje do żadnego układu");
+        }
     }
 
     private void Choose(Timeline timeline, double offset, string decision)
@@ -227,6 +258,34 @@ internal class TimedSampleDecoder : ManagedDecoderBase
 
         _source.Seek(0);
         return finished && double.IsFinite(end) ? end : null;
+    }
+
+    /// <summary>
+    /// Od początku strumienia do pierwszej porcji o czasie dodatnim: ile dźwięku (s) przyszło
+    /// przed nią i jaki ma czas. System, który oddaje rozbieg z czasem zero albo ujemnym, oddaje
+    /// przed nią rozbieg i jeszcze czas porcji; system, który go pomija albo liczy czas od
+    /// początku ścieżki, oddaje przed nią dokładnie tyle, ile mówi jej czas.
+    /// </summary>
+    private (double Before, double Time)? ProbeStart()
+    {
+        var before = 0.0;
+        (double, double)? result = null;
+
+        while (before < ProbeLimitSeconds && _source.Next(out var block))
+        {
+            if (block.Rate <= 0) continue;
+
+            if (block.Ticks > 0)
+            {
+                result = (before, block.Ticks / (double)TimeSpan.TicksPerSecond);
+                break;
+            }
+
+            before += block.Frames / (double)block.Rate;
+        }
+
+        _source.Seek(0);
+        return result;
     }
 
     /// <summary>
@@ -300,19 +359,24 @@ internal class TimedSampleDecoder : ManagedDecoderBase
         var rate = block.Rate;
         if (rate <= 0 || _gapless is not { } g) return true;
 
-        var start = block.Ticks / (double)TimeSpan.TicksPerSecond + _offset;
+        var time = block.Ticks / (double)TimeSpan.TicksPerSecond;
 
-        // Porcja zaczynająca się przed końcem poprzedniej: czas nie opisuje miejsca w pliku
-        // (np. rozbieg z czasem przyciętym do zera). Dalej bez przycinania, nic nie ginie.
-        if (_previousEnd is { } previous && start < previous - 2.0 / rate)
+        // Czas zero albo ujemny przy rozbiegu oddawanym nie mówi, gdzie porcja leży.
+        double? stated = _timeline == Timeline.Stated || block.Ticks > 0 ? time + _offset : null;
+
+        // Pierwsza porcja po otwarciu albo przewinięciu bez czasu: początek strumienia.
+        var position = _nextPosition ?? stated ?? 0;
+
+        if (_nextPosition is { } expected && stated is { } at && Math.Abs(at - expected) > _tolerance)
         {
-            Choose(Timeline.Untrimmed, 0, "czasy porcji się cofają");
+            Choose(Timeline.Untrimmed, 0, string.Create(CultureInfo.InvariantCulture,
+                $"czas porcji {at * g.Timescale:F1} nie zgadza się z licznikiem {expected * g.Timescale:F1}"));
             return true;
         }
 
-        _previousEnd = start + block.Frames / (double)rate;
+        _nextPosition = position + block.Frames / (double)rate;
 
-        var first = (long)Math.Round(start * rate);
+        var first = (long)Math.Round(position * rate);
         var from = (long)Math.Round(_keepFrom * rate);
         var until = (long)Math.Round(g.EndSeconds * rate);
 
@@ -336,7 +400,7 @@ internal class TimedSampleDecoder : ManagedDecoderBase
         _blockOffset = 0;
         _blockFrames = 0;
         _endOfStream = false;
-        _previousEnd = null;
+        _nextPosition = null;
         _seeked = true;
 
         var seconds = sourceFrame / (double)SourceSampleRate;
@@ -346,6 +410,12 @@ internal class TimedSampleDecoder : ManagedDecoderBase
         {
             _keepFrom = g.StartSeconds + seconds;
             seconds = Math.Max(0, _keepFrom - _offset - SeekPreRollFrames / (double)SourceSampleRate);
+
+            // Przy rozbiegu oddawanym z czasem zero porcja trafiona tuż za początkiem też może
+            // mieć czas zero, a jej miejsca nie widać. Przewinięcie na sam początek sprawdziła
+            // sonda początku, więc cel blisko początku zamienia się na początek.
+            if (_timeline == Timeline.Counted && seconds < 2.0 * Math.Max(g.FrameDuration, 1) / g.Timescale)
+                seconds = 0;
         }
 
         _source.Seek((long)(seconds * TimeSpan.TicksPerSecond));

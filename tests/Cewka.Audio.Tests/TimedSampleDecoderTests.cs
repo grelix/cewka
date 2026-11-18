@@ -4,26 +4,16 @@ using Xunit;
 namespace Cewka.Audio.Tests;
 
 /// <summary>
-/// Przycinanie rozbiegu nad atrapami źródła, które oddają próbki tak, jak mogą to robić różne
-/// wydania Media Foundation. Plik: 70 ramek AAC po 1024, rozbieg 1024, nagranie 70 000 ramek,
-/// lista edycji od 1024. Wartość ramki to jej numer w nagraniu; rozbieg ma −1, dopełnienie −2,
-/// więc wynik mówi wprost, co zagrało i w jakiej kolejności.
+/// Przycinanie rozbiegu nad atrapami źródła, które oddają próbki tak, jak robią to różne
+/// wydania Media Foundation. Plik: ramki AAC po 1024, rozbieg 1024 albo 2112 (koder Apple),
+/// nagranie 70 000 ramek, lista edycji od rozbiegu. Wartość ramki to jej numer w nagraniu;
+/// rozbieg ma −1, dopełnienie −2, więc wynik mówi wprost, co zagrało i w jakiej kolejności.
 /// </summary>
 public sealed class TimedSampleDecoderTests
 {
     private const int Rate = 44100;
     private const int Frame = 1024;
-    private const int Blocks = 70;
-    private const int Delay = 1024;
     private const int Length = 70000;
-
-    private static readonly Mp4Gapless EditList = new(Rate, Delay, Length, Mp4GaplessSource.EditList)
-    {
-        Samples = Delay + Length,
-        SampleCount = Blocks,
-        FrameDuration = Frame,
-        EditDelay = Delay,
-    };
 
     public enum Behaviour
     {
@@ -39,69 +29,97 @@ public sealed class TimedSampleDecoderTests
         /// <summary>Czas od początku edycji, rozbieg z czasem przyciętym do zera.</summary>
         EditedClamped,
 
+        /// <summary>Jak wyżej, z czasami zaokrąglanymi jak na maszynach GitHuba: [0, 0, 232200, …].</summary>
+        EditedClampedRounded,
+
         /// <summary>Oś przesunięta o 500 ramek: koniec nie pasuje do żadnego układu.</summary>
         Ambiguous,
     }
 
-    private static float Value(long fileFrame) =>
-        fileFrame < Delay ? -1 : fileFrame < Delay + Length ? fileFrame - Delay : -2;
+    private static int Blocks(int delay) => (delay + Length + Frame - 1) / Frame;
 
-    private sealed class FakeSource(Behaviour behaviour) : ITimedSampleSource
+    private static Mp4Gapless File(int delay) => new(Rate, delay, Length, Mp4GaplessSource.EditList)
     {
+        Samples = delay + Length,
+        SampleCount = Blocks(delay),
+        FrameDuration = Frame,
+        EditDelay = delay,
+    };
+
+    private sealed class FakeSource : ITimedSampleSource
+    {
+        private readonly int _delay;
+        private readonly bool _round;
+        private readonly List<(long Start, int Frames, long Time)> _blocks = [];
         private readonly float[] _samples = new float[Frame * 2];
         private int _next;
+        private int _count;
+
+        public FakeSource(Behaviour behaviour, int delay)
+        {
+            _delay = delay;
+            _round = behaviour == Behaviour.EditedClampedRounded;
+
+            for (var k = 0; k < Blocks(delay); k++)
+            {
+                long start = k * Frame;
+                switch (behaviour)
+                {
+                    case Behaviour.Absolute: _blocks.Add((start, Frame, start)); break;
+                    case Behaviour.EditedNegative: _blocks.Add((start, Frame, start - delay)); break;
+                    case Behaviour.Ambiguous: _blocks.Add((start, Frame, start + 500)); break;
+                    case Behaviour.EditedSkipped:
+                        if (start + Frame <= delay) break;
+                        if (start < delay) _blocks.Add((delay, (int)(start + Frame - delay), 0));
+                        else _blocks.Add((start, Frame, start - delay));
+                        break;
+                    default: _blocks.Add((start, Frame, Math.Max(0, start - delay))); break;
+                }
+            }
+        }
 
         public int Seeks { get; private set; }
         public int Rate => TimedSampleDecoderTests.Rate;
         public int Channels => 2;
         public uint Mask => 3;
         public TimeSpan? Duration => null;
-        public ReadOnlySpan<float> Samples => _samples;
+        public ReadOnlySpan<float> Samples => _samples.AsSpan(0, _count * 2);
 
-        private bool Delivered(int block) => !(behaviour == Behaviour.EditedSkipped && block == 0);
+        private float Value(long fileFrame) =>
+            fileFrame < _delay ? -1 : fileFrame < _delay + Length ? fileFrame - _delay : -2;
 
-        /// <summary>Czas porcji w ramkach na osi źródła.</summary>
-        private long Time(int block)
+        private long Ticks(long frames)
         {
-            long start = block * Frame;
-            return behaviour switch
-            {
-                Behaviour.Absolute => start,
-                Behaviour.EditedClamped => Math.Max(0, start - Delay),
-                Behaviour.Ambiguous => start + 500,
-                _ => start - Delay,
-            };
+            var exact = frames * 10_000_000.0 / TimedSampleDecoderTests.Rate;
+            return _round ? (long)Math.Round(exact) : (long)exact;
         }
-
-        // Jak Media Foundation: czas w 100 ns obcięty do całości.
-        private static long Ticks(long frames) => (long)(frames * 10_000_000.0 / TimedSampleDecoderTests.Rate);
 
         public bool Next(out TimedBlock block)
         {
             block = default;
-            while (_next < Blocks && !Delivered(_next)) _next++;
-            if (_next >= Blocks) return false;
+            _count = 0;
+            if (_next >= _blocks.Count) return false;
 
-            for (var i = 0; i < Frame; i++)
-                _samples[2 * i] = _samples[2 * i + 1] = Value((long)_next * Frame + i);
+            var (start, frames, time) = _blocks[_next++];
+            for (var i = 0; i < frames; i++) _samples[2 * i] = _samples[2 * i + 1] = Value(start + i);
 
-            block = new TimedBlock(Ticks(Time(_next)), Rate, 2, 3, Frame);
-            _next++;
+            _count = frames;
+            block = new TimedBlock(Ticks(time), Rate, 2, 3, frames);
             return true;
         }
 
-        /// <summary>Staje na ostatniej porcji, która zaczyna się nie później niż cel.</summary>
+        /// <summary>
+        /// Staje na ostatniej porcji, która zaczyna się nie później niż cel; cel przed pierwszą
+        /// porcją albo kilka porcji z tym samym czasem: pierwsza z nich.
+        /// </summary>
         public void Seek(long ticks)
         {
             Seeks++;
+            _count = 0;
             var target = ticks * (double)TimedSampleDecoderTests.Rate / 10_000_000;
-            // Cel przed pierwszą porcją: pierwsza porcja. Kilka porcji z tym samym czasem: pierwsza z nich.
-            var landing = -1;
-            for (var b = 0; b < Blocks; b++)
-            {
-                if (!Delivered(b)) continue;
-                if (landing < 0 || (Time(b) <= target + 0.5 && Time(b) > Time(landing))) landing = b;
-            }
+            var landing = 0;
+            for (var b = 1; b < _blocks.Count; b++)
+                if (_blocks[b].Time <= target + 0.5 && _blocks[b].Time > _blocks[landing].Time) landing = b;
 
             _next = landing;
         }
@@ -133,58 +151,62 @@ public sealed class TimedSampleDecoderTests
     }
 
     [Theory]
-    [InlineData(Behaviour.Absolute)]
-    [InlineData(Behaviour.EditedSkipped)]
-    [InlineData(Behaviour.EditedNegative)]
-    public void RozpoznanaOsGraSamoNagranie(Behaviour behaviour)
+    [InlineData(Behaviour.Absolute, 1024)]
+    [InlineData(Behaviour.Absolute, 2112)]
+    [InlineData(Behaviour.EditedSkipped, 1024)]
+    [InlineData(Behaviour.EditedSkipped, 2112)]
+    [InlineData(Behaviour.EditedNegative, 1024)]
+    [InlineData(Behaviour.EditedNegative, 2112)]
+    [InlineData(Behaviour.EditedClamped, 1024)]
+    [InlineData(Behaviour.EditedClamped, 2112)]
+    [InlineData(Behaviour.EditedClampedRounded, 1024)]
+    [InlineData(Behaviour.EditedClampedRounded, 2112)]
+    public void RozpoznanaOsGraSamoNagranie(Behaviour behaviour, int delay)
     {
-        using var decoder = new Decoder(new FakeSource(behaviour), EditList);
-        var report = decoder.TimelineReport;
+        using var decoder = new Decoder(new FakeSource(behaviour, delay), File(delay));
         var output = ReadAll(decoder);
+        var report = decoder.TimelineReport;
 
         Assert.Equal(Length, decoder.TotalFrames);
         Assert.True(Length == output.Length, $"ramek {output.Length}; {report}");
+        Assert.True(output[0] == 0, $"pierwsza ramka {output[0]}; {report}");
         AssertRecordingIntact(output, 0, report);
     }
 
     [Theory]
-    [InlineData(Behaviour.Absolute)]
-    [InlineData(Behaviour.EditedSkipped)]
-    [InlineData(Behaviour.EditedNegative)]
-    [InlineData(Behaviour.EditedClamped)]
-    public void RozpoznanaOsPrzewijaCoDoRamki(Behaviour behaviour)
+    [InlineData(Behaviour.Absolute, 1024, 30000)]
+    [InlineData(Behaviour.EditedSkipped, 2112, 30000)]
+    [InlineData(Behaviour.EditedNegative, 2112, 30000)]
+    [InlineData(Behaviour.EditedClamped, 1024, 30000)]
+    [InlineData(Behaviour.EditedClamped, 2112, 30000)]
+    [InlineData(Behaviour.EditedClampedRounded, 1024, 30000)]
+    [InlineData(Behaviour.EditedClampedRounded, 1024, 0)]
+    [InlineData(Behaviour.EditedClampedRounded, 1024, 1)]
+    [InlineData(Behaviour.EditedClampedRounded, 1024, 3000)]
+    [InlineData(Behaviour.EditedClamped, 2112, 5000)]
+    [InlineData(Behaviour.EditedClamped, 2112, 69999)]
+    public void RozpoznanaOsPrzewijaCoDoRamki(Behaviour behaviour, int delay, int target)
     {
-        using var decoder = new Decoder(new FakeSource(behaviour), EditList);
-        decoder.Seek(30000);
+        using var decoder = new Decoder(new FakeSource(behaviour, delay), File(delay));
+        ReadAll(decoder);
+        decoder.Seek(target);
         var output = ReadAll(decoder);
+        var report = decoder.TimelineReport;
 
-        Assert.Equal(30000, decoder.Position - output.Length);
-        Assert.Equal(Length - 30000, output.Length);
-        AssertRecordingIntact(output, 30000, decoder.TimelineReport);
-    }
-
-    /// <summary>
-    /// Rozbieg z czasem przyciętym do zera ma ten sam czas co pierwsza ramka nagrania: miejsca
-    /// w pliku nie da się ustalić, więc gra wszystko. Rozbieg może zostać, nagranie nie może zginąć.
-    /// </summary>
-    [Fact]
-    public void CzasPrzycietyDoZeraNieGubiNagrania()
-    {
-        using var decoder = new Decoder(new FakeSource(Behaviour.EditedClamped), EditList);
-        var output = ReadAll(decoder);
-
-        AssertRecordingIntact(output, 0, decoder.TimelineReport);
-        Assert.Contains("cofają", decoder.TimelineReport);
+        Assert.Equal(target, decoder.Position - output.Length);
+        Assert.True(Length - target == output.Length, $"ramek {output.Length}; {report}");
+        Assert.True(output[0] == target, $"pierwsza ramka {output[0]}; {report}");
+        AssertRecordingIntact(output, target, report);
     }
 
     [Fact]
     public void NiejednoznacznaSondaNieObcinaNiczego()
     {
-        using var decoder = new Decoder(new FakeSource(Behaviour.Ambiguous), EditList);
+        using var decoder = new Decoder(new FakeSource(Behaviour.Ambiguous, 1024), File(1024));
         var report = decoder.TimelineReport;
         var output = ReadAll(decoder);
 
-        Assert.Equal(Blocks * Frame, output.Length);
+        Assert.Equal(Blocks(1024) * Frame, output.Length);
         Assert.Equal(-1, output[0]);
         AssertRecordingIntact(output, 0, report);
         Assert.Contains("nie pasuje", report);
@@ -193,12 +215,54 @@ public sealed class TimedSampleDecoderTests
         AssertRecordingIntact(ReadAll(decoder), 30000, report);
     }
 
-    /// <summary>Sam znacznik iTunes bez listy edycji: czas od początku ścieżki, bez sondy.</summary>
+    /// <summary>
+    /// Porcja, której czas nie zgadza się z licznikiem (system zgubił ramki albo zmienił oś),
+    /// kończy przycinanie od tego miejsca; to, co już zagrało, zostaje nienaruszone.
+    /// </summary>
+    [Fact]
+    public void NiezgodnyCzasPorcjiKonczyPrzycinanie()
+    {
+        var source = new GappySource(new FakeSource(Behaviour.Absolute, 1024), skipBlock: 30);
+        using var decoder = new Decoder(source, File(1024) with { EditDelay = 0, Source = Mp4GaplessSource.ITunSmpb });
+        var output = ReadAll(decoder);
+
+        Assert.Equal(0, output[0]);
+        Assert.Contains("nie zgadza się z licznikiem", decoder.TimelineReport);
+        Assert.Equal(-2, output[^1]);
+    }
+
+    /// <summary>Atrapa gubiąca jedną porcję.</summary>
+    private sealed class GappySource(FakeSource inner, int skipBlock) : ITimedSampleSource
+    {
+        private int _index;
+
+        public int Rate => inner.Rate;
+        public int Channels => inner.Channels;
+        public uint Mask => inner.Mask;
+        public TimeSpan? Duration => null;
+        public ReadOnlySpan<float> Samples => inner.Samples;
+
+        public bool Next(out TimedBlock block)
+        {
+            if (_index++ == skipBlock) inner.Next(out _);
+            return inner.Next(out block);
+        }
+
+        public void Seek(long ticks)
+        {
+            _index = 0;
+            inner.Seek(ticks);
+        }
+
+        public void Dispose() { }
+    }
+
+    /// <summary>Sam znacznik iTunes bez listy edycji: czas od początku ścieżki, bez sond.</summary>
     [Fact]
     public void ZnacznikBezListyEdycjiNieWymagaSondy()
     {
-        var source = new FakeSource(Behaviour.Absolute);
-        var smpb = EditList with { Source = Mp4GaplessSource.ITunSmpb, EditDelay = 0 };
+        var source = new FakeSource(Behaviour.Absolute, 1024);
+        var smpb = File(1024) with { Source = Mp4GaplessSource.ITunSmpb, EditDelay = 0 };
 
         using var decoder = new Decoder(source, smpb);
         Assert.Equal(0, source.Seeks);
@@ -211,8 +275,8 @@ public sealed class TimedSampleDecoderTests
     [Fact]
     public void BezOpisuGraWszystko()
     {
-        using var decoder = new Decoder(new FakeSource(Behaviour.Absolute), null);
+        using var decoder = new Decoder(new FakeSource(Behaviour.Absolute, 1024), null);
 
-        Assert.Equal(Blocks * Frame, ReadAll(decoder).Length);
+        Assert.Equal(Blocks(1024) * Frame, ReadAll(decoder).Length);
     }
 }

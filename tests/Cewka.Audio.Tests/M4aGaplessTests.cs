@@ -12,7 +12,8 @@ namespace Cewka.Audio.Tests;
 /// sygnałem, 656 dopełnienia za nim) bez względu na znacznik i listę edycji; GStreamer 1.24
 /// przycina sam według znacznika albo listy edycji, a gdy plik ma oba, przycina dwa razy.
 /// Media Foundation na maszynach GitHuba (windows-latest) przy liście edycji liczy czas od
-/// początku edycji; dekoder rozpoznaje to sondą końca osi. Komunikaty porażek podają surowe
+/// początku edycji i oddaje rozbieg z czasem zero (czasy porcji [0, 0, 232200, …]); dekoder
+/// rozpoznaje to sondami końca i początku osi. Komunikaty porażek podają surowe
 /// liczby rozpoznania, żeby porażka w innym środowisku mówiła, jak zachowuje się tamten system.
 /// </summary>
 public sealed class M4aGaplessTests(ITestOutputHelper log) : IDisposable
