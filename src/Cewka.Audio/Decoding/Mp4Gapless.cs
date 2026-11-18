@@ -28,6 +28,21 @@ internal readonly record struct Mp4Gapless(int Timescale, long Delay, long Lengt
     public double StartSeconds => Delay / (double)Timescale;
     public double EndSeconds => (Delay + Length) / (double)Timescale;
     public double LengthSeconds => Length / (double)Timescale;
+
+    /// <summary>Suma czasów próbek ścieżki: rozbieg, nagranie i dopełnienie zapisane w tablicy.</summary>
+    public long Samples { get; init; }
+
+    /// <summary>Liczba próbek (ramek kodera) w tablicy czasów.</summary>
+    public long SampleCount { get; init; }
+
+    /// <summary>Najdłuższy czas jednej próbki tablicy, czyli długość ramki kodera.</summary>
+    public long FrameDuration { get; init; }
+
+    /// <summary>
+    /// Początek jedynej edycji listy, zero bez listy. Dekoder systemu, który stosuje listę,
+    /// liczy czas od tego miejsca, a nie od początku ścieżki.
+    /// </summary>
+    public long EditDelay { get; init; }
 }
 
 /// <summary>
@@ -88,13 +103,13 @@ internal static class Mp4GaplessReader
 
         private bool _trackIsSound;
         private uint _trackTimescale;
-        private long _trackSamples = -1;
+        private (long Total, long Count, long Frame) _trackSamples = (-1, 0, 0);
         private (long Duration, long MediaTime)? _trackEdit;
         private bool _trackEditUsable = true;
 
         private bool _haveSound;
         private uint _soundTimescale;
-        private long _soundSamples = -1;
+        private (long Total, long Count, long Frame) _soundSamples = (-1, 0, 0);
         private (long Duration, long MediaTime)? _soundEdit;
 
         private string? _freeformMean;
@@ -180,7 +195,7 @@ internal static class Mp4GaplessReader
         {
             _trackIsSound = false;
             _trackTimescale = 0;
-            _trackSamples = -1;
+            _trackSamples = (-1, 0, 0);
             _trackEdit = null;
             _trackEditUsable = true;
 
@@ -206,23 +221,35 @@ internal static class Mp4GaplessReader
 
         public Mp4Gapless? Result()
         {
-            if (!_haveSound || _soundTimescale is 0 or > MaxTimescale || _soundSamples <= 0) return null;
+            if (!_haveSound || _soundTimescale is 0 or > MaxTimescale || _soundSamples.Total <= 0) return null;
 
             var timescale = (int)_soundTimescale;
-            var samples = _soundSamples;
+            var samples = _soundSamples.Total;
             if (samples > MaxDurationSeconds * timescale) return null;
 
             var maxDelay = MaxDelaySeconds * timescale;
 
+            long? editLength = null;
+            if (_soundEdit is { } edit && edit.MediaTime <= maxDelay && edit.MediaTime < samples)
+                editLength = EditLength(edit, timescale, samples);
+
+            var editDelay = editLength is null ? 0 : _soundEdit!.Value.MediaTime;
+
+            var result = new Mp4Gapless(timescale, 0, samples, Mp4GaplessSource.SampleTable);
+
             if (ParseSmpb(_smpb) is { } smpb && smpb.Delay <= maxDelay && smpb.Length > 0
                 && smpb.Length <= samples - smpb.Delay)
-                return new Mp4Gapless(timescale, smpb.Delay, smpb.Length, Mp4GaplessSource.ITunSmpb);
+                result = new Mp4Gapless(timescale, smpb.Delay, smpb.Length, Mp4GaplessSource.ITunSmpb);
+            else if (editLength is { } length)
+                result = new Mp4Gapless(timescale, editDelay, length, Mp4GaplessSource.EditList);
 
-            if (_soundEdit is { } edit && edit.MediaTime <= maxDelay && edit.MediaTime < samples
-                && EditLength(edit, timescale, samples) is { } length)
-                return new Mp4Gapless(timescale, edit.MediaTime, length, Mp4GaplessSource.EditList);
-
-            return new Mp4Gapless(timescale, 0, samples, Mp4GaplessSource.SampleTable);
+            return result with
+            {
+                Samples = samples,
+                SampleCount = _soundSamples.Count,
+                FrameDuration = _soundSamples.Frame,
+                EditDelay = editDelay,
+            };
         }
 
         /// <summary>
@@ -274,8 +301,11 @@ internal static class Mp4GaplessReader
             return Encoding.ASCII.GetString(data);
         }
 
-        /// <summary>Suma czasów próbek, czyli długość ścieżki z rozbiegiem i dopełnieniem.</summary>
-        private long ReadSampleDurations(long body, long end)
+        /// <summary>
+        /// Suma czasów próbek (długość ścieżki z rozbiegiem i dopełnieniem), liczba próbek
+        /// i najdłuższa z nich.
+        /// </summary>
+        private (long Total, long Count, long Frame) ReadSampleDurations(long body, long end)
         {
             if (end - body < 8) throw Damaged("niepełna tablica czasów");
 
@@ -287,7 +317,7 @@ internal static class Mp4GaplessReader
             if (count > (end - body - 8) / 8) throw Damaged("tablica czasów dłuższa niż atom");
 
             var chunk = new byte[SttsChunkEntries * 8];
-            long total = 0;
+            long total = 0, samplesTotal = 0, frame = 0;
             var left = (long)count;
 
             while (left > 0)
@@ -300,6 +330,8 @@ internal static class Mp4GaplessReader
                     var samples = BinaryPrimitives.ReadUInt32BigEndian(chunk.AsSpan(i * 8));
                     var duration = BinaryPrimitives.ReadUInt32BigEndian(chunk.AsSpan(i * 8 + 4));
                     total += (long)samples * duration;
+                    samplesTotal += samples;
+                    if (samples > 0) frame = Math.Max(frame, duration);
 
                     // Suma z dwóch liczb 32-bitowych na wpis; granica chroni przed przepełnieniem.
                     if (total > long.MaxValue / 4) throw Damaged("suma czasów próbek poza zakresem");
@@ -308,7 +340,7 @@ internal static class Mp4GaplessReader
                 left -= entries;
             }
 
-            return total;
+            return (total, samplesTotal, frame);
         }
 
         /// <summary>

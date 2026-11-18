@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Cewka.Audio.Decoding;
 using Cewka.Audio.Tests.Engine;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Cewka.Audio.Tests;
 
@@ -10,8 +11,11 @@ namespace Cewka.Audio.Tests;
 /// z 18.11.2026: Media Foundation oddaje wszystkie ramki AAC (1024 ramki rozbiegu przed
 /// sygnałem, 656 dopełnienia za nim) bez względu na znacznik i listę edycji; GStreamer 1.24
 /// przycina sam według znacznika albo listy edycji, a gdy plik ma oba, przycina dwa razy.
+/// Media Foundation na maszynach GitHuba (windows-latest) przy liście edycji liczy czas od
+/// początku edycji; dekoder rozpoznaje to sondą końca osi. Komunikaty porażek podają surowe
+/// liczby rozpoznania, żeby porażka w innym środowisku mówiła, jak zachowuje się tamten system.
 /// </summary>
-public sealed class M4aGaplessTests : IDisposable
+public sealed class M4aGaplessTests(ITestOutputHelper log) : IDisposable
 {
     private readonly string _directory = Directory.CreateTempSubdirectory("cewka-test-").FullName;
 
@@ -44,6 +48,17 @@ public sealed class M4aGaplessTests : IDisposable
         return [.. all];
     }
 
+    private static string Report(IAudioDecoder decoder) =>
+        decoder is TimedSampleDecoder timed ? timed.TimelineReport : decoder.GetType().Name;
+
+    /// <summary>Rozpoznanie osi czasu i liczba ramek wyniku dla pliku, do komunikatu porażki.</summary>
+    private static string Diagnose(string path)
+    {
+        using var decoder = SystemCodecs.Open(path, Mp4Samples.Rate, 2, null);
+        var frames = ReadAll(decoder).Length / 2;
+        return $"{Path.GetFileName(path)}: wynik {frames} ramek; {Report(decoder)}";
+    }
+
     private static readonly float[] Reference = Mp4Samples.Reference(Mp4Samples.FirstFrames + Mp4Samples.SecondFrames, Mp4Samples.Rate);
 
     [MediaFoundationTheory]
@@ -57,10 +72,12 @@ public sealed class M4aGaplessTests : IDisposable
         using var decoder = SystemCodecs.Open(path, Mp4Samples.Rate, 2, null);
         var total = decoder.TotalFrames;
         var output = ReadAll(decoder);
+        var report = $"długość {total}, wynik {output.Length / 2} ramek; {Report(decoder)}";
 
-        Assert.Equal(Mp4Samples.FirstFrames, total);
-        Assert.Equal(Mp4Samples.FirstFrames, output.Length / 2);
-        Assert.Equal(5000, Mp4Samples.Offset(output, Reference, 5000, 40000, 3000));
+        Assert.True(total == Mp4Samples.FirstFrames, report);
+        Assert.True(output.Length / 2 == Mp4Samples.FirstFrames, report);
+        var signal = Mp4Samples.Offset(output, Reference, 5000, 40000, 3000);
+        Assert.True(signal == 5000, $"ramka 5000 nagrania w wyniku na {signal}; {report}");
     }
 
     /// <summary>Bez opisu rozbiegu zostaje on w nagraniu, ale dopełnienie za końcem tablicy czasów nie gra.</summary>
@@ -133,7 +150,8 @@ public sealed class M4aGaplessTests : IDisposable
         // Ten sam odstęp wzorca przed granicą i za nią; rozbieg albo dopełnienie przesuwa drugi plik o ponad tysiąc ramek.
         var before = Mp4Samples.Offset(output, reference, boundary - 38000, 30000, 3500) - (boundary - 38000);
         var after = Mp4Samples.Offset(output, reference, boundary + 8000, 30000, 3500) - (boundary + 8000);
-        Assert.InRange(after - before, -3, 3);
+        Assert.True(Math.Abs(after - before) <= 3,
+            $"drugi plik przesunięty o {after - before} ramek 48 kHz; {Diagnose(first)}; {Diagnose(second)}");
 
         // Sygnał ma wartość skuteczną około 0,2; wstawka ciszy schodzi do zera.
         var quietest = Mp4Samples.QuietestWindow(output, boundary + before - 3000, boundary + before + 3000);
@@ -141,6 +159,29 @@ public sealed class M4aGaplessTests : IDisposable
 
         var expected = (Mp4Samples.FirstFrames + Mp4Samples.SecondFrames) * (double)rate / Mp4Samples.Rate;
         Assert.InRange(output.Length / 2 - before, expected - 64, expected + 64);
+    }
+
+    /// <summary>
+    /// Nic nie sprawdza poza spójnością: wypisuje, jak system tego środowiska podaje czas
+    /// próbek plików z każdym opisem rozbiegu.
+    /// </summary>
+    [MediaFoundationFact]
+    public void MediaFoundationDiagnostyka()
+    {
+        var variants = new (string Name, byte[] File)[]
+        {
+            ("bez opisu", Mp4Samples.First),
+            ("iTunSMPB", Described(Mp4Samples.First, Mp4Samples.FirstFrames, Description.Smpb)),
+            ("lista edycji", Described(Mp4Samples.First, Mp4Samples.FirstFrames, Description.EditList)),
+            ("oba", Described(Mp4Samples.First, Mp4Samples.FirstFrames, Description.Both)),
+        };
+
+        foreach (var (name, file) in variants)
+        {
+            var line = $"{name}: {Diagnose(Write("diagnostyka.m4a", file))}";
+            log.WriteLine(line);
+            Assert.DoesNotContain("wynik 0 ramek", line);
+        }
     }
 
     private static float[] Play(params string[] files)

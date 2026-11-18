@@ -10,6 +10,23 @@ public sealed class Mp4GaplessReaderTests
 {
     private static Mp4Gapless? Read(byte[] file) => Mp4GaplessReader.Read(new MemoryStream(file));
 
+    /// <summary>Sama część do zagrania, bez opisu tablicy czasów i listy edycji.</summary>
+    private static Mp4Gapless? Core(Mp4Gapless? info) =>
+        info is { } x ? new Mp4Gapless(x.Timescale, x.Delay, x.Length, x.Source) : null;
+
+    /// <summary>Tablica czasów wzorca: 69 ramek po 1024 i ostatnia skrócona do 368.</summary>
+    [Fact]
+    public void OpisTablicyCzasowIListyEdycji()
+    {
+        var plain = Read(Mp4Samples.First)!.Value;
+        Assert.Equal((71024L, 70L, 1024L, 0L), (plain.Samples, plain.SampleCount, plain.FrameDuration, plain.EditDelay));
+
+        var both = Mp4Samples.WithEditList(Mp4Samples.First, Mp4Samples.Delay, Mp4Samples.FirstFrames);
+        both = Mp4Samples.WithSmpb(both, Mp4Samples.Delay, Mp4Samples.Padding(Mp4Samples.FirstFrames), Mp4Samples.FirstFrames);
+        var info = Read(both)!.Value;
+        Assert.Equal((Mp4GaplessSource.ITunSmpb, 1024L), (info.Source, info.EditDelay));
+    }
+
     /// <summary>Lista edycji mp4mux zaczyna się od zera; długość z niej i z tablicy czasów obejmuje rozbieg.</summary>
     [Fact]
     public void ListaEdycjiOdZeraZostawiaRozbieg()
@@ -17,7 +34,7 @@ public sealed class Mp4GaplessReaderTests
         var info = Read(Mp4Samples.First);
 
         // Rozbieg i nagranie; dopełnienie ostatniej ramki mp4mux odciął w tablicy czasów.
-        Assert.Equal(new Mp4Gapless(Mp4Samples.Rate, 0, Mp4Samples.Delay + Mp4Samples.FirstFrames, Mp4GaplessSource.EditList), info);
+        Assert.Equal(new Mp4Gapless(Mp4Samples.Rate, 0, Mp4Samples.Delay + Mp4Samples.FirstFrames, Mp4GaplessSource.EditList), Core(info));
     }
 
     [Fact]
@@ -27,7 +44,7 @@ public sealed class Mp4GaplessReaderTests
         var edts = file.AsSpan().IndexOf("edts"u8);
         "free"u8.CopyTo(file.AsSpan(edts));
 
-        Assert.Equal(new Mp4Gapless(Mp4Samples.Rate, 0, Mp4Samples.Delay + Mp4Samples.FirstFrames, Mp4GaplessSource.SampleTable), Read(file));
+        Assert.Equal(new Mp4Gapless(Mp4Samples.Rate, 0, Mp4Samples.Delay + Mp4Samples.FirstFrames, Mp4GaplessSource.SampleTable), Core(Read(file)));
     }
 
     [Fact]
@@ -35,7 +52,7 @@ public sealed class Mp4GaplessReaderTests
     {
         var file = Mp4Samples.WithSmpb(Mp4Samples.First, Mp4Samples.Delay, Mp4Samples.Padding(Mp4Samples.FirstFrames), Mp4Samples.FirstFrames);
 
-        Assert.Equal(new Mp4Gapless(Mp4Samples.Rate, Mp4Samples.Delay, Mp4Samples.FirstFrames, Mp4GaplessSource.ITunSmpb), Read(file));
+        Assert.Equal(new Mp4Gapless(Mp4Samples.Rate, Mp4Samples.Delay, Mp4Samples.FirstFrames, Mp4GaplessSource.ITunSmpb), Core(Read(file)));
     }
 
     /// <summary>Długość edycji w skali filmu 1800/s jest zaokrąglona; dokładny jest koniec tablicy czasów.</summary>
@@ -44,7 +61,7 @@ public sealed class Mp4GaplessReaderTests
     {
         var file = Mp4Samples.WithEditList(Mp4Samples.First, Mp4Samples.Delay, Mp4Samples.FirstFrames);
 
-        Assert.Equal(new Mp4Gapless(Mp4Samples.Rate, Mp4Samples.Delay, Mp4Samples.FirstFrames, Mp4GaplessSource.EditList), Read(file));
+        Assert.Equal(new Mp4Gapless(Mp4Samples.Rate, Mp4Samples.Delay, Mp4Samples.FirstFrames, Mp4GaplessSource.EditList), Core(Read(file)));
     }
 
     [Fact]

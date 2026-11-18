@@ -8,45 +8,67 @@ namespace Cewka.Audio.Decoding.Windows;
 /// AAC, M4A i ALAC przez Media Foundation. Dekoder prosi tylko o próbki zmiennoprzecinkowe
 /// w częstotliwości źródła; dopasowanie do urządzenia robi wspólna klasa bazowa, bo jakość
 /// resamplera systemowego zależy od wydania Windows. Rozbieg kodera i dopełnienie końca
-/// przycinane są tutaj według opisu z pliku (<see cref="Mp4GaplessReader"/>).
+/// przycina <see cref="TimedSampleDecoder"/> według opisu z pliku (<see cref="Mp4GaplessReader"/>).
 /// </summary>
 [SupportedOSPlatform("windows")]
-internal sealed class MediaFoundationDecoder : ManagedDecoderBase
+internal sealed class MediaFoundationDecoder : TimedSampleDecoder
 {
     private static readonly Lock StartupLock = new();
     private static bool _started;
 
-    private readonly string _path;
-    private IMFSourceReader? _reader;
-
-    private byte[] _pending = [];
-    private int _pendingOffset;
-    private int _pendingBytes;
-    private bool _endOfStream;
-
-    private uint _channelMask;
-    private (int Rate, int Channels, uint Mask)? _formatChange;
-
-    /// <summary>
-    /// Część pliku do zagrania. Media Foundation pomija znacznik <c>iTunSMPB</c> i listę edycji
-    /// i oddaje każdą ramkę AAC: rozbieg kodera przed nagraniem i dopełnienie ostatniej ramki
-    /// za nim, czyli ciszę między utworami albumu. Null dla plików bez opisu (nie MP4).
-    /// </summary>
-    private readonly Mp4Gapless? _gapless;
-
-    /// <summary>Pierwsza chwila osi czasu pliku, która gra: początek nagrania albo cel przewinięcia.</summary>
-    private double _keepFrom;
-
-    /// <summary>
-    /// Rozbieg dekodera przed celem przewinięcia: ramka AAC zależy od poprzedniej, więc dekodowanie
-    /// zaczyna się wcześniej, a nadmiar odpada. Dwie ramki HE-AAC z zapasem.
-    /// </summary>
-    private const int SeekPreRollFrames = 4096;
-
     public MediaFoundationDecoder(string path, int outputSampleRate, int outputChannels, BitrateMeter? meter = null)
+        : base(new MediaFoundationSampleSource(path), ReadGapless(path), outputSampleRate, outputChannels, meter)
     {
-        _path = path;
-        EnsureStarted();
+    }
+
+    /// <summary>Opis rozbiegu jest dodatkiem: plik, z którego nie da się go odczytać, gra w całości.</summary>
+    private static Mp4Gapless? ReadGapless(string path)
+    {
+        try
+        {
+            return Mp4GaplessReader.Read(path);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            DecoderFailures.Log($"Media Foundation: plik gra bez przycięcia rozbiegu ({ex.Message}).");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Media Foundation has to be started once per process. It is reference counted, so the
+    /// matching shutdown is deliberately omitted: the platform is wanted for the whole run,
+    /// and shutting it down while another decoder still holds a reader would fail.
+    /// </summary>
+    internal static void EnsureStarted()
+    {
+        lock (StartupLock)
+        {
+            if (_started) return;
+
+            var result = MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET);
+            if (result < 0)
+            {
+                DecoderFailures.Log($"Media Foundation: uruchomienie nie powiodło się (0x{result:X8}).");
+                throw DecoderFailures.Create(DecoderFailure.SystemCodecsUnavailable);
+            }
+
+            _started = true;
+        }
+    }
+}
+
+/// <summary>Czytnik źródła Media Foundation jako porcje próbek z czasami.</summary>
+[SupportedOSPlatform("windows")]
+internal sealed class MediaFoundationSampleSource : ITimedSampleSource
+{
+    private IMFSourceReader? _reader;
+    private float[] _samples = [];
+    private int _count;
+
+    public MediaFoundationSampleSource(string path)
+    {
+        MediaFoundationDecoder.EnsureStarted();
 
         var result = MFCreateSourceReaderFromURL(path, IntPtr.Zero, out var reader);
         if (result < 0) throw Failure("otwarcie pliku", result);
@@ -63,26 +85,13 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
             if (result < 0) throw Failure("wybór ścieżki dźwiękowej", result);
 
             ConfigureOutput(reader);
-            if (!ReadOutputFormat(reader, out var sourceRate, out var sourceChannels, out var mask))
+            if (!ReadOutputFormat(reader, out var rate, out var channels, out var mask))
                 throw Failure("odczyt formatu wyjściowego", 0);
 
-            _channelMask = mask;
-            Configure(sourceRate, sourceChannels, outputSampleRate, outputChannels, meter,
-                ChannelLayouts.FromWaveMask(mask, sourceChannels));
-
-            _gapless = ReadGapless(path);
-
-            if (_gapless is { } gapless)
-            {
-                _keepFrom = gapless.StartSeconds;
-                TotalFrames = (long)Math.Round(gapless.LengthSeconds * outputSampleRate);
-            }
-            else
-            {
-                TotalFrames = ReadDuration(reader) is { } duration && duration > TimeSpan.Zero
-                    ? (long)Math.Round(duration.TotalSeconds * outputSampleRate)
-                    : 0;
-            }
+            Rate = rate;
+            Channels = channels;
+            Mask = mask;
+            Duration = ReadDuration(reader);
         }
         catch
         {
@@ -92,7 +101,12 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
         }
     }
 
-    public override bool CanSeek => true;
+    public int Rate { get; private set; }
+    public int Channels { get; private set; }
+    public uint Mask { get; private set; }
+    public TimeSpan? Duration { get; }
+
+    public ReadOnlySpan<float> Samples => _samples.AsSpan(0, _count);
 
     /// <summary>
     /// Asks for uncompressed float at the file's own rate. Passing a partial type lets the
@@ -154,20 +168,6 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
         return true;
     }
 
-    /// <summary>Opis rozbiegu jest dodatkiem: plik, z którego nie da się go odczytać, gra w całości.</summary>
-    private static Mp4Gapless? ReadGapless(string path)
-    {
-        try
-        {
-            return Mp4GaplessReader.Read(path);
-        }
-        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
-        {
-            DecoderFailures.Log($"Media Foundation: plik gra bez przycięcia rozbiegu ({ex.Message}).");
-            return null;
-        }
-    }
-
     private static TimeSpan? ReadDuration(IMFSourceReader reader)
     {
         var key = MF_PD_DURATION;
@@ -178,200 +178,100 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
         return value.Value > 0 ? TimeSpan.FromTicks(value.Value) : null;
     }
 
-    protected override int ReadSource(Span<float> destination, int frames)
-    {
-        if (_reader is null) return 0;
-
-        var written = 0;
-
-        while (written < frames)
-        {
-            if (_formatChange is { } change)
-            {
-                // Próbki w nowym formacie nie mogą trafić do bufora za próbkami w starym.
-                if (written > 0) break;
-
-                _formatChange = null;
-                _channelMask = change.Mask;
-                Reconfigure(change.Rate, change.Channels, ChannelLayouts.FromWaveMask(change.Mask, change.Channels));
-                return 0;
-            }
-
-            if (_pendingBytes == 0)
-            {
-                if (_endOfStream || !PullSample()) break;
-                continue;
-            }
-
-            var bytesPerFrame = SourceChannels * sizeof(float);
-            var available = _pendingBytes / bytesPerFrame;
-            var take = Math.Min(frames - written, available);
-            if (take <= 0) { _pendingBytes = 0; continue; }
-
-            var source = MemoryMarshal.Cast<byte, float>(
-                _pending.AsSpan(_pendingOffset, take * bytesPerFrame));
-
-            source.CopyTo(destination[(written * SourceChannels)..]);
-
-            written += take;
-            _pendingOffset += take * bytesPerFrame;
-            _pendingBytes -= take * bytesPerFrame;
-        }
-
-        return written;
-    }
-
     /// <summary>Fetches one sample and copies it out, so the COM buffer can be released at once.</summary>
-    private bool PullSample()
+    public bool Next(out TimedBlock block)
     {
-        var result = _reader!.ReadSample(
-            MF_SOURCE_READER_FIRST_AUDIO_STREAM, 0,
-            out _, out var flags, out var timestamp, out var sample);
+        block = default;
+        _count = 0;
+        if (_reader is null) return false;
 
-        if (result < 0)
+        while (true)
         {
-            DecoderFailures.Log($"Media Foundation: odczyt próbki nie powiódł się (0x{result:X8}).");
-            _endOfStream = true;
-            return false;
-        }
+            var result = _reader.ReadSample(
+                MF_SOURCE_READER_FIRST_AUDIO_STREAM, 0,
+                out _, out var flags, out var timestamp, out var sample);
 
-        if ((flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0)
-        {
-            _endOfStream = true;
-            if (sample is not null) Marshal.ReleaseComObject(sample);
-            return false;
-        }
-
-        // Ta próbka jest już w nowym formacie; ReadSource przebuduje konwerter, zanim ją przekaże.
-        if ((flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) != 0)
-        {
-            if (!ReadOutputFormat(_reader!, out var rate, out var channels, out var mask))
+            if (result < 0)
             {
-                DecoderFailures.Log("Media Foundation: nie odczytano nowego formatu próbek.");
-                _endOfStream = true;
+                DecoderFailures.Log($"Media Foundation: odczyt próbki nie powiódł się (0x{result:X8}).");
+                return false;
+            }
+
+            if ((flags & MF_SOURCE_READERF_ENDOFSTREAM) != 0)
+            {
                 if (sample is not null) Marshal.ReleaseComObject(sample);
                 return false;
             }
 
-            _formatChange = rate != SourceSampleRate || channels != SourceChannels || mask != _channelMask
-                ? (rate, channels, mask)
-                : null;
-        }
+            // Ta próbka jest już w nowym formacie.
+            if ((flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) != 0)
+            {
+                if (!ReadOutputFormat(_reader, out var rate, out var channels, out var mask))
+                {
+                    DecoderFailures.Log("Media Foundation: nie odczytano nowego formatu próbek.");
+                    if (sample is not null) Marshal.ReleaseComObject(sample);
+                    return false;
+                }
 
-        // Brak próbki bez końca strumienia zdarza się przy zmianie formatu w środku pliku.
-        if (sample is null) return true;
+                Rate = rate;
+                Channels = channels;
+                Mask = mask;
+            }
 
-        try
-        {
-            if (sample.ConvertToContiguousBuffer(out var buffer) < 0) return false;
+            // Brak próbki bez końca strumienia zdarza się przy zmianie formatu w środku pliku.
+            if (sample is null) continue;
 
             try
             {
-                if (buffer.Lock(out var pointer, out _, out var length) < 0) return false;
-
-                try
-                {
-                    if (_pending.Length < length) _pending = new byte[length];
-                    Marshal.Copy(pointer, _pending, 0, length);
-
-                    _pendingOffset = 0;
-                    _pendingBytes = length;
-
-                    if (_gapless is { } gapless && !Trim(gapless, timestamp)) return false;
-                }
-                finally
-                {
-                    buffer.Unlock();
-                }
+                if (!Copy(sample)) return false;
             }
             finally
             {
-                Marshal.ReleaseComObject(buffer);
+                Marshal.ReleaseComObject(sample);
+            }
+
+            block = new TimedBlock(timestamp, Rate, Channels, Mask, _count / Channels);
+            return true;
+        }
+    }
+
+    private bool Copy(IMFSample sample)
+    {
+        if (sample.ConvertToContiguousBuffer(out var buffer) < 0) return false;
+
+        try
+        {
+            if (buffer.Lock(out var pointer, out _, out var length) < 0) return false;
+
+            try
+            {
+                var floats = length / sizeof(float) / Channels * Channels;
+                if (_samples.Length < floats) _samples = new float[floats];
+                Marshal.Copy(pointer, _samples, 0, floats);
+                _count = floats;
+            }
+            finally
+            {
+                buffer.Unlock();
             }
         }
         finally
         {
-            Marshal.ReleaseComObject(sample);
+            Marshal.ReleaseComObject(buffer);
         }
 
         return true;
     }
 
-    /// <summary>
-    /// Zostawia z właśnie pobranej próbki tylko ramki od <see cref="_keepFrom"/> do końca nagrania.
-    /// Miejsce próbki w pliku podaje jej znacznik czasu, więc system, który sam pominął rozbieg,
-    /// oddaje pierwszą próbkę już za nim i nic więcej nie odpada. Fałsz oznacza koniec nagrania.
-    /// </summary>
-    private bool Trim(Mp4Gapless gapless, long timestamp)
-    {
-        // Próbka po zmianie formatu jest już w nowym, choć konwerter przebuduje się dopiero przy odczycie.
-        var rate = _formatChange?.Rate ?? SourceSampleRate;
-        var bytesPerFrame = (_formatChange?.Channels ?? SourceChannels) * sizeof(float);
-        var frames = _pendingBytes / bytesPerFrame;
-
-        var first = (long)Math.Round(timestamp / (double)TimeSpan.TicksPerSecond * rate);
-        var from = (long)Math.Round(_keepFrom * rate);
-        var until = (long)Math.Round(gapless.EndSeconds * rate);
-
-        if (first >= until)
-        {
-            _pendingBytes = 0;
-            _endOfStream = true;
-            return false;
-        }
-
-        var skip = Math.Clamp(from - first, 0, frames);
-        var keep = Math.Clamp(until - first, 0, frames) - skip;
-
-        _pendingOffset = (int)skip * bytesPerFrame;
-        _pendingBytes = (int)Math.Max(keep, 0) * bytesPerFrame;
-        return true;
-    }
-
-    protected override void SeekSource(long sourceFrame)
+    public void Seek(long ticks)
     {
         if (_reader is null) return;
 
-        _pendingOffset = 0;
-        _pendingBytes = 0;
-        _endOfStream = false;
-
-        var seconds = sourceFrame / (double)SourceSampleRate;
-
-        // Media Foundation staje na początku ramki AAC przed celem; resztę do celu odrzuca Trim.
-        if (_gapless is { } gapless)
-        {
-            _keepFrom = gapless.StartSeconds + seconds;
-            seconds = Math.Max(0, _keepFrom - SeekPreRollFrames / (double)SourceSampleRate);
-        }
-
+        _count = 0;
         var format = GUID_NULL;
-        var position = PropVariant.FromHundredNanoseconds(
-            (long)(seconds * TimeSpan.TicksPerSecond));
+        var position = PropVariant.FromHundredNanoseconds(ticks);
 
         _reader.SetCurrentPosition(ref format, ref position);
-    }
-
-    /// <summary>
-    /// Media Foundation has to be started once per process. It is reference counted, so the
-    /// matching shutdown is deliberately omitted: the platform is wanted for the whole run,
-    /// and shutting it down while another decoder still holds a reader would fail.
-    /// </summary>
-    internal static void EnsureStarted()
-    {
-        lock (StartupLock)
-        {
-            if (_started) return;
-
-            var result = MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET);
-            if (result < 0)
-            {
-                DecoderFailures.Log($"Media Foundation: uruchomienie nie powiodło się (0x{result:X8}).");
-                throw DecoderFailures.Create(DecoderFailure.SystemCodecsUnavailable);
-            }
-
-            _started = true;
-        }
     }
 
     private static AudioException Failure(string operation, int hresult)
@@ -387,7 +287,7 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
         });
     }
 
-    protected override void DisposeCore()
+    public void Dispose()
     {
         if (_reader is null) return;
 
