@@ -5,7 +5,7 @@ osobnego środowiska .NET.
 
 ![Licencja](https://img.shields.io/badge/licencja-MIT-blue)
 ![Platformy](https://img.shields.io/badge/platformy-Linux%20%7C%20Windows-lightgrey)
-![Wersja](https://img.shields.io/badge/wersja-1.0.0-brightgreen)
+![Wersja](https://img.shields.io/badge/wersja-1.1.0-brightgreen)
 
 *[English version](README.en.md)*
 
@@ -25,14 +25,21 @@ z okładki albumu.
 
 ## Możliwości
 
-- MP3, FLAC, WAV, Ogg Vorbis i Opus. AAC, M4A i ALAC przez kodeki systemu: Media Foundation
-  w Windowsie, GStreamer w Linuksie.
-- Przejścia między utworami bez przerwy.
-- Korektor dziesięciopasmowy z przedwzmacniaczem i ogranicznikiem.
+- MP3, FLAC, WAV, AIFF, WavPack, Ogg Vorbis i Opus. AAC, M4A i ALAC przez kodeki systemu: Media
+  Foundation w Windowsie, GStreamer w Linuksie.
+- Arkusze CUE: album zapisany w jednym pliku pokazuje się w kolejce jako osobne utwory.
+- Przejścia między utworami bez przerwy albo z przenikaniem od 2 do 12 sekund (domyślnie wyłączone;
+  albumy grają wtedy nadal bez przenikania).
+- Dokładna konwersja częstotliwości próbkowania, gdy plik ma inną niż urządzenie wyjściowe.
+- Korektor dziesięciopasmowy albo parametryczny do 20 pasm, z przedwzmacniaczem i ogranicznikiem.
+  Pasma parametryczne można wczytać z pliku w formacie Equalizer APO, na przykład z profili
+  słuchawek AutoEq. Korektor i efekty mogą mieć osobne ustawienia dla każdego urządzenia.
 - Pięć efektów, domyślnie wyłączonych: crossfeed do słuchawek, kompensacja głośności przy cichym
   słuchaniu, bas wirtualny, kompresja dynamiki i poszerzenie stereo.
-- Wyrównanie głośności według znaczników ReplayGain albo własnego pomiaru EBU R128, do poziomu
-  −23, −18 albo −14 LUFS.
+- Wyrównanie głośności według znaczników ReplayGain albo własnego pomiaru EBU R128, dla utworu albo
+  całego albumu, do poziomu −23, −18 albo −14 LUFS.
+- Tor sygnału: kliknięcie opisu parametrów pliku pod tytułem pokazuje wszystko, co dzieje się
+  z dźwiękiem między plikiem a urządzeniem.
 - Listy odtwarzania M3U.
 - Motyw jasny i ciemny, dwadzieścia języków interfejsu, w tym chiński uproszczony, japoński
   i portugalski brazylijski.
@@ -57,10 +64,13 @@ z okładki albumu.
 - Radio internetowe z wbudowaną listą ponad siedmiuset stacji (kraj, kategoria, wyszukiwanie, ulubione,
   ostatnio słuchane), własnymi adresami i importem list M3U i PLS. Stacje grają w MP3 i AAC, także
   przez HLS; tytuły utworów widać, gdy stacja je nadaje. Źródło przełączają Ctrl+1 (pliki) i Ctrl+2 (radio).
-  Cewka łączy się wtedy z serwerami nadawców, które widzą
-  adres IP: pobiera strumień wybranej stacji oraz, po zamknięciu jednorazowego baneru albo uruchomieniu
-  stacji, logo widocznych stacji (tylko po HTTPS, z pamięcią podręczną na dysku). Bez ciasteczek,
-  identyfikatorów i telemetrii. Całe radio wyłącza się w ustawieniach w Radio › Stacje, a pobieranie logo w Radio › Logo i prywatność.
+  Cewka łączy się wtedy z serwerem nadawcy wybranej stacji i pobiera z niego strumień. Po zamknięciu
+  jednorazowego baneru albo uruchomieniu stacji pobiera też logo widocznych stacji: z serwera autora
+  programu (maciejgrela.pl), a gdy ten nie odpowiada, ze źródeł, czyli z serwerów nadawców i z Wikimedia
+  Commons (tylko po HTTPS, z pamięcią podręczną na dysku). Każdy z tych serwerów widzi adres IP.
+  Bez ciasteczek, identyfikatorów i telemetrii. Całe radio wyłącza się w ustawieniach w Radio › Stacje,
+  a pobieranie logo w Radio › Logo i prywatność. Logo są znakami nadawców i służą wyłącznie wskazaniu
+  stacji; prośbę o usunięcie logo albo stacji można zgłosić w repozytorium.
 
 ![Scena pełnoekranowa z płytą](docs/obrazy/cewka-scena.png)
 
@@ -90,25 +100,25 @@ pojawia się w menu aplikacji.
 Fedora, RHEL:
 
 ```bash
-sudo dnf install ./cewka-1.0.0-1.x86_64.rpm
+sudo dnf install ./cewka-1.1.0-1.x86_64.rpm
 ```
 
 openSUSE:
 
 ```bash
-sudo zypper install ./cewka-1.0.0-1.x86_64.rpm
+sudo zypper install ./cewka-1.1.0-1.x86_64.rpm
 ```
 
 Debian, Ubuntu, Linux Mint:
 
 ```bash
-sudo apt install ./cewka_1.0.0_amd64.deb
+sudo apt install ./cewka_1.1.0_amd64.deb
 ```
 
 Arch, Manjaro:
 
 ```bash
-sudo pacman -U cewka-1.0.0-1-x86_64.pkg.tar.zst
+sudo pacman -U cewka-1.1.0-1-x86_64.pkg.tar.zst
 ```
 
 W Windowsie wystarczy pobrać `Cewka.exe` i go uruchomić. Plik nie jest podpisany, więc za pierwszym
@@ -141,7 +151,7 @@ W Windowsie są to `native\build-windows.cmd` i `tools\publish-windows.cmd`.
 
 C# i [Avalonia](https://avaloniaui.net/). Dźwięk idzie przez [miniaudio](https://miniaud.io/),
 który dekoduje też MP3, FLAC i WAV. Ogg Vorbis obsługuje [NVorbis](https://github.com/NVorbis/NVorbis),
-Opusa [Concentus](https://github.com/lostromb/concentus), a pozostałe formaty, także AAC ze stacji radiowych, kodeki systemu. Wizualizacje rysuje Skia, dołączona do Avalonii.
+Opusa [Concentus](https://github.com/lostromb/concentus), WavPack biblioteka [WavPack](https://www.wavpack.com/), a pozostałe formaty, także AAC ze stacji radiowych, kodeki systemu. Wizualizacje rysuje Skia, dołączona do Avalonii.
 
 ## Licencja
 

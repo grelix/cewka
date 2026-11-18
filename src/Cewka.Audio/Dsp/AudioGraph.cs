@@ -8,7 +8,50 @@ namespace Cewka.Audio.Dsp;
 /// O ile utwór po wyrównaniu gra głośniej od poziomu odniesienia ReplayGain. Zwykle różnica
 /// między poziomem docelowym a odniesieniem, mniejsza, gdy wzmocnienie ograniczył szczyt.
 /// </param>
-public readonly record struct TrackGain(double GainDecibels, double ProgrammeLevelDecibels);
+/// <param name="Kind">Czy wzmocnienie wyrównuje sam utwór, czy cały album.</param>
+public readonly record struct TrackGain(double GainDecibels, double ProgrammeLevelDecibels, TrackGainKind Kind = TrackGainKind.Track);
+
+/// <summary>Do czego odnosi się wzmocnienie wyrównania.</summary>
+public enum TrackGainKind
+{
+    Track,
+    Album,
+}
+
+/// <summary>Kiedy wyrównanie bierze wzmocnienie albumu zamiast wzmocnienia utworu.</summary>
+public enum NormalisationScope
+{
+    /// <summary>Zawsze wzmocnienie utworu.</summary>
+    Track,
+
+    /// <summary>Wzmocnienie albumu, gdy wpis należy do albumu.</summary>
+    Album,
+
+    /// <summary>Wzmocnienie albumu, gdy sąsiad w kolejności odtwarzania jest z tego samego albumu.</summary>
+    Auto,
+}
+
+/// <summary>
+/// Otoczenie wpisu w chwili otwarcia: sąsiedzi w kolejności odtwarzania i wycinek kolejki wokół
+/// niego. Kopia, bo źródło wzmocnienia czyta ją poza blokadą silnika, także w wątku analizy.
+/// </summary>
+/// <param name="Previous">Wpis grany przed tym; null na początku albo gdy go nie ma.</param>
+/// <param name="Next">Wpis, który zagra po tym; null na końcu.</param>
+/// <param name="Surrounding">Wpisy kolejki wokół tego, w kolejności kolejki.</param>
+/// <param name="Position">Miejsce wpisu w <paramref name="Surrounding"/>; −1, gdy go tam nie ma.</param>
+public sealed record TrackGainContext(
+    QueueEntry? Previous, QueueEntry? Next, IReadOnlyList<QueueEntry> Surrounding, int Position)
+{
+    /// <summary>Wpis bez otoczenia: nie wiadomo nic o sąsiadach.</summary>
+    public static readonly TrackGainContext Alone = new(null, null, [], -1);
+
+    /// <summary>
+    /// Czy źródło może odczytać znaczniki sąsiadów w wątku wołającym. Fałsz dla odświeżenia z wątku
+    /// interfejsu: plik na wolnym udziale sieciowym zawiesiłby okno, więc liczą się tylko znaczniki
+    /// już odczytane, a brakujące czyta wątek analizy.
+    /// </summary>
+    public bool MayReadTags { get; init; } = true;
+}
 
 /// <summary>Supplies a normalisation gain for a queue entry.</summary>
 public interface ITrackGainSource
@@ -18,6 +61,9 @@ public interface ITrackGainSource
     /// otwieraniu utworu, więc musi wrócić od razu; wszystko powolne idzie w tle.
     /// </summary>
     TrackGain? GetTrackGain(QueueEntry entry);
+
+    /// <summary>To samo z otoczeniem wpisu, z którego źródło może wybrać wzmocnienie albumu.</summary>
+    TrackGain? GetTrackGain(QueueEntry entry, TrackGainContext context) => GetTrackGain(entry);
 }
 
 /// <summary>
@@ -40,6 +86,12 @@ public sealed class AudioGraph
     public Loudness Loudness { get; } = new();
 
     public Equaliser Equaliser { get; } = new();
+
+    /// <summary>
+    /// Korektor parametryczny zaraz za graficznym. Gra jeden z nich według trybu, a przy zmianie trybu
+    /// jeden wygasa, gdy drugi narasta; wygaszony przepuszcza próbki bez zmiany.
+    /// </summary>
+    public ParametricEqualiser Parametric { get; } = new() { Enabled = false };
 
     /// <summary>Harmoniczne najniższych tonów dla małych przetworników. Domyślnie wyłączony.</summary>
     public VirtualBass VirtualBass { get; } = new();
@@ -84,6 +136,7 @@ public sealed class AudioGraph
         Normalisation.Prepare(sampleRate, channels);
         Loudness.Prepare(sampleRate, channels);
         Equaliser.Prepare(sampleRate, channels);
+        Parametric.Prepare(sampleRate, channels);
         VirtualBass.Prepare(sampleRate, channels);
         StereoWidth.Prepare(sampleRate, channels);
         Crossfeed.Prepare(sampleRate, channels);
@@ -109,6 +162,7 @@ public sealed class AudioGraph
         Loudness.Process(buffer, frames);
 
         Equaliser.Process(buffer, frames);
+        Parametric.Process(buffer, frames);
         VirtualBass.Process(buffer, frames);
         StereoWidth.Process(buffer, frames);
         Crossfeed.Process(buffer, frames);
@@ -124,13 +178,15 @@ public sealed class AudioGraph
     /// Ustawia od razu wzmocnienie utworu, który już gra. Na zmianę ustawień wyrównania;
     /// przy zmianie utworu wzmocnienie zmienia wątek dźwiękowy przez <see cref="ApplyTrackGain"/>.
     /// </summary>
-    public void OnTrackChanged(QueueEntry entry) => ApplyTrackGain(TrackGainFor(entry), snap: false);
+    public void OnTrackChanged(QueueEntry entry, TrackGainContext? context = null) =>
+        ApplyTrackGain(TrackGainFor(entry, context), snap: false);
 
     /// <summary>
     /// Wzmocnienie utworu ze źródła, niezależnie od tego, czy wyrównanie jest włączone.
     /// Wołane przez wątek dekodujący przy otwieraniu pliku, bo źródło może czytać plik.
     /// </summary>
-    public TrackGain? TrackGainFor(QueueEntry entry) => GainSource?.GetTrackGain(entry);
+    public TrackGain? TrackGainFor(QueueEntry entry, TrackGainContext? context = null) =>
+        GainSource?.GetTrackGain(entry, context ?? TrackGainContext.Alone);
 
     /// <summary>
     /// Ustawia wzmocnienie wyrównania i poziom programu, gdy utwór dociera do wyjścia; przy
@@ -154,6 +210,7 @@ public sealed class AudioGraph
         Normalisation.Reset();
         Loudness.Reset();
         Equaliser.Reset();
+        Parametric.Reset();
         VirtualBass.Reset();
         StereoWidth.Reset();
         Crossfeed.Reset();

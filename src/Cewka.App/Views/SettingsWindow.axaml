@@ -391,6 +391,12 @@
                       <TextBlock Classes="setting-hint" Text="{l:Translate HintLoudnessTarget}" />
                     </StackPanel>
 
+                    <StackPanel Classes="setting" Spacing="8" IsEnabled="{Binding NormalisationEnabled}">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingNormalisationMode}" />
+                      <c:SegmentBar Group="{Binding NormalisationModeChoice}" />
+                      <TextBlock Classes="setting-hint" Text="{l:Translate HintNormalisationMode}" />
+                    </StackPanel>
+
                     <Grid Classes="setting" ColumnDefinitions="*,Auto" IsEnabled="{Binding NormalisationEnabled}">
                       <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
                         <TextBlock Classes="setting-label" Text="{l:Translate OptionAlwaysAnalyse}" />
@@ -412,6 +418,19 @@
                       <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
                                      IsChecked="{Binding LimiterEnabled, Mode=TwoWay}"
                                      AutomationProperties.Name="{l:Translate OptionLimiter}"
+                                     OffBrush="{DynamicResource TrackBrush}"
+                                     OnBrush="{DynamicResource AccentBrush}"
+                                     BorderBrush="{DynamicResource StrokeBrush}" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
+                        <TextBlock Classes="setting-label" Text="{l:Translate SettingSoundProfiles}" />
+                        <TextBlock Classes="setting-hint" Text="{l:Translate HintSoundProfiles}" />
+                      </StackPanel>
+                      <c:GlassSwitch x:Name="SoundProfilesSwitch" Grid.Column="1" VerticalAlignment="Center"
+                                     IsChecked="{Binding SoundProfilesEnabled, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingSoundProfiles}"
                                      OffBrush="{DynamicResource TrackBrush}"
                                      OnBrush="{DynamicResource AccentBrush}"
                                      BorderBrush="{DynamicResource StrokeBrush}" />
@@ -462,6 +481,41 @@
                       <c:SegmentBar Group="{Binding FileOpen}" />
                       <TextBlock Classes="setting-hint" Text="{l:Translate HintFileOpen}" />
                     </StackPanel>
+                  </StackPanel>
+                </Border>
+
+                <Border Classes="section">
+                  <StackPanel Spacing="16">
+                    <Grid ColumnDefinitions="*,Auto">
+                      <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
+                        <TextBlock Classes="setting-label" Text="{l:Translate SettingCrossfade}" />
+                        <TextBlock Classes="setting-hint" Text="{l:Translate HintCrossfade}" />
+                      </StackPanel>
+                      <c:GlassSwitch x:Name="CrossfadeSwitch" Grid.Column="1" VerticalAlignment="Center"
+                                     IsChecked="{Binding Crossfade, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingCrossfade}"
+                                     OffBrush="{DynamicResource TrackBrush}"
+                                     OnBrush="{DynamicResource AccentBrush}"
+                                     BorderBrush="{DynamicResource StrokeBrush}" />
+                    </Grid>
+
+                    <StackPanel x:Name="CrossfadeDurationSetting" Classes="setting" Spacing="8" IsEnabled="{Binding Crossfade}">
+                      <TextBlock Classes="setting-label" Text="{l:Translate SettingCrossfadeDuration}" />
+                      <c:SegmentBar Group="{Binding CrossfadeDuration}" />
+                    </StackPanel>
+
+                    <Grid x:Name="CrossfadeAlbumsSetting" Classes="setting" ColumnDefinitions="*,Auto" IsEnabled="{Binding Crossfade}">
+                      <StackPanel Grid.Column="0" Spacing="3" Margin="0,0,16,0">
+                        <TextBlock Classes="setting-label" Text="{l:Translate SettingCrossfadeAlbums}" />
+                        <TextBlock Classes="setting-hint" Text="{l:Translate HintCrossfadeAlbums}" />
+                      </StackPanel>
+                      <c:GlassSwitch Grid.Column="1" VerticalAlignment="Center"
+                                     IsChecked="{Binding AlbumsWithoutCrossfade, Mode=TwoWay}"
+                                     AutomationProperties.Name="{l:Translate SettingCrossfadeAlbums}"
+                                     OffBrush="{DynamicResource TrackBrush}"
+                                     OnBrush="{DynamicResource AccentBrush}"
+                                     BorderBrush="{DynamicResource StrokeBrush}" />
+                    </Grid>
                   </StackPanel>
                 </Border>
               </StackPanel>

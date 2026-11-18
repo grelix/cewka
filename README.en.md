@@ -5,7 +5,7 @@ A minimalist music player for Linux and Windows. A single file, no installer and
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20Windows-lightgrey)
-![Version](https://img.shields.io/badge/version-1.0.0-brightgreen)
+![Version](https://img.shields.io/badge/version-1.1.0-brightgreen)
 
 *[Wersja polska](README.md)*
 
@@ -25,14 +25,21 @@ takes its colors from the album cover.
 
 ## Features
 
-- MP3, FLAC, WAV, Ogg Vorbis and Opus. AAC, M4A and ALAC through the system codecs: Media
-  Foundation on Windows, GStreamer on Linux.
-- Gapless playback.
-- Ten-band equalizer with a preamp and a limiter.
+- MP3, FLAC, WAV, AIFF, WavPack, Ogg Vorbis and Opus. AAC, M4A and ALAC through the system codecs:
+  Media Foundation on Windows, GStreamer on Linux.
+- CUE sheets: an album stored as a single file shows in the queue as separate tracks.
+- Gapless playback, or a crossfade of 2 to 12 seconds between tracks (off by default; albums still
+  play without it).
+- Accurate sample-rate conversion when the rate of a file differs from the output device.
+- Ten-band equalizer or a parametric one with up to 20 bands, with a preamp and a limiter.
+  Parametric bands can be loaded from a file in Equalizer APO format, for example AutoEq headphone
+  profiles. The equalizer and effects can have separate settings for each device.
 - Five effects, all off by default: headphone crossfeed, loudness compensation for quiet
   listening, virtual bass, dynamic range compression and stereo widening.
-- Volume leveling from ReplayGain tags or Cewka's own EBU R128 measurement, to −23, −18 or
-  −14 LUFS.
+- Volume leveling from ReplayGain tags or Cewka's own EBU R128 measurement, per track or per
+  album, to −23, −18 or −14 LUFS.
+- Signal path: a click on the file parameters under the title shows everything that happens to the
+  sound between the file and the device.
 - M3U playlists.
 - Light and dark themes, twenty interface languages, including Simplified Chinese, Japanese
   and Brazilian Portuguese.
@@ -56,11 +63,15 @@ takes its colors from the album cover.
 - Internet radio with a built-in list of over seven hundred stations (country, category, search,
   favorites, recently played), your own addresses and M3U and PLS import. Stations play as MP3 and
   AAC, including over HLS; track titles show when the station sends them. Ctrl+1 (files) and Ctrl+2
-  (radio) switch the source. Cewka then connects to the broadcasters' servers, which see your IP
-  address: it fetches the stream of the chosen station and, after the one-time banner is dismissed
-  or a station is started, the logos of the stations on screen (HTTPS only, cached on disk). No
-  cookies, identifiers or telemetry. Radio as a whole can be turned off in
-  Settings under Radio › Stations, and logo downloads under Radio › Logos and privacy.
+  (radio) switch the source. Cewka then connects to the server of the chosen station's broadcaster
+  and fetches the stream from it. After the one-time banner is dismissed or a station is started,
+  it also fetches the logos of the stations on screen: from the program author's server
+  (maciejgrela.pl) and, when that server does not answer, from their sources, that is the
+  broadcasters' servers and Wikimedia Commons (HTTPS only, cached on disk). Each of these servers
+  sees your IP address. No cookies, identifiers or telemetry. Radio as a whole can be turned off in
+  Settings under Radio › Stations, and logo downloads under Radio › Logos and privacy. Logos are
+  the broadcasters' marks and serve only to point to the station; a request to remove a logo or
+  a station can be filed in the repository.
 - Update check, off by default. It asks GitHub for the latest release number, at most once a day.
 
 ![The full-screen stage with the disc](docs/obrazy/cewka-scena-en.png)
@@ -91,25 +102,25 @@ Cewka shows up in the application menu.
 Fedora, RHEL:
 
 ```bash
-sudo dnf install ./cewka-1.0.0-1.x86_64.rpm
+sudo dnf install ./cewka-1.1.0-1.x86_64.rpm
 ```
 
 openSUSE:
 
 ```bash
-sudo zypper install ./cewka-1.0.0-1.x86_64.rpm
+sudo zypper install ./cewka-1.1.0-1.x86_64.rpm
 ```
 
 Debian, Ubuntu, Linux Mint:
 
 ```bash
-sudo apt install ./cewka_1.0.0_amd64.deb
+sudo apt install ./cewka_1.1.0_amd64.deb
 ```
 
 Arch, Manjaro:
 
 ```bash
-sudo pacman -U cewka-1.0.0-1-x86_64.pkg.tar.zst
+sudo pacman -U cewka-1.1.0-1-x86_64.pkg.tar.zst
 ```
 
 On Windows, download `Cewka.exe` and run it. The file isn't signed, so SmartScreen will warn you
@@ -142,7 +153,7 @@ packages. On Windows use `native\build-windows.cmd` and `tools\publish-windows.c
 
 C# and [Avalonia](https://avaloniaui.net/). Audio goes through [miniaudio](https://miniaud.io/),
 which also decodes MP3, FLAC and WAV. Ogg Vorbis is handled by [NVorbis](https://github.com/NVorbis/NVorbis),
-Opus by [Concentus](https://github.com/lostromb/concentus), and everything else, including AAC from radio stations, by the system codecs. The visuals are drawn by Skia, which ships with Avalonia.
+Opus by [Concentus](https://github.com/lostromb/concentus), WavPack by the [WavPack](https://www.wavpack.com/) library, and everything else, including AAC from radio stations, by the system codecs. The visuals are drawn by Skia, which ships with Avalonia.
 
 ## License
 

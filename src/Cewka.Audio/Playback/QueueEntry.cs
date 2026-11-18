@@ -15,6 +15,18 @@ public sealed class QueueEntry
 
     public required string Path { get; init; }
 
+    /// <summary>Utwór arkusza CUE: wycinek pliku <see cref="Path"/> i znaczniki z arkusza; null dla całego pliku.</summary>
+    public SheetTrack? Sheet { get; init; }
+
+    /// <summary>Pozycja, z której powstał wpis; z niej odtwarza się kolejkę.</summary>
+    public QueueItem Item => new(Path, Sheet);
+
+    /// <summary>
+    /// Klucz pamięci podręcznych pomiaru głośności i obwiedni: ścieżka pliku, a dla utworu arkusza
+    /// ścieżka z zakresem, bo wycinki jednego pliku mierzy się osobno.
+    /// </summary>
+    public string CacheKey => Sheet?.CacheKey(Path) ?? Path;
+
     /// <summary>Tylko dla stacji; ta nigdy nie trafia do kolejki.</summary>
     internal LiveBinding? Live { get; init; }
 
@@ -46,7 +58,7 @@ public sealed class QueueEntry
 
     public TimeSpan Duration => Metadata?.Duration ?? TimeSpan.Zero;
 
-    public string Title => Metadata?.Title ?? System.IO.Path.GetFileNameWithoutExtension(Path);
+    public string Title => Metadata?.Title ?? Sheet?.Title ?? System.IO.Path.GetFileNameWithoutExtension(Path);
 
     public string? Artist => Metadata?.Artist;
 
@@ -67,6 +79,7 @@ public sealed class QueueEntry
 
             var format = AudioFileFormatDetector.Detect(Path);
             var metadata = MetadataReader.Read(Path);
+            if (Sheet is { } sheet) metadata = sheet.Apply(metadata);
 
             Format = format;
 

@@ -93,8 +93,9 @@ public partial class MainWindow
         if (Body.TranslatePoint(QueueColumn.Bounds.TopLeft, Backdrop) is not { } origin) return;
 
         var source = new RelativeRect(origin.X, origin.Y, size.Width, size.Height, RelativeUnit.Absolute);
-        if (QueueBackdropCopy.Background is VisualBrush current && current.SourceRect == source) return;
+        if (!_queueBackdropStale && QueueBackdropCopy.Background is VisualBrush current && current.SourceRect == source) return;
 
+        _queueBackdropStale = false;
         QueueBackdropCopy.Background = new VisualBrush(Backdrop)
         {
             Stretch = Stretch.None,
@@ -105,6 +106,18 @@ public partial class MainWindow
         };
     }
 
+    /// <summary>
+    /// Kopia tła trzyma nieaktualny rysunek: tło zmieniło skład (motyw, bufor, liczba plam) albo było
+    /// ukryte. Schowany panel odnawia ją przy najbliższym wysunięciu.
+    /// </summary>
+    private bool _queueBackdropStale;
+
+    private void RenewQueueBackdrop()
+    {
+        _queueBackdropStale = true;
+        UpdateQueueBackdrop();
+    }
+
     private void AttachQueuePanel()
     {
         // Wycinek tła pod nakładanym panelem idzie za jego miejscem i rozmiarem.
@@ -113,6 +126,14 @@ public partial class MainWindow
             if (e.Property == BoundsProperty || e.Property == IsVisibleProperty) UpdateQueueBackdrop();
         };
         QueueColumn.Classes.CollectionChanged += (_, _) => UpdateQueueBackdrop();
+
+        // Kopia to polecenia rysowania tła z chwili utworzenia pędzla, więc po zmianie składu tła
+        // (inny podkład po zmianie motywu, inny bufor) i po jego ukryciu powstaje od nowa.
+        Backdrop.CompositionChanged += RenewQueueBackdrop;
+        Backdrop.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == IsVisibleProperty) RenewQueueBackdrop();
+        };
 
         QueueClock = () => _queueStopwatch.Elapsed;
         _peek = new QueuePeek(() => QueueClock());

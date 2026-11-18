@@ -20,7 +20,8 @@ public static class MetadataReader
     {
         try
         {
-            var track = new ATL.Track(path);
+            using var source = Source.Open(path);
+            if (source?.Load() is not { } track) return Fallback(path);
 
             return new TrackMetadata
             {
@@ -35,6 +36,7 @@ public static class MetadataReader
                 // showing that beside the album would be worse than showing nothing.
                 Year = track.Date?.Year is > 1000 and var year ? year : null,
                 TrackNumber = track.TrackNumber > 0 ? track.TrackNumber : null,
+                DiscNumber = track.DiscNumber > 0 ? track.DiscNumber : null,
                 Duration = TimeSpan.FromMilliseconds(track.DurationMs),
                 Bitrate = track.Bitrate,
                 SampleRate = (int)Math.Round(track.SampleRate),
@@ -45,6 +47,7 @@ public static class MetadataReader
                 ReplayGainTrack = ReadGain(track, "REPLAYGAIN_TRACK_GAIN") ?? ReadR128Gain(track, "R128_TRACK_GAIN"),
                 ReplayGainAlbum = ReadGain(track, "REPLAYGAIN_ALBUM_GAIN") ?? ReadR128Gain(track, "R128_ALBUM_GAIN"),
                 ReplayGainTrackPeak = ReadPeak(track, "REPLAYGAIN_TRACK_PEAK"),
+                ReplayGainAlbumPeak = ReadPeak(track, "REPLAYGAIN_ALBUM_PEAK"),
             };
         }
         catch (Exception)
@@ -67,7 +70,10 @@ public static class MetadataReader
     {
         try
         {
-            var pictures = new ATL.Track(path).EmbeddedPictures;
+            using var source = Source.Open(path);
+            if (source?.Load() is not { } track) return null;
+
+            var pictures = track.EmbeddedPictures;
             if (pictures.Count == 0) return null;
 
             var cover = pictures.FirstOrDefault(p => p.PicType == ATL.PictureInfo.PIC_TYPE.Front) ?? pictures[0];
@@ -79,6 +85,56 @@ public static class MetadataReader
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Plik otwarty dla biblioteki znaczników, z kontrolą tego, co biblioteka dostanie. Biblioteka
+    /// czyta leniwie (obrazy dopiero na żądanie), więc strumień żyje tak długo jak wynik odczytu.
+    /// </summary>
+    private sealed class Source(FileStream file, BudgetStream guarded, string extension) : IDisposable
+    {
+        /// <summary>Null, gdy ścieżka nie jest zwykłym plikiem albo plik niesie długości nie do przyjęcia.</summary>
+        public static Source? Open(string path)
+        {
+            if (!RegularFile.Is(path)) return null;
+
+            var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.RandomAccess);
+
+            try
+            {
+                if (!TagGuard.IsSafe(file))
+                {
+                    file.Dispose();
+                    return null;
+                }
+
+                return new Source(
+                    file, new BudgetStream(file, BudgetStream.BudgetFor(file.Length)), System.IO.Path.GetExtension(path));
+            }
+            catch
+            {
+                file.Dispose();
+                throw;
+            }
+        }
+
+        /// <summary>Null, gdy odczyt przekroczył limit operacji: wynik byłby wtedy przypadkowy.</summary>
+        public ATL.Track? Load()
+        {
+            // Format według rozszerzenia, tak jak przy odczycie po ścieżce. Gdy rozszerzenie kłamie,
+            // biblioteka rozpoznaje format po treści.
+            var track = new ATL.Track(guarded, extension);
+
+            if (track.DurationMs <= 0 && !guarded.Exhausted)
+            {
+                guarded.Position = 0;
+                track = new ATL.Track(guarded, string.Empty);
+            }
+
+            return guarded.Exhausted ? null : track;
+        }
+
+        public void Dispose() => file.Dispose();
     }
 
     private static TrackMetadata Fallback(string path) => new()
@@ -106,6 +162,9 @@ public static class MetadataReader
         if (upper.Contains("FLAC")) return "FLAC";
         if (upper.Contains("OPUS")) return "OPUS";
         if (upper.Contains("VORBIS") || upper.Contains("OGG")) return "OGG";
+
+        // Przed WAV, bo nazwa zawiera „WAV”.
+        if (upper.Contains("WAVPACK")) return "WavPack";
         if (upper.Contains("WAV") || upper.Contains("PCM")) return "WAV";
         if (upper.Contains("ALAC")) return "ALAC";
         if (upper.Contains("AAC") || upper.Contains("MP4")) return "AAC";

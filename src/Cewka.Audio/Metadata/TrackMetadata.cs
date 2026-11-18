@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Cewka.Audio.Metadata;
 
 /// <summary>Everything read from a file's tags and header, ready for display.</summary>
@@ -13,6 +15,9 @@ public sealed class TrackMetadata
     public string? AlbumArtist { get; init; }
     public int? Year { get; init; }
     public int? TrackNumber { get; init; }
+
+    /// <summary>Numer płyty w wydaniu wielopłytowym; null, gdy plik go nie podaje.</summary>
+    public int? DiscNumber { get; init; }
 
     public TimeSpan Duration { get; init; }
 
@@ -36,6 +41,9 @@ public sealed class TrackMetadata
     /// <summary>Track peak from ReplayGain tags, as a linear amplitude.</summary>
     public double? ReplayGainTrackPeak { get; init; }
 
+    /// <summary>Szczyt albumu ze znacznika ReplayGain, jako amplituda liniowa.</summary>
+    public double? ReplayGainAlbumPeak { get; init; }
+
     /// <summary>
     /// The badge shown beside the record, matching the design: codec, bit depth and rate.
     /// </summary>
@@ -45,13 +53,17 @@ public sealed class TrackMetadata
     /// Plakietka formatu, opcjonalnie z bieżącym pomiarem przepływności. Pomiar zastępuje
     /// średnią z tagów i dostaje oznaczenie <c>VBR</c>.
     /// </summary>
-    public string BuildBadge(int? liveBitrate)
+    /// <param name="numbers">
+    /// Zapis liczb w języku interfejsu: „44,1 kHz” po polsku, „44.1 kHz” po angielsku. Bez niego
+    /// separatorem jest kropka.
+    /// </param>
+    public string BuildBadge(int? liveBitrate, IFormatProvider? numbers = null)
     {
         var codec = Codec ?? "?";
         var rate = SampleRate > 0
             ? (SampleRate % 1000 == 0
                 ? $"{SampleRate / 1000} kHz"
-                : $"{SampleRate / 1000.0:0.#} kHz".Replace('.', ','))
+                : (SampleRate / 1000.0).ToString("0.#", numbers ?? CultureInfo.InvariantCulture) + " kHz")
             : null;
 
         if (IsVariableBitrate && liveBitrate is > 0 && rate is not null)

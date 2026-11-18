@@ -15,11 +15,12 @@ public static class WebLink
     /// </summary>
     public static bool Open(string? address)
     {
-        if (!IsSafe(address)) return false;
+        var target = ShellTarget(address);
+        if (target is null) return false;
 
         try
         {
-            using var process = Process.Start(new ProcessStartInfo(address!) { UseShellExecute = true });
+            using var process = Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
             return true;
         }
         catch (Exception ex)
@@ -28,6 +29,12 @@ public static class WebLink
             return false;
         }
     }
+
+    /// <summary>Tekst przekazywany powłoce albo <c>null</c>, gdy adresu nie wolno otworzyć.</summary>
+    // Postać znormalizowana: cudzysłów i spacje z obcego adresu nie trafiają dosłownie
+    // do wiersza poleceń przeglądarki.
+    public static string? ShellTarget(string? address) =>
+        IsSafe(address) ? new Uri(address!).AbsoluteUri : null;
 
     /// <summary>Adres bezwzględny o schemacie http albo https.</summary>
     public static bool IsSafe(string? address) =>

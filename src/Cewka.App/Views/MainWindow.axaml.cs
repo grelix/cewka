@@ -157,6 +157,7 @@ public partial class MainWindow : Window
 
         AttachQueueInput();
         AttachRadioInput();
+        AttachSignalPath();
         _viewModel.DeviceSelectionRequested += () => OpenSettings(settings => settings.Audio);
 
         PositionChanged += (_, _) => RememberNormalBounds();
@@ -1197,7 +1198,7 @@ public partial class MainWindow : Window
 
     private static FilePickerFileType BuildAudioFilter() => new(Strings.Current["AudioFilter"])
     {
-        Patterns = AudioFileFormatDetector.SupportedExtensions.Select(ext => "*" + ext).ToArray(),
+        Patterns = CueSheetFile.OpenableExtensions.Select(ext => "*" + ext).ToArray(),
     };
 
     // ================= Przeciąganie na okno =================
@@ -1826,6 +1827,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (e.Key == Key.Escape && CloseSignalPath())
+        {
+            e.Handled = true;
+            return;
+        }
+
         // Scena obsługuje klawisze przed skrótami okna; czego nie weźmie, idzie do kontrolki
         // z fokusem albo do skrótów plików i ustawień w OnKeyDown.
         if (Scene.IsOpen)
@@ -1859,7 +1866,8 @@ public partial class MainWindow : Window
     private bool KeepsSpace(IInputElement? focused) =>
         focused is StyledElement element && element.Classes.Contains(":focus-visible")
         && (focused is GlassSwitch or Avalonia.Controls.Primitives.ToggleButton
-            || focused is Button button && (button == ThemeButton || button == RepeatModeButton || button == MuteButton));
+            || focused is Button button && (button == ThemeButton || button == RepeatModeButton || button == MuteButton
+                                            || IsSignalPathButton(button)));
 
     private bool KeepsArrowKeys(IInputElement? focused) => focused switch
     {

@@ -1,30 +1,57 @@
 namespace Cewka.Audio;
 
+/// <summary>Poziom konwersji częstotliwości próbkowania: długość i tłumienie filtru.</summary>
+public enum ResamplingLevel
+{
+    /// <summary>Krótki filtr: pasmo płaskie do 16 kHz, składowe obce poniżej −70 dB.</summary>
+    Economy,
+
+    /// <summary>Pasmo płaskie do 20 kHz, składowe obce poniżej −95 dB.</summary>
+    Standard,
+
+    /// <summary>Pasmo płaskie do 20 kHz, składowe obce poniżej −120 dB.</summary>
+    High,
+}
+
 /// <summary>
 /// Jakość konwersji wybrana w ustawieniach. Stan wspólny dla procesu, bo dekodery powstają
 /// w głębi <see cref="Decoding.DecoderFactory"/>, a gra jeden utwór na jednym urządzeniu.
 ///
-/// <para>Zmiana działa od następnego otwarcia dekodera: resampler ma historię filtru i podmiana
-/// rzędu w trakcie utworu dałaby trzask.</para>
+/// <para>Zmiana działa od następnego otwarcia dekodera: filtr ma historię i podmiana w trakcie
+/// utworu dałaby trzask.</para>
 /// </summary>
 public static class AudioQuality
 {
-    /// <summary>Rząd filtru przyjęty przez miniaudio, gdy nie wskazano innego.</summary>
-    public const int DefaultFilterOrder = 4;
+    private static volatile ResamplingLevel _resampling = ResamplingLevel.Standard;
 
-    /// <summary>MA_MAX_FILTER_ORDER z miniaudio.</summary>
-    public const int MaximumFilterOrder = 8;
-
-    private static int _resamplerFilterOrder = DefaultFilterOrder;
+    [ThreadStatic] private static ResamplingLevel? _threadLevel;
 
     /// <summary>
-    /// Rząd filtru dolnoprzepustowego resamplera: 0 wyłącza filtrowanie, 8 to maksimum.
-    /// Ma znaczenie wyłącznie dla plików o częstotliwości innej niż urządzenie wyjściowe;
-    /// przy zgodnych częstotliwościach resampler nie powstaje wcale.
+    /// Poziom konwersji dla plików o częstotliwości innej niż urządzenie wyjściowe; przy zgodnych
+    /// częstotliwościach konwersja nie powstaje wcale.
     /// </summary>
-    public static int ResamplerFilterOrder
+    public static ResamplingLevel Resampling
     {
-        get => _resamplerFilterOrder;
-        set => _resamplerFilterOrder = Math.Clamp(value, 0, MaximumFilterOrder);
+        get => _resampling;
+        set => _resampling = Enum.IsDefined(value) ? value : ResamplingLevel.Standard;
+    }
+
+    /// <summary>Poziom, z jakim powstaje dekoder otwierany w tym wątku.</summary>
+    internal static ResamplingLevel Current => _threadLevel ?? _resampling;
+
+    /// <summary>
+    /// Dekodery otwierane w tym wątku do końca zakresu dostają wskazany poziom niezależnie od
+    /// ustawienia. Analiza w tle nie słyszy różnicy, a długi filtr spowolniłby ją kilkakrotnie.
+    /// </summary>
+    internal static LevelScope UseInThisThread(ResamplingLevel level)
+    {
+        var previous = _threadLevel;
+        _threadLevel = level;
+        return new LevelScope(previous);
+    }
+
+    internal readonly struct LevelScope(ResamplingLevel? previous) : IDisposable
+    {
+        public void Dispose() => _threadLevel = previous;
     }
 }

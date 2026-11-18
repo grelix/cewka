@@ -54,11 +54,12 @@ internal sealed class ScriptedLiveDecoder(float value = 0.25f, int channels = 2,
 
     public int DisposeCount { get; private set; }
     public int SampleRate => EngineHarness.Rate;
-    public int Channels => channels;
+    public int Channels { get; } = channels;
     public long TotalFrames => 0;
     public bool CanSeek => false;
     public int SourceSampleRate => SampleRate;
-    public int SourceChannels => channels;
+    /// <summary>Kanały strumienia; domyślnie tyle, ile wyjście dekodera.</summary>
+    public int SourceChannels { get; init; } = channels;
     public int InstantaneousBitrate => 128;
     public LiveCodec Codec => LiveCodec.Mp3;
     public LiveFailure? EndFailure { get; private set; }
@@ -102,12 +103,12 @@ internal sealed class ScriptedLiveDecoder(float value = 0.25f, int channels = 2,
         {
             if (_throw) throw new InvalidDataException("Uszkodzona ramka.");
 
-            frames = (int)Math.Min(_available, destination.Length / channels);
+            frames = (int)Math.Min(_available, destination.Length / Channels);
             if (frames == 0)
                 return _ended ? LiveReadStatus.Ended : LiveReadStatus.Waiting;
 
             for (var i = 0; i < frames; i++)
-                destination.Slice(i * channels, channels).Fill(signal is null ? value : signal((int)(_position + i)));
+                destination.Slice(i * Channels, Channels).Fill(signal is null ? value : signal((int)(_position + i)));
 
             _available -= frames;
             _position += frames;

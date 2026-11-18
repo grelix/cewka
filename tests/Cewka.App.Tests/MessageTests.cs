@@ -24,6 +24,38 @@ public sealed class MessageTests
         Assert.DoesNotContain("Brak pliku", h.Player.Notice);
     });
 
+    /// <summary>
+    /// WavPack sprzed wersji 4 to odmiana rozpoznanego formatu, której dekoder nie obsługuje: wiersz
+    /// mówi o formacie, którego nie można odtworzyć, a nie o pliku uszkodzonym, i zostaje oznaczony.
+    /// </summary>
+    [Fact]
+    public void OdmianaFormatuBezObslugiJestFormatemNieobslugiwanym() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        var legacy = Path.Combine(h.Directory, "stary.wv");
+
+        // Nagłówek RIFF WAVE, a za nim blok WavPack 3.
+        var header = new byte[44];
+        "RIFF"u8.CopyTo(header);
+        "WAVEfmt "u8.CopyTo(header.AsSpan(8));
+        File.WriteAllBytes(legacy, [.. header, .. "wvpk"u8, 3, 0, 0, 0, .. new byte[400]]);
+
+        var synthetic = h.Engine.OpenDecoder;
+        h.Engine.OpenDecoder = (path, rate, channels) => path == legacy
+            ? Cewka.Audio.Decoding.DecoderFactory.Open(path, rate, channels)
+            : synthetic(path, rate, channels);
+
+        h.OpenPaths([legacy, h.Track("b")]);
+
+        Assert.True(h.PumpUntil(() => h.Player.HasNotice));
+        var reason = Strings.Current["DecoderFailureUnspecified"];
+        Assert.Contains(reason, h.Player.Notice);
+        Assert.Equal(reason, h.Player.Queue[0].Tooltip);
+
+        h.Player.Queue[0].ClearTemporaryFailure();
+        Assert.True(h.Player.Queue[0].IsUnsupported);
+    });
+
     [Fact]
     public void SeriaPominietychPlikowDajeJednoPodsumowanie() => Ui.Run(() =>
     {

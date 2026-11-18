@@ -62,19 +62,87 @@ public class RadioStateStoreTests
         Assert.NotEqual(0xEF, bytes[0]);
     }
 
-    [Fact]
-    public void PlikNieczytelnyDajeStanTylkoDoOdczytuAZapisGoNieNadpisuje()
+    /// <summary>
+    /// Uszkodzonej treści nikt już nie odczyta: oryginał zostaje w kopii obok, a stan zapisuje się
+    /// od nowa. Inaczej ulubione dodane po takim starcie przepadałyby przy każdym uruchomieniu.
+    /// </summary>
+    [Theory]
+    [InlineData("{ to nie jest json")]
+    [InlineData("null")]
+    [InlineData("""{"schemaVersion":"jeden"}""")]
+    public void PlikUszkodzonyZostajeWKopiiAStanZapisujeSieOdNowa(string broken)
     {
         var path = NewTempFile();
-        const string broken = "{ to nie jest json";
         File.WriteAllText(path, broken);
 
         var state = RadioStateStore.Load(path);
 
-        Assert.True(state.ReadOnly);
+        Assert.False(state.ReadOnly);
+        var copy = Assert.Single(Directory.GetFiles(Path.GetDirectoryName(path)!, Path.GetFileName(path) + ".bad-*"));
+        Assert.Equal(broken, File.ReadAllText(copy));
+
         state.AddFavourite(Station("a", "A", "PL"));
+        Assert.True(RadioStateStore.Save(state, path));
+        Assert.Equal(["a"], RadioStateStore.Load(path).Favourites.Select(f => f.Id));
+    }
+
+    /// <summary>Plik zablokowany przy odczycie ma zwykle poprawną treść; w tej sesji nie jest nadpisywany.</summary>
+    [Fact]
+    public void PlikZablokowanyDajeStanTylkoDoOdczytuAZapisGoNieNadpisuje()
+    {
+        var path = NewTempFile();
+        var saved = new RadioState();
+        saved.AddFavourite(Station("a", "A", "PL"));
+        Assert.True(RadioStateStore.Save(saved, path));
+        var before = File.ReadAllText(path);
+
+        RadioState state;
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            state = RadioStateStore.Load(path);
+
+        Assert.True(state.ReadOnly);
         Assert.False(RadioStateStore.Save(state, path));
-        Assert.Equal(broken, File.ReadAllText(path));
+        Assert.Equal(before, File.ReadAllText(path));
+        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(path)!, Path.GetFileName(path) + ".bad-*"));
+    }
+
+    /// <summary>Plik nowszej wersji z pustymi polami: stan tylko do odczytu, ale bez pustych list.</summary>
+    [Fact]
+    public void PlikNowszejWersjiZPustymiPolamiNieWywracaOdczytu()
+    {
+        var path = NewTempFile();
+        File.WriteAllText(path, """{"schemaVersion":2,"recent":null,"favourites":null,"context":null}""");
+
+        var state = RadioStateStore.Load(path);
+
+        Assert.True(state.ReadOnly);
+        Assert.NotNull(state.Recent);
+        Assert.NotNull(state.Favourites);
+        Assert.NotNull(state.Context);
+        Assert.NotNull(state.Context.View);
+        state.TrimRecent(10);
+    }
+
+    /// <summary>Puste wartości wewnątrz zapisanej stacji nie mogą dojść do widoku listy.</summary>
+    [Fact]
+    public void PustePolaStacjiSaUzupelniane()
+    {
+        var path = NewTempFile();
+        File.WriteAllText(path, """
+            {"schemaVersion":1,"favourites":[
+              {"id":"a","name":null,"country":null,"categories":[null,"hits"],"languages":[null],"logos":[null],
+               "streams":[{"url":"http://a/","codec":null}]}],
+             "context":{"view":"favourites"}}
+            """);
+
+        var station = Assert.Single(RadioStateStore.Load(path).Favourites);
+
+        Assert.Equal("unknown", station.Streams[0].Codec);
+        Assert.Equal("a", station.Name);
+        Assert.Equal(string.Empty, station.Country);
+        Assert.Equal(["hits"], station.Categories);
+        Assert.Empty(station.Languages);
+        Assert.Empty(station.Logos);
     }
 
     [Fact]
@@ -147,5 +215,45 @@ public class RadioStateStoreTests
 
         Assert.Empty(RadioStateStore.Load(path).Favourites);
         Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(path)!, "*.tmp"));
+    }
+
+    /// <summary>
+    /// Gdy kopii uszkodzonego pliku nie da się zrobić (pełny dysk), oryginał jest jedynym egzemplarzem
+    /// ulubionych, które da się jeszcze ręcznie odzyskać. Stan jest wtedy tylko do odczytu.
+    /// </summary>
+    [Fact]
+    public void UszkodzonyPlikBezKopiiNieJestNadpisywany()
+    {
+        var path = NewTempFile();
+        File.WriteAllText(path, "{ to nie jest json");
+
+        var state = RadioStateStore.Load(path, _ => false);
+
+        Assert.True(state.ReadOnly);
+
+        state.AddFavourite(Station("a", "A", "PL"));
+        Assert.False(RadioStateStore.Save(state, path));
+        Assert.Equal("{ to nie jest json", File.ReadAllText(path));
+    }
+
+    /// <summary>
+    /// Plik nowszej wersji programu, w którym zmienił się typ pola, nie daje się odczytać, ale dla
+    /// tamtej wersji jest poprawny. Po powrocie do niej ulubione mają być na miejscu.
+    /// </summary>
+    [Fact]
+    public void PlikNowszejWersjiNieDoOdczytaniaZostajeNietkniety()
+    {
+        var path = NewTempFile();
+        const string newer = """{"schemaVersion":7,"favourites":"zapis, którego ta wersja nie zna"}""";
+        File.WriteAllText(path, newer);
+
+        var state = RadioStateStore.Load(path);
+
+        Assert.True(state.ReadOnly);
+        Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(path)!, Path.GetFileName(path) + ".bad-*"));
+
+        state.AddFavourite(Station("a", "A", "PL"));
+        Assert.False(RadioStateStore.Save(state, path));
+        Assert.Equal(newer, File.ReadAllText(path));
     }
 }

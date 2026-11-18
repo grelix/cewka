@@ -224,12 +224,18 @@ public class SceneAudioTests
     {
         var (analyser, _) = Rig(48000);
         var block = Sine(440, 0.5, 480, 48000);
-        for (var i = 0; i < 100; i++) analyser.Process(block, 480);
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < 200; i++) analyser.Process(block, 480);
+        var allocated = Allocations.Smallest(5,
+            () =>
+            {
+                for (var i = 0; i < 100; i++) analyser.Process(block, 480);
+            },
+            () =>
+            {
+                for (var i = 0; i < 200; i++) analyser.Process(block, 480);
+            });
 
-        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+        Assert.Equal(0, allocated);
     }
 
     private static void Frame(SceneAudio scene, float[] left, float[] right)

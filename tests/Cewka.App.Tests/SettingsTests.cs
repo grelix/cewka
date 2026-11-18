@@ -20,40 +20,37 @@ public sealed class SettingsTests
     // ---------- Przełożenie wyborów na liczby ----------
 
     [Theory]
-    [InlineData(ResamplerQuality.Off, 0)]
-    [InlineData(ResamplerQuality.Standard, AudioQuality.DefaultFilterOrder)]
-    [InlineData(ResamplerQuality.High, AudioQuality.MaximumFilterOrder)]
-    public void JakoscOdpowiadaRzedowiFiltru(ResamplerQuality quality, int expected) =>
-        Assert.Equal(expected, AudioPreferences.FilterOrder(quality));
+    [InlineData(ResamplerQuality.Off, ResamplingLevel.Economy)]
+    [InlineData(ResamplerQuality.Standard, ResamplingLevel.Standard)]
+    [InlineData(ResamplerQuality.High, ResamplingLevel.High)]
+    public void JakoscOdpowiadaPoziomowiKonwersji(ResamplerQuality quality, ResamplingLevel expected) =>
+        Assert.Equal(expected, AudioPreferences.Resampling(quality));
 
-    /// <summary>
-    /// Domyślna jakość to rząd filtru przyjęty przez miniaudio, żeby brzmienie się nie zmieniało.
-    /// </summary>
+    /// <summary>Domyślna jakość to poziom standardowy, także dla pliku ustawień bez tego pola.</summary>
     [Fact]
-    public void DomyslnaJakoscToWartoscMiniaudio()
+    public void DomyslnaJakoscToPoziomStandardowy()
     {
         var settings = new AppSettings();
 
         Assert.Equal(ResamplerQuality.Standard, settings.ResamplerQuality);
-        Assert.Equal(AudioQuality.DefaultFilterOrder, AudioPreferences.FilterOrder(settings.ResamplerQuality));
+        Assert.Equal(ResamplingLevel.Standard, AudioPreferences.Resampling(settings.ResamplerQuality));
     }
 
     [Fact]
-    public void RzadFiltruNieWychodziPozaZakresMiniaudio()
+    public void PoziomSpozaWyliczeniaToStandardowy()
     {
-        var restore = AudioQuality.ResamplerFilterOrder;
+        var restore = AudioQuality.Resampling;
 
         try
         {
-            AudioQuality.ResamplerFilterOrder = 99;
-            Assert.Equal(AudioQuality.MaximumFilterOrder, AudioQuality.ResamplerFilterOrder);
+            AudioQuality.Resampling = (ResamplingLevel)99;
 
-            AudioQuality.ResamplerFilterOrder = -5;
-            Assert.Equal(0, AudioQuality.ResamplerFilterOrder);
+            AudioQuality.Resampling = ResamplingLevel.High;
+            Assert.Equal(ResamplingLevel.High, AudioQuality.Resampling);
         }
         finally
         {
-            AudioQuality.ResamplerFilterOrder = restore;
+            AudioQuality.Resampling = restore;
         }
     }
 
@@ -297,6 +294,8 @@ public sealed class SettingsTests
         double[] value => value.Select(gain => gain - 1).ToArray(),
         Enum value => NextEnumValue(value),
         List<SceneVisual> value => new List<SceneVisual>(value) { SceneVisual.Spectrum },
+        List<ParametricBandSettings> value => new List<ParametricBandSettings>(value) { new() { Frequency = 250, Gain = 3 } },
+        List<SoundProfile> value => new List<SoundProfile>(value) { new() { Device = "Słuchawki", Preamp = -2 } },
         Dictionary<string, SceneMargin> value => new Dictionary<string, SceneMargin>(value) { ["ekran|1920x1080"] = SceneMargin.Large },
         DateTimeOffset value => value.AddDays(1),
         null when property.PropertyType == typeof(string) => "cokolwiek",

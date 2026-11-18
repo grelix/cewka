@@ -281,6 +281,34 @@ public sealed class DisplayWakeLockTests
         Assert.Empty(bus.Inhibitions);
     }
 
+    /// <summary>
+    /// Napis, który nie jest ścieżką obiektu, nie jest uchwytem: biblioteka szyny przerwałaby
+    /// proces przy wywołaniu z taką ścieżką.
+    /// </summary>
+    [Theory]
+    [InlineData("x")]
+    [InlineData("")]
+    [InlineData("a/b")]
+    [InlineData("/a/")]
+    [InlineData("/a//b")]
+    [InlineData("/a-b")]
+    [InlineData("/żądanie")]
+    [InlineData("/a b")]
+    public void UchwytNieBedacySciezkaObiektuJestOdrzucany(string handle)
+    {
+        var bus = new FakeBus { PortalHandle = handle };
+        using var wakeLock = new LinuxDisplayWakeLock(Reason, bus, _time);
+
+        wakeLock.Acquire();
+        Assert.True(wakeLock.IsHeld);
+        Assert.Equal(FakeBus.ScreenSaverKind, Assert.Single(bus.Inhibitions).Kind);
+
+        wakeLock.Release();
+        Assert.Empty(bus.Inhibitions);
+        Assert.DoesNotContain(handle, bus.Paths);
+        Assert.DoesNotContain(bus.ResponseWaits, wait => wait.Handle == handle);
+    }
+
     [Theory]
     [InlineData(Service.Slow)]
     [InlineData(Service.Garbled)]
@@ -704,11 +732,15 @@ public sealed class DisplayWakeLockTests
         public Service ScreenSaverRelease { get; init; }
         public bool BusMissing { get; init; }
 
+        /// <summary>Uchwyt podawany przez portal zamiast własnego; gdy pusty, portal podaje poprawny.</summary>
+        public string? PortalHandle { get; init; }
+
         /// <summary>Kod sygnału Response po uchwycie z portalu; inny niż 0 to odmowa backendu.</summary>
         public uint? PortalResponse { get; init; }
 
         public List<(int Connection, string Kind, string Id)> Inhibitions { get; } = [];
         public List<string> Calls { get; } = [];
+        public List<string> Paths { get; } = [];
         public List<(string Handle, int Timeout)> ResponseWaits { get; } = [];
         public int Connections { get; private set; }
         public int ConnectAttempts { get; private set; }
@@ -733,6 +765,7 @@ public sealed class DisplayWakeLockTests
         {
             Assert.True(IsConnected, "Wywołanie bez połączenia.");
             Calls.Add($"{call.Interface}.{call.Member}");
+            Paths.Add(call.Path);
 
             return (call.Interface, call.Member) switch
             {
@@ -756,7 +789,7 @@ public sealed class DisplayWakeLockTests
             }
 
             var number = ++_nextId;
-            var id = kind == PortalKind ? $"/org/freedesktop/portal/desktop/request/1_{_connection}/t{number}" : number.ToString();
+            var id = kind == PortalKind ? PortalHandle ?? $"/org/freedesktop/portal/desktop/request/1_{_connection}/t{number}" : number.ToString();
 
             // Odmowa backendu: portal zamyka żądanie, blokady nie ma.
             if (kind != PortalKind || DisplayInhibitRules.IsPortalHeld(PortalResponse))

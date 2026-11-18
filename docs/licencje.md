@@ -59,10 +59,18 @@ Avalonia.Headless 12.1.6 (MIT, testy i narzędzie zrzutów), xunit 2.9.3, xunit.
 
 | Składnik | Wersja | Licencja | Zastosowanie |
 |----------|--------|----------|--------------|
-| miniaudio | 0.11.26 | do wyboru domena publiczna (Unlicense) lub MIT-0 | wyjście dźwięku, dekodery MP3, FLAC i WAV, resampler |
+| miniaudio | 0.11.26 | do wyboru domena publiczna (Unlicense) lub MIT-0 | wyjście dźwięku, dekodery MP3, FLAC i WAV |
+| WavPack (libwavpack) | 5.9.0 | BSD, 3 klauzule | dekodowanie WavPack |
 
 Źródło miniaudio leży w `native/miniaudio/` razem z licencją. Kompiluje się razem z nakładką
 `native/cewka_audio.c` do biblioteki `cewka_audio`, która trafia do wydania.
+
+Z WavPack w `native/wavpack/` leżą tylko pliki potrzebne do dekodowania (`include/wavpack.h`,
+dziewięć plików `.c` i dwa nagłówki w `src/`) oraz licencja (`license.txt`, plik `COPYING`
+z archiwum źródeł). Pochodzą z archiwum `wavpack-5.9.0.tar.xz` z oficjalnej strony wydań
+https://github.com/dbry/WavPack/releases (SHA-256
+`b5291bc4e6d69ebbd3da3800c5bf4a70f19bb92679b23e09b3b612c1e648d1ff`), bez zmian. Kompilują się
+razem z nakładką, bez DSD, bez plików sprzed wersji 4, bez wstawek asemblerowych i bez wątków.
 
 ## Biblioteki systemowe
 
@@ -102,7 +110,7 @@ Większość licencji powyżej pozwala rozpowszechniać plik wykonywalny pod war
 z nim noty składników:
 
 - MIT (Avalonia, NVorbis, Concentus.OggFile, ATL.NET, środowisko .NET i reszta pakietów MIT)
-  i BSD z 3 klauzulami (Concentus, ANGLE): informacja o prawach autorskich i tekst licencji.
+  i BSD z 3 klauzulami (Concentus, ANGLE, WavPack): informacja o prawach autorskich i tekst licencji.
 - Biblioteki natywne Skii i HarfBuzz: noty z ich pliku `THIRD-PARTY-NOTICES.txt`.
 - Ude.NetStandard (MPL 1.1): informacja, gdzie można pobrać kod źródłowy pakietu.
 - Font (SIL OFL 1.1): informacja o prawach autorskich i tekst licencji przy każdej kopii fontu.
@@ -130,8 +138,9 @@ pakietu z grafu zależności w `src/Cewka.App/obj/project.assets.json` (cel `net
 `Plik: <nazwa>` dla każdego pliku fontu w `src/Cewka.App/Assets/Fonts`. Nowy pakiet, także
 przechodni, nowa wersja albo nowy font bez sekcji w pliku not zatrzymuje więc testy. Test pomija
 pakiety spoza wydania wymienione wyżej: Avalonia.BuildServices
-oraz `*.NativeAssets.macOS` i `*.NativeAssets.WebAssembly`. Środowiska .NET i miniaudio
-nie ma w grafie pakietów, więc ich sekcje trzeba pilnować przy zmianie wersji.
+oraz `*.NativeAssets.macOS` i `*.NativeAssets.WebAssembly`. Środowiska .NET nie ma w grafie
+pakietów, więc jego sekcji trzeba pilnować przy zmianie wersji. Wersje miniaudio i WavPack test
+bierze z ich nagłówków w `native/` i wymaga wiersza `Składnik: <nazwa> <wersja>`.
 
 Teksty OFL są też osadzone w pliku wykonywalnym razem z fontami, ale program ich nie pokazuje,
 a sekcja „Licencje” w ustawieniach podaje tylko nazwy licencji.

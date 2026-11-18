@@ -29,8 +29,10 @@ internal sealed class SyntheticDecoder(long totalFrames, float value, int channe
     public long TotalFrames { get; } = totalFrames;
     public long Position => _position;
     public bool CanSeek => true;
-    public int SourceSampleRate => SampleRate;
-    public int SourceChannels => Channels;
+    /// <summary>Format pliku, jaki dekoder zgłasza; domyślnie równy formatowi wyjścia, czyli bez konwersji.</summary>
+    public int SourceSampleRate { get; init; } = sampleRate;
+
+    public int SourceChannels { get; init; } = channels;
     public int InstantaneousBitrate => 0;
 
     public int Read(Span<float> destination)

@@ -56,6 +56,105 @@ internal static class TestAudioFiles
         return ms.ToArray();
     }
 
+    /// <summary>
+    /// AIFF (bez <paramref name="compression"/>) albo AIFF-C z podanym rodzajem zapisu próbek:
+    /// <c>NONE</c>, <c>twos</c>, <c>sowt</c>, <c>in24</c>, <c>in32</c>, <c>fl32</c>, <c>FL32</c>, <c>fl64</c>,
+    /// <c>FL64</c> albo dowolny inny, wtedy próbki jak w <c>NONE</c>. <paramref name="before"/> trafia
+    /// przed opis formatu, <paramref name="after"/> za dane.
+    /// </summary>
+    public static byte[] Aiff(
+        float[] interleaved, int channels, int sampleRate, int bits = 16, string? compression = null,
+        byte[]? before = null, byte[]? after = null, bool formatAfterData = false)
+    {
+        var kind = compression ?? "NONE";
+        var encode = AiffSampleWriter(kind, bits);
+        var frames = interleaved.Length / channels;
+
+        using var data = new MemoryStream();
+        foreach (var sample in interleaved) data.Write(encode(sample));
+
+        var comm = new MemoryStream();
+        var number = new byte[4];
+        BinaryPrimitives.WriteInt16BigEndian(number, (short)channels);
+        comm.Write(number, 0, 2);
+        BinaryPrimitives.WriteUInt32BigEndian(number, (uint)frames);
+        comm.Write(number, 0, 4);
+        BinaryPrimitives.WriteInt16BigEndian(number, (short)bits);
+        comm.Write(number, 0, 2);
+        comm.Write(Extended(sampleRate));
+        if (compression is not null)
+        {
+            comm.Write(Encoding.ASCII.GetBytes(kind));
+            comm.Write(new byte[2]);
+        }
+
+        var ssnd = new MemoryStream();
+        ssnd.Write(new byte[8]);
+        data.Position = 0;
+        data.CopyTo(ssnd);
+
+        var chunks = new List<byte[]>();
+        if (before is not null) chunks.Add(before);
+        if (compression is not null) chunks.Add(AiffChunk("FVER", [0xA2, 0x80, 0x51, 0x40]));
+        if (!formatAfterData) chunks.Add(AiffChunk("COMM", comm.ToArray()));
+        chunks.Add(AiffChunk("SSND", ssnd.ToArray()));
+        if (formatAfterData) chunks.Add(AiffChunk("COMM", comm.ToArray()));
+        if (after is not null) chunks.Add(after);
+
+        var body = Concat(Encoding.ASCII.GetBytes(compression is null ? "AIFF" : "AIFC"), chunks.SelectMany(c => c).ToArray());
+        var size = new byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(size, (uint)body.Length);
+        return Concat("FORM"u8.ToArray(), size, body);
+    }
+
+    /// <summary>Fragment AIFF: identyfikator, długość bez dopełnienia, treść dopełniona do parzystej długości.</summary>
+    public static byte[] AiffChunk(string id, byte[] content)
+    {
+        var size = new byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(size, (uint)content.Length);
+        return Concat(Encoding.ASCII.GetBytes(id), size, content, new byte[content.Length % 2]);
+    }
+
+    /// <summary>Zapis jednej próbki dla rodzaju kompresji AIFF-C.</summary>
+    private static Func<float, byte[]> AiffSampleWriter(string kind, int bits)
+    {
+        switch (kind)
+        {
+            case "fl32" or "FL32":
+                return s => { var b = new byte[4]; BinaryPrimitives.WriteSingleBigEndian(b, s); return b; };
+            case "fl64" or "FL64":
+                return s => { var b = new byte[8]; BinaryPrimitives.WriteDoubleBigEndian(b, s); return b; };
+        }
+
+        var width = kind switch { "in24" => 3, "in32" => 4, _ => (bits + 7) / 8 };
+        var significant = kind switch { "in24" => 24, "in32" => 32, _ => bits };
+        var little = kind == "sowt";
+
+        return s =>
+        {
+            // Skala 2^(n−1), ta sama co przy odczycie, więc błąd to wyłącznie kwantyzacja.
+            var full = 1L << (significant - 1);
+            var value = Math.Clamp((long)Math.Round(s * (double)full), -full, full - 1) << (width * 8 - significant);
+            var b = new byte[width];
+            for (var i = 0; i < width; i++)
+                b[little ? i : width - 1 - i] = (byte)(value >> (8 * i));
+            return b;
+        };
+    }
+
+    /// <summary>Częstotliwość jako 80-bitowa liczba rozszerzona, jak w nagłówku AIFF.</summary>
+    public static byte[] Extended(double value)
+    {
+        var bytes = new byte[10];
+        if (value <= 0) return bytes;
+
+        var exponent = (int)Math.Floor(Math.Log2(value));
+        var mantissa = (ulong)Math.Round(Math.ScaleB(value, 63 - exponent));
+        BinaryPrimitives.WriteUInt16BigEndian(bytes, (ushort)(exponent + 16383));
+        BinaryPrimitives.WriteUInt64BigEndian(bytes.AsSpan(2), mantissa);
+        return bytes;
+    }
+
     /// <summary>WAV z nieznanym kodekiem: kontener poprawny, ale nikt nie potrafi go zdekodować.</summary>
     public static byte[] WavWithUnknownCodec()
     {
@@ -93,6 +192,12 @@ internal static class TestAudioFiles
         public int PreSkip { get; init; } = 312;
         public short OutputGainQ8 { get; init; }
         public int Frames { get; init; } = 50;
+
+        /// <summary>O ile próbek ostatnia strona kończy się przed końcem ostatniego pakietu (dopełnienie kodera).</summary>
+        public int EndTrim { get; init; }
+
+        /// <summary>Pakietów na stronę Ogg. Prawdziwe kodery mieszczą ich na stronie kilkadziesiąt.</summary>
+        public int PacketsPerPage { get; init; } = 1;
         public float Amplitude { get; init; } = 0.3f;
         public double Frequency { get; init; } = 440;
 
@@ -167,6 +272,7 @@ internal static class TestAudioFiles
 
         var pcm = new float[OpusFrame * channels];
         var packet = new byte[4000];
+        var page = new List<byte[]>();
         long granule = 0;
         long sample = 0;
 
@@ -184,25 +290,40 @@ internal static class TestAudioFiles
                 : multi!.EncodeMultistream(pcm, OpusFrame, packet, packet.Length);
 
             granule += OpusFrame;
-            ogg.WritePage(packet.AsSpan(0, length).ToArray(), granule, bos: false, eos: f == options.Frames - 1);
+            var last = f == options.Frames - 1;
+            page.Add(packet.AsSpan(0, length).ToArray());
+
+            if (page.Count < options.PacketsPerPage && !last) continue;
+
+            ogg.WritePage(page, last ? granule - options.EndTrim : granule, bos: false, eos: last);
+            page.Clear();
         }
 
         return ogg.ToArray();
     }
 
-    /// <summary>Minimalny zapis stron Ogg: jeden pakiet na stronę, suma kontrolna wg specyfikacji.</summary>
+    /// <summary>Minimalny zapis stron Ogg: całe pakiety na stronie, suma kontrolna wg specyfikacji.</summary>
     public sealed class OggWriter
     {
         private readonly MemoryStream _output = new();
         private uint _sequence;
 
-        public void WritePage(byte[] packet, long granule, bool bos, bool eos)
+        public void WritePage(byte[] packet, long granule, bool bos, bool eos) => WritePage([packet], granule, bos, eos);
+
+        /// <summary>Strona z kilkoma całymi pakietami; granula opisuje koniec ostatniego.</summary>
+        public void WritePage(IReadOnlyList<byte[]> packets, long granule, bool bos, bool eos)
         {
             var segments = new List<byte>();
-            var remaining = packet.Length;
-            while (remaining >= 255) { segments.Add(255); remaining -= 255; }
-            segments.Add((byte)remaining);
+            foreach (var part in packets)
+            {
+                var remaining = part.Length;
+                while (remaining >= 255) { segments.Add(255); remaining -= 255; }
+                segments.Add((byte)remaining);
+            }
 
+            if (segments.Count > 255) throw new ArgumentException("Za dużo pakietów na jedną stronę Ogg.");
+
+            var packet = packets.SelectMany(part => part).ToArray();
             var page = new byte[27 + segments.Count + packet.Length];
             "OggS"u8.CopyTo(page);
             page[4] = 0;
@@ -219,6 +340,32 @@ internal static class TestAudioFiles
         }
 
         public byte[] ToArray() => _output.ToArray();
+
+        /// <summary>
+        /// Przelicza sumy kontrolne stron po zmianie ich treści. Czytniki odrzucają stronę ze złą
+        /// sumą, więc bez tego uszkodzone dane nie docierałyby do dekodera.
+        /// </summary>
+        public static void FixChecksums(Span<byte> data)
+        {
+            var at = 0;
+            while (at + 27 <= data.Length)
+            {
+                if (!data.Slice(at, 4).SequenceEqual("OggS"u8)) { at++; continue; }
+
+                var segments = data[at + 26];
+                if (at + 27 + segments > data.Length) break;
+
+                var body = 0;
+                for (var i = 0; i < segments; i++) body += data[at + 27 + i];
+
+                var length = Math.Min(27 + segments + body, data.Length - at);
+                var page = data.Slice(at, length);
+                page.Slice(22, 4).Clear();
+                BinaryPrimitives.WriteUInt32LittleEndian(page.Slice(22), Crc(page));
+
+                at += length;
+            }
+        }
 
         private static readonly uint[] Table = BuildTable();
 
@@ -389,4 +536,125 @@ internal static class TestAudioFiles
     }
 
     public static byte[] Concat(params byte[][] parts) => parts.SelectMany(p => p).ToArray();
+
+    /// <summary>
+    /// Krótki, poprawny plik danego rodzaju: WAV i Opus składane w teście, pozostałe to tony
+    /// z prawdziwych koderów leżące w <c>Dane</c>.
+    /// </summary>
+    public static byte[] Seed(string kind) => kind switch
+    {
+        "wav" => Wav(ToneInChannel(2, 0, 22050, 44100), 2, 44100),
+        "opus" => Opus(new OpusOptions { Frames = 25, PreSkip = 312, PacketsPerPage = 5 }),
+        "aiff" => Aiff(ToneInChannel(2, 0, 22050, 44100), 2, 44100),
+        _ => File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Dane", "ton-440-stereo-44100." + kind)),
+    };
+
+    public const string TaggedTitle = "Tytuł próbny";
+    public const int TaggedPictureBytes = 600;
+
+    /// <summary>Ten sam plik ze znacznikami i okładką, zapisanymi przez bibliotekę znaczników.</summary>
+    public static byte[] Tagged(string kind)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cewka-ziarno-{Guid.NewGuid():N}.{kind}");
+        File.WriteAllBytes(path, Seed(kind));
+
+        try
+        {
+            var track = new ATL.Track(path)
+            {
+                Title = TaggedTitle,
+                Artist = "Wykonawca",
+                Album = "Album",
+                TrackNumber = 3,
+            };
+            track.AdditionalFields["REPLAYGAIN_TRACK_GAIN"] = "-6.48 dB";
+
+            var picture = new byte[TaggedPictureBytes];
+            new Random(7).NextBytes(picture);
+
+            // Nagłówek JPEG: biblioteka rozpoznaje typ obrazu po pierwszych bajtach.
+            picture[0] = 0xFF;
+            picture[1] = 0xD8;
+            picture[2] = 0xFF;
+            picture[3] = 0xE0;
+            track.EmbeddedPictures.Add(ATL.PictureInfo.fromBinaryData(picture, ATL.PictureInfo.PIC_TYPE.Front));
+
+            if (!track.Save()) throw new InvalidOperationException($"Nie zapisano znaczników w pliku {kind}.");
+
+            return File.ReadAllBytes(path);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>Plik z katalogu <c>Dane</c>.</summary>
+    public static byte[] DataFile(string name) => File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Dane", name));
+
+    /// <summary>
+    /// Ton 440 Hz stereo 44,1 kHz w zakresie ±1: lewy kanał o amplitudzie 0,5, prawy 0,25
+    /// z przesunięciem fazy. Z tych próbek powstały pliki WavPack w <c>Dane</c>: 16 bit pół
+    /// sekundy, 24 bit i float ćwierć sekundy.
+    /// </summary>
+    public static double[] WavPackTone(int frames)
+    {
+        var data = new double[frames * 2];
+        for (var i = 0; i < frames; i++)
+        {
+            var phase = 2 * Math.PI * 440 * i / 44100;
+            data[2 * i] = 0.5 * Math.Sin(phase);
+            data[2 * i + 1] = 0.25 * Math.Sin(phase + 1.0);
+        }
+
+        return data;
+    }
+
+    /// <summary>Próbki ±1 zaokrąglone do liczb całkowitych o podanej głębi.</summary>
+    public static int[] Quantise(double[] data, int bits)
+    {
+        var full = (1 << (bits - 1)) - 1;
+        return data.Select(x => (int)Math.Round(x * full)).ToArray();
+    }
+
+    /// <summary>WAV z próbkami całkowitymi 16 albo 24 bity; z maską zapisuje nagłówek WAVE_FORMAT_EXTENSIBLE.</summary>
+    public static byte[] PcmWav(int[] interleaved, int channels, int sampleRate, int bits, uint? channelMask = null)
+    {
+        var bytesPerSample = bits / 8;
+        var dataBytes = interleaved.Length * bytesPerSample;
+        var extensible = channelMask is not null;
+        var fmtSize = extensible ? 40 : 16;
+
+        using var ms = new MemoryStream();
+        using var w = new BinaryWriter(ms);
+
+        w.Write("RIFF"u8);
+        w.Write(4 + 8 + fmtSize + 8 + dataBytes);
+        w.Write("WAVE"u8);
+
+        w.Write("fmt "u8);
+        w.Write(fmtSize);
+        w.Write((ushort)(extensible ? 0xFFFE : 1));
+        w.Write((ushort)channels);
+        w.Write(sampleRate);
+        w.Write(sampleRate * channels * bytesPerSample);
+        w.Write((ushort)(channels * bytesPerSample));
+        w.Write((ushort)bits);
+
+        if (extensible)
+        {
+            w.Write((ushort)22);
+            w.Write((ushort)bits);
+            w.Write(channelMask!.Value);
+            // KSDATAFORMAT_SUBTYPE_PCM
+            w.Write(new Guid("00000001-0000-0010-8000-00aa00389b71").ToByteArray());
+        }
+
+        w.Write("data"u8);
+        w.Write(dataBytes);
+        foreach (var sample in interleaved)
+            for (var b = 0; b < bytesPerSample; b++) w.Write((byte)(sample >> (8 * b)));
+
+        return ms.ToArray();
+    }
 }

@@ -36,11 +36,19 @@ public sealed record InstanceAddress(string Name, string LockFile, string Socket
 /// </summary>
 public sealed class SingleInstance : IDisposable
 {
-    /// <summary>Guards against a hostile or broken sender flooding the channel.</summary>
-    private const int MaxMessageBytes = 1 << 20;
+    /// <summary>
+    /// Guards against a hostile or broken sender flooding the channel. Limit mieści najdłuższy
+    /// wiersz poleceń, jaki przyjmuje system (w Linuksie około 2 MB), także po zapisie w JSON,
+    /// w którym znak spoza ASCII zajmuje sześć bajtów: menedżer plików przekazuje jednej kopii
+    /// tysiące ścieżek naraz.
+    /// </summary>
+    private const int MaxMessageBytes = 16 << 20;
 
     /// <summary>Messages kept until the window attaches.</summary>
     private const int MaxPendingMessages = 256;
+
+    /// <summary>Łączna długość ścieżek trzymanych do podpięcia okna.</summary>
+    private const long MaxPendingCharacters = 32L << 20;
 
     /// <summary>
     /// Najdłuższe czekanie zamykanego okna na przeglądane w tle foldery przed zapisem kolejki.
@@ -68,6 +76,7 @@ public sealed class SingleInstance : IDisposable
     private readonly Thread _listener;
     private readonly object _gate = new();
     private readonly List<string[]> _pending = [];
+    private long _pendingCharacters;
     private Action<string[]>? _receiver;
     private bool _stopped;
     private bool _disposed;
@@ -149,6 +158,28 @@ public sealed class SingleInstance : IDisposable
     }
 
     /// <summary>
+    /// Jak <see cref="Start(InstanceAddress, IReadOnlyList{string})"/>, z adresem ustalanym na miejscu.
+    /// Adres wymaga katalogów ustawień i sesji; gdy ich nie da się utworzyć, nikt inny też nie
+    /// trzyma roli w tym miejscu, więc ta kopia po prostu rusza, jak przy niedostępnej blokadzie.
+    /// </summary>
+    public static Claim Start(Func<InstanceAddress> address, IReadOnlyList<string> paths)
+    {
+        InstanceAddress resolved;
+
+        try
+        {
+            resolved = address();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[cewka] pojedyncza instancja niedostępna: {ex.Message}");
+            return new Claim(null, false);
+        }
+
+        return Start(resolved, paths);
+    }
+
+    /// <summary>
     /// Claims the role of the one running instance. Returns <c>null</c> when another copy already
     /// holds it, in which case <see cref="TryHandOff"/> should be used instead.
     /// </summary>
@@ -226,10 +257,19 @@ public sealed class SingleInstance : IDisposable
     /// </summary>
     public static bool TryHandOff(InstanceAddress address, IReadOnlyList<string> paths)
     {
+        // Jedna wiadomość, bo odbiorca wykonuje otwarcie raz na wiadomość: lista w kilku częściach
+        // przy ustawieniu „zastąp kolejkę” zostawiałaby w kolejce tylko ostatnią. Odbiorca odrzuca
+        // wiadomość ponad limit w całości, więc nadmiar, którego system i tak nie przekaże
+        // w wierszu poleceń, jest obcinany.
+        var parts = SplitForHandOff(paths, MaxMessageBytes);
+
+        if (parts.Count > 1)
+            Console.Error.WriteLine($"[cewka] lista ścieżek ponad limit: przekazano {parts[0].Length} z {paths.Count}.");
+
         try
         {
             HandoffChannel.Send(address, Encoding.UTF8.GetBytes(
-                JsonSerializer.Serialize(paths.ToArray(), HandoffJsonContext.Default.StringArray)));
+                JsonSerializer.Serialize(parts[0], HandoffJsonContext.Default.StringArray)));
 
             return true;
         }
@@ -237,6 +277,45 @@ public sealed class SingleInstance : IDisposable
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Dzieli listę na części, których JSON mieści się w <paramref name="limit"/> bajtów, bez
+    /// zmiany kolejności. Ścieżka, która sama przekracza limit, przepada, bo odbiorca odrzuca
+    /// taką wiadomość w całości. Zawsze jest co najmniej jedna część, choćby pusta: pusta
+    /// lista też wysuwa okno.
+    /// </summary>
+    internal static List<string[]> SplitForHandOff(IReadOnlyList<string> paths, int limit)
+    {
+        const int brackets = 2;
+        const int comma = 1;
+
+        var parts = new List<string[]>();
+        var current = new List<string>();
+        var size = brackets;
+
+        foreach (var path in paths)
+        {
+            // Zapis elementu nie zależy od sąsiadów, więc rozmiar części to suma rozmiarów elementów.
+            var element = Encoding.UTF8.GetByteCount(
+                JsonSerializer.Serialize([path], HandoffJsonContext.Default.StringArray)) - brackets;
+
+            if (brackets + element > limit) continue;
+
+            var grown = size + (current.Count > 0 ? comma : 0) + element;
+            if (grown > limit)
+            {
+                parts.Add([.. current]);
+                current.Clear();
+                grown = brackets + element;
+            }
+
+            current.Add(path);
+            size = grown;
+        }
+
+        if (current.Count > 0 || parts.Count == 0) parts.Add([.. current]);
+        return parts;
     }
 
     /// <summary>
@@ -251,6 +330,7 @@ public sealed class SingleInstance : IDisposable
 
             foreach (var paths in _pending) receiver(paths);
             _pending.Clear();
+            _pendingCharacters = 0;
         }
     }
 
@@ -259,8 +339,20 @@ public sealed class SingleInstance : IDisposable
     {
         lock (_gate)
         {
-            if (_receiver is not null) _receiver(paths);
-            else if (_pending.Count < MaxPendingMessages) _pending.Add(paths);
+            if (_receiver is not null)
+            {
+                _receiver(paths);
+                return;
+            }
+
+            // Wiadomość ma do kilkunastu megabajtów, więc sam licznik nie wystarcza za granicę.
+            long size = 0;
+            foreach (var path in paths) size += path.Length;
+
+            if (_pending.Count >= MaxPendingMessages || _pendingCharacters + size > MaxPendingCharacters) return;
+
+            _pending.Add(paths);
+            _pendingCharacters += size;
         }
     }
 
@@ -376,8 +468,11 @@ public sealed class SingleInstance : IDisposable
         var payload = new byte[length];
         if (!await ReadExactlyAsync(stream, payload, token)) return [];
 
-        return JsonSerializer.Deserialize(
+        var paths = JsonSerializer.Deserialize(
             Encoding.UTF8.GetString(payload), HandoffJsonContext.Default.StringArray) ?? [];
+
+        // Tablica od innego procesu może nieść puste pozycje; dalej nikt się ich nie spodziewa.
+        return Array.Exists(paths, string.IsNullOrEmpty) ? [.. paths.Where(path => !string.IsNullOrEmpty(path))] : paths;
     }
 
     private static async Task<bool> ReadExactlyAsync(Stream stream, byte[] destination, CancellationToken token)

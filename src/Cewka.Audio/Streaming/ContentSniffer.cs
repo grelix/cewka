@@ -41,6 +41,22 @@ internal static class ContentSniffer
 
     private static SniffKind? ClassifyText(ReadOnlySpan<byte> head, ref PlaylistKind list)
     {
+        // Rozpoznanie biegnie po każdym odczycie z gniazda, a głowa to prawie zawsze dźwięk, przy
+        // znaczniku ID3 na początku nawet ćwierć megabajta. O tekście rozstrzyga pierwszy znak,
+        // więc głowa jest zamieniana na napis dopiero wtedy, gdy ten znak coś zaczyna.
+        var wide = head.Length >= 2 && (head[0] == 0xFF && head[1] == 0xFE || head[0] == 0xFE && head[1] == 0xFF);
+
+        if (!wide)
+        {
+            var body = head.StartsWith<byte>([0xEF, 0xBB, 0xBF]) ? head[3..] : head;
+
+            var first = 0;
+            while (first < body.Length && char.IsWhiteSpace((char)body[first])) first++;
+
+            if (first == body.Length) return SniffKind.NeedMore;
+            if (body[first] is not ((byte)'#' or (byte)'[' or (byte)'<' or (byte)'h' or (byte)'H')) return null;
+        }
+
         string decoded;
         if (head.Length >= 2 && head[0] == 0xFF && head[1] == 0xFE)
             decoded = Encoding.Unicode.GetString(head[2..]);

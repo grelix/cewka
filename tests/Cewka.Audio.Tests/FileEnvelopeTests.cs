@@ -137,6 +137,209 @@ public sealed class FileEnvelopeTests : IDisposable
         Assert.Equal(envelope.Rms, read.Rms);
     }
 
+    /// <summary>Mierzy plik i czeka na koniec pomiaru.</summary>
+    private static void Measure(LoudnessService service, string file)
+    {
+        using var done = new ManualResetEventSlim();
+        service.Measured += (_, _) => done.Set();
+        Assert.Null(service.RequestEnvelope(file));
+        Assert.True(done.Wait(TimeSpan.FromSeconds(5)));
+    }
+
+    private static FileEnvelope SomeEnvelope()
+    {
+        var builder = new EnvelopeBuilder();
+        builder.Add(Burst(48_000, 0, 24_000, 0.5f), 48_000, 2);
+        return builder.Build()!;
+    }
+
+    /// <summary>
+    /// Obwiednia leży w osobnym pliku, a nie w pamięci podręcznej pomiarów: ta jest czytana w całości
+    /// przy starcie i zapisywana w całości po każdym pomiarze, a obwiednia to ponad 5 kB na utwór.
+    /// </summary>
+    [Fact]
+    public void ObwiedniaNieTrafiaDoPlikuPomiarow()
+    {
+        var file = Path.Combine(_directory, "a.flac");
+        File.WriteAllBytes(file, new byte[64]);
+        var cache = Path.Combine(_directory, "loudness.json");
+        var envelope = SomeEnvelope();
+
+        using (var service = new LoudnessService(cache, (_, _) => new LoudnessMeasurement(-18, 0.5, envelope)))
+            Measure(service, file);
+
+        var json = File.ReadAllText(cache);
+        Assert.DoesNotContain("envelope", json, StringComparison.OrdinalIgnoreCase);
+        Assert.True(json.Length < 600, $"plik pomiarów ma {json.Length} znaków");
+        Assert.Single(Directory.GetFiles(Path.Combine(_directory, "envelopes"), "*.env"));
+    }
+
+    /// <summary>Odbiorca poznaje zmianę obwiedni po tożsamości obiektu, więc kolejne pytania dają ten sam.</summary>
+    [Fact]
+    public void KolejnePytaniaOObwiednieDajaTenSamObiekt()
+    {
+        var file = Path.Combine(_directory, "a.flac");
+        File.WriteAllBytes(file, new byte[64]);
+        var cache = Path.Combine(_directory, "loudness.json");
+        var envelope = SomeEnvelope();
+
+        using (var service = new LoudnessService(cache, (_, _) => new LoudnessMeasurement(-18, 0.5, envelope)))
+            Measure(service, file);
+
+        using var reloaded = new LoudnessService(cache, (_, _) => null);
+        var first = reloaded.GetEnvelope(file);
+
+        Assert.NotNull(first);
+        Assert.Same(first, reloaded.GetEnvelope(file));
+        Assert.Same(first, reloaded.RequestEnvelope(file));
+    }
+
+    /// <summary>Plik pomiarów z wersji 1.0.0 trzymał obwiednię we wpisie; po zapisie leży w osobnym pliku.</summary>
+    [Fact]
+    public async Task ObwiedniaZeStaregoWpisuPrzenosiSieDoOsobnegoPliku()
+    {
+        var file = Path.Combine(_directory, "stary.flac");
+        File.WriteAllBytes(file, new byte[64]);
+        var info = new FileInfo(file);
+        var cache = Path.Combine(_directory, "loudness.json");
+        var envelope = SomeEnvelope();
+
+        File.WriteAllText(cache, JsonSerializer.Serialize(new[]
+        {
+            new Dictionary<string, object?>
+            {
+                ["path"] = file,
+                ["length"] = info.Length,
+                ["modifiedTicks"] = info.LastWriteTimeUtc.Ticks,
+                ["integratedLufs"] = -20.0,
+                ["samplePeak"] = 0.7,
+                ["envelopePeak"] = Convert.ToBase64String(envelope.Peak),
+                ["envelopeRms"] = Convert.ToBase64String(envelope.Rms),
+            },
+        }));
+
+        var measured = 0;
+        using (var service = new LoudnessService(cache, (_, _) => { Interlocked.Increment(ref measured); return null; }))
+        {
+            // Obwiednia jest dostępna i przed przeniesieniem (z wpisu), i po nim (z pliku).
+            Assert.Equal(envelope.Peak, service.RequestEnvelope(file)!.Peak);
+
+            // Przeniesienie robi wątek analizy zaraz po starcie, a nie zamykanie programu.
+            await service.StartupSave.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(envelope.Peak, service.RequestEnvelope(file)!.Peak);
+        }
+
+        Assert.DoesNotContain("envelope", File.ReadAllText(cache), StringComparison.OrdinalIgnoreCase);
+
+        using var reloaded = new LoudnessService(cache, (_, _) => { Interlocked.Increment(ref measured); return null; });
+        var read = reloaded.RequestEnvelope(file);
+
+        Assert.NotNull(read);
+        Assert.Equal(envelope.Peak, read!.Peak);
+        Assert.Equal(envelope.Rms, read.Rms);
+        Assert.Equal(0, measured);
+        Assert.NotNull(reloaded.GetTrackGain(new Cewka.Audio.Playback.QueueEntry { Path = file }));
+    }
+
+    /// <summary>
+    /// Gdy pliku obwiedni nie da się zapisać, obwiednia nie przepada: zostaje we wpisie pomiaru,
+    /// i nowa, i przenoszona ze starego wpisu, a zapis ponawia próbę.
+    /// </summary>
+    [Fact]
+    public async Task ObwiedniaZostajeWeWpisieGdyJejPlikuNieDaSieZapisac()
+    {
+        var file = Path.Combine(_directory, "a.flac");
+        File.WriteAllBytes(file, new byte[64]);
+        var old = Path.Combine(_directory, "stary.flac");
+        File.WriteAllBytes(old, new byte[64]);
+        var info = new FileInfo(old);
+        var cache = Path.Combine(_directory, "loudness.json");
+        var envelope = SomeEnvelope();
+
+        File.WriteAllText(cache, JsonSerializer.Serialize(new[]
+        {
+            new Dictionary<string, object?>
+            {
+                ["path"] = old,
+                ["length"] = info.Length,
+                ["modifiedTicks"] = info.LastWriteTimeUtc.Ticks,
+                ["integratedLufs"] = -20.0,
+                ["samplePeak"] = 0.7,
+                ["envelopePeak"] = Convert.ToBase64String(envelope.Peak),
+                ["envelopeRms"] = Convert.ToBase64String(envelope.Rms),
+            },
+        }));
+
+        // Plik w miejscu katalogu obwiedni: katalogu nie da się założyć ani nic w nim zapisać.
+        var blocked = Path.Combine(_directory, "envelopes");
+        File.WriteAllText(blocked, "zajęte");
+
+        using (var service = new LoudnessService(cache, (_, _) => new LoudnessMeasurement(-18, 0.5, envelope)))
+            Measure(service, file);
+
+        using (var reloaded = new LoudnessService(cache, (_, _) => null))
+        {
+            Assert.Equal(envelope.Peak, reloaded.GetEnvelope(file)!.Peak);
+            Assert.Equal(envelope.Peak, reloaded.GetEnvelope(old)!.Peak);
+        }
+
+        // Przeszkoda znika: następny zapis przenosi obie obwiednie do plików.
+        File.Delete(blocked);
+        using (var retried = new LoudnessService(cache, (_, _) => null))
+        {
+            await retried.StartupSave.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.NotNull(retried.GetEnvelope(file));
+        }
+
+        Assert.DoesNotContain("envelope", File.ReadAllText(cache), StringComparison.OrdinalIgnoreCase);
+        using var last = new LoudnessService(cache, (_, _) => null);
+        Assert.Equal(envelope.Peak, last.GetEnvelope(file)!.Peak);
+        Assert.Equal(envelope.Rms, last.GetEnvelope(old)!.Rms);
+    }
+
+    /// <summary>Obwiednia innej wersji utworu (zmieniony plik) nie jest oddawana.</summary>
+    [Fact]
+    public void ObwiedniaInnejWersjiUtworuJestOdrzucana()
+    {
+        var directory = Path.Combine(_directory, "envelopes");
+        var store = new EnvelopeStore(directory);
+        var envelope = SomeEnvelope();
+
+        store.Write("C:/muzyka/a.flac", 100, 200, envelope);
+
+        Assert.Equal(envelope.Peak, store.Read("C:/muzyka/a.flac", 100, 200)!.Peak);
+        Assert.Equal(envelope.Rms, store.Read("c:/MUZYKA/A.flac", 100, 200)!.Rms);
+        Assert.Null(store.Read("C:/muzyka/a.flac", 101, 200));
+        Assert.Null(store.Read("C:/muzyka/a.flac", 100, 201));
+        Assert.Null(store.Read("C:/muzyka/b.flac", 100, 200));
+
+        // Plik ucięty albo z obcą zawartością to brak obwiedni, nie błąd.
+        File.WriteAllBytes(store.FileFor("C:/muzyka/a.flac"), new byte[7]);
+        Assert.Null(store.Read("C:/muzyka/a.flac", 100, 200));
+    }
+
+    /// <summary>Obwiednie utworów, których nie ma już w pamięci podręcznej, znikają przy zapisie.</summary>
+    [Fact]
+    public void ObwiednieBezWpisuSaSprzatane()
+    {
+        var file = Path.Combine(_directory, "a.flac");
+        File.WriteAllBytes(file, new byte[64]);
+        var cache = Path.Combine(_directory, "loudness.json");
+        var envelope = SomeEnvelope();
+
+        var orphans = new EnvelopeStore(Path.Combine(_directory, "envelopes"));
+        orphans.Write("C:/nie-ma/usuniety.flac", 1, 2, envelope);
+        var foreign = Path.Combine(_directory, "envelopes", "notatka.txt");
+        File.WriteAllText(foreign, "cudzy plik");
+
+        using (var service = new LoudnessService(cache, (_, _) => new LoudnessMeasurement(-18, 0.5, envelope)))
+            Measure(service, file);
+
+        Assert.False(File.Exists(orphans.FileFor("C:/nie-ma/usuniety.flac")));
+        Assert.True(File.Exists(orphans.FileFor(file)));
+        Assert.True(File.Exists(foreign));
+    }
+
     [Fact]
     public void StaryWpisBezObwiedniLiczySieRazJeszczeBezBledu()
     {

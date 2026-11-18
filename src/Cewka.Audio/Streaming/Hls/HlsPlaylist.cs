@@ -25,6 +25,9 @@ internal readonly record struct HlsChoice(Uri Url, int? BitrateKbps);
 /// <summary>Playlisty według RFC 8216. Treść pochodzi z sieci, więc wiersze nie do odczytania są pomijane.</summary>
 internal static class HlsPlaylistParser
 {
+    /// <summary>Segmenty radia trwają kilka sekund; dwie minuty to już zapas na nietypowe stacje.</summary>
+    internal const double MaxTargetSeconds = 120;
+
     /// <summary>Gdy serwer nie poda czasu docelowego, nie dojdzie do odświeżania częstszego niż typowy segment.</summary>
     private const double DefaultTargetSeconds = 6;
 
@@ -86,8 +89,10 @@ internal static class HlsPlaylistParser
             }
             else if (Value(line, "#EXT-X-TARGETDURATION:") is { } targetText)
             {
+                // Od tej liczby zależą limit ciszy i odstęp odświeżania; wartość bez górnej granicy
+                // wyłączałaby wykrywanie zastoju, a nieskończona nie mieści się w czasie.
                 if (double.TryParse(targetText, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) && parsed > 0)
-                    target = parsed;
+                    target = Math.Min(parsed, MaxTargetSeconds);
             }
             else if (Value(line, "#EXT-X-MEDIA-SEQUENCE:") is { } sequenceText)
             {

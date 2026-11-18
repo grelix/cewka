@@ -162,6 +162,72 @@ public struct Biquad
     }
 
     /// <summary>
+    /// Pasmo korektora parametrycznego: dzwon albo półka według Audio EQ Cookbook, półki z dobrocią
+    /// (<c>alpha = sin(w0)/(2Q)</c>). Częstotliwość wszystkich trzech rodzajów zatrzymuje się na 0,92
+    /// częstotliwości Nyquista, także półki górnej, która w <see cref="SetHighShelf"/> przechodzi tam
+    /// w przepust: przeskok między półką a przepustem przy przesuwaniu pasma byłby słychać.
+    /// </summary>
+    public void SetParametric(ParametricFilterType type, double frequency, double q, double gainDb, double sampleRate)
+    {
+        if (Math.Abs(gainDb) < 1e-6)
+        {
+            SetCoefficients(1, 0, 0, 1, 0, 0);
+            return;
+        }
+
+        frequency = Math.Min(frequency, sampleRate / 2 * 0.92);
+
+        if (type == ParametricFilterType.Peak)
+        {
+            SetPeaking(frequency, q, gainDb, sampleRate);
+            return;
+        }
+
+        var a = Math.Pow(10, gainDb / 40);
+        var w0 = 2 * Math.PI * frequency / sampleRate;
+        var cosW0 = Math.Cos(w0);
+        var alpha = Math.Sin(w0) / (2 * q);
+        var twoSqrtAAlpha = 2 * Math.Sqrt(a) * alpha;
+
+        if (type == ParametricFilterType.LowShelf)
+        {
+            SetCoefficients(
+                b0: a * ((a + 1) - (a - 1) * cosW0 + twoSqrtAAlpha),
+                b1: 2 * a * ((a - 1) - (a + 1) * cosW0),
+                b2: a * ((a + 1) - (a - 1) * cosW0 - twoSqrtAAlpha),
+                a0: (a + 1) + (a - 1) * cosW0 + twoSqrtAAlpha,
+                a1: -2 * ((a - 1) + (a + 1) * cosW0),
+                a2: (a + 1) + (a - 1) * cosW0 - twoSqrtAAlpha);
+            return;
+        }
+
+        SetCoefficients(
+            b0: a * ((a + 1) + (a - 1) * cosW0 + twoSqrtAAlpha),
+            b1: -2 * a * ((a - 1) + (a + 1) * cosW0),
+            b2: a * ((a + 1) + (a - 1) * cosW0 - twoSqrtAAlpha),
+            a0: (a + 1) - (a - 1) * cosW0 + twoSqrtAAlpha,
+            a1: 2 * ((a - 1) - (a + 1) * cosW0),
+            a2: (a + 1) - (a - 1) * cosW0 - twoSqrtAAlpha);
+    }
+
+    /// <summary>Moduł transmitancji w decybelach dla pulsacji <paramref name="omega"/> (radiany na próbkę).</summary>
+    public readonly double MagnitudeDb(double omega)
+    {
+        // |b0 + b1·z⁻¹ + b2·z⁻²| / |1 + a1·z⁻¹ + a2·z⁻²| dla z = e^(jω).
+        var cos1 = Math.Cos(omega);
+        var sin1 = Math.Sin(omega);
+        var cos2 = Math.Cos(2 * omega);
+        var sin2 = Math.Sin(2 * omega);
+
+        var nr = _b0 + _b1 * cos1 + _b2 * cos2;
+        var ni = -_b1 * sin1 - _b2 * sin2;
+        var dr = 1 + _a1 * cos1 + _a2 * cos2;
+        var di = -_a1 * sin1 - _a2 * sin2;
+
+        return 10 * Math.Log10((nr * nr + ni * ni) / (dr * dr + di * di));
+    }
+
+    /// <summary>
     /// Low-pass w postaci z Audio EQ Cookbook. Dobroć 0,7071 daje charakterystykę Butterwortha,
     /// przy której część przepuszczona i odjęta reszta sumują się z powrotem bez garbu.
     /// </summary>

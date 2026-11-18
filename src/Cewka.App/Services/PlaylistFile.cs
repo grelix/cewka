@@ -1,6 +1,9 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using Cewka.Audio.Cue;
+using Cewka.Audio.Decoding;
+using Cewka.Audio.Playback;
 
 namespace Cewka.App.Services;
 
@@ -12,7 +15,11 @@ public sealed record PlaylistEntry(string Path, string Title, string? Artist, do
 /// Wynik odczytu listy: ścieżki, które istnieją, liczba tych, których zabrakło, i liczba
 /// adresów strumieni internetowych, których odtwarzacz plików nie otwiera.
 /// </summary>
-public sealed record PlaylistLoad(IReadOnlyList<string> Paths, int Missing, int Streams = 0);
+public sealed record PlaylistLoad(IReadOnlyList<string> Paths, int Missing, int Streams = 0)
+{
+    /// <summary>Pozycje do kolejki w kolejności listy: arkusz CUE z listy rozwinięty na swoje utwory.</summary>
+    public IReadOnlyList<QueueItem> Items { get; init; } = Paths.Select(path => new QueueItem(path)).ToList();
+}
 
 /// <summary>
 /// Zapisuje i czyta kolejkę jako listę M3U.
@@ -64,20 +71,108 @@ public static partial class PlaylistFile
         AtomicFile.Write(path, text.ToString(), m3u ? Utf8WithMarker : Utf8);
     }
 
+    /// <summary>Więcej wpisów jest obcinane: każdy to wiersz kolejki i odczyt znaczników.</summary>
+    internal const int MaxEntries = 100_000;
+
+    /// <summary>Większa lista idzie drogą błędu odczytu, zamiast trafić w całości do pamięci.</summary>
+    internal const long MaxBytes = 8 * 1024 * 1024;
+
+    /// <summary>
+    /// Ścieżka lokalna albo na tym samym serwerze i udziale co sama lista. Samo sprawdzenie
+    /// istnienia pliku na obcym serwerze łączy się z nim (w Windowsie z poświadczeniami
+    /// słuchacza), a ścieżka urządzenia (<c>\\.\</c>, <c>\\?\</c>) nie jest plikiem dźwiękowym.
+    /// </summary>
+    internal static bool IsAllowedLocation(string fullPath, string playlistDirectory)
+    {
+        if (!StartsWithTwoSeparators(fullPath)) return true;
+
+        var share = ShareOf(fullPath);
+        return share is not null
+            && string.Equals(share, ShareOf(playlistDirectory), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool StartsWithTwoSeparators(string path) =>
+        path.Length >= 2 && path[0] is ('\\' or '/') && path[1] is ('\\' or '/');
+
+    /// <summary>„serwer\udział” ścieżki sieciowej; null dla ścieżki lokalnej i urządzenia.</summary>
+    private static string? ShareOf(string path)
+    {
+        if (!StartsWithTwoSeparators(path)) return null;
+
+        var parts = path[2..].Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2 || parts[0] is "." or "?") return null;
+
+        return parts[0] + "\\" + parts[1];
+    }
+
+    private static bool IsAudio(string path) =>
+        AudioFileFormatDetector.SupportedExtensions
+            .Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Ścieżka urządzenia (<c>\\.\</c>, <c>\\?\</c>): potok, dysk surowy; nigdy plik z muzyką.</summary>
+    private static bool IsDevicePath(string path) =>
+        StartsWithTwoSeparators(path) && path.Length >= 4 && path[2] is '.' or '?' && path[3] is '\\' or '/';
+
+    /// <summary>
+    /// Czy wpis leży tam, dokąd lista może prowadzić. Lista ułożona przez słuchacza wskazuje, co chce,
+    /// także serwer z muzyką. Lista pobrana z sieci (<paramref name="restrict"/>) tylko pliki lokalne
+    /// i własny udział: obcy adres sieciowy w takiej liście to sposób na wyłudzenie poświadczeń.
+    /// </summary>
+    internal static bool IsReachable(string path, string katalog, bool restrict) =>
+        !IsDevicePath(path) && (!restrict || IsAllowedLocation(path, katalog));
+
+    /// <summary>Ścieżka, którą wolno sprawdzić na dysku: plik dźwiękowy albo arkusz CUE w dozwolonym miejscu.</summary>
+    private static bool IsAcceptable(string path, string katalog, bool restrict) =>
+        (IsAudio(path) || CueSheet.IsSheetPath(path)) && IsReachable(path, katalog, restrict);
+
+    /// <summary>Adres strumienia (http://, rtsp:// i podobne), a nie ścieżka pliku.</summary>
+    internal static bool IsStreamAddress(string line) =>
+        StreamAddress().IsMatch(line) && !line.StartsWith("file:", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Windows oznacza pliki pobrane przeglądarką, z poczty i wypakowane z pobranych archiwów
+    /// strumieniem <c>Zone.Identifier</c>; strefa 3 i wyższe to internet. W innych systemach
+    /// samo sprawdzenie pliku nie łączy się z niczym, więc nie ma czego ograniczać.
+    /// </summary>
+    internal static bool IsFromInternet(string path)
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+
+        try
+        {
+            foreach (var line in File.ReadLines(path + ":Zone.Identifier"))
+            {
+                if (line.StartsWith("ZoneId=", StringComparison.OrdinalIgnoreCase)
+                    && int.TryParse(line.AsSpan(7).Trim(), out var zone))
+                    return zone >= 3;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
+        {
+            // Brak strumienia: plik powstał na tym komputerze.
+        }
+
+        return false;
+    }
+
     public static PlaylistLoad Load(string path) => Load(path, fallbackCodePage: null);
 
     /// <param name="fallbackCodePage">
     /// Strona kodowa dla <c>.m3u</c>, który nie jest poprawnym UTF-8; null oznacza stronę systemu.
     /// </param>
     /// <param name="fileExists">Sprawdzanie plików z listy; null oznacza dysk.</param>
-    internal static PlaylistLoad Load(string path, int? fallbackCodePage, Func<string, bool>? fileExists = null)
+    /// <param name="fromInternet">Czy lista jest pobrana z sieci; null oznacza sprawdzenie pliku.</param>
+    internal static PlaylistLoad Load(
+        string path, int? fallbackCodePage, Func<string, bool>? fileExists = null, bool? fromInternet = null)
     {
         fileExists ??= File.Exists;
+        var restrict = fromInternet ?? IsFromInternet(path);
 
         var katalog = Path.GetDirectoryName(Path.GetFullPath(path)) ?? string.Empty;
-        var found = new List<string>();
+        var found = new List<QueueItem>();
         var missing = 0;
         var streams = 0;
+        var entries = 0;
 
         foreach (var raw in Decode(path, fallbackCodePage).Split('\n'))
         {
@@ -89,38 +184,59 @@ public static partial class PlaylistFile
             // kolumnie: nazwa pliku też może się od niego zaczynać i wtedy zapis poprzedza ją „./”.
             if (string.IsNullOrWhiteSpace(line) || line[0] == '#') continue;
 
+            if (++entries > MaxEntries) break;
+
             if (StreamAddress().IsMatch(line) && !line.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
             {
                 streams++;
                 continue;
             }
 
-            var resolved = Resolve(line, katalog, fileExists);
-            if (resolved is not null) found.Add(resolved);
-            else missing++;
+            var resolved = Resolve(line, katalog, fileExists, restrict);
+            if (resolved is null)
+            {
+                missing++;
+            }
+            else if (CueSheet.IsSheetPath(resolved))
+            {
+                // Arkusz bez żadnego istniejącego pliku liczy się jak brakujący wpis listy. Ograniczenie
+                // pobranej listy przechodzi na arkusz, a arkusz pobrany ma swoje bez względu na listę.
+                var tracks = CueSheetFile.Load(resolved, fileExists, listFromInternet: restrict);
+                if (tracks.Count == 0) missing++;
+                found.AddRange(tracks);
+            }
+            else
+            {
+                found.Add(new QueueItem(resolved));
+            }
         }
 
-        return new PlaylistLoad(found, missing, streams);
+        return new PlaylistLoad(found.Select(item => item.Path).ToList(), missing, streams) { Items = found };
     }
 
     /// <summary>Ścieżka istniejącego pliku dla jednej linii listy albo null.</summary>
-    private static string? Resolve(string line, string katalog, Func<string, bool> fileExists)
+    private static string? Resolve(string line, string katalog, Func<string, bool> fileExists, bool restrict)
     {
         try
         {
             if (line.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
             {
                 // Adres pliku (VLC, Rhythmbox, Strawberry): znaki zakodowane procentowo.
-                return Uri.TryCreate(line.Trim(), UriKind.Absolute, out var uri) && uri.IsFile && fileExists(uri.LocalPath)
+                return Uri.TryCreate(line.Trim(), UriKind.Absolute, out var uri) && uri.IsFile
+                    && IsAcceptable(uri.LocalPath, katalog, restrict) && fileExists(uri.LocalPath)
                     ? uri.LocalPath
                     : null;
             }
+
+            // Linia niedozwolona odrzucona od razu: wersje zapasowe w Linuksie zrobiłyby z niej ścieżkę lokalną.
+            var trimmed = line.Trim();
+            if (!IsReachable(trimmed, katalog, restrict)) return null;
 
             foreach (var candidate in Candidates(line))
             {
                 var full = Path.GetFullPath(Path.IsPathRooted(candidate) ? candidate : Path.Combine(katalog, candidate));
 
-                if (fileExists(full)) return full;
+                if (IsAcceptable(full, katalog, restrict) && fileExists(full)) return full;
             }
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException or UriFormatException)
@@ -154,7 +270,15 @@ public static partial class PlaylistFile
 
     private static string Decode(string path, int? fallbackCodePage)
     {
-        var bytes = File.ReadAllBytes(path);
+        byte[] bytes;
+        using (var stream = File.OpenRead(path))
+        {
+            if (stream.Length > MaxBytes)
+                throw new IOException($"lista odtwarzania ma ponad {MaxBytes} bajtów");
+
+            bytes = new byte[stream.Length];
+            stream.ReadExactly(bytes);
+        }
 
         var marker = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
         if (marker) return Utf8.GetString(bytes, 3, bytes.Length - 3);

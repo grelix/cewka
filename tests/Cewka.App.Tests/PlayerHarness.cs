@@ -19,6 +19,9 @@ internal sealed class PlayerHarness : IDisposable
     public const int Rate = 48000;
     public const int Channels = 2;
 
+    /// <summary>Nazwa, pod jaką zgłasza się urządzenie domyślne atrapy.</summary>
+    public const string DefaultDevice = "Atrapa";
+
     private readonly Dictionary<string, double> _lengths = new(StringComparer.Ordinal);
 
     /// <param name="configure">Ustawienia przed utworzeniem modelu widoku.</param>
@@ -37,7 +40,8 @@ internal sealed class PlayerHarness : IDisposable
             if (FailAll || (name is not null && name == FailingDevice))
                 throw new AudioException("Urządzenie nie przyjęło formatu.");
 
-            var output = new TestOutput(1024, Rate, Channels);
+            // Urządzenie domyślne ma własną nazwę, jak w systemie; wybrane nazywa się tak, jak je wybrano.
+            var output = new TestOutput(1024, Rate, Channels) { Name = name ?? DefaultDevice };
             Outputs.Add(output);
             return output;
         }, random);

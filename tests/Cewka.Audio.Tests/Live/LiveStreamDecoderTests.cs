@@ -722,4 +722,26 @@ public sealed class LiveStreamDecoderTests
 
         public void Dispose() { }
     }
+
+    /// <summary>
+    /// Stare połączenie urwało się na śmieciach tuż pod progiem, a ich końcówka przekracza próg już
+    /// po odebraniu znacznika nowego połączenia. Zgłoszenie trafiłoby wtedy w nowe połączenie:
+    /// bufor wyrzuciłby jego dane, a sesja skreśliła adres, który właśnie zaczął grać.
+    /// </summary>
+    [Fact]
+    public void GarbageInTheTailOfAnOldConnectionIsNotBlamedOnTheNewOne()
+    {
+        var source = new FakeByteSource { HasFallback = true }
+            .Begin().Add(new byte[256 * 1024 + 100])
+            .Begin().Add(TestAudioFiles.Mp3NoiseFrames(40, 1, OutputRate));
+        source.Complete();
+
+        using var decoder = Open(source);
+        var samples = new List<float>();
+
+        Assert.Equal(LiveReadStatus.Ended, Drain(decoder, samples));
+        Assert.Empty(source.Undecodable);
+        Assert.NotEmpty(samples);
+        Assert.Null(decoder.EndFailure);
+    }
 }

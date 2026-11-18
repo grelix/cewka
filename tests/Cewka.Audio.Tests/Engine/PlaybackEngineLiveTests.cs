@@ -875,6 +875,8 @@ public class PlaybackEngineLiveTests
         h.Opened.Clear();
         h.TrackChanges.Clear();
 
+        // Porównanie względne: ile dźwięku wypompowano do chwili startu, zależy od obciążenia maszyny.
+        var before = rig.Engine.Position;
         rig.Engine.Next();
         rig.Engine.Previous();
         rig.Engine.SeekTo(TimeSpan.FromSeconds(10));
@@ -884,7 +886,7 @@ public class PlaybackEngineLiveTests
         Assert.Empty(h.Opened);
         Assert.Empty(h.TrackChanges);
         Assert.Equal(-1, rig.Engine.CurrentIndex);
-        Assert.True(rig.Engine.Position < TimeSpan.FromSeconds(5));
+        Assert.InRange(rig.Engine.Position, before, before + TimeSpan.FromSeconds(5));
         Assert.Equal(0, rig.Session.Stopped);
     }
 

@@ -16,12 +16,19 @@ public enum ImageFetchProblem
     /// <summary>Serwer odpowiedział, że obrazu nie ma (4xx).</summary>
     Missing,
 
+    /// <summary>
+    /// Serwer chwilowo odmawia: za dużo żądań (429) albo przekroczony czas żądania (408). Obraz istnieje
+    /// i ten sam adres odda go po krótkiej przerwie.
+    /// </summary>
+    Throttled,
+
     /// <summary>Treść przekracza limit bajtów, także po rozpakowaniu.</summary>
     TooLarge,
 }
 
 /// <summary>Wynik pobrania obrazu: bajty albo przyczyna porażki.</summary>
-public sealed record ImageFetchResult(byte[]? Bytes, ImageFetchProblem Problem, int Status = 0)
+/// <param name="RetryAfter">Przerwa, o którą poprosił serwer (nagłówek Retry-After), jeśli ją podał.</param>
+public sealed record ImageFetchResult(byte[]? Bytes, ImageFetchProblem Problem, int Status = 0, TimeSpan? RetryAfter = null)
 {
     public bool Ok => Bytes is not null;
 }
@@ -64,8 +71,7 @@ public sealed class ImageFetcher : IDisposable
         }
         catch (LiveOpenException e)
         {
-            var status = e.Failure.HttpStatus ?? 0;
-            return new ImageFetchResult(null, ProblemFor(e.Failure.Reason, status), status);
+            return FromFailure(e);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -77,9 +83,16 @@ public sealed class ImageFetcher : IDisposable
         }
     }
 
-    private static ImageFetchProblem ProblemFor(LiveFailureReason reason, int status) => reason switch
+    internal static ImageFetchResult FromFailure(LiveOpenException e)
+    {
+        var status = e.Failure.HttpStatus ?? 0;
+        return new ImageFetchResult(null, ProblemFor(e.Failure.Reason, status), status, e.RetryAfter);
+    }
+
+    internal static ImageFetchProblem ProblemFor(LiveFailureReason reason, int status) => reason switch
     {
         LiveFailureReason.InsecureDowngrade or LiveFailureReason.AddressRefused => ImageFetchProblem.Refused,
+        _ when status is 429 or 408 => ImageFetchProblem.Throttled,
         _ when status is >= 400 and < 500 => ImageFetchProblem.Missing,
         _ => ImageFetchProblem.Unavailable,
     };

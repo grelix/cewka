@@ -369,4 +369,94 @@ public sealed class AacFrameDecoderTests
         Assert.True(left > 0);
         Assert.Equal(left, right, 3);
     }
+
+    /// <summary>Sam nagłówek ADTS, bez treści ramki; indeks 3 to 48 kHz, 4 to 44,1 kHz.</summary>
+    private static byte[] BareHeader(int samplingIndex) =>
+        [0xFF, 0xF1, (byte)(0x40 | samplingIndex << 2), 0x80, 0x00, 0xFF, 0xFC];
+
+    private static void FeedAll(AacFrameDecoder decoder, byte[] input)
+    {
+        var output = new float[decoder.MaxOutputSamples];
+
+        for (var at = 0; at < input.Length && decoder.Failure is null;)
+        {
+            decoder.Decode(input.AsSpan(at), output, out var consumed, out _);
+            if (consumed == 0) break;
+            at += consumed;
+        }
+    }
+
+    /// <summary>
+    /// Strumień, który zmienia parametry co dwie ramki i nie niesie dźwięku, kazał budować dekoder
+    /// systemu przy każdej zmianie: tysiące potoków z własnymi wątkami, zanim zadziałał limit bajtów.
+    /// </summary>
+    [Fact]
+    public void ParametersChangingWithoutAnySoundEndTheStreamAfterAFewRebuilds()
+    {
+        using var decoder = Decoder();
+
+        var input = Enumerable.Range(0, 200)
+            .SelectMany(pair => BareHeader(pair % 2 == 0 ? 3 : 4).Concat(BareHeader(pair % 2 == 0 ? 3 : 4)))
+            .ToArray();
+
+        FeedAll(decoder, input);
+
+        Assert.Equal(AacFrameDecoder.MaxBuildsWithoutSound, _backends.Count);
+        Assert.Equal(LiveFailureReason.UndecodableData, decoder.Failure?.Reason);
+    }
+
+    /// <summary>Zmiana parametrów, po której jest dźwięk, to zwykła rzecz i limitu nie zbliża.</summary>
+    [Fact]
+    public void ParametersChangingWithSoundInBetweenAreNotLimited()
+    {
+        var built = 0;
+        using var decoder = new AacFrameDecoder(_ =>
+        {
+            built++;
+            var backend = new FakeBackend();
+            backend.Ready.Enqueue((1024, 44100, 2, new float[2048]));
+            return backend;
+        });
+
+        var input = Enumerable.Range(0, 40)
+            .SelectMany(pair => BareHeader(pair % 2 == 0 ? 3 : 4).Concat(BareHeader(pair % 2 == 0 ? 3 : 4)))
+            .ToArray();
+
+        FeedAll(decoder, input);
+
+        Assert.Null(decoder.Failure);
+        Assert.True(built > AacFrameDecoder.MaxBuildsWithoutSound, $"zbudowano {built}");
+    }
+
+    /// <summary>
+    /// Dekoder systemu potyka się czasem na pojedynczych ramkach i jest wtedy budowany od nowa
+    /// przy tych samych parametrach. Taka seria nie jest zmianą parametrów: stacja, która po niej
+    /// wraca do dźwięku, nie może zostać zakończona limitem budów.
+    /// </summary>
+    [Fact]
+    public void RebuildsAfterBackendFailuresWithTheSameParametersAreNotLimited()
+    {
+        var built = 0;
+        using var decoder = new AacFrameDecoder(_ =>
+        {
+            var backend = new FakeBackend { Failed = ++built <= 12 };
+            if (!backend.Failed) backend.Ready.Enqueue((1024, 44100, 2, new float[2048]));
+            return backend;
+        });
+
+        var input = Frames(40);
+        var output = new float[decoder.MaxOutputSamples];
+        var frames = 0;
+
+        for (var at = 0; at < input.Length && decoder.Failure is null;)
+        {
+            frames += decoder.Decode(input.AsSpan(at), output, out var consumed, out _);
+            if (consumed == 0) break;
+            at += consumed;
+        }
+
+        Assert.Null(decoder.Failure);
+        Assert.Equal(13, built);
+        Assert.True(frames > 0);
+    }
 }

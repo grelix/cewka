@@ -18,7 +18,7 @@ namespace Cewka.Audio.Playback;
 /// <para>Pułapka: wątek dźwiękowy nie alokuje, nie czeka na blokady i nie zgłasza zdarzeń;
 /// przejście przez granicę sygnalizuje flagą, którą odbiera wątek dekodujący.</para>
 /// </summary>
-public sealed class PlaybackEngine : IDisposable
+public sealed partial class PlaybackEngine : IDisposable
 {
     /// <summary>Half a second of lookahead: enough to open the next file, short enough that seeking feels immediate.</summary>
     private const double RingSeconds = 0.5;
@@ -426,7 +426,10 @@ public sealed class PlaybackEngine : IDisposable
             return;
         }
 
-        Graph.OnTrackChanged(entry);
+        // Wołane z wątku interfejsu: znaczniki sąsiadów tylko już odczytane, brakujące czyta wątek analizy.
+        var refreshed = GainFor(entry, mayReadTags: false);
+        RememberRefreshedGain(entry, refreshed);
+        Graph.ApplyTrackGain(refreshed, snap: false);
     }
 
     public int SampleRate { get; private set; } = 48000;
@@ -477,6 +480,17 @@ public sealed class PlaybackEngine : IDisposable
     }
 
     public TimeSpan Duration => TimeSpan.FromSeconds(_current.TotalFrames / (double)Math.Max(1, SampleRate));
+
+    /// <summary>Dłuższego utworu nie ma; taka długość to uszkodzony nagłówek.</summary>
+    private const long MaxTrackSeconds = 30L * 24 * 3600;
+
+    /// <summary>
+    /// Długość podana przez dekoder pochodzi z pliku. Ujemna albo niedorzecznie wielka (granula
+    /// końca w uszkodzonym pliku Ogg sięga 2^63) staje się nieznaną, bo dalej trafia do
+    /// <see cref="TimeSpan"/>, który przy takiej wartości rzuca wyjątek na wątku interfejsu.
+    /// </summary>
+    internal static long PlausibleLength(long frames, int sampleRate) =>
+        frames > 0 && frames / Math.Max(1, sampleRate) <= MaxTrackSeconds ? frames : 0;
 
     // ================= konfiguracja =================
 
@@ -705,14 +719,18 @@ public sealed class PlaybackEngine : IDisposable
     // ================= kolejka =================
 
     /// <summary>Replaces the queue and begins at <paramref name="startIndex"/>.</summary>
-    public void SetQueue(IEnumerable<string> paths, int startIndex = 0)
+    public void SetQueue(IEnumerable<string> paths, int startIndex = 0) =>
+        SetQueue(paths.Select(path => new QueueItem(path)), startIndex);
+
+    /// <summary>Zastępuje kolejkę plikami i utworami arkuszy, zaczyna od <paramref name="startIndex"/>.</summary>
+    public void SetQueue(IEnumerable<QueueItem> items, int startIndex = 0)
     {
         int count;
         lock (_sync)
         {
             _orderVersion++;
             _queue.Clear();
-            foreach (var path in paths) _queue.Add(new QueueEntry { Path = path });
+            foreach (var item in items) _queue.Add(NewEntry(item));
             count = _queue.Count;
             _bookmark = null;
 
@@ -723,11 +741,13 @@ public sealed class PlaybackEngine : IDisposable
         if (count > 0) PlayIndex(Math.Clamp(startIndex, 0, count - 1));
     }
 
-    public void Enqueue(IEnumerable<string> paths)
+    public void Enqueue(IEnumerable<string> paths) => Enqueue(paths.Select(path => new QueueItem(path)));
+
+    public void Enqueue(IEnumerable<QueueItem> items)
     {
         lock (_sync)
         {
-            var added = paths.Select(path => new QueueEntry { Path = path }).ToList();
+            var added = items.Select(NewEntry).ToList();
             _orderVersion++;
             _queue.AddRange(added);
             _shuffleOrder.Insert(added, OrderAnchorLocked());
@@ -985,10 +1005,18 @@ public sealed class PlaybackEngine : IDisposable
         if (index >= 0) ThreadPool.UnsafeQueueUserWorkItem(_ => TrackChanged?.Invoke(index), null);
     }
 
+    private static QueueEntry NewEntry(QueueItem item) => new() { Path = item.Path, Sheet = item.Sheet };
+
     /// <summary>Paths in queue order, for saving between runs.</summary>
     public IReadOnlyList<string> QueuePaths
     {
         get { lock (_sync) return _queue.Select(entry => entry.Path).ToArray(); }
+    }
+
+    /// <summary>Pozycje w kolejności kolejki, razem z wycinkami arkuszy; z nich kolejkę da się odtworzyć.</summary>
+    public IReadOnlyList<QueueItem> QueueItems
+    {
+        get { lock (_sync) return _queue.Select(entry => entry.Item).ToArray(); }
     }
 
     public void ClearQueue()
@@ -1599,6 +1627,50 @@ public sealed class PlaybackEngine : IDisposable
         return wrap ? _queue[0] : null;
     }
 
+    /// <summary>
+    /// Ile wpisów kolejki po każdej stronie dostaje źródło wzmocnienia. Album do pomiaru ma
+    /// najwyżej 200 wpisów, więc tyle wystarcza, żeby objął go cały, gdziekolwiek stoi wpis.
+    /// </summary>
+    internal const int GainContextReach = 199;
+
+    /// <summary>
+    /// Otoczenie wpisu dla źródła wzmocnienia: sąsiedzi w kolejności odtwarzania, odczytani bez
+    /// losowania i bez przesuwania permutacji, oraz kopia kolejki wokół wpisu. Kopia, bo źródło
+    /// czyta ją poza blokadą, a kolejka może się w tym czasie zmienić.
+    /// </summary>
+    private TrackGainContext GainContextLocked(QueueEntry entry)
+    {
+        var index = _queue.IndexOf(entry);
+        if (index < 0) return TrackGainContext.Alone;
+
+        QueueEntry? previous, next;
+        if (_shuffle && _queue.Count > 1 && _shuffleOrder.Order.Count == _queue.Count)
+        {
+            (previous, next) = _shuffleOrder.Around(entry);
+        }
+        else
+        {
+            previous = index > 0 ? _queue[index - 1] : null;
+            next = index + 1 < _queue.Count ? _queue[index + 1] : null;
+        }
+
+        var first = Math.Max(0, index - GainContextReach);
+        var count = Math.Min(_queue.Count, index + GainContextReach + 1) - first;
+        var surrounding = new QueueEntry[count];
+        _queue.CopyTo(first, surrounding, 0, count);
+        return new TrackGainContext(previous, next, surrounding, index - first);
+    }
+
+    /// <summary>Wzmocnienie wpisu z jego otoczeniem. Otoczenie pod blokadą, źródło już poza nią.</summary>
+    /// <param name="mayReadTags">Fałsz poza wątkiem dekodującym: źródło nie czyta wtedy znaczników sąsiadów.</param>
+    private TrackGain? GainFor(QueueEntry entry, bool mayReadTags = true)
+    {
+        TrackGainContext context;
+        lock (_sync) context = GainContextLocked(entry);
+        if (!mayReadTags) context = context with { MayReadTags = false };
+        return Graph.TrackGainFor(entry, context);
+    }
+
     private QueueEntry? PrecedingEntryLocked(QueueEntry from)
     {
         if (_shuffle && _queue.Count > 1)
@@ -1816,7 +1888,9 @@ public sealed class PlaybackEngine : IDisposable
             return true;
         }
 
-        Graph.ApplyTrackGain(next.Gain, snap: false);
+        // W nakładce końcówka poprzedniego utworu jest już przeskalowana na wzmocnienie nowego;
+        // dochodzenie do niego dałoby skok poziomu tej końcówki.
+        Graph.ApplyTrackGain(next.Gain, snap: next.Overlap);
         Volatile.Write(ref session.TrackChangeSignal, 1);
         return true;
     }
@@ -1895,6 +1969,7 @@ public sealed class PlaybackEngine : IDisposable
                     }
 
                     CloseDecoder(session);
+                    NoteOutcome(session, failed);
 
                     if (failed is not null && !session.Cancelled)
                     {
@@ -2032,6 +2107,10 @@ public sealed class PlaybackEngine : IDisposable
         // 1. Wyciszenie i opróżnienie bufora.
         WaitForFlush(session);
 
+        // Utwór wyciszany w nakładce już nie wraca, także gdy dekoder następnego zostaje.
+        DropOverlap(session);
+        session.Verdict = CrossfadeVerdict.None;
+
         // 2. Odczyt celu.
         QueueEntry? entry;
         long frame;
@@ -2071,6 +2150,9 @@ public sealed class PlaybackEngine : IDisposable
             session.LiveMarks.Clear();
         }
 
+        // Nowe polecenie: wpisy bez dźwięku dostają kolejną szansę.
+        session.Barren.Clear();
+
         if (entry is null)
         {
             CloseDecoder(session);
@@ -2106,6 +2188,9 @@ public sealed class PlaybackEngine : IDisposable
             // Dekoder, którego przewinięcie się nie udało, stoi gdzie indziej niż cel;
             // pozycja ma opisywać to, co faktycznie zagra.
             start = Math.Max(0, decoder.Position);
+
+            // Przewinięty pod sam koniec nie zagra już nic, a pusty nie jest.
+            if (start > 0) session.ProducedSound = true;
         }
         else if (decoder.Position != 0)
         {
@@ -2113,9 +2198,11 @@ public sealed class PlaybackEngine : IDisposable
             start = Math.Max(0, decoder.Position);
         }
 
-        var gain = Graph.TrackGainFor(opened);
-        var boundary = new TrackBoundary(session.Ring.TotalWritten, opened, decoder.TotalFrames, start, gain);
+        var gain = GainFor(opened);
+        var boundary = new TrackBoundary(
+            session.Ring.TotalWritten, opened, PlausibleLength(decoder.TotalFrames, SampleRate), start, gain);
 
+        session.EntryGain = gain;
         if (!SetCurrent(session, boundary)) return;
 
         _pendingGain = gain;
@@ -2135,6 +2222,7 @@ public sealed class PlaybackEngine : IDisposable
         try
         {
             session.Decoder = OpenLiveDecoder(entry.Live!.Session.Bytes, SampleRate, Channels);
+            RememberSource(entry, session.Decoder);
             session.LiveStartPending = true;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -2260,9 +2348,25 @@ public sealed class PlaybackEngine : IDisposable
 
     private void PumpOneChunk(FeederSession session)
     {
+        if (session.Overlap is not null)
+        {
+            PumpOverlap(session);
+            return;
+        }
+
         var decoder = session.Decoder!;
         var needed = DecodeChunkFrames * Channels;
         if (session.Buffer.Length < needed) session.Buffer = new float[needed];
+
+        // Odczyt nie przeskakuje miejsca, w którym ma się zacząć przenikanie.
+        var lead = CrossfadeLead(decoder);
+        if (lead == 0 && TryBeginCrossfade(session))
+        {
+            PumpOverlap(session);
+            return;
+        }
+
+        if (lead > 0 && lead < DecodeChunkFrames) needed = (int)lead * Channels;
 
         var frames = decoder.Read(session.Buffer.AsSpan(0, needed));
 
@@ -2338,6 +2442,8 @@ public sealed class PlaybackEngine : IDisposable
             if (accepted == 0) { Thread.Sleep(2); continue; }
             written += accepted;
         }
+
+        if (written > 0) session.ProducedSound = true;
     }
 
     /// <summary>
@@ -2347,16 +2453,51 @@ public sealed class PlaybackEngine : IDisposable
     private void AdvanceToNextTrack(FeederSession session)
     {
         var finished = session.Entry;
-        CloseDecoder(session);
+
+        // Końcówka filtru zostaje przy dekoderze, dopóki nie wiadomo, czy następny utwór ją przejmie.
+        session.Finished = session.Decoder;
+        session.Decoder = null;
+        NoteOutcome(session, finished);
 
         QueueEntry? next = null;
         lock (_sync)
         {
-            if (finished is not null && _queue.Contains(finished))
+            // Przenikanie próbowało już wszystkich następnych i żadnego nie otworzyło; kolejka od tamtej
+            // chwili się nie zmieniła, więc druga próba tylko zgłosiłaby te same błędy.
+            var exhausted = session.Verdict == CrossfadeVerdict.Exhausted && session.VerdictVersion == OrderVersionLocked();
+
+            if (!exhausted && finished is not null && _queue.Contains(finished))
                 next = _repeat == RepeatMode.Track ? finished : FollowingEntryLocked(finished, userInitiated: false);
         }
 
         OpenFirstPlayable(session, next, gapless: true);
+    }
+
+    /// <summary>
+    /// Zapisuje, czy zamknięty właśnie wpis dał jakikolwiek dźwięk. Plik z samym nagłówkiem albo
+    /// psujący się przy pierwszym odczycie otwiera się poprawnie, więc przy powtarzaniu wątek
+    /// dekodujący otwierałby go w kółko bez przerwy. Wpisy bez dźwięku zbierają się do pierwszego,
+    /// który coś zagra, albo do następnego polecenia.
+    /// </summary>
+    private static void NoteOutcome(FeederSession session, QueueEntry? entry)
+    {
+        if (session.ProducedSound) session.Barren.Clear();
+        else if (entry is not null) session.Barren.Add(entry);
+
+        session.ProducedSound = false;
+    }
+
+    /// <summary>
+    /// Czy otwarcie kandydata tylko powtórzyłoby koło bez dźwięku. Przy powtarzaniu utworu kołem
+    /// jest on sam. Przy powtarzaniu kolejki koło zamyka się dopiero wtedy, gdy od ostatniego
+    /// dźwięku nie dał go żaden wpis kolejki: w kolejności losowej pusty wpis wraca na początku
+    /// następnej rundy, zanim przyjdzie kolej na ten, który gra.
+    /// </summary>
+    private bool ClosesBarrenCircleLocked(FeederSession session, QueueEntry candidate)
+    {
+        if (!session.Barren.Contains(candidate)) return false;
+
+        return _repeat == RepeatMode.Track || _queue.TrueForAll(session.Barren.Contains);
     }
 
     /// <summary>
@@ -2374,6 +2515,10 @@ public sealed class PlaybackEngine : IDisposable
             lock (_sync)
             {
                 if (!_queue.Contains(candidate)) break;
+
+                // Sprawdzane tutaj, bo do pustego wpisu dochodzi się także po nieudanym otwarciu innego.
+                if (ClosesBarrenCircleLocked(session, candidate)) break;
+
                 session.Entry = candidate;
             }
 
@@ -2381,10 +2526,14 @@ public sealed class PlaybackEngine : IDisposable
             {
                 if (gapless)
                 {
-                    var boundary = new TrackBoundary(
-                        session.Ring.TotalWritten, candidate, session.Decoder!.TotalFrames, 0,
-                        Graph.TrackGainFor(candidate));
+                    SettleTail(session);
 
+                    var gain = GainFor(candidate);
+                    var boundary = new TrackBoundary(
+                        session.Ring.TotalWritten, candidate, PlausibleLength(session.Decoder!.TotalFrames, SampleRate), 0,
+                        gain);
+
+                    session.EntryGain = gain;
                     lock (session.BoundaryLock) session.Boundaries.Enqueue(boundary);
                 }
 
@@ -2393,13 +2542,50 @@ public sealed class PlaybackEngine : IDisposable
 
             ReportFailure(session, candidate, failure);
 
+            // Wpis nie do otwarcia też nie dał dźwięku: koło z samych takich i pustych ma się zamknąć.
+            session.Barren.Add(candidate);
+
             // Powtarzanie utworu nie dotyczy pliku, którego nie da się otworzyć.
             lock (_sync) candidate = _queue.Contains(candidate) ? FollowingEntryLocked(candidate, userInitiated: false) : null;
         }
 
         session.Entry = null;
+        if (gapless) SettleTail(session);
         EndOfQueue(session, gapless, generation ?? Volatile.Read(ref _generation));
         return null;
+    }
+
+    /// <summary>
+    /// Końcówka filtru utworu, który właśnie się skończył. Następny utwór w tym samym formacie
+    /// przejmuje stan konwersji i gra tak, jakby oba były jednym plikiem; granica wypada wtedy
+    /// wcześniej o opóźnienie filtru, kilka milisekund. Inaczej końcówka idzie do bufora przed
+    /// granicą, żeby ostatnie ramki utworu nie przepadły.
+    /// </summary>
+    private void SettleTail(FeederSession session)
+    {
+        var finished = session.Finished;
+        if (finished is null) return;
+        session.Finished = null;
+
+        try
+        {
+            if (session.Decoder is IContinuousDecoder next && next.TryContinueFrom(SliceDecoder.Unwrap(finished))) return;
+            if (finished is not IContinuousDecoder tail) return;
+
+            var needed = DecodeChunkFrames * Channels;
+            if (session.Buffer.Length < needed) session.Buffer = new float[needed];
+
+            // Końcówka należy do poprzedniego wpisu, a nie do świeżo otwartego.
+            var produced = session.ProducedSound;
+            int frames;
+            while (!session.Cancelled && !_seekPending && (frames = tail.DrainTail(session.Buffer.AsSpan(0, needed))) > 0)
+                WriteToRing(session, frames);
+            session.ProducedSound = produced;
+        }
+        finally
+        {
+            finished.Dispose();
+        }
     }
 
     /// <summary>
@@ -2455,7 +2641,28 @@ public sealed class PlaybackEngine : IDisposable
                 return false;
             }
 
-            session.Decoder = OpenDecoder(entry.Path, SampleRate, Channels);
+            // Następny utwór arkusza w tym samym pliku gra dalej z tego samego dekodera: bez
+            // przewinięcia i bez zerowania konwersji. Granicę utworu zapisuje wołający, jak zwykle.
+            if (entry.Sheet is { } sheet && session.Finished is SliceDecoder slice && slice.TryAdvance(entry.Path, sheet))
+            {
+                session.Finished = null;
+                session.Decoder = slice;
+                RememberSource(entry, session.Decoder);
+                session.ProducedSound = false;
+                session.Verdict = CrossfadeVerdict.None;
+                entry.OpenFailure = null;
+                failure = default;
+                return true;
+            }
+
+            var decoder = OpenDecoder(entry.Path, SampleRate, Channels);
+            session.Decoder = entry.Sheet is { } track ? Slice(decoder, entry.Path, track) : decoder;
+            RememberSource(entry, session.Decoder);
+            session.ProducedSound = false;
+            session.Verdict = CrossfadeVerdict.None;
+
+            // O końcówce filtru rozstrzyga przejście do następnego utworu.
+            if (session.Decoder is IContinuousDecoder continuous) continuous.HoldTail = true;
             entry.OpenFailure = null;
             failure = default;
             return true;
@@ -2467,6 +2674,10 @@ public sealed class PlaybackEngine : IDisposable
                 FileNotFoundException or DirectoryNotFoundException => TrackFailureReason.FileMissing,
                 UnauthorizedAccessException => TrackFailureReason.AccessDenied,
                 IOException => TrackFailureReason.FileUnavailable,
+
+                // Dekoder rozpoznał plik i odmówił jego odmiany (WavPack DSD, częstotliwość poza
+                // zakresem konwersji); uszkodzenie dekodery zgłaszają osobnym powodem.
+                AudioException { Reason: DecoderFailure.Unspecified } => TrackFailureReason.UnsupportedFormat,
                 _ => TrackFailureReason.DamagedFile,
             };
 
@@ -2475,6 +2686,20 @@ public sealed class PlaybackEngine : IDisposable
             entry.OpenFailure = reason;
             failure = new TrackFailure(reason, ex.Message);
             return false;
+        }
+    }
+
+    /// <summary>Wycinek arkusza; dekoder zamykany, gdy samo ustawienie początku się nie powiedzie.</summary>
+    private static SliceDecoder Slice(IAudioDecoder decoder, string path, SheetTrack track)
+    {
+        try
+        {
+            return new SliceDecoder(decoder, path, track);
+        }
+        catch
+        {
+            decoder.Dispose();
+            throw;
         }
     }
 
@@ -2502,6 +2727,11 @@ public sealed class PlaybackEngine : IDisposable
     {
         session.Decoder?.Dispose();
         session.Decoder = null;
+
+        session.Finished?.Dispose();
+        session.Finished = null;
+
+        DropOverlap(session);
     }
 
     public void Dispose() => TearDown(keepPlace: false);
@@ -2529,6 +2759,12 @@ public sealed class PlaybackEngine : IDisposable
 
         public IAudioDecoder? Decoder;
 
+        /// <summary>
+        /// Dekoder utworu, który doszedł do końca, z końcówką filtru; tylko na czas otwierania
+        /// następnego. Tylko wątek dekodujący.
+        /// </summary>
+        public IAudioDecoder? Finished;
+
         /// <summary>Wpis otwarty albo właśnie otwierany przez dekoder; zapisywany pod blokadą kolejki.</summary>
         public volatile QueueEntry? Entry;
 
@@ -2550,6 +2786,28 @@ public sealed class PlaybackEngine : IDisposable
 
         /// <summary>Używa go wyłącznie wątek dekodujący.</summary>
         public LiveLoudnessTracker? LiveLoudness;
+
+        /// <summary>Otwarty dekoder zapisał już coś do bufora; tylko wątek dekodujący.</summary>
+        public bool ProducedSound;
+
+        /// <summary>
+        /// Wpisy otwarte od ostatniego dźwięku albo polecenia, które nie dały ani ramki; tylko wątek
+        /// dekodujący. Porównywane tożsamością, jak wszędzie w kolejce.
+        /// </summary>
+        public readonly HashSet<QueueEntry> Barren = new(ReferenceEqualityComparer.Instance);
+
+        /// <summary>Wzmocnienie zapisane w granicy dekodowanego wpisu; tylko wątek dekodujący.</summary>
+        public TrackGain? EntryGain;
+
+        /// <summary>Trwające przenikanie: utwór wyciszany obok dekodera następnego; tylko wątek dekodujący.</summary>
+        public CrossfadeOverlap? Overlap;
+
+        /// <summary>Druga połowa nakładki: próbki wyciszanego utworu.</summary>
+        public float[] FadeBuffer = [];
+
+        /// <summary>Rozstrzygnięcie przenikania dla dekodowanego utworu i wersja kolejności, przy której zapadło.</summary>
+        public CrossfadeVerdict Verdict;
+        public long VerdictVersion;
     }
 
     private enum LiveMarkKind { Started, Title, Ended }
@@ -2565,6 +2823,7 @@ public sealed class PlaybackEngine : IDisposable
     /// track played from its beginning, the seek target after a seek. <paramref name="Gain"/>
     /// is the track's normalisation gain with its programme level, applied by the audio thread
     /// when the boundary is crossed. An end marker has no entry and closes the queue.
+    /// <paramref name="Overlap"/> marks the start of a crossfade: the gain is set at once, not eased.
     /// </para>
     /// </summary>
     private sealed record TrackBoundary(
@@ -2574,7 +2833,8 @@ public sealed class PlaybackEngine : IDisposable
         long StartFrame = 0,
         TrackGain? Gain = null,
         bool IsEnd = false,
-        int Generation = 0)
+        int Generation = 0,
+        bool Overlap = false)
     {
         public static readonly TrackBoundary None = new(0, null, 0);
     }

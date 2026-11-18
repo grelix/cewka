@@ -5,11 +5,21 @@ namespace Cewka.App.Radio;
 /// <summary>Wynik importu playlisty stacji.</summary>
 /// <param name="Stations">Stacje z adresami dopuszczonymi (bez <c>AllowLocalAddress</c>).</param>
 /// <param name="Rejected">Wpisy odrzucone, z powodem: adres niepoprawny, inny schemat niż http(s), domena z listy blokad.</param>
-public sealed record PlaylistImport(IReadOnlyList<RadioStation> Stations, IReadOnlyList<(string Url, AddressVerdict Reason)> Rejected);
+/// <param name="Excess">Wpisy pominięte bez sprawdzenia, bo import osiągnął <see cref="StationPlaylist.MaxStations"/>.</param>
+public sealed record PlaylistImport(IReadOnlyList<RadioStation> Stations, IReadOnlyList<(string Url, AddressVerdict Reason)> Rejected, int Excess = 0);
 
 /// <summary>Import M3U i PLS do ulubionych oraz eksport do rozszerzonego M3U.</summary>
 public static class StationPlaylist
 {
+    /// <summary>
+    /// Pułap stacji z jednego importu. Plik pod limitem rozmiaru mieści ponad sto tysięcy adresów,
+    /// a import, lista ulubionych i plik stanu obsługiwane są na wątku interfejsu.
+    /// </summary>
+    public const int MaxStations = 2000;
+
+    /// <summary>Najdłuższa nazwa stacji z pliku; ta sama co dla tytułów z sieci.</summary>
+    private const int MaxNameChars = 300;
+
     /// <summary>Plik M3U/M3U8 (z <c>#EXTINF</c> lub bez) albo PLS; rozpoznaje po treści.</summary>
     public static PlaylistImport Import(string text, RadioBlocklist? blocklist = null)
     {
@@ -21,8 +31,17 @@ public static class StationPlaylist
         var stations = new List<RadioStation>();
         var rejected = new List<(string, AddressVerdict)>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (name, url) in entries)
+        var excess = 0;
+        for (var i = 0; i < entries.Count; i++)
         {
+            if (stations.Count == MaxStations)
+            {
+                excess = entries.Count - i;
+                break;
+            }
+
+            var (name, url) = entries[i];
+
             // Adresy z importu nigdy nie sięgają do sieci lokalnej; blokady jak przy wpisanych.
             var verdict = blocklist.CheckAddress(url);
             if (verdict != AddressVerdict.Allowed)
@@ -31,7 +50,7 @@ public static class StationPlaylist
                 continue;
             }
 
-            var station = RadioState.CreateCustom(name ?? url, url, country: null, typed: false);
+            var station = RadioState.CreateCustom(CleanName(name) ?? CleanName(url) ?? url, url, country: null, typed: false);
             if (blocklist.IsBlockedName(station.Name))
             {
                 rejected.Add((url, AddressVerdict.Blocked));
@@ -42,8 +61,48 @@ public static class StationPlaylist
                 stations.Add(station);
         }
 
-        return new PlaylistImport(stations, rejected);
+        return new PlaylistImport(stations, rejected, excess);
     }
+
+    /// <summary>
+    /// Nazwa do listy i pliku stanu, oczyszczona jak tytuły z sieci: bez znaków sterujących
+    /// i kierunku pisma, z jedną spacją zamiast odstępów, najwyżej <see cref="MaxNameChars"/>
+    /// znaków. Pusta daje null.
+    /// </summary>
+    private static string? CleanName(string? name)
+    {
+        if (name is null)
+            return null;
+
+        var text = new StringBuilder(Math.Min(name.Length, MaxNameChars + 1));
+        foreach (var c in name)
+        {
+            if (text.Length > MaxNameChars)
+                break;
+
+            if (char.IsWhiteSpace(c))
+            {
+                if (text.Length > 0 && text[^1] != ' ')
+                    text.Append(' ');
+            }
+            else if (!char.IsControl(c) && !IsDirectionMark(c))
+            {
+                text.Append(c);
+            }
+        }
+
+        if (text.Length > MaxNameChars)
+        {
+            text.Length = MaxNameChars;
+            if (char.IsHighSurrogate(text[^1]))
+                text.Length--;
+        }
+
+        var result = text.ToString().TrimEnd();
+        return result.Length == 0 ? null : result;
+    }
+
+    private static bool IsDirectionMark(char c) => c is >= '\u202A' and <= '\u202E' or >= '\u2066' and <= '\u2069';
 
     /// <summary>
     /// Eksport ulubionych do rozszerzonego M3U. Nazwę z krajem (przy nazwie powtórzonej w liście) buduje

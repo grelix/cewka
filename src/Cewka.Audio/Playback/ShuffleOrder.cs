@@ -210,6 +210,26 @@ internal sealed class ShuffleOrder
         return wrap ? _order[^1] : null;
     }
 
+    /// <summary>
+    /// Wpisy przed i po <paramref name="entry"/> w bieżącej permutacji, bez losowania i bez zmiany
+    /// stanu. Przed początkiem rundy stoi wpis, który zamknął poprzednią; za końcem nic, bo następna
+    /// runda może nie zostać jeszcze rozlosowana.
+    /// </summary>
+    public (QueueEntry? Previous, QueueEntry? Next) Around(QueueEntry entry)
+    {
+        // Wpis zamykający poprzednią rundę gra jeszcze, a po nim zagra początek nowej; jego
+        // poprzednik został w rozlosowanej już rundzie.
+        if (ReferenceEquals(entry, _closedRound)) return (null, _order.Count > 0 ? _order[0] : null);
+
+        var position = _order.IndexOf(entry);
+        if (position < 0) return (null, null);
+
+        var previous = position > 0 ? _order[position - 1]
+            : _closedRound is { } closed && !ReferenceEquals(closed, entry) ? closed : null;
+        var next = position + 1 < _order.Count ? _order[position + 1] : null;
+        return (previous, next);
+    }
+
     /// <summary>Permutacja budowana, gdy losowanie było wyłączone w chwili zmian kolejki, może nie pasować.</summary>
     private void EnsureMatches(IReadOnlyList<QueueEntry> queue, QueueEntry? current)
     {

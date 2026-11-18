@@ -252,6 +252,15 @@ internal sealed class LiveStreamDecoder : ManagedDecoderBase, ILiveDecoder
     /// <summary>O zapasowym adresie wie źródło; kończymy dopiero, gdy nie ma czego spróbować.</summary>
     private void OnUndecodable(LiveFailure failure)
     {
+        // Końcówka starego połączenia: znacznik nowego jest już odebrany, więc bufor wziąłby
+        // zgłoszenie za skargę na nowe połączenie, wyrzucił jego dane i skreślił adres, który gra.
+        if (_pendingBegin is not null)
+        {
+            _bytesWithoutSound = 0;
+            _windowStart = _windowEnd;
+            return;
+        }
+
         if (!_source.ReportUndecodable(failure))
         {
             Finish(failure);

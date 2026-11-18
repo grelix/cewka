@@ -14,7 +14,8 @@ SO="$KATALOG/src/Cewka.Audio/runtimes/linux-x64/native/libcewka_audio.so"
 if [ ! -f "$SO" ] ||
    [ "$KATALOG/native/cewka_audio.c" -nt "$SO" ] ||
    [ "$KATALOG/native/build-linux.sh" -nt "$SO" ] ||
-   [ "$KATALOG/native/miniaudio/miniaudio.h" -nt "$SO" ]; then
+   [ "$KATALOG/native/miniaudio/miniaudio.h" -nt "$SO" ] ||
+   [ -n "$(find "$KATALOG/native/wavpack" -type f -newer "$SO" 2>/dev/null | head -n 1)" ]; then
     echo "Biblioteka natywna nieaktualna lub brak, budowanie..."
     "$KATALOG/native/build-linux.sh"
 fi

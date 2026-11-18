@@ -81,6 +81,59 @@ public class StationPlaylistTests
         Assert.Single(import.Stations);
     }
 
+    /// <summary>Plik tuż pod limitem rozmiaru mieści ponad sto tysięcy adresów; jeden import ma pułap stacji.</summary>
+    [Fact]
+    public void ImportMaPulapLiczbyStacjiANadmiarJestLiczony()
+    {
+        var text = string.Join("\n", Enumerable.Range(0, 100_000).Select(i => $"http://a.example.com/{i}"));
+
+        var import = StationPlaylist.Import(text);
+
+        Assert.Equal(StationPlaylist.MaxStations, import.Stations.Count);
+        Assert.Equal("http://a.example.com/0", import.Stations[0].Streams[0].Url);
+        Assert.Equal(100_000 - StationPlaylist.MaxStations, import.Excess);
+        Assert.Empty(import.Rejected);
+    }
+
+    [Fact]
+    public void ImportPonizejPulapuNieMaNadmiaru()
+    {
+        Assert.Equal(0, StationPlaylist.Import("http://a.example.com/live\n").Excess);
+    }
+
+    /// <summary>Nazwa z pliku trafia na listę i do pliku stanu: przycięta i bez znaków sterujących, jak tytuły z sieci.</summary>
+    [Fact]
+    public void NazwaZExtinfJestPrzycinanaICzyszczona()
+    {
+        var name = "Radio\u0007 \u202Eodwrócone\t\tdalej " + new string('x', 1 << 20);
+
+        var station = Assert.Single(StationPlaylist.Import($"#EXTINF:-1,{name}\nhttp://a.example.com/live\n").Stations);
+
+        Assert.True(station.Name.Length <= 300, $"długość {station.Name.Length}");
+        Assert.StartsWith("Radio odwrócone dalej xxx", station.Name);
+        Assert.DoesNotContain(station.Name, char.IsControl);
+    }
+
+    [Fact]
+    public void NazwaZSamychZnakowSterujacychDajeAdres()
+    {
+        var station = Assert.Single(StationPlaylist.Import("#EXTINF:-1,\u0001\u0002\nhttp://a.example.com/live\n").Stations);
+
+        Assert.Equal("http://a.example.com/live", station.Name);
+    }
+
+    /// <summary>Adres bez nazwy staje się nazwą; długi adres też nie może dać nazwy bez końca.</summary>
+    [Fact]
+    public void DlugiAdresJakoNazwaJestPrzycinany()
+    {
+        var url = "http://a.example.com/" + new string('a', 5000);
+
+        var station = Assert.Single(StationPlaylist.Import(url + "\n").Stations);
+
+        Assert.True(station.Name.Length <= 300, $"długość {station.Name.Length}");
+        Assert.Equal(url, station.Streams[0].Url);
+    }
+
     [Fact]
     public void PustyPlikDajePustyWynik()
     {

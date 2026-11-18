@@ -25,6 +25,9 @@ public static class CoverBlur
     /// <summary>Rozmyta okładka prosto z zakodowanego obrazu; nie wymaga wątku interfejsu.</summary>
     public static WriteableBitmap FromEncoded(byte[] encoded)
     {
+        if (!CoverImage.FitsAtWidth(encoded, Width))
+            throw new InvalidDataException("okładka poza pułapem wymiarów");
+
         using var stream = new MemoryStream(encoded);
         using var small = Bitmap.DecodeToWidth(stream, Width, BitmapInterpolationMode.MediumQuality);
 

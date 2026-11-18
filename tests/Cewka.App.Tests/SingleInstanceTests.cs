@@ -84,6 +84,63 @@ public sealed class SingleInstanceTests : IDisposable
     }
 
     /// <summary>
+    /// Menedżer plików przekazuje jednej kopii tysiące ścieżek naraz, a znaki spoza ASCII
+    /// rosną w JSON sześciokrotnie. Taka lista ma dojść w całości i jedną wiadomością: odbiorca
+    /// wykonuje otwarcie raz na wiadomość, więc lista w częściach przy zastępowaniu kolejki
+    /// zostawiłaby w niej tylko ostatnią. Dawniej odbiorca odrzucał wszystko ponad megabajt,
+    /// a druga kopia otwierała własne okno.
+    /// </summary>
+    [Fact]
+    public void DlugaListaSciezekDocieraJednaWiadomoscia()
+    {
+        var address = Temporary();
+        var paths = Enumerable.Range(0, 4000).Select(i => $"/muzyka/{i:0000}/" + new string('ж', 300) + ".mp3").ToArray();
+
+        var start = SingleInstance.Start(address, []);
+        using var instance = start.Instance;
+        Assert.NotNull(instance);
+
+        var messages = new System.Collections.Concurrent.ConcurrentQueue<string[]>();
+        instance.Attach(messages.Enqueue);
+        SpinWait.SpinUntil(() => messages.Count == 1, Patience);
+        messages.Clear();
+
+        var claim = SingleInstance.Start(address, paths);
+
+        Assert.True(claim.HandedOver);
+        Assert.True(SpinWait.SpinUntil(() => messages.Sum(m => m.Length) >= paths.Length, Patience), "ścieżki nie doszły");
+        Assert.Single(messages);
+        Assert.Equal(paths, messages.SelectMany(m => m));
+    }
+
+    [Fact]
+    public void PodzialListyMiesciSieWLimicieIZachowujeKolejnosc()
+    {
+        string[] paths = ["/a/1.mp3", "/a/2.mp3", "/a/" + new string('x', 100), "/a/3.mp3", "/a/ż.mp3", "/a/4.mp3"];
+
+        var parts = SingleInstance.SplitForHandOff(paths, 40);
+
+        Assert.All(parts, part => Assert.True(
+            System.Text.Encoding.UTF8.GetByteCount(System.Text.Json.JsonSerializer.Serialize(part)) <= 40, string.Join(",", part)));
+        Assert.Equal(paths.Where(p => p.Length < 100), parts.SelectMany(p => p));
+        Assert.True(parts.Count > 1);
+    }
+
+    [Fact]
+    public void KrotkaListaIdzieJednaWiadomoscia()
+    {
+        Assert.Equal([["/a/1.mp3", "/a/2.mp3"]], SingleInstance.SplitForHandOff(["/a/1.mp3", "/a/2.mp3"], 1 << 20));
+        Assert.Equal([[]], SingleInstance.SplitForHandOff([], 1 << 20));
+    }
+
+    /// <summary>Same zbyt długie ścieżki: okno i tak ma się wysunąć, więc idzie pusta lista.</summary>
+    [Fact]
+    public void ListaZSamychZbytDlugichSciezekDajePustaWiadomosc()
+    {
+        Assert.Equal([[]], SingleInstance.SplitForHandOff(["/" + new string('x', 100)], 40));
+    }
+
+    /// <summary>
     /// Uruchomienie bez argumentów, gdy program już działa, ma wysunąć jego okno na wierzch —
     /// więc pusta lista też musi dojść, zamiast zostać po drodze uznana za brak wiadomości.
     /// </summary>
@@ -201,6 +258,35 @@ public sealed class SingleInstanceTests : IDisposable
         Assert.Null(claim.Instance);
         Assert.False(claim.HandedOver);
         Assert.True(clock.Elapsed < TimeSpan.FromMilliseconds(900), $"start trwał {clock.ElapsedMilliseconds} ms");
+    }
+
+    /// <summary>
+    /// Adres liczony jest z katalogów ustawień i sesji, których czasem nie da się utworzyć.
+    /// Program ma wtedy ruszyć jako zwykła kopia, a nie upaść przed oknem.
+    /// </summary>
+    [Theory]
+    [InlineData("io")]
+    [InlineData("access")]
+    public void StartRuszaGdyAdresuNieDaSieUstalic(string failure)
+    {
+        var claim = SingleInstance.Start(
+            () => throw (failure == "io" ? new IOException("plik zamiast katalogu") : new UnauthorizedAccessException("cudzy katalog")),
+            ["/muzyka/utwor.mp3"]);
+
+        Assert.Null(claim.Instance);
+        Assert.False(claim.HandedOver);
+    }
+
+    [Fact]
+    public void StartZUstalonymAdresemBierzeRole()
+    {
+        var address = Temporary();
+
+        var claim = SingleInstance.Start(() => address, []);
+
+        using var instance = claim.Instance;
+        Assert.NotNull(instance);
+        Assert.False(claim.HandedOver);
     }
 
     /// <summary>

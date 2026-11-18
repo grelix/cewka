@@ -2,6 +2,7 @@ using System.Text.Json;
 using Avalonia.Threading;
 using Cewka.App.Models;
 using Cewka.App.Radio;
+using Cewka.Audio.Dsp;
 using Cewka.Platform;
 
 namespace Cewka.App.Services;
@@ -44,22 +45,145 @@ public sealed class SettingsStore
     /// Pułapka: pełnego magazynu nie da się tu utworzyć, bo ma zegar dyspozytora, a dyspozytora
     /// jeszcze nie ma.
     /// </para>
+    /// <para>
+    /// Plik jest tylko przeglądany w poszukiwaniu jednej właściwości. Pełny odczyt kosztował tu
+    /// prawie 30 ms pierwszego użycia czytnika ustawień, zanim Avalonia w ogóle ruszyła; teraz
+    /// wykonuje go <see cref="Preload"/> w tle.
+    /// </para>
     /// </summary>
-    public static bool ReadSingleInstanceFlag()
+    public static bool ReadSingleInstanceFlag() => ReadSingleInstanceFlag(AppPaths.SettingsFile);
+
+    internal static bool ReadSingleInstanceFlag(string path)
     {
         try
         {
-            var path = AppPaths.SettingsFile;
             if (!File.Exists(path)) return new AppSettings().SingleInstance;
 
-            var loaded = JsonSerializer.Deserialize(
-                File.ReadAllText(path), SettingsJsonContext.Default.AppSettings);
+            var reader = new Utf8JsonReader(File.ReadAllBytes(path).AsSpan().TrimStart(Utf8Preamble), new JsonReaderOptions
+            {
+                AllowTrailingCommas = true,
+                CommentHandling = JsonCommentHandling.Skip,
+            });
 
-            return loaded?.SingleInstance ?? true;
+            var flag = new AppSettings().SingleInstance;
+
+            // Do końca pliku: urwany albo zepsuty dalej oznacza ustawienia domyślne, tak jak przy pełnym odczycie.
+            while (reader.Read())
+            {
+                if (reader.TokenType != JsonTokenType.PropertyName || reader.CurrentDepth != 1
+                    || !reader.ValueTextEquals("singleInstance"u8))
+                    continue;
+
+                reader.Read();
+                flag = reader.TokenType switch
+                {
+                    JsonTokenType.True => true,
+                    JsonTokenType.False => false,
+                    _ => throw new JsonException("singleInstance nie jest wartością logiczną"),
+                };
+            }
+
+            if (flag) return true;
+        }
+        catch
+        {
+            // Przeglądanie nie rozstrzygnęło (inne kodowanie, plik zablokowany albo zepsuty): niżej pełny odczyt.
+        }
+
+        // Wyłączoną jedną kopię i każdy przypadek wątpliwy rozstrzyga pełny odczyt, żeby flaga
+        // mówiła to samo co magazyn: plik z poprawną flagą, ale odrzucony w całości (nieznana
+        // wartość innego ustawienia), daje ustawienia domyślne, a program bez roli jednej kopii
+        // działałby wtedy wbrew nim. Odczyt nie idzie na marne, bo przejmuje go magazyn.
+        try
+        {
+            Preload(path);
+            return PeekPreloaded(path) is not { ReadError: null, ParseError: null, Loaded.SingleInstance: false };
         }
         catch
         {
             return true;
+        }
+    }
+
+    private static ReadOnlySpan<byte> Utf8Preamble => [0xEF, 0xBB, 0xBF];
+
+    // ---------- Odczyt w tle ----------
+
+    /// <summary>Wynik odczytu pliku bez skutków ubocznych: kopie i komunikaty robi dopiero magazyn.</summary>
+    private sealed record Raw(bool Exists, AppSettings? Loaded, Exception? ReadError, Exception? ParseError);
+
+    private static readonly object PreloadGate = new();
+    private static string? _preloadedPath;
+    private static Task<Raw>? _preloaded;
+
+    /// <summary>
+    /// Zaczyna czytać plik ustawień w tle. Wołane z <c>Program.Main</c> przed startem Avalonii:
+    /// wątek główny czeka wtedy na kartę graficzną, a magazyn utworzony po tym czekaniu dostaje
+    /// ustawienia gotowe. Wynik służy jednemu magazynowi; następny czyta plik sam.
+    /// </summary>
+    public static void Preload() => Preload(AppPaths.SettingsFile);
+
+    internal static void Preload(string path)
+    {
+        lock (PreloadGate)
+        {
+            // Odczyt tego samego pliku już trwa albo czeka na magazyn: drugi niczego by nie dodał.
+            if (_preloaded is not null && string.Equals(_preloadedPath, path, StringComparison.Ordinal)) return;
+
+            _preloadedPath = path;
+            _preloaded = Task.Run(() => Read(path));
+        }
+    }
+
+    /// <summary>Wynik odczytu w tle bez zabierania go magazynowi; null, gdy dla tej ścieżki go nie ma.</summary>
+    private static Raw? PeekPreloaded(string path)
+    {
+        Task<Raw>? task;
+
+        lock (PreloadGate)
+            task = string.Equals(_preloadedPath, path, StringComparison.Ordinal) ? _preloaded : null;
+
+        return task?.GetAwaiter().GetResult();
+    }
+
+    private static Raw TakePreloadedOrRead(string path)
+    {
+        Task<Raw>? task = null;
+
+        lock (PreloadGate)
+        {
+            if (_preloaded is not null && string.Equals(_preloadedPath, path, StringComparison.Ordinal))
+            {
+                task = _preloaded;
+                _preloaded = null;
+                _preloadedPath = null;
+            }
+        }
+
+        return task is null ? Read(path) : task.GetAwaiter().GetResult();
+    }
+
+    private static Raw Read(string path)
+    {
+        if (!File.Exists(path)) return new Raw(false, null, null, null);
+
+        string json;
+        try
+        {
+            json = ReadWithRetry(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new Raw(true, null, ex, null);
+        }
+
+        try
+        {
+            return new Raw(true, JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings), null, null);
+        }
+        catch (Exception ex)
+        {
+            return new Raw(true, null, null, ex);
         }
     }
 
@@ -143,24 +267,21 @@ public sealed class SettingsStore
 
     private AppSettings Load(string path)
     {
-        if (!File.Exists(path)) return Defaults();
+        var raw = TakePreloadedOrRead(path);
+        if (!raw.Exists) return Defaults();
 
-        string json;
-        try
+        if (raw.ReadError is { } readError)
         {
-            json = ReadWithRetry(path);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            Console.Error.WriteLine($"[cewka] nie udało się odczytać ustawień, użyto domyślnych: {ex.Message}");
+            Console.Error.WriteLine($"[cewka] nie udało się odczytać ustawień, użyto domyślnych: {readError.Message}");
             _readFailed = true;
             return Defaults();
         }
 
         try
         {
-            var loaded = JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings);
-            return Sanitise(Migrate(loaded ?? Defaults()));
+            if (raw.ParseError is { } parseError) throw parseError;
+
+            return Sanitise(Migrate(raw.Loaded ?? Defaults()));
         }
         catch (Exception ex)
         {
@@ -251,7 +372,21 @@ public sealed class SettingsStore
         for (var i = 0; i < s.EqualiserGains.Length; i++)
             s.EqualiserGains[i] = Math.Clamp(s.EqualiserGains[i], -12, 12);
 
+        if (!Enum.IsDefined(s.EqualiserMode)) s.EqualiserMode = EqualiserMode.Graphic;
+        s.ParametricBands = SoundProfile.Settings.Bands(s.ParametricBands);
+        s.ParametricPreamp = SoundProfile.Settings.ClampFinite(
+            s.ParametricPreamp, ParametricEqualiser.MinPreamp, ParametricEqualiser.MaxPreamp);
+
+        // Jeden profil na urządzenie (pierwszy, czyli używany ostatnio, wygrywa), najwyżej 32.
+        s.SoundProfiles = [.. (s.SoundProfiles ?? [])
+            .Where(profile => profile is not null && !string.IsNullOrEmpty(profile.Device))
+            .DistinctBy(profile => profile.Device, StringComparer.Ordinal)
+            .Take(SoundProfile.MaxProfiles)];
+        foreach (var profile in s.SoundProfiles) profile.Sanitise();
         s.SeekStep = AudioPreferences.NearestSeekStep(s.SeekStep);
+        s.CrossfadeSeconds = AudioPreferences.NearestCrossfade(s.CrossfadeSeconds);
+
+        if (!Enum.IsDefined(s.NormalisationMode)) s.NormalisationMode = NormalisationMode.Auto;
 
         // Wskaźniki wycofano; zapisany wybór i wartość spoza wyliczenia dają Płytę.
         if (s.SceneVisual == SceneVisual.Meters || !Enum.IsDefined(s.SceneVisual)) s.SceneVisual = SceneVisual.Disc;

@@ -154,7 +154,7 @@ internal sealed class LinuxDisplayWakeLock : IDisplayWakeLock
         refused = false;
 
         var reply = _transport.Call(DisplayInhibitRules.PortalInhibit(_reason));
-        if (!reply.IsError && reply.Value is string handle)
+        if (!reply.IsError && reply.Value is string handle && DisplayInhibitRules.IsObjectPath(handle))
         {
             var response = _transport.WaitForResponse(handle, DisplayInhibitRules.PortalResponseMilliseconds);
             if (DisplayInhibitRules.IsPortalHeld(response))

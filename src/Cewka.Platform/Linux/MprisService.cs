@@ -298,13 +298,13 @@ public sealed unsafe class MprisService : IMediaPanel
             if (_changed)
             {
                 _changed = false;
-                EmitPropertiesChanged();
+                MprisRules.TryEmit(EmitPropertiesChanged, "PropertiesChanged", Console.Error);
             }
 
             if (_seeked)
             {
                 _seeked = false;
-                EmitSeeked();
+                MprisRules.TryEmit(EmitSeeked, "Seeked", Console.Error);
             }
         }
     }
@@ -440,7 +440,7 @@ public sealed unsafe class MprisService : IMediaPanel
 
             case "Seek":
                 if (TryReadInt64(message, 0, out var offset))
-                    SeekRequested?.Invoke(TimeSpan.FromMilliseconds(offset / 1000.0));
+                    SeekRequested?.Invoke(MprisRules.SeekOffset(offset));
                 break;
 
             // Żądanie dotyczy utworu wskazanego pierwszym argumentem. Po zmianie utworu w trakcie

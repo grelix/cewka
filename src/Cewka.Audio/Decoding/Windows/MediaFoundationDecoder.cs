@@ -7,7 +7,8 @@ namespace Cewka.Audio.Decoding.Windows;
 /// <summary>
 /// AAC, M4A i ALAC przez Media Foundation. Dekoder prosi tylko o próbki zmiennoprzecinkowe
 /// w częstotliwości źródła; dopasowanie do urządzenia robi wspólna klasa bazowa, bo jakość
-/// resamplera systemowego zależy od wydania Windows.
+/// resamplera systemowego zależy od wydania Windows. Rozbieg kodera i dopełnienie końca
+/// przycinane są tutaj według opisu z pliku (<see cref="Mp4GaplessReader"/>).
 /// </summary>
 [SupportedOSPlatform("windows")]
 internal sealed class MediaFoundationDecoder : ManagedDecoderBase
@@ -25,6 +26,22 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
 
     private uint _channelMask;
     private (int Rate, int Channels, uint Mask)? _formatChange;
+
+    /// <summary>
+    /// Część pliku do zagrania. Media Foundation pomija znacznik <c>iTunSMPB</c> i listę edycji
+    /// i oddaje każdą ramkę AAC: rozbieg kodera przed nagraniem i dopełnienie ostatniej ramki
+    /// za nim, czyli ciszę między utworami albumu. Null dla plików bez opisu (nie MP4).
+    /// </summary>
+    private readonly Mp4Gapless? _gapless;
+
+    /// <summary>Pierwsza chwila osi czasu pliku, która gra: początek nagrania albo cel przewinięcia.</summary>
+    private double _keepFrom;
+
+    /// <summary>
+    /// Rozbieg dekodera przed celem przewinięcia: ramka AAC zależy od poprzedniej, więc dekodowanie
+    /// zaczyna się wcześniej, a nadmiar odpada. Dwie ramki HE-AAC z zapasem.
+    /// </summary>
+    private const int SeekPreRollFrames = 4096;
 
     public MediaFoundationDecoder(string path, int outputSampleRate, int outputChannels, BitrateMeter? meter = null)
     {
@@ -53,9 +70,19 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
             Configure(sourceRate, sourceChannels, outputSampleRate, outputChannels, meter,
                 ChannelLayouts.FromWaveMask(mask, sourceChannels));
 
-            TotalFrames = ReadDuration(reader) is { } duration && duration > TimeSpan.Zero
-                ? (long)Math.Round(duration.TotalSeconds * outputSampleRate)
-                : 0;
+            _gapless = ReadGapless(path);
+
+            if (_gapless is { } gapless)
+            {
+                _keepFrom = gapless.StartSeconds;
+                TotalFrames = (long)Math.Round(gapless.LengthSeconds * outputSampleRate);
+            }
+            else
+            {
+                TotalFrames = ReadDuration(reader) is { } duration && duration > TimeSpan.Zero
+                    ? (long)Math.Round(duration.TotalSeconds * outputSampleRate)
+                    : 0;
+            }
         }
         catch
         {
@@ -127,6 +154,20 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
         return true;
     }
 
+    /// <summary>Opis rozbiegu jest dodatkiem: plik, z którego nie da się go odczytać, gra w całości.</summary>
+    private static Mp4Gapless? ReadGapless(string path)
+    {
+        try
+        {
+            return Mp4GaplessReader.Read(path);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            DecoderFailures.Log($"Media Foundation: plik gra bez przycięcia rozbiegu ({ex.Message}).");
+            return null;
+        }
+    }
+
     private static TimeSpan? ReadDuration(IMFSourceReader reader)
     {
         var key = MF_PD_DURATION;
@@ -185,7 +226,7 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
     {
         var result = _reader!.ReadSample(
             MF_SOURCE_READER_FIRST_AUDIO_STREAM, 0,
-            out _, out var flags, out _, out var sample);
+            out _, out var flags, out var timestamp, out var sample);
 
         if (result < 0)
         {
@@ -235,6 +276,8 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
 
                     _pendingOffset = 0;
                     _pendingBytes = length;
+
+                    if (_gapless is { } gapless && !Trim(gapless, timestamp)) return false;
                 }
                 finally
                 {
@@ -254,6 +297,37 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
         return true;
     }
 
+    /// <summary>
+    /// Zostawia z właśnie pobranej próbki tylko ramki od <see cref="_keepFrom"/> do końca nagrania.
+    /// Miejsce próbki w pliku podaje jej znacznik czasu, więc system, który sam pominął rozbieg,
+    /// oddaje pierwszą próbkę już za nim i nic więcej nie odpada. Fałsz oznacza koniec nagrania.
+    /// </summary>
+    private bool Trim(Mp4Gapless gapless, long timestamp)
+    {
+        // Próbka po zmianie formatu jest już w nowym, choć konwerter przebuduje się dopiero przy odczycie.
+        var rate = _formatChange?.Rate ?? SourceSampleRate;
+        var bytesPerFrame = (_formatChange?.Channels ?? SourceChannels) * sizeof(float);
+        var frames = _pendingBytes / bytesPerFrame;
+
+        var first = (long)Math.Round(timestamp / (double)TimeSpan.TicksPerSecond * rate);
+        var from = (long)Math.Round(_keepFrom * rate);
+        var until = (long)Math.Round(gapless.EndSeconds * rate);
+
+        if (first >= until)
+        {
+            _pendingBytes = 0;
+            _endOfStream = true;
+            return false;
+        }
+
+        var skip = Math.Clamp(from - first, 0, frames);
+        var keep = Math.Clamp(until - first, 0, frames) - skip;
+
+        _pendingOffset = (int)skip * bytesPerFrame;
+        _pendingBytes = (int)Math.Max(keep, 0) * bytesPerFrame;
+        return true;
+    }
+
     protected override void SeekSource(long sourceFrame)
     {
         if (_reader is null) return;
@@ -262,9 +336,18 @@ internal sealed class MediaFoundationDecoder : ManagedDecoderBase
         _pendingBytes = 0;
         _endOfStream = false;
 
+        var seconds = sourceFrame / (double)SourceSampleRate;
+
+        // Media Foundation staje na początku ramki AAC przed celem; resztę do celu odrzuca Trim.
+        if (_gapless is { } gapless)
+        {
+            _keepFrom = gapless.StartSeconds + seconds;
+            seconds = Math.Max(0, _keepFrom - SeekPreRollFrames / (double)SourceSampleRate);
+        }
+
         var format = GUID_NULL;
         var position = PropVariant.FromHundredNanoseconds(
-            (long)(sourceFrame / (double)SourceSampleRate * TimeSpan.TicksPerSecond));
+            (long)(seconds * TimeSpan.TicksPerSecond));
 
         _reader.SetCurrentPosition(ref format, ref position);
     }

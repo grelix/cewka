@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text;
 using Cewka.Audio.Streaming;
+using Cewka.Audio.Streaming.Hls;
 using Cewka.Audio.Tests.Live;
 using Xunit;
 
@@ -370,5 +371,118 @@ public sealed class HlsStreamTests
         var failure = await FailureOfAsync(master.Url("/master.m3u8"), Options with { TrustedRootForTests = certificates.Root });
 
         Assert.Equal(LiveFailureReason.InsecureDowngrade, failure.Reason);
+    }
+
+    private sealed class IdleFetcher : IHlsFetcher
+    {
+        public int Fetches;
+
+        public Task<(byte[] Content, Uri FinalUrl)> FetchPlaylistAsync(Uri url, Uri from, CancellationToken ct)
+        {
+            Interlocked.Increment(ref Fetches);
+            return Task.FromResult((Encoding.UTF8.GetBytes("#EXTM3U\n#EXT-X-TARGETDURATION:30\n"), url));
+        }
+
+        public Task<HttpResponseMessage> OpenSegmentAsync(Uri url, Uri from, CancellationToken ct) =>
+            throw new InvalidOperationException("W tej próbie nie ma segmentów.");
+    }
+
+    /// <summary>
+    /// Między segmentami strumień czeka na playlistę i nie ma otwartego połączenia. Zamknięcie
+    /// musi przerwać także to czekanie: sesja zamyka strumień, gdy porzuca stację, której dźwięku
+    /// nie da się zdekodować, i bez tego wisiała w buforowaniu, pobierając kolejne segmenty.
+    /// </summary>
+    [Fact]
+    public async Task ClosingTheStreamEndsAReadThatWaitsForThePlaylist()
+    {
+        var fetcher = new IdleFetcher();
+        var url = new Uri("https://stacja.example/live.m3u8");
+        var stream = new HlsAudioStream(fetcher, url, new HlsMedia(30, Ended: false, [], Unsupported: null));
+
+        var read = stream.ReadAsync(new byte[4096]).AsTask();
+        await Task.Delay(100);
+        Assert.False(read.IsCompleted);
+
+        stream.Dispose();
+
+        var finished = await Task.WhenAny(read, Task.Delay(TimeSpan.FromSeconds(5)));
+        Assert.Same(read, finished);
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => read);
+
+        // Po zamknięciu odczyt nie zaczyna pracy od nowa.
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => stream.ReadAsync(new byte[4096]).AsTask());
+        Assert.Equal(0, fetcher.Fetches);
+    }
+
+    private sealed class BrokenFetcher(bool playlist) : IHlsFetcher
+    {
+        private static HttpRequestException Broken() =>
+            new(HttpRequestError.InvalidResponse, "Serwer przysłał niepoprawny nagłówek odpowiedzi.");
+
+        public Task<(byte[] Content, Uri FinalUrl)> FetchPlaylistAsync(Uri url, Uri from, CancellationToken ct) =>
+            playlist ? throw Broken() : Task.FromResult((Encoding.UTF8.GetBytes("#EXTM3U\n#EXT-X-TARGETDURATION:1\n"), url));
+
+        public Task<HttpResponseMessage> OpenSegmentAsync(Uri url, Uri from, CancellationToken ct) => throw Broken();
+    }
+
+    /// <summary>
+    /// Jedna niepoprawna odpowiedź serwera w trakcie grania przychodzi wyjątkiem klienta HTTP, nie
+    /// naszym. Przy otwieraniu taki błąd skreśla adres, ale stacji, która gra, należy się nowe
+    /// połączenie; inaczej stacja z jednym adresem kończyła się po jednym potknięciu serwera.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BrokenResponseDuringPlayIsATransientFailure(bool onReload)
+    {
+        var url = new Uri("https://stacja.example/live.m3u8");
+
+        IReadOnlyList<HlsSegment> segments = onReload ? [] : [new HlsSegment(new Uri("https://stacja.example/s0.ts"), 1, 0)];
+        using var stream = new HlsAudioStream(new BrokenFetcher(onReload), url, new HlsMedia(0.5, Ended: false, segments, Unsupported: null));
+
+        var failure = await Assert.ThrowsAsync<LiveOpenException>(() => stream.ReadAsync(new byte[4096]).AsTask());
+
+        Assert.True(failure.Transient);
+        Assert.False(LiveErrors.Classify(failure).Permanent);
+    }
+
+    private sealed class ThrowingFetcher(Func<Exception> failure) : IHlsFetcher
+    {
+        public Task<(byte[] Content, Uri FinalUrl)> FetchPlaylistAsync(Uri url, Uri from, CancellationToken ct) => throw failure();
+
+        public Task<HttpResponseMessage> OpenSegmentAsync(Uri url, Uri from, CancellationToken ct) => throw failure();
+    }
+
+    /// <summary>
+    /// Przejściowy jest błąd sieci. Odmowa certyfikatu zostaje stała, anulowanie zostaje anulowaniem,
+    /// a błąd programu nie zamienia się w ponawianie bez końca.
+    /// </summary>
+    [Fact]
+    public async Task OnlyNetworkErrorsBecomeTransientDuringPlay()
+    {
+        var url = new Uri("https://stacja.example/live.m3u8");
+        IReadOnlyList<HlsSegment> segments = [new HlsSegment(new Uri("https://stacja.example/s0.ts"), 1, 0)];
+
+        HlsAudioStream Stream(Func<Exception> failure) =>
+            new(new ThrowingFetcher(failure), url, new HlsMedia(1, Ended: false, segments, Unsupported: null));
+
+        using (var stream = Stream(() => new InvalidOperationException("błąd programu")))
+            await Assert.ThrowsAsync<InvalidOperationException>(() => stream.ReadAsync(new byte[4096]).AsTask());
+
+        using (var stream = Stream(() => new OperationCanceledException()))
+            await Assert.ThrowsAsync<OperationCanceledException>(() => stream.ReadAsync(new byte[4096]).AsTask());
+
+        using (var stream = Stream(() => new HttpRequestException(
+                   "tls", new System.Security.Authentication.AuthenticationException("zły certyfikat"))))
+        {
+            var failure = await Assert.ThrowsAsync<HttpRequestException>(() => stream.ReadAsync(new byte[4096]).AsTask());
+            Assert.True(LiveErrors.Classify(failure).Permanent);
+        }
+
+        using (var stream = Stream(() => new IOException("zerwane połączenie")))
+        {
+            var failure = await Assert.ThrowsAsync<LiveOpenException>(() => stream.ReadAsync(new byte[4096]).AsTask());
+            Assert.True(failure.Transient);
+        }
     }
 }

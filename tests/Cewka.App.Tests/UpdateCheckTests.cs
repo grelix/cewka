@@ -112,6 +112,63 @@ public sealed class UpdateCheckTests
     }
 
     /// <summary>
+    /// Powłoka dostaje adres w postaci znormalizowanej: cudzysłów i spacja z odpowiedzi serwisu
+    /// nie mogą trafić dosłownie do wiersza poleceń przeglądarki.
+    /// </summary>
+    [Fact]
+    public void DoPowlokiTrafiaAdresZnormalizowany()
+    {
+        var target = WebLink.ShellTarget("https://example.org/a\"b c");
+
+        Assert.NotNull(target);
+        Assert.Contains("%22", target);
+        Assert.DoesNotContain("\"", target);
+        Assert.DoesNotContain(" ", target);
+        Assert.Null(WebLink.ShellTarget("file:///etc/passwd"));
+    }
+
+    /// <summary>
+    /// Odpowiedź serwisu ma kilka kilobajtów. Odpowiedź wielokrotnie większa ma skończyć się
+    /// niepowodzeniem, a nie wczytaniem całości do pamięci.
+    /// </summary>
+    [Fact]
+    public async Task OdpowiedzPonadLimitDajeNiepowodzenie()
+    {
+        var body = "{\"tag_name\":\"v9.9.9\",\"html_url\":\"https://github.com/grelix/cewka\""
+            + new string(' ', 10 * 1024 * 1024) + "}";
+        using var handler = new FixedResponseHandler(body);
+
+        var result = await UpdateCheck.LatestAsync(
+            "https://github.com/grelix/cewka", new Version(1, 0, 0), handler, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.NotNull(result.Failure);
+    }
+
+    [Fact]
+    public async Task OdpowiedzZwyklaOdczytanaPrzezPodanaObsluge()
+    {
+        using var handler = new FixedResponseHandler(
+            "{\"tag_name\":\"v9.9.9\",\"html_url\":\"https://github.com/grelix/cewka/releases/tag/v9.9.9\"}");
+
+        var result = await UpdateCheck.LatestAsync(
+            "https://github.com/grelix/cewka", new Version(1, 0, 0), handler, CancellationToken.None);
+
+        Assert.True(result.Succeeded, result.Failure);
+        Assert.Equal(new Version(9, 9, 9), result.Latest);
+    }
+
+    private sealed class FixedResponseHandler(string body) : System.Net.Http.HttpMessageHandler
+    {
+        protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(
+            System.Net.Http.HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new System.Net.Http.StringContent(body),
+            });
+    }
+
+    /// <summary>
     /// Adres repozytorium ma pochodzić z metadanych zestawu, a nie ze stałej w kodzie okna.
     /// Ten test pilnuje, że metadane w ogóle trafiają do wyniku kompilacji — bez nich wpis
     /// w oknie „O programie" byłby pusty, a sprawdzanie wersji niedostępne.

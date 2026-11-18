@@ -42,6 +42,36 @@ public class ShuffleOrderTests
         Assert.Same(predicted, next);
     }
 
+    /// <summary>
+    /// Sąsiedzi wpisu w permutacji, odczytani bez losowania i bez zmiany stanu. Wpis zamykający
+    /// rundę ma za następnika początek nowej; początek nowej ma za poprzednika wpis zamykający.
+    /// </summary>
+    [Theory]
+    [InlineData(3)]
+    [InlineData(11)]
+    public void AroundGivesTheNeighboursWithoutChangingTheOrder(int seed)
+    {
+        var queue = Queue(5);
+        var order = new ShuffleOrder(new Random(seed));
+        order.Reset(queue, null);
+
+        var snapshot = order.Order.ToArray();
+        var version = order.Version;
+
+        Assert.Equal((null, snapshot[1]), order.Around(snapshot[0]));
+        Assert.Equal((snapshot[1], snapshot[3]), order.Around(snapshot[2]));
+        Assert.Equal((snapshot[3], null), order.Around(snapshot[4]));
+        Assert.Equal((null, null), order.Around(new QueueEntry { Path = "obcy.flac" }));
+        Assert.Equal(snapshot, order.Order);
+        Assert.Equal(version, order.Version);
+
+        var closing = snapshot[4];
+        var first = order.Next(closing, wrap: true, queue)!;
+
+        Assert.Equal((null, first), order.Around(closing));
+        Assert.Equal((closing, order.Order[1]), order.Around(first));
+    }
+
     public static TheoryData<int> Seeds()
     {
         var seeds = new TheoryData<int>();

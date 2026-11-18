@@ -8,7 +8,7 @@
     operujacych wylacznie na typach prostych i wskaznikach nieprzezroczystych.
 
     Zakres celowo waski. Warstwa zarzadzana odpowiada za caly tor przetwarzania sygnalu;
-    stad potrzebne sa tylko: urzadzenie wyjsciowe, dekoder, resampler i wyliczenie urzadzen.
+    stad potrzebne sa tylko: urzadzenie wyjsciowe, dekodery (miniaudio i WavPack) i wyliczenie urzadzen.
 
     Budowanie: patrz build-windows.cmd oraz build-linux.sh w tym katalogu.
 */
@@ -23,8 +23,12 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio/miniaudio.h"
 
+/* Sciezka do naglowka podaje skrypt budowy (wavpack/include). */
+#include "wavpack.h"
+
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #if defined(_WIN32)
     #define CEWKA_API __declspec(dllexport)
@@ -38,7 +42,7 @@
     kopia moze trafic do nowego programu, a wywolanie funkcji o innej sygnaturze konczy sie
     awaria procesu zamiast bledu.
 */
-#define CEWKA_ABI_VERSION 3
+#define CEWKA_ABI_VERSION 4
 
 CEWKA_API int cewka_abi_version(void)
 {
@@ -486,8 +490,8 @@ static ma_result cewka__vfs_info(ma_vfs* pVFS, ma_vfs_file file, ma_file_info* p
     Otwiera dekoder. outRate i outChannels rowne zeru oznaczaja format zrodlowy;
     podanie wartosci wlacza wbudowana konwersje miniaudio.
 
-    lpfOrder dotyczy tej wbudowanej konwersji - MP3, FLAC i WAV resampluje
-    dekoder miniaudio, a nie cewka_resampler_*. Znaczenie wartosci jak tam.
+    lpfOrder to rzad filtru tej wbudowanej konwersji: 0 wylacza filtrowanie,
+    8 to maksimum (MA_MAX_FILTER_ORDER).
 */
 CEWKA_API int cewka_decoder_open(cewka_read_cb read,
                                  cewka_seek_cb seek,
@@ -797,80 +801,402 @@ CEWKA_API int cewka_mp3_stream_decode(void*           handle,
 }
 
 /* ============================================================================
-   Resampler
+   Dekoder WavPack
 
-   Uzywany przez dekodery zarzadzane (Vorbis, Opus, Media Foundation, GStreamer),
-   ktore zwracaja probki w czestotliwosci zrodlowej i wymagaja dopasowania
-   do czestotliwosci urzadzenia.
-
-   lpfOrder to rzad filtru dolnoprzepustowego: 0 wylacza filtrowanie, 4 jest
-   wartoscia domyslna miniaudio, 8 to maksimum (MA_MAX_FILTER_ORDER). Filtr
-   dziala przed zmniejszeniem czestotliwosci i po jej zwiekszeniu, wiec jego
-   rzad decyduje o tym, ile aliasingu przechodzi na wyjscie.
+   Biblioteka WavPack zbudowana tylko do odczytu: bez DSD, bez plikow sprzed wersji 4,
+   bez wstawek asemblerowych i bez watkow. Strumien, jak przy dekoderze miniaudio,
+   zostaje po stronie C#. Plik korekcyjny .wvc jest pomijany: biblioteka dostaje tylko
+   strumien glowny, wiec plik hybrydowy gra czesc stratna.
    ============================================================================ */
 
-CEWKA_API int cewka_resampler_create(ma_uint32 channels,
-                                     ma_uint32 rateIn,
-                                     ma_uint32 rateOut,
-                                     ma_uint32 lpfOrder,
-                                     void**    outHandle)
+#define CEWKA_WAVPACK_OK            0
+#define CEWKA_WAVPACK_INVALID_ARGS  1
+#define CEWKA_WAVPACK_OUT_OF_MEMORY 2
+#define CEWKA_WAVPACK_DAMAGED       3
+#define CEWKA_WAVPACK_UNSUPPORTED   4   /* DSD albo plik sprzed wersji 4 */
+#define CEWKA_WAVPACK_CHANNELS      5   /* liczba kanalow poza granica */
+#define CEWKA_WAVPACK_SEEK_FAILED   6
+
+/* Granice wartosci z pliku. Bufor posredni rosnie z liczba kanalow. */
+#define CEWKA_WAVPACK_MAX_CHANNELS  32
+#define CEWKA_WAVPACK_MAX_RATE      768000
+#define CEWKA_WAVPACK_CHUNK_FRAMES  4096
+
+typedef struct
 {
-    if (outHandle == NULL) {
-        return (int)MA_INVALID_ARGS;
+    WavpackContext*       wpc;
+    WavpackStreamReader64 reader;
+    cewka_read_cb         read;
+    cewka_seek_cb         seek;
+    cewka_tell_cb         tell;
+    void*                 user;
+    int                   pushedBack;   /* bajt cofniety przez biblioteke albo -1 */
+    int                   channels;
+    int                   isFloat;
+    double                scale;        /* probka calkowita do zakresu +-1 */
+    long long             totalFrames;  /* -1, gdy plik nie podaje dlugosci */
+    long long             position;
+    int                   atEnd;        /* przewinieto za koniec bez udzialu biblioteki */
+    int                   broken;       /* po nieudanym przewinieciu biblioteki nie wolno juz czytac */
+    int32_t*              chunk;
+} cewka_wavpack;
+
+static int32_t cewka__wv_read_bytes(void* id, void* data, int32_t bcount)
+{
+    cewka_wavpack* self = (cewka_wavpack*)id;
+    unsigned char* out = (unsigned char*)data;
+    int32_t total = 0;
+
+    if (bcount <= 0) {
+        return 0;
     }
+
+    if (self->pushedBack >= 0) {
+        *out++ = (unsigned char)self->pushedBack;
+        self->pushedBack = -1;
+        total = 1;
+    }
+
+    /* Strumien zarzadzany oddaje czasem mniej, niz poproszono, a biblioteka czyta krotsza porcje jako koniec pliku. */
+    while (total < bcount) {
+        size_t wanted = (size_t)(bcount - total);
+        size_t got = self->read(self->user, out, wanted);
+        if (got == 0 || got > wanted) {
+            break;
+        }
+        out += got;
+        total += (int32_t)got;
+    }
+
+    return total;
+}
+
+static int32_t cewka__wv_write_bytes(void* id, void* data, int32_t bcount)
+{
+    (void)id;
+    (void)data;
+    (void)bcount;
+    return 0;
+}
+
+static int64_t cewka__wv_get_pos(void* id)
+{
+    cewka_wavpack* self = (cewka_wavpack*)id;
+    long long position = self->tell(self->user, 0);
+
+    if (position < 0) {
+        return -1;
+    }
+
+    return self->pushedBack >= 0 ? position - 1 : position;
+}
+
+static int cewka__wv_set_pos_abs(void* id, int64_t pos)
+{
+    cewka_wavpack* self = (cewka_wavpack*)id;
+    self->pushedBack = -1;
+
+    return (pos >= 0 && self->seek(self->user, (long long)pos, 0)) ? 0 : -1;
+}
+
+static int cewka__wv_set_pos_rel(void* id, int64_t delta, int mode)
+{
+    cewka_wavpack* self = (cewka_wavpack*)id;
+    int origin;
+
+    switch (mode) {
+        case SEEK_SET: origin = 0; break;
+        case SEEK_CUR:
+            origin = 1;
+            /* Cofniety bajt zostal juz odczytany ze strumienia. */
+            if (self->pushedBack >= 0) delta -= 1;
+            break;
+        case SEEK_END: origin = 2; break;
+        default: return -1;
+    }
+
+    self->pushedBack = -1;
+    return self->seek(self->user, (long long)delta, origin) ? 0 : -1;
+}
+
+static int cewka__wv_push_back_byte(void* id, int c)
+{
+    cewka_wavpack* self = (cewka_wavpack*)id;
+
+    if (c == EOF) {
+        return EOF;
+    }
+
+    self->pushedBack = c & 0xFF;
+    return c;
+}
+
+static int64_t cewka__wv_get_length(void* id)
+{
+    cewka_wavpack* self = (cewka_wavpack*)id;
+    long long length = self->tell(self->user, 1);
+    return length < 0 ? 0 : length;
+}
+
+static int cewka__wv_can_seek(void* id)
+{
+    cewka_wavpack* self = (cewka_wavpack*)id;
+    return self->tell(self->user, 1) >= 0;
+}
+
+static int cewka__wv_truncate_here(void* id)
+{
+    (void)id;
+    return -1;
+}
+
+static int cewka__wv_close(void* id)
+{
+    (void)id;
+    return 0;
+}
+
+static void cewka__wv_copy_error(const char* message, char* error, int errorSize)
+{
+    size_t length;
+
+    if (error == NULL || errorSize <= 0) {
+        return;
+    }
+
+    length = strlen(message);
+    if (length >= (size_t)errorSize) {
+        length = (size_t)errorSize - 1;
+    }
+
+    memcpy(error, message, length);
+    error[length] = '\0';
+}
+
+static void cewka__wv_free(cewka_wavpack* self)
+{
+    if (self->wpc != NULL) {
+        WavpackCloseFile(self->wpc);
+    }
+    ma_free(self->chunk, NULL);
+    ma_free(self, NULL);
+}
+
+/*
+    Otwiera plik WavPack. W error trafia opis bledu biblioteki (do dziennika, nie na ekran).
+    outChannelMask to maska kanalow WAVE, zero gdy plik jej nie podaje. outTotalFrames
+    rowne -1 oznacza nieznana dlugosc.
+*/
+CEWKA_API int cewka_wavpack_open(cewka_read_cb read,
+                                 cewka_seek_cb seek,
+                                 cewka_tell_cb tell,
+                                 void*         user,
+                                 char*         error,
+                                 int           errorSize,
+                                 void**        outHandle,
+                                 ma_uint32*    outRate,
+                                 ma_uint32*    outChannels,
+                                 ma_uint32*    outChannelMask,
+                                 ma_uint32*    outBits,
+                                 int*          outFloat,
+                                 long long*    outTotalFrames)
+{
+    /* Biblioteka zapisuje opis bledu do 80 znakow. */
+    char message[128];
+    cewka_wavpack* self;
+    int channels;
+    int bytes;
+    ma_uint32 rate;
+
+    if (read == NULL || seek == NULL || tell == NULL || outHandle == NULL || outRate == NULL ||
+        outChannels == NULL || outChannelMask == NULL || outBits == NULL || outFloat == NULL ||
+        outTotalFrames == NULL) {
+        return CEWKA_WAVPACK_INVALID_ARGS;
+    }
+
     *outHandle = NULL;
+    cewka__wv_copy_error("", error, errorSize);
 
-    if (lpfOrder > MA_MAX_FILTER_ORDER) {
-        lpfOrder = MA_MAX_FILTER_ORDER;
-    }
-
-    ma_resampler* self = (ma_resampler*)ma_malloc(sizeof(ma_resampler), NULL);
+    self = (cewka_wavpack*)ma_malloc(sizeof(cewka_wavpack), NULL);
     if (self == NULL) {
-        return (int)MA_OUT_OF_MEMORY;
+        return CEWKA_WAVPACK_OUT_OF_MEMORY;
     }
     memset(self, 0, sizeof(*self));
 
-    ma_resampler_config config = ma_resampler_config_init(
-        ma_format_f32, channels, rateIn, rateOut, ma_resample_algorithm_linear);
+    self->read = read;
+    self->seek = seek;
+    self->tell = tell;
+    self->user = user;
+    self->pushedBack = -1;
 
-    config.linear.lpfOrder = lpfOrder;
+    self->reader.read_bytes     = cewka__wv_read_bytes;
+    self->reader.write_bytes    = cewka__wv_write_bytes;
+    self->reader.get_pos        = cewka__wv_get_pos;
+    self->reader.set_pos_abs    = cewka__wv_set_pos_abs;
+    self->reader.set_pos_rel    = cewka__wv_set_pos_rel;
+    self->reader.push_back_byte = cewka__wv_push_back_byte;
+    self->reader.get_length     = cewka__wv_get_length;
+    self->reader.can_seek       = cewka__wv_can_seek;
+    self->reader.truncate_here  = cewka__wv_truncate_here;
+    self->reader.close          = cewka__wv_close;
 
-    ma_result result = ma_resampler_init(&config, NULL, self);
-    if (result != MA_SUCCESS) {
-        ma_free(self, NULL);
-        return (int)result;
+    /*
+        OPEN_NORMALIZE: probki zmiennoprzecinkowe w zakresie +-1 bez wzgledu na wykladnik zapisany
+        w pliku. Bez OPEN_WVC plik korekcyjny jest pomijany, bez OPEN_TAGS biblioteka nie czyta
+        znacznikow (czyta je warstwa zarzadzana).
+    */
+    message[0] = '\0';
+    self->wpc = WavpackOpenFileInputEx64(&self->reader, self, NULL, message, OPEN_NORMALIZE, 0);
+
+    if (self->wpc == NULL) {
+        /* Biblioteka zbudowana bez DSD i bez plikow sprzed wersji 4 odrzuca je z takim opisem. */
+        int code = (strstr(message, "DSD") != NULL || strstr(message, "legacy") != NULL)
+            ? CEWKA_WAVPACK_UNSUPPORTED
+            : CEWKA_WAVPACK_DAMAGED;
+
+        cewka__wv_copy_error(message, error, errorSize);
+        cewka__wv_free(self);
+        return code;
     }
 
+    channels = WavpackGetNumChannels(self->wpc);
+    bytes = WavpackGetBytesPerSample(self->wpc);
+    rate = WavpackGetSampleRate(self->wpc);
+
+    if ((WavpackGetQualifyMode(self->wpc) & QMODE_DSD_AUDIO) != 0) {
+        cewka__wv_copy_error("DSD", error, errorSize);
+        cewka__wv_free(self);
+        return CEWKA_WAVPACK_UNSUPPORTED;
+    }
+
+    if (channels < 1 || channels > CEWKA_WAVPACK_MAX_CHANNELS) {
+        cewka__wv_copy_error("channel count out of range", error, errorSize);
+        cewka__wv_free(self);
+        return CEWKA_WAVPACK_CHANNELS;
+    }
+
+    self->isFloat = (WavpackGetMode(self->wpc) & MODE_FLOAT) != 0;
+
+    if (rate == 0 || rate > CEWKA_WAVPACK_MAX_RATE || bytes < 1 || bytes > 4 || (self->isFloat && bytes != 4)) {
+        cewka__wv_copy_error("sample format out of range", error, errorSize);
+        cewka__wv_free(self);
+        return CEWKA_WAVPACK_DAMAGED;
+    }
+
+    self->chunk = (int32_t*)ma_malloc(sizeof(int32_t) * CEWKA_WAVPACK_CHUNK_FRAMES * (size_t)channels, NULL);
+    if (self->chunk == NULL) {
+        cewka__wv_free(self);
+        return CEWKA_WAVPACK_OUT_OF_MEMORY;
+    }
+
+    /* Probki calkowite przychodza wyrownane do prawej w szerokosci pojemnika (bytes * 8 bitow). */
+    self->channels = channels;
+    self->scale = 1.0 / (double)((long long)1 << (bytes * 8 - 1));
+    self->totalFrames = (long long)WavpackGetNumSamples64(self->wpc);
+    if (self->totalFrames < 0) {
+        self->totalFrames = -1;
+    }
+
+    *outRate = rate;
+    *outChannels = (ma_uint32)channels;
+    *outChannelMask = (ma_uint32)WavpackGetChannelMask(self->wpc);
+    *outBits = (ma_uint32)WavpackGetBitsPerSample(self->wpc);
+    *outFloat = self->isFloat;
+    *outTotalFrames = self->totalFrames;
     *outHandle = self;
-    return (int)MA_SUCCESS;
+    return CEWKA_WAVPACK_OK;
 }
 
-/* Wartosci wskazywane przez frameCountIn i frameCountOut sa nadpisywane liczba ramek faktycznie uzytych. */
-CEWKA_API int cewka_resampler_process(void*        handle,
-                                      const float* input,
-                                      ma_uint64*   frameCountIn,
-                                      float*       output,
-                                      ma_uint64*   frameCountOut)
+/* Zwraca liczbe ramek float32 z przeplotem kanalow; zero oznacza koniec, -1 zle argumenty. */
+CEWKA_API int cewka_wavpack_read(void* handle, float* output, int frameCount)
 {
-    if (handle == NULL) return (int)MA_INVALID_ARGS;
-    return (int)ma_resampler_process_pcm_frames((ma_resampler*)handle, input, frameCountIn, output, frameCountOut);
+    cewka_wavpack* self = (cewka_wavpack*)handle;
+    int produced = 0;
+
+    if (self == NULL || output == NULL || frameCount < 0) {
+        return -1;
+    }
+
+    if (self->atEnd || self->broken) {
+        return 0;
+    }
+
+    while (produced < frameCount) {
+        int remaining = frameCount - produced;
+        uint32_t wanted = (uint32_t)(remaining < CEWKA_WAVPACK_CHUNK_FRAMES ? remaining : CEWKA_WAVPACK_CHUNK_FRAMES);
+        uint32_t got = WavpackUnpackSamples(self->wpc, self->chunk, wanted);
+        size_t count;
+        float* dst;
+        size_t i;
+
+        if (got == 0 || got > wanted) {
+            break;
+        }
+
+        count = (size_t)got * (size_t)self->channels;
+        dst = output + (size_t)produced * (size_t)self->channels;
+
+        if (self->isFloat) {
+            /* Dla plikow zmiennoprzecinkowych biblioteka oddaje bity liczby float w int32. */
+            memcpy(dst, self->chunk, count * sizeof(float));
+        } else {
+            for (i = 0; i < count; i++) {
+                dst[i] = (float)((double)self->chunk[i] * self->scale);
+            }
+        }
+
+        produced += (int)got;
+
+        if (got < wanted) {
+            break;
+        }
+    }
+
+    self->position += produced;
+    return produced;
 }
 
-CEWKA_API ma_uint64 cewka_resampler_required_input(void* handle, ma_uint64 outputFrameCount)
+/*
+    Przewija do ramki. Za koncem pliku biblioteka nie jest pytana, tylko dekoder staje na koncu.
+    Po nieudanym przewinieciu biblioteka nie nadaje sie do odczytu, wiec dekoder milknie.
+*/
+CEWKA_API int cewka_wavpack_seek(void* handle, long long frame)
 {
-    if (handle == NULL) return 0;
+    cewka_wavpack* self = (cewka_wavpack*)handle;
 
-    ma_uint64 required = 0;
-    ma_resampler_get_required_input_frame_count((ma_resampler*)handle, outputFrameCount, &required);
-    return required;
+    if (self == NULL || frame < 0) {
+        return CEWKA_WAVPACK_INVALID_ARGS;
+    }
+
+    if (self->broken) {
+        return CEWKA_WAVPACK_SEEK_FAILED;
+    }
+
+    if (self->totalFrames >= 0 && frame >= self->totalFrames) {
+        self->atEnd = 1;
+        self->position = self->totalFrames;
+        return CEWKA_WAVPACK_OK;
+    }
+
+    if (!WavpackSeekSample64(self->wpc, (int64_t)frame)) {
+        self->broken = 1;
+        return CEWKA_WAVPACK_SEEK_FAILED;
+    }
+
+    self->atEnd = 0;
+    self->position = frame;
+    return CEWKA_WAVPACK_OK;
 }
 
-CEWKA_API void cewka_resampler_destroy(void* handle)
+CEWKA_API long long cewka_wavpack_position(void* handle)
+{
+    return handle == NULL ? 0 : ((cewka_wavpack*)handle)->position;
+}
+
+CEWKA_API void cewka_wavpack_close(void* handle)
 {
     if (handle == NULL) return;
-
-    ma_resampler_uninit((ma_resampler*)handle, NULL);
-    ma_free(handle, NULL);
+    cewka__wv_free((cewka_wavpack*)handle);
 }
 
 /* ============================================================================

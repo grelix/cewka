@@ -108,9 +108,10 @@ internal sealed class StationProbe(LiveOptions options, ProbeLimits limits)
         {
             return !ByteBudgetExhaustedException.IsIn(e);
         }
-        catch (HttpRequestException e) when (ByteBudgetExhaustedException.IsIn(e))
+        catch (Exception e) when (e is HttpRequestException or LiveOpenException && ByteBudgetExhaustedException.IsIn(e))
         {
-            // Strumień z segmentów łączy się w trakcie czytania, więc limit może paść przy wysyłaniu żądania.
+            // Strumień z segmentów łączy się w trakcie czytania, więc limit może paść przy wysyłaniu
+            // żądania; błąd pobrania segmentu przychodzi wtedy opakowany w przyczynę strumienia.
             return false;
         }
     }

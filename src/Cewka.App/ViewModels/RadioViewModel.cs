@@ -263,6 +263,8 @@ public sealed class RadioViewModel : ObservableObject, IDisposable
     /// <summary>Po zmianie języka nazwy krajów i kategorii, a z nimi kolejność krajów, powstają od nowa.</summary>
     public void RefreshLanguage()
     {
+        ViewGroup.RefreshLabels();
+
         if (_catalog is null) return;
 
         BuildChoices(_country?.Key, _category?.Key);
@@ -907,11 +909,13 @@ public sealed class RadioViewModel : ObservableObject, IDisposable
         SaveState();
         AfterFavouritesChanged();
 
-        _notify(added == 0 && import.Rejected.Count == 0
+        // Wpisy ponad pułap importu liczą się jak pominięte.
+        var skipped = import.Rejected.Count + import.Excess;
+        _notify(added == 0 && skipped == 0
             ? Strings.Current["RadioImportEmpty"]
-            : import.Rejected.Count == 0
+            : skipped == 0
                 ? string.Format(Strings.Current["RadioImported"], added)
-                : string.Format(Strings.Current["RadioImportedSkipped"], added, import.Rejected.Count));
+                : string.Format(Strings.Current["RadioImportedSkipped"], added, skipped));
         return added;
     }
 
@@ -1007,9 +1011,18 @@ public sealed class RadioViewModel : ObservableObject, IDisposable
     {
         try
         {
-            var logo = await _logos!.GetAsync(row.Station).ConfigureAwait(true);
-            if (logo is not null && LogosAllowed)
-                row.Logo = logo.List;
+            var logo = await _logos!.GetListAsync(row.Station).ConfigureAwait(true);
+            if (logo is null)
+            {
+                // Wiersz bez logo zapyta ponownie, gdy znów trafi na ekran: porażka mogła być chwilowa
+                // (serwer w przerwie, brak sieci przy starcie). Trwała jest pamiętana na dysku
+                // i ponowne pytanie nie wychodzi wtedy do sieci.
+                row.LogoStarted = false;
+                return;
+            }
+
+            if (LogosAllowed)
+                row.Logo = logo;
         }
         catch (OperationCanceledException)
         {

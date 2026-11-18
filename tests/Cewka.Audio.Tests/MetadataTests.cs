@@ -123,6 +123,38 @@ public sealed class MetadataTests : IDisposable
         Assert.Null(MetadataReader.Read(path).ReplayGainTrack);
     }
 
+    /// <summary>Numer płyty i szczyt albumu, potrzebne do wzmocnienia albumu i następcy na płycie.</summary>
+    [Fact]
+    public void DiscNumberAndAlbumPeakAreRead()
+    {
+        var path = Opus("plyta.opus", new TestAudioFiles.OpusOptions
+        {
+            Frames = 10,
+            Tags = new Dictionary<string, string>
+            {
+                ["DISCNUMBER"] = "2",
+                ["REPLAYGAIN_ALBUM_GAIN"] = "-4.25 dB",
+                ["REPLAYGAIN_ALBUM_PEAK"] = "0.987654",
+            },
+        });
+
+        var metadata = MetadataReader.Read(path);
+
+        Assert.Equal(2, metadata.DiscNumber);
+        Assert.Equal(-4.25, metadata.ReplayGainAlbum!.Value, 6);
+        Assert.Equal(0.987654, metadata.ReplayGainAlbumPeak!.Value, 6);
+    }
+
+    /// <summary>Plik bez tych znaczników nie dostaje płyty ani szczytu albumu.</summary>
+    [Fact]
+    public void MissingDiscNumberAndAlbumPeakStayUnknown()
+    {
+        var metadata = MetadataReader.Read(Opus("bez-plyty.opus"));
+
+        Assert.Null(metadata.DiscNumber);
+        Assert.Null(metadata.ReplayGainAlbumPeak);
+    }
+
     [Fact]
     public void OpusBadgeNamesTheCodec()
     {
@@ -133,5 +165,29 @@ public sealed class MetadataTests : IDisposable
     {
         try { Directory.Delete(_directory, recursive: true); }
         catch (IOException) { }
+    }
+
+    /// <summary>Separator dziesiętny częstotliwości podaje wołający; bez niego jest nim kropka.</summary>
+    [Fact]
+    public void BadgeUsesTheGivenDecimalSeparator()
+    {
+        var metadata = new Cewka.Audio.Metadata.TrackMetadata
+        {
+            Path = "a.flac", Title = "a", Codec = "FLAC", BitDepth = 16, SampleRate = 44100, Bitrate = 900,
+        };
+
+        var comma = (System.Globalization.NumberFormatInfo)System.Globalization.NumberFormatInfo.InvariantInfo.Clone();
+        comma.NumberDecimalSeparator = ",";
+
+        Assert.Equal("FLAC 16 bit / 900 kbps / 44,1 kHz", metadata.BuildBadge(null, comma));
+        Assert.Equal("FLAC 16 bit / 900 kbps / 44.1 kHz", metadata.BuildBadge(null, System.Globalization.NumberFormatInfo.InvariantInfo));
+        Assert.Equal("FLAC 16 bit / 900 kbps / 44.1 kHz", metadata.BuildBadge(null));
+
+        var whole = new Cewka.Audio.Metadata.TrackMetadata
+        {
+            Path = "b.flac", Title = "b", Codec = "FLAC", BitDepth = 24, SampleRate = 96000,
+        };
+
+        Assert.Equal("FLAC 24 bit / 96 kHz", whole.BuildBadge(null, comma));
     }
 }

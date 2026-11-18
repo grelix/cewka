@@ -20,7 +20,7 @@ public sealed class Limiter : IAudioProcessor
     private const double SwitchSeconds = 0.010;
 
     /// <summary>A little below full scale, leaving room for inter-sample peaks.</summary>
-    private const double ThresholdDb = -1.0;
+    public const double ThresholdDb = -1.0;
 
     /// <summary>Width of the soft knee, in decibels around the threshold.</summary>
     private const double KneeDb = 4.0;

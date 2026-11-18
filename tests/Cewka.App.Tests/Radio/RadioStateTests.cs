@@ -125,6 +125,60 @@ public class RadioStateTests
         Assert.Equal("a", state.LastStationId);
     }
 
+    /// <summary>Import dodaje tysiące ulubionych naraz na wątku interfejsu; koszt nie może rosnąć z kwadratem.</summary>
+    [Fact]
+    public void DodanieWieluUlubionychNieMaKosztuKwadratowego()
+    {
+        var state = new RadioState();
+        var stations = Enumerable.Range(0, 60_000).Select(i => S("s" + i)).ToList();
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        foreach (var station in stations) Assert.True(state.AddFavourite(station));
+        foreach (var station in stations) Assert.True(state.IsFavourite(station.Id));
+        clock.Stop();
+
+        Assert.Equal(60_000, state.Favourites.Count);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(2), $"trwało {clock.ElapsedMilliseconds} ms");
+    }
+
+    /// <summary>Lista z pliku stanu podmieniana jest w całości; sprawdzenie ulubionej ma ją widzieć.</summary>
+    [Fact]
+    public void UlubioneZPodmienionejListySaRozpoznawane()
+    {
+        var state = new RadioState();
+        state.AddFavourite(S("a"));
+        Assert.True(state.IsFavourite("a"));
+
+        state.Favourites = [S("b"), S("c")];
+
+        Assert.False(state.IsFavourite("a"));
+        Assert.True(state.IsFavourite("b"));
+        Assert.True(state.AddFavourite(S("a")));
+        Assert.False(state.AddFavourite(S("c")));
+
+        state.Favourites.Add(S("d"));
+        Assert.True(state.IsFavourite("d"));
+    }
+
+    [Fact]
+    public void UsuniecieICofniecieUtrzymujaSprawdzanieUlubionych()
+    {
+        var state = new RadioState();
+        state.AddFavourite(S("a"));
+        state.AddFavourite(S("b"));
+
+        var removed = state.RemoveFavourite("a");
+        Assert.False(state.IsFavourite("a"));
+        Assert.True(state.IsFavourite("b"));
+
+        Assert.True(state.RestoreFavourite(removed!.Value.Index, removed.Value.Station));
+        Assert.True(state.IsFavourite("a"));
+
+        Assert.True(state.MoveFavourite(0, 1));
+        Assert.True(state.IsFavourite("a"));
+        Assert.True(state.IsFavourite("b"));
+    }
+
     [Fact]
     public void FindSzukaWUlubionychIOstatnich()
     {

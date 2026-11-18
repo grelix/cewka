@@ -7,7 +7,7 @@
     języka; aplikacja wymienia ją przy zmianie języka (Themes/UiFonts.cs).
   -->
 
-  <FontFamily x:Key="UiFont">avares://Cewka/Assets/Fonts#Noto Sans, avares://Cewka/Assets/Fonts#Noto Sans SC, avares://Cewka/Assets/Fonts#Noto Sans JP, avares://Cewka/Assets/Fonts#Noto Sans Arabic, avares://Cewka/Assets/Fonts#Noto Sans Hebrew, avares://Cewka/Assets/Fonts#Noto Sans Devanagari, avares://Cewka/Assets/Fonts#Noto Sans Thai</FontFamily>
+  <FontFamily x:Key="UiFont">avares://Cewka/Assets/Fonts/NotoSans-*.ttf#Noto Sans, avares://Cewka/Assets/Fonts/NotoSansSC-*.otf#Noto Sans SC, avares://Cewka/Assets/Fonts/NotoSansJP-*.otf#Noto Sans JP, avares://Cewka/Assets/Fonts/NotoSansArabic-*.ttf#Noto Sans Arabic, avares://Cewka/Assets/Fonts/NotoSansHebrew-*.ttf#Noto Sans Hebrew, avares://Cewka/Assets/Fonts/NotoSansDevanagari-*.ttf#Noto Sans Devanagari, avares://Cewka/Assets/Fonts/NotoSansThai-*.ttf#Noto Sans Thai</FontFamily>
 
   <!-- Skala typograficzna odwzorowana z projektu -->
   <x:Double x:Key="FontSizeTitle">42</x:Double>

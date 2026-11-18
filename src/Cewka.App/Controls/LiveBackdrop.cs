@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using Cewka.App.Services;
 
 namespace Cewka.App.Controls;
@@ -346,15 +347,46 @@ public sealed class LiveBackdrop : Control
         if (!_hasPalette)
         {
             if (BaseBrush is { } plain) context.DrawRectangle(plain, null, area);
+            NoteComposition(BaseBrush, null, 0);
             return;
         }
 
         // Przy przeciążeniu plamy trafiają do bufora o niższej rozdzielczości, rozciąganego na okno:
         // gradienty są miękkie, więc utrata ostrości jest niewidoczna, a koszt rysowania spada.
-        if (_budget.Level > 0 && BaseBrush is { } baseFill && IsOpaque(baseFill) && TryRenderBuffered(context, width, height, area, baseFill)) return;
+        if (_budget.Level > 0 && BaseBrush is { } baseFill && IsOpaque(baseFill) && TryRenderBuffered(context, width, height, area, baseFill))
+        {
+            // Podkład trafia do bufora w każdej klatce, więc o składzie rysunku decyduje sam bufor.
+            NoteComposition(null, _buffer, 0);
+            return;
+        }
 
         if (BaseBrush is { } baseBrush) context.DrawRectangle(baseBrush, null, area);
         PaintBlobs(context, width, height, area);
+        NoteComposition(BaseBrush, null, IsReduced ? 2 : CoverPaletteSize);
+    }
+
+    /// <summary>
+    /// Zmienił się skład rysunku: inny pędzel podkładu (motyw), inny bufor albo inna liczba plam.
+    /// <see cref="VisualBrush"/> z tym tłem trzyma polecenia rysowania z chwili utworzenia. Ruch
+    /// i barwy plam widzi dalej, bo pędzle i bufor zostają te same, ale zmiany składu już nie,
+    /// więc kopia tła musi wtedy powstać od nowa.
+    /// </summary>
+    public event Action? CompositionChanged;
+
+    private object? _drawnBase;
+    private object? _drawnBuffer;
+    private int _drawnBlobs = -1;
+
+    private void NoteComposition(object? baseBrush, object? buffer, int blobs)
+    {
+        if (ReferenceEquals(baseBrush, _drawnBase) && ReferenceEquals(buffer, _drawnBuffer) && blobs == _drawnBlobs) return;
+
+        _drawnBase = baseBrush;
+        _drawnBuffer = buffer;
+        _drawnBlobs = blobs;
+
+        // Zgłoszenie po zakończeniu rysowania: odbiorca zmienia pędzel innej kontrolki.
+        if (CompositionChanged is not null) Dispatcher.UIThread.Post(() => CompositionChanged?.Invoke());
     }
 
     /// <summary>Rozmiar bufora w pikselach dla poziomu obniżenia: 960 x 540 (nie większy od okna) razy mnożnik poziomu.</summary>

@@ -26,10 +26,7 @@ public partial class SoundWindow : AuxiliaryWindow
             () => App.Settings.Current.SoundWindow, geometry => App.Settings.Current.SoundWindow = geometry,
             restoreSize: true);
         ContentScrollBar.Target = ContentArea;
-        ContentArea.PropertyChanged += (_, e) =>
-        {
-            if (e.Property == ScrollViewer.ExtentProperty || e.Property == ScrollViewer.ViewportProperty) FitHeightToContent();
-        };
+        ContentArea.LayoutUpdated += (_, _) => FitHeightToContent();
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         AddHandler(KeyUpEvent, OnPreviewKeyUp, RoutingStrategies.Tunnel);
@@ -42,14 +39,23 @@ public partial class SoundWindow : AuxiliaryWindow
     /// także po zmianie języka, w którym opisy zajmują więcej wierszy. Najniższa wysokość jest taka sama,
     /// więc okna nie da się zmniejszyć tak, żeby coś zniknęło. Na niskim ekranie okno kończy się na
     /// obszarze roboczym, a resztę treści przewija pasek przewijania.
+    /// <para>
+    /// Pułapka: miarą jest wysokość, jakiej chce treść, a nie zasięg przewijania. Treść rozciąga się do
+    /// wysokości okna, więc zasięg rośnie razem z oknem i nie maleje, gdy treść się skurczy (lista pasm
+    /// korektora parametrycznego dopasowuje się po przebiegu układu), a liczony od widoku sprzed zmiany
+    /// rozmiaru kazał oknu skakać między dwiema wysokościami bez końca.
+    /// </para>
     /// </summary>
     private void FitHeightToContent()
     {
-        var extent = ContentArea.Extent.Height;
-        var viewport = ContentArea.Viewport.Height;
-        if (extent <= 0 || viewport <= 0 || double.IsNaN(Height)) return;
+        if (ContentArea.Content is not Control content || double.IsNaN(Height)) return;
 
-        var needed = Math.Ceiling(Height - viewport + extent);
+        var extent = content.DesiredSize.Height;
+        var chrome = TitleBar.Bounds.Height + Shell.BorderThickness.Top + Shell.BorderThickness.Bottom
+                     + Shell.Padding.Top + Shell.Padding.Bottom;
+        if (extent <= 0 || TitleBar.Bounds.Height <= 0) return;
+
+        var needed = Math.Ceiling(chrome + extent);
         var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
         if (screen is not null) needed = Math.Min(needed, screen.WorkingArea.Height / screen.Scaling);
 
@@ -95,12 +101,14 @@ public partial class SoundWindow : AuxiliaryWindow
             e.Handled = true;
     }
 
+    /// <summary>Pole liczbowe pasma korektora bierze Spację i strzałki zawsze: pisze się w nim i przesuwa kursor.</summary>
     private static bool KeepsSpace(IInputElement? focused) =>
-        focused is Button or ToggleButton or GlassSwitch
+        focused is TextBox
+        || focused is Button or ToggleButton or GlassSwitch
         && ((StyledElement)focused).Classes.Contains(":focus-visible");
 
     private static bool KeepsArrowKeys(IInputElement? focused) =>
-        focused is EqFader || focused is TrackSlider { Focusable: true };
+        focused is EqFader or TextBox || focused is TrackSlider { Focusable: true };
 
     public SoundWindow(MainViewModel player) : this()
     {

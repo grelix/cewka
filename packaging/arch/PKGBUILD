@@ -4,7 +4,7 @@
 # Na Archu lepiej zbudować go z tego pliku.
 
 pkgname=cewka
-pkgver=1.0.0
+pkgver=1.1.0
 pkgrel=1
 pkgdesc="Odtwarzacz plików muzycznych z korektorem i wyrównaniem głośności"
 arch=('x86_64')

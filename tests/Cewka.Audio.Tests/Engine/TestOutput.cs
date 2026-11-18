@@ -27,7 +27,7 @@ internal sealed class TestOutput : IAudioOutput
     public int SampleRate { get; }
     public int Channels { get; }
     public int PeriodSizeInFrames { get; }
-    public string Name => "Atrapa";
+    public string Name { get; init; } = "Atrapa";
     public bool IsRunning => _running;
     public bool IsFallback => false;
     public bool Disposed { get; private set; }

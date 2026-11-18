@@ -15,6 +15,11 @@ public enum AudioFileFormat
 
     /// <summary>Windows Media. Out of the declared scope; recognised only to explain itself.</summary>
     Wma,
+
+    /// <summary>WavPack 4 i 5 (.wv); dekoduje go biblioteka natywna.</summary>
+    WavPack,
+    /// <summary>AIFF i AIFF-C bez kompresji.</summary>
+    Aiff,
 }
 
 /// <summary>
@@ -28,10 +33,15 @@ public static class AudioFileFormatDetector
     public static readonly string[] SupportedExtensions =
     [
         ".mp3", ".flac", ".wav", ".ogg", ".oga", ".opus", ".m4a", ".mp4", ".aac", ".alac",
+        ".wv",
+        ".aiff", ".aif", ".aifc",
     ];
 
     public static AudioFileFormat Detect(string path)
     {
+        // Potoku ani urządzenia nie wolno nawet otwierać; bez formatu nikt dalej po nie nie sięgnie.
+        if (!RegularFile.Is(path)) return AudioFileFormat.Unknown;
+
         try
         {
             using var stream = File.OpenRead(path);
@@ -53,10 +63,15 @@ public static class AudioFileFormatDetector
 
         if (read >= 12)
         {
-            // RIFF....WAVE
+            // RIFF....WAVE. WavPack sprzed wersji 4 też zaczyna się nagłówkiem RIFF, a dekoder WAV
+            // zagrałby jego dane skompresowane jako szum; rozszerzenie .wv kieruje go do WavPack.
             if (header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F' &&
                 header[8] == 'W' && header[9] == 'A' && header[10] == 'V' && header[11] == 'E')
-                return AudioFileFormat.Wav;
+                return FromExtension(path) == AudioFileFormat.WavPack ? AudioFileFormat.WavPack : AudioFileFormat.Wav;
+
+            // FORM....AIFF albo AIFC; AIFF-C z kompresją, której dekoder nie zna, nie jest odtwarzalnym AIFF.
+            if (header[..4].SequenceEqual("FORM"u8) && (header[8..12].SequenceEqual("AIFF"u8) || header[8..12].SequenceEqual("AIFC"u8)))
+                return AiffDecoder.IsDecodable(stream) ? AudioFileFormat.Aiff : AudioFileFormat.Unknown;
 
             // ftyp at offset 4 marks the MP4 family.
             if (header[4] == 'f' && header[5] == 't' && header[6] == 'y' && header[7] == 'p')
@@ -67,6 +82,9 @@ public static class AudioFileFormatDetector
         {
             if (header[0] == 'f' && header[1] == 'L' && header[2] == 'a' && header[3] == 'C')
                 return AudioFileFormat.Flac;
+
+            if (header[0] == 'w' && header[1] == 'v' && header[2] == 'p' && header[3] == 'k')
+                return AudioFileFormat.WavPack;
 
             // OggS — the codec inside is named by the first packet.
             if (header[0] == 'O' && header[1] == 'g' && header[2] == 'g' && header[3] == 'S')
@@ -223,6 +241,8 @@ public static class AudioFileFormatDetector
             ".opus" => AudioFileFormat.Opus,
             ".m4a" or ".mp4" or ".aac" or ".alac" => AudioFileFormat.Mp4,
             ".wma" => AudioFileFormat.Wma,
+            ".wv" => AudioFileFormat.WavPack,
+            ".aiff" or ".aif" or ".aifc" => AudioFileFormat.Aiff,
             _ => AudioFileFormat.Unknown,
         };
 

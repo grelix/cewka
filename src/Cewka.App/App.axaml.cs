@@ -41,6 +41,33 @@ public partial class App : Application
 
     private static MainWindow? _mainWindow;
 
+    /// <summary>
+    /// Podpowiedź staje pod kontrolką, którą opisuje, a przy krawędzi ekranu nad nią. Domyślnie
+    /// Avalonia stawia ją przy kursorze i przy dolnej krawędzi ekranu dosuwa z powrotem na kursor:
+    /// w zmaksymalizowanym oknie podpowiedź przycisku w stopce panelu kolejki zasłaniała przycisk
+    /// i pierwsze kliknięcie trafiało w nią zamiast w niego. Odstęp domyślny (20) liczony jest od
+    /// kursora; od krawędzi kontrolki wystarcza mniejszy.
+    ///
+    /// <para>Ustawiane tuż przed otwarciem podpowiedzi, dla każdej kontrolki w każdym oknie:
+    /// wartości domyślnej tych właściwości nie da się zmienić dla wszystkich kontrolek naraz,
+    /// a styl obejmujący wszystkie obciążałby też te bez podpowiedzi. Położenie podane wprost
+    /// przy kontrolce zostaje.</para>
+    /// </summary>
+    static App()
+    {
+        Avalonia.Controls.ToolTip.ToolTipOpeningEvent.AddClassHandler<Avalonia.Controls.Control>((control, _) =>
+        {
+            if (!control.IsSet(Avalonia.Controls.ToolTip.PlacementProperty))
+                Avalonia.Controls.ToolTip.SetPlacement(control, Avalonia.Controls.PlacementMode.Bottom);
+
+            if (!control.IsSet(Avalonia.Controls.ToolTip.VerticalOffsetProperty))
+                Avalonia.Controls.ToolTip.SetVerticalOffset(control, TooltipGap);
+        });
+    }
+
+    /// <summary>Odstęp podpowiedzi od krawędzi kontrolki.</summary>
+    private const double TooltipGap = 6;
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -60,7 +87,14 @@ public partial class App : Application
         if (key == _uiFontKey) return;
 
         _uiFontKey = key;
-        Resources["UiFont"] = Themes.UiFonts.For(Localisation.Strings.Current.CurrentCode);
+        var font = Themes.UiFonts.For(Localisation.Strings.Current.CurrentCode);
+        Resources["UiFont"] = font;
+
+        // Motyw Fluent daje okienkom wyskakującym (menu, podpowiedzi, listy rozwijane) rodzinę
+        // z własnego zasobu i nie dziedziczą one pisma okna. Pozycja menu składa nagłówek kontrolką
+        // spoza stylu napisów interfejsu, więc bez tego znaki Han w menu rysowałby font systemu,
+        // a w Linuksie bez fontów tego pisma puste prostokąty.
+        Resources["ContentControlThemeFontFamily"] = font;
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -92,6 +126,9 @@ public partial class App : Application
             AttachSingleInstance();
             AttachMediaKeys();
             AttachShutdownSignals(desktop);
+
+            // Pliki poprzednich wersji wydania jednoplikowego; w tle, okno na to nie czeka.
+            BundleExtractionCleanup.StartInBackground();
         }
 
         base.OnFrameworkInitializationCompleted();

@@ -354,11 +354,22 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             ("−18 LUFS", LoudnessTarget.Reference),
             ("−14 LUFS", LoudnessTarget.Streaming));
 
+        NormalisationModeChoice = new SegmentGroup(
+            value => _player.SetNormalisationMode((NormalisationMode)value),
+            ("NormalisationModeTrack", NormalisationMode.Track),
+            ("NormalisationModeAlbum", NormalisationMode.Album),
+            ("NormalisationModeAuto", NormalisationMode.Auto));
+
         // Etykiety kroku przewijania są liczbami z jednostką, jednakową we wszystkich językach,
         // więc nie przechodzą przez tłumaczenie.
         SeekStep = new SegmentGroup(
             value => _player.SeekStep = (int)value,
             AudioPreferences.SeekSteps.Select(step => new SegmentOption($"{step} s", step, literal: true)));
+
+        // Tak samo czas przenikania; twarda spacja nie rozdziela liczby i jednostki.
+        CrossfadeDuration = new SegmentGroup(
+            value => _player.CrossfadeSeconds = (int)value,
+            AudioPreferences.CrossfadeDurations.Select(seconds => new SegmentOption($"{seconds} s", seconds, literal: true)));
 
         RadioRecentLimitChoice = new SegmentGroup(
             value => _player.Radio.RecentLimit = (int)value,
@@ -393,6 +404,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             {
                 case nameof(MainViewModel.NormalisationEnabled):
                 case nameof(MainViewModel.LimiterEnabled):
+                case nameof(MainViewModel.SoundProfilesEnabled):
                 case nameof(MainViewModel.LatencyDescription):
                     Raise(e.PropertyName);
                     break;
@@ -606,6 +618,13 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         set { _player.LimiterEnabled = value; Raise(); }
     }
 
+    /// <summary>Korektor i efekty zapamiętywane osobno dla każdego urządzenia wyjściowego.</summary>
+    public bool SoundProfilesEnabled
+    {
+        get => _player.SoundProfilesEnabled;
+        set { _player.SoundProfilesEnabled = value; Raise(); }
+    }
+
     public SegmentGroup Quality { get; }
 
     public SegmentGroup Latency { get; }
@@ -614,6 +633,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public string LatencyDescription => _player.LatencyDescription;
 
     public SegmentGroup Loudness { get; }
+
+    public SegmentGroup NormalisationModeChoice { get; }
 
     public bool AlwaysAnalyse
     {
@@ -626,6 +647,21 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public SegmentGroup SeekStep { get; }
 
     public SegmentGroup FileOpen { get; }
+
+    /// <summary>Przenikanie plików; od niego zależy, czy czas i albumy są aktywne.</summary>
+    public bool Crossfade
+    {
+        get => _player.Crossfade;
+        set { _player.Crossfade = value; Raise(); }
+    }
+
+    public SegmentGroup CrossfadeDuration { get; }
+
+    public bool AlbumsWithoutCrossfade
+    {
+        get => _player.AlbumsWithoutCrossfade;
+        set { _player.AlbumsWithoutCrossfade = value; Raise(); }
+    }
 
     // ---------- Pełny ekran ----------
 
@@ -848,11 +884,12 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         _player.Radio.ClearRecent();
     }
 
-    private static string FormatSize(long bytes) => bytes switch
+    /// <summary>Rozmiar z separatorem dziesiętnym języka interfejsu: „43,4 MB” po polsku, „43.4 MB” po angielsku.</summary>
+    internal static string FormatSize(long bytes) => bytes switch
     {
         < 1024 => $"{bytes} B",
-        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
-        _ => $"{bytes / 1024.0 / 1024.0:0.#} MB",
+        < 1024 * 1024 => (bytes / 1024.0).ToString("0.#", Strings.Current.Numbers) + " KB",
+        _ => (bytes / 1024.0 / 1024.0).ToString("0.#", Strings.Current.Numbers) + " MB",
     };
 
     public bool AssociationsSupported => FileAssociations.IsSupported;
@@ -870,7 +907,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         try
         {
             FileAssociations.Register(
-                AudioFileFormatDetector.SupportedExtensions,
+                CueSheetFile.OpenableExtensions,
                 new AssociationTexts(Strings.Current["AssociationFileType"], Strings.Current["AssociationDescription"]));
         }
         catch (Exception ex)
@@ -886,7 +923,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     {
         try
         {
-            FileAssociations.Unregister(AudioFileFormatDetector.SupportedExtensions);
+            FileAssociations.Unregister(CueSheetFile.OpenableExtensions);
         }
         catch (Exception ex)
         {
@@ -1094,6 +1131,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         Quality.RefreshLabels();
         Latency.RefreshLabels();
         Loudness.RefreshLabels();
+        NormalisationModeChoice.RefreshLabels();
         FileOpen.RefreshLabels();
         SceneTextSizeChoice.RefreshLabels();
         SceneTextPositionChoice.RefreshLabels();
@@ -1103,6 +1141,14 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         DiscSpinChoice.RefreshLabels();
         BackdropMotionChoice.RefreshLabels();
         SpectrumResponseChoice.RefreshLabels();
+        SceneVisualChoice.RefreshLabels();
+        SceneVisualReactiveChoice.RefreshLabels();
+
+        // Karta Zorzy bywa poza grupą (bez wykrytej karty graficznej), a wraca z tą samą etykietą.
+        _auroraOption.RefreshLabel();
+        SpectrumShapeChoice.RefreshLabels();
+        WaveformKindChoice.RefreshLabels();
+        DiscRingChoice.RefreshLabels();
         foreach (var option in SceneCycleOptions) option.Refresh();
         foreach (var option in SceneEffectOptions) option.Refresh();
         SceneMarginChoice.RefreshLabels();
@@ -1122,6 +1168,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         Raise(nameof(ShowTranslationNote));
         Raise(nameof(LatencyDescription));
         Raise(nameof(ActiveDeviceName));
+        Raise(nameof(MediaPanelText));
+        Raise(nameof(RadioLogoCacheText));
         Raise(nameof(Shortcuts));
     }
 
@@ -1178,7 +1226,9 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         Quality.Mark(_settings.Current.ResamplerQuality);
         Latency.Mark(_settings.Current.OutputLatency);
         Loudness.Mark(_settings.Current.LoudnessTarget);
+        NormalisationModeChoice.Mark(_settings.Current.NormalisationMode);
         SeekStep.Mark(_settings.Current.SeekStep);
+        CrossfadeDuration.Mark(_settings.Current.CrossfadeSeconds);
         FileOpen.Mark(_settings.Current.FileOpenAction);
         SceneVisualChoice.Mark(_settings.Current.SceneVisual);
         SceneVisualReactiveChoice.Mark(_settings.Current.SceneVisual);

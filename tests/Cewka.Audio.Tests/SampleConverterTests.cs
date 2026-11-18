@@ -19,7 +19,7 @@ public class SampleConverterTests
 
     private static float[] Convert(float[] source, int sourceChannels, int targetChannels, IReadOnlyList<Speaker>? layout)
     {
-        using var converter = new SampleConverter(sourceChannels, Rate, targetChannels, Rate, sourceLayout: layout);
+        var converter = new SampleConverter(sourceChannels, Rate, targetChannels, Rate, sourceLayout: layout);
         var output = new float[Frames * targetChannels];
         var written = converter.Process(source, Frames, output, out var used);
 

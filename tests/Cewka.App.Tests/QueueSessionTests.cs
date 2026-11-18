@@ -183,6 +183,82 @@ public sealed class QueueSessionTests
         Assert.True(h.Engine.Position.TotalSeconds >= 29, $"pozycja {h.Engine.Position}");
     });
 
+    /// <summary>
+    /// Pozycja poza zakresem czasu (ręczna edycja, uszkodzony plik) przy wpisie bez znanej
+    /// długości zaczyna utwór od początku, zamiast kończyć każde odtworzenie błędem wyjścia.
+    /// </summary>
+    [Fact]
+    public void PozycjaSpozaZakresuZaczynaOdPoczatku() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        Save(h, [h.Track("a"), h.Track("b")], 0, 1e300);
+
+        h.RestoreQueueState();
+        h.Player.TogglePlay();
+
+        Assert.True(h.Player.IsPlaying);
+        Assert.True(h.PumpUntil(() => h.Engine.CurrentIndex == 0));
+    });
+
+    /// <summary>
+    /// Plik zablokowany przy starcie (program antywirusowy, kopia zapasowa) ma zwykle poprawną
+    /// treść. Pusta kolejka tej sesji nie może go nadpisać ani przy zamknięciu, ani w tle.
+    /// </summary>
+    [Fact]
+    public void ZablokowanyPlikKolejkiNieJestNadpisywany() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        Save(h, [h.Track("a"), h.Track("b")], 1, 42);
+        var before = File.ReadAllText(h.QueueFile);
+
+        using (new FileStream(h.QueueFile, FileMode.Open, FileAccess.Read, FileShare.None))
+            h.RestoreQueueState();
+
+        h.Player.SaveQueueStateInBackground().Wait(5000);
+        h.Player.SaveQueueState();
+
+        Assert.Equal(before, File.ReadAllText(h.QueueFile));
+    });
+
+    /// <summary>Plik uszkodzony trafia do kopii obok, a kolejka zapisuje się od nowa.</summary>
+    [Fact]
+    public void UszkodzonyPlikKolejkiZostajeWKopii() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        File.WriteAllText(h.QueueFile, """{"paths":["a.mp3"],"currentIndex":"zle""");
+
+        h.RestoreQueueState();
+        h.OpenPaths([h.Track("a")]);
+        h.Player.SaveQueueState();
+
+        var copy = Assert.Single(Directory.GetFiles(h.Directory, "queue.json.bad-*"));
+        Assert.Contains("\"zle", File.ReadAllText(copy));
+        Assert.Single(QueueStateStore.Load(h.QueueFile)!.Paths);
+    });
+
+    /// <summary>Wartości z pliku spoza zakresu sprowadzane do poprawnych przy wczytaniu.</summary>
+    [Theory]
+    [InlineData("1e300", 1, 0, 1)]
+    [InlineData("-5", 1, 0, 1)]
+    public void WczytaniePoprawiaPozycjeWznowienia(string seconds, int index, double expectedSeconds, int expectedIndex)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cewka-kolejka-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path,
+                $$"""{"paths":["a.mp3","b.mp3"],"currentIndex":{{index}},"positionSeconds":{{seconds}}}""");
+
+            var state = QueueStateStore.Load(path)!;
+
+            Assert.Equal(expectedSeconds, state.PositionSeconds);
+            Assert.Equal(expectedIndex, state.CurrentIndex);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void NieudaneOtwarcieUrzadzeniaNieZuzywaWznowienia() => Ui.Run(() =>
     {
@@ -415,4 +491,25 @@ public sealed class QueueSessionTests
 
     private static void Save(PlayerHarness h, List<string> paths, int current, double seconds) =>
         QueueStateStore.Save(new QueueState { Paths = paths, CurrentIndex = current, PositionSeconds = seconds }, h.QueueFile);
+
+    /// <summary>Bez kopii uszkodzony plik kolejki jest jedynym egzemplarzem i zostaje nietknięty.</summary>
+    [Fact]
+    public void UszkodzonyPlikKolejkiBezKopiiLiczySieJakNiedostepny()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"cewka-kolejka-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path, "{ to nie jest json");
+
+            Assert.Null(QueueStateStore.Load(path, out var kept, _ => true));
+            Assert.False(kept);
+
+            Assert.Null(QueueStateStore.Load(path, out var unreadable, _ => false));
+            Assert.True(unreadable);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

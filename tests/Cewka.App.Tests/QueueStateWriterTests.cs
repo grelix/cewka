@@ -48,5 +48,28 @@ public sealed class QueueStateWriterTests
         Assert.Equal(2, QueueStateStore.Load(h.QueueFile)!.Paths.Count);
     });
 
+    /// <summary>
+    /// Przestawienie utworów jednego pliku z arkusza nie zmienia listy ścieżek. Zapis w tle nie może
+    /// go uznać za samą zmianę miejsca odtwarzania, bo kolejka wróciłaby w starej kolejności.
+    /// </summary>
+    [Fact]
+    public async Task PrzestawienieUtworowJednegoPlikuZapisujeListe()
+    {
+        var writer = new QueueStateWriter(_path);
+        var first = new Cewka.Audio.Playback.SheetTrack { SheetPath = "a.cue", Number = 1, Start = 0, End = 75 };
+        var second = first with { Number = 2, Start = 75, End = null };
+
+        var state = new QueueState();
+        state.SetItems([new("a.wav", first), new("a.wav", second)]);
+        writer.SaveNow(state);
+
+        var swapped = new QueueState { CurrentIndex = 1 };
+        swapped.SetItems([new("a.wav", second), new("a.wav", first)]);
+        await writer.SaveInBackground(swapped);
+
+        var loaded = QueueStateStore.Load(_path)!;
+        Assert.Equal([2, 1], loaded.Items().Select(item => item.Sheet!.Number));
+    }
+
     private static QueueState State(int index) => new() { Paths = ["a.wav"], CurrentIndex = index };
 }

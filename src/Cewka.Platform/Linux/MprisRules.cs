@@ -27,6 +27,35 @@ internal static class MprisRules
         track == currentTrack && currentTrack != NoTrack
                               && positionMicroseconds >= 0 && positionMicroseconds <= lengthMicroseconds;
 
+    /// <summary>Largest offset accepted from the bus, in microseconds.</summary>
+    /// <remarks>Połowa zakresu czasu: zostaje zapas na dodanie przesunięcia do pozycji.</remarks>
+    public const long MaxSeekOffsetMicroseconds = long.MaxValue / TimeSpan.TicksPerMicrosecond / 2;
+
+    /// <summary>
+    /// <c>Seek</c> offset as time. Wartość z szyny bywa dowolna; poza zakresem jest przycinana,
+    /// bo przepełnienie dalej, na wątku interfejsu, zakończyłoby program.
+    /// </summary>
+    public static TimeSpan SeekOffset(long microseconds) =>
+        TimeSpan.FromTicks(Math.Clamp(microseconds, -MaxSeekOffsetMicroseconds, MaxSeekOffsetMicroseconds) * TimeSpan.TicksPerMicrosecond);
+
+    /// <summary>
+    /// Sends a signal from the bus thread. Wyjątek na tym wątku zakończyłby proces, a utracony
+    /// sygnał panel odrobi przy następnej zmianie, więc błąd trafia tylko do dziennika.
+    /// </summary>
+    public static bool TryEmit(Action emit, string signal, TextWriter log)
+    {
+        try
+        {
+            emit();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            log.WriteLine($"[cewka] MPRIS: nie wysłano sygnału {signal}: {ex.Message}");
+            return false;
+        }
+    }
+
     /// <summary>Accepts <c>file://</c> addresses only; the player plays local files.</summary>
     public static bool TryGetLocalPath(string uri, out string path)
     {

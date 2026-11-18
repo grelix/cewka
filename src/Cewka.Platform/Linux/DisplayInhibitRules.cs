@@ -121,6 +121,31 @@ internal static class DisplayInhibitRules
     public static bool IsPortalHeld(uint? response) => response is null or 0;
 
     /// <summary>
+    /// Czy napis jest poprawną ścieżką obiektu D-Bus. Uchwyt typu napisu nie jest sprawdzany
+    /// przy odbiorze, a wywołanie z niepoprawną ścieżką biblioteka szyny kończy przerwaniem procesu.
+    /// </summary>
+    public static bool IsObjectPath(string path)
+    {
+        if (path == "/") return true;
+        if (path.Length < 2 || path[0] != '/' || path[^1] == '/') return false;
+
+        for (var i = 1; i < path.Length; i++)
+        {
+            var c = path[i];
+            if (c == '/')
+            {
+                if (path[i - 1] == '/') return false;
+            }
+            else if (!char.IsAsciiLetterOrDigit(c) && c != '_')
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Wspólny początek ścieżek żądań portalu dla połączenia o danej nazwie unikalnej:
     /// <c>:1.42</c> daje <c>/org/freedesktop/portal/desktop/request/1_42</c>.
     /// </summary>

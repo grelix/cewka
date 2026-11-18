@@ -1,12 +1,12 @@
-using Cewka.Audio.Interop;
+using Cewka.Audio.Dsp;
 
 namespace Cewka.Audio.Decoding;
 
 /// <summary>
-/// Mapowanie kanałów i zmiana częstotliwości dla dekoderów zarządzanych, resamplerem
-/// miniaudio, żeby wszystkie ścieżki brzmiały tak samo.
+/// Mapowanie kanałów i zmiana częstotliwości dla wszystkich dekoderów plików i stacji,
+/// żeby każda ścieżka brzmiała tak samo.
 /// </summary>
-internal sealed unsafe class SampleConverter : IDisposable
+internal sealed class SampleConverter
 {
     /// <summary>Współczynnik ITU-R BS.775 dla środka i kanałów otoczenia przy miksie do stereo.</summary>
     private const float SurroundLevel = 0.70710678f;
@@ -17,20 +17,16 @@ internal sealed unsafe class SampleConverter : IDisposable
     /// <summary>Macierz miksu [wyjście × wejście]; null przy kopiowaniu i powielaniu mono.</summary>
     private readonly float[]? _matrix;
 
-    private nint _resampler;
+    private readonly SincResampler? _resampler;
     private float[] _mixed = [];
-    private bool _disposed;
 
-    /// <param name="filterOrder">
-    /// Rząd filtru dolnoprzepustowego resamplera; wartość pochodzi z ustawień użytkownika
-    /// przez <see cref="AudioQuality.ResamplerFilterOrder"/>.
-    /// </param>
+    /// <param name="level">Poziom konwersji; zwykle <see cref="AudioQuality.Current"/>.</param>
     /// <param name="sourceLayout">
     /// Położenia kanałów źródła; bez niego przyjmowana jest domyślna kolejność WAVE.
     /// </param>
     public SampleConverter(
         int sourceChannels, int sourceRate, int targetChannels, int targetRate,
-        int filterOrder = AudioQuality.DefaultFilterOrder, IReadOnlyList<Speaker>? sourceLayout = null)
+        ResamplingLevel level = ResamplingLevel.Standard, IReadOnlyList<Speaker>? sourceLayout = null)
     {
         _sourceChannels = sourceChannels;
         _targetChannels = targetChannels;
@@ -38,6 +34,7 @@ internal sealed unsafe class SampleConverter : IDisposable
         var layout = sourceLayout is { } given && given.Count == sourceChannels
             ? given
             : ChannelLayouts.Wave(sourceChannels);
+        Layout = layout;
 
         if (sourceChannels > 1 && sourceChannels != targetChannels)
             _matrix = BuildMatrix(layout, targetChannels);
@@ -46,31 +43,33 @@ internal sealed unsafe class SampleConverter : IDisposable
 
         SourceRate = sourceRate;
         TargetRate = targetRate;
-        FilterOrder = Math.Clamp(filterOrder, 0, AudioQuality.MaximumFilterOrder);
+        Level = level;
 
         if (sourceRate != targetRate)
-        {
-            NativeAudio.EnsureCompatible();
-            NativeAudio.ThrowIfFailed(
-                NativeAudio.ResamplerCreate(
-                    (uint)targetChannels, (uint)sourceRate, (uint)targetRate, (uint)FilterOrder, out _resampler),
-                "Utworzenie resamplera");
-        }
+            _resampler = new SincResampler(targetChannels, sourceRate, targetRate, level);
     }
 
     public int SourceRate { get; }
     public int TargetRate { get; }
+    public IReadOnlyList<Speaker> Layout { get; }
 
-    /// <summary>Rząd filtru, z jakim resampler powstał. Zerowy oznacza brak filtrowania.</summary>
-    public int FilterOrder { get; }
+    /// <summary>Poziom, z jakim konwerter powstał.</summary>
+    public ResamplingLevel Level { get; }
 
-    public bool NeedsResampling => _resampler != nint.Zero;
+    public bool NeedsResampling => _resampler is not null;
+
+    /// <summary>
+    /// Czy strumień tego konwertera może płynąć dalej przez <paramref name="other"/>, tak jakby był
+    /// jednym plikiem: ten sam format źródła, układ, cel i poziom.
+    /// </summary>
+    public bool SameConversionAs(SampleConverter other) =>
+        SourceRate == other.SourceRate && TargetRate == other.TargetRate
+        && _sourceChannels == other._sourceChannels && _targetChannels == other._targetChannels
+        && Level == other.Level && Layout.SequenceEqual(other.Layout);
 
     /// <summary>How many source frames are needed to produce the given number of output frames.</summary>
     public long RequiredSourceFrames(long outputFrames) =>
-        _resampler == nint.Zero
-            ? outputFrames
-            : (long)NativeAudio.ResamplerRequiredInput(_resampler, (ulong)outputFrames);
+        _resampler is null ? outputFrames : _resampler.RequiredInput(outputFrames);
 
     /// <summary>
     /// Maps channels and resamples. Returns the number of output frames written and reports
@@ -78,30 +77,28 @@ internal sealed unsafe class SampleConverter : IDisposable
     /// </summary>
     public int Process(ReadOnlySpan<float> source, int sourceFrames, Span<float> destination, out int sourceFramesUsed)
     {
-        ReadOnlySpan<float> mapped = MapChannels(source, sourceFrames);
-
-        if (_resampler == nint.Zero)
+        if (_resampler is null)
         {
             var frames = Math.Min(sourceFrames, destination.Length / _targetChannels);
-            mapped[..(frames * _targetChannels)].CopyTo(destination);
+            MapChannels(source, frames)[..(frames * _targetChannels)].CopyTo(destination);
             sourceFramesUsed = frames;
             return frames;
         }
 
-        var inFrames = (ulong)sourceFrames;
-        var outFrames = (ulong)(destination.Length / _targetChannels);
-
-        fixed (float* input = mapped)
-        fixed (float* output = destination)
-        {
-            NativeAudio.ThrowIfFailed(
-                NativeAudio.ResamplerProcess(_resampler, input, ref inFrames, output, ref outFrames),
-                "Przetwarzanie resamplera");
-        }
-
-        sourceFramesUsed = (int)inFrames;
-        return (int)outFrames;
+        // Mapowane jest tylko to, co resampler przyjmie, żeby nie liczyć miksu dwa razy.
+        var accepted = Math.Min(sourceFrames, _resampler.AcceptableFrames);
+        var mapped = MapChannels(source, accepted);
+        return _resampler.Process(mapped, accepted, destination, out sourceFramesUsed);
     }
+
+    /// <summary>
+    /// Końcówka filtru po ostatniej ramce źródła. Zero, gdy już nic nie zostało albo
+    /// częstotliwość się nie zmienia.
+    /// </summary>
+    public int Drain(Span<float> destination) => _resampler?.Drain(destination) ?? 0;
+
+    /// <summary>Stan jak przed pierwszą ramką: po przewinięciu historia filtru należy do starego miejsca.</summary>
+    public void Reset() => _resampler?.Reset();
 
     /// <summary>Mono is duplicated across every output; anything else goes through the mix matrix.</summary>
     private ReadOnlySpan<float> MapChannels(ReadOnlySpan<float> source, int frames)
@@ -263,16 +260,4 @@ internal sealed unsafe class SampleConverter : IDisposable
         Speaker.BackCenter => (0.5f, 0.5f),
         _ => (0f, 0f),
     };
-
-    public void Dispose()
-    {
-        if (_disposed) return;
-        _disposed = true;
-
-        if (_resampler != nint.Zero)
-        {
-            NativeAudio.ResamplerDestroy(_resampler);
-            _resampler = nint.Zero;
-        }
-    }
 }

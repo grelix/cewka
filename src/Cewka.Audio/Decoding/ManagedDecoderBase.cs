@@ -5,10 +5,13 @@ namespace Cewka.Audio.Decoding;
 /// and channel count. Subclasses only have to fetch source frames; the pump below feeds
 /// them through <see cref="SampleConverter"/> until the caller's buffer is full.
 /// </summary>
-internal abstract class ManagedDecoderBase : IAudioDecoder
+internal abstract class ManagedDecoderBase : IAudioDecoder, IContinuousDecoder
 {
     /// <summary>Upper bound on a single source read, so a slow track cannot allocate without limit.</summary>
     private const int MaxSourceFramesPerPull = 16384;
+
+    /// <summary>Poziom z chwili utworzenia, w wątku, który otwiera dekoder.</summary>
+    private readonly ResamplingLevel _level = AudioQuality.Current;
 
     private SampleConverter _converter = null!;
     private IReadOnlyList<Speaker> _layout = [];
@@ -17,6 +20,12 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
     private int _pendingFrames;
     private bool _endOfStream;
     private bool _reconfigured;
+
+    /// <summary>Źródło oddało już jakąś ramkę albo było przewijane; stanu poprzedniego utworu przejąć nie wolno.</summary>
+    private bool _started;
+
+    /// <summary>Końcówkę filtru przejął następny utwór albo została już wydana.</summary>
+    private bool _tailGone;
 
     private BitrateMeter? _meter;
 
@@ -30,6 +39,11 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
     public long Position => PositionFrames;
     public abstract bool CanSeek { get; }
     public int InstantaneousBitrate => _meter?.Kilobits ?? 0;
+
+    public bool HoldTail { get; set; }
+
+    /// <summary>Poziom konwersji, z jakim dekoder powstał.</summary>
+    internal ResamplingLevel ResamplingLevel => _level;
 
     /// <summary>
     /// Called by the subclass once the underlying reader knows the source format.
@@ -48,8 +62,7 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
         Channels = targetChannels;
 
         _layout = layout;
-        _converter = new SampleConverter(
-            sourceChannels, sourceRate, targetChannels, targetRate, AudioQuality.ResamplerFilterOrder, layout);
+        _converter = NewConverter();
     }
 
     /// <summary>
@@ -58,25 +71,20 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
     /// Wolno wywołać tylko z <see cref="ReadSource"/>, zanim do bufora trafiła jakakolwiek ramka;
     /// <see cref="ReadSource"/> zwraca wtedy zero, a klasa bazowa pyta ponownie z buforem
     /// dobranym do nowej liczby kanałów. Pozycja i długość liczone są w ramkach wyjściowych,
-    /// więc zostają bez zmian.
+    /// więc zostają bez zmian. Nowy konwerter zaczyna od zera: historia filtru należy do
+    /// strumienia w starym formacie.
     /// </summary>
     protected void Reconfigure(int sourceRate, int sourceChannels, IReadOnlyList<Speaker> layout)
     {
-        RebuildConverter(sourceRate, sourceChannels, layout);
-
         SourceSampleRate = sourceRate;
         SourceChannels = sourceChannels;
+        _layout = layout;
+        _converter = NewConverter();
         _reconfigured = true;
     }
 
-    private void RebuildConverter(int sourceRate, int sourceChannels, IReadOnlyList<Speaker> layout)
-    {
-        var previous = _converter;
-        _converter = new SampleConverter(
-            sourceChannels, sourceRate, Channels, SampleRate, previous.FilterOrder, layout);
-        previous.Dispose();
-        _layout = layout;
-    }
+    private SampleConverter NewConverter() =>
+        new(SourceChannels, SourceSampleRate, Channels, SampleRate, _level, _layout);
 
     /// <summary>
     /// Fills <paramref name="destination"/> with at most <paramref name="frames"/> source frames
@@ -91,6 +99,16 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
     /// <summary>Moves the underlying reader; the frame index is expressed in source frames.</summary>
     protected abstract void SeekSource(long sourceFrame);
 
+    /// <summary>
+    /// Przewija źródło i zwraca ramkę źródła, na której faktycznie stanęło. Dekoder, który wie
+    /// o nieudanym przewinięciu, podaje tu prawdziwe miejsce, żeby pozycja opisywała to, co zagra.
+    /// </summary>
+    protected virtual long SeekSourceTo(long sourceFrame)
+    {
+        SeekSource(sourceFrame);
+        return sourceFrame;
+    }
+
     public int Read(Span<float> destination)
     {
         var wanted = destination.Length / Channels;
@@ -102,7 +120,26 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
         {
             if (_pendingFrames == 0)
             {
-                if (_endOfStream) break;
+                // Najpierw to, co konwerter może już policzyć z przyjętego wejścia: przy pełnym
+                // buforze wywołującego część zostaje na następny odczyt, a nie może zginąć przy
+                // zmianie formatu ani przejść do następnego utworu.
+                var ready = _converter.Process([], 0, destination[(produced * Channels)..], out _);
+                if (ready > 0)
+                {
+                    produced += ready;
+                    continue;
+                }
+
+                if (_endOfStream)
+                {
+                    if (HoldTail) break;
+
+                    var drained = DrainInto(destination[(produced * Channels)..]);
+                    if (drained == 0) break;
+
+                    produced += drained;
+                    continue;
+                }
 
                 var need = (int)Math.Clamp(_converter.RequiredSourceFrames(wanted - produced), 1, MaxSourceFramesPerPull);
                 EnsureSourceCapacity(need);
@@ -115,11 +152,12 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
                     if (SourceWaiting) break;
 
                     _endOfStream = true;
-                    break;
+                    continue;
                 }
 
                 _pendingOffset = 0;
                 _pendingFrames = got;
+                _started = true;
             }
 
             var input = _source.AsSpan(_pendingOffset * SourceChannels, _pendingFrames * SourceChannels);
@@ -140,6 +178,41 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
         return produced;
     }
 
+    public int DrainTail(Span<float> destination)
+    {
+        if (!_endOfStream || _pendingFrames != 0) return 0;
+
+        var drained = DrainInto(destination);
+        PositionFrames += drained;
+        _meter?.AddFrames(drained);
+        return drained;
+    }
+
+    private int DrainInto(Span<float> destination)
+    {
+        if (_tailGone) return 0;
+
+        var drained = _converter.Drain(destination);
+        if (drained == 0) _tailGone = true;
+        return drained;
+    }
+
+    public bool TryContinueFrom(IAudioDecoder previous)
+    {
+        if (previous is not ManagedDecoderBase other || ReferenceEquals(other, this)) return false;
+
+        // Ten zaczął już grać od zera albo poprzedni nie skończył: strumienie się nie sklejają.
+        if (_started || PositionFrames != 0 || _endOfStream) return false;
+        if (!other._endOfStream || other._pendingFrames != 0 || other._tailGone) return false;
+
+        if (!other._converter.NeedsResampling || !other._converter.SameConversionAs(_converter)) return false;
+
+        _converter = other._converter;
+        other._converter = other.NewConverter();
+        other._tailGone = true;
+        return true;
+    }
+
     public void Seek(long frame)
     {
         if (!CanSeek) return;
@@ -148,15 +221,20 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
             ? frame
             : (long)Math.Round(frame * (double)SourceSampleRate / SampleRate);
 
-        SeekSource(Math.Max(0, sourceFrame));
+        var target = Math.Max(0, sourceFrame);
+        var landed = SeekSourceTo(target);
 
-        // Resampler pamięta ostatnie próbki i stan filtru ze starego miejsca.
-        if (_converter.NeedsResampling) RebuildConverter(SourceSampleRate, SourceChannels, _layout);
+        // Resampler pamięta ostatnie próbki ze starego miejsca, po przejęciu także z poprzedniego utworu.
+        _converter.Reset();
 
         _pendingOffset = 0;
         _pendingFrames = 0;
         _endOfStream = false;
-        PositionFrames = frame;
+        _tailGone = false;
+        _started = true;
+        PositionFrames = landed == target
+            ? frame
+            : SourceSampleRate == SampleRate ? landed : (long)Math.Round(landed * (double)SampleRate / SourceSampleRate);
 
         // Po przewinięciu zależność bajtów od czasu przestaje obowiązywać.
         _meter?.Reset();
@@ -170,9 +248,5 @@ internal abstract class ManagedDecoderBase : IAudioDecoder
 
     protected virtual void DisposeCore() { }
 
-    public void Dispose()
-    {
-        DisposeCore();
-        _converter?.Dispose();
-    }
+    public void Dispose() => DisposeCore();
 }

@@ -192,8 +192,10 @@ public sealed class TrackQualityLabelTests
         Assert.True(rig.Line.ShowsLabel);
 
         // Ten sam wiersz: wspólny rodzic, wspólna linia bazowa, etykieta zaraz za wykonawcą z odstępem.
+        // Etykieta jest napisem przycisku, który otwiera tor sygnału.
         Assert.Same(rig.Line, artist.Parent);
-        Assert.Same(rig.Line, quality.Parent);
+        Assert.Same(rig.Window.TrackQualityButton, quality.Parent);
+        Assert.Same(rig.Line, rig.Window.TrackQualityButton.Parent);
         Assert.Equal(Baseline(artist, rig.Window), Baseline(quality, rig.Window), 1.0);
         var gap = Left(quality, rig.Window) - Right(artist, rig.Window);
         Assert.Equal(QualityRow.GapPerEm * quality.FontSize, gap, 1.0);
@@ -306,7 +308,8 @@ public sealed class TrackQualityLabelTests
 
         // Kropka zostaje tuż przed napisem; etykieta w tym samym wierszu, za napisem, z odstępem.
         Assert.Same(rig.Window.LiveDot.Parent, caption.Parent);
-        Assert.Same(rig.Window.LiveLine, quality.Parent);
+        Assert.Same(rig.Window.LiveQualityButton, quality.Parent);
+        Assert.Same(rig.Window.LiveLine, rig.Window.LiveQualityButton.Parent);
         Assert.Equal(Baseline(caption, rig.Window), Baseline(quality, rig.Window), 1.0);
         Assert.Equal(QualityRow.GapPerEm * quality.FontSize, Left(quality, rig.Window) - Right(caption, rig.Window), 1.0);
 
@@ -316,7 +319,7 @@ public sealed class TrackQualityLabelTests
         Assert.True(Ink(quality).A < Ink(caption).A, $"{Ink(quality)} wobec {Ink(caption)}");
 
         // W radiu wiersz wykonawcy opisuje stację; etykiety w nim nie ma.
-        Assert.False(rig.Quality.IsVisible);
+        Assert.False(rig.Window.TrackQualityButton.IsVisible);
         Assert.False(rig.Player.ShowsTrackQuality);
     });
 
@@ -366,7 +369,7 @@ public sealed class TrackQualityLabelTests
         });
         Render();
         Assert.True(rig.Window.LiveCaption.IsEffectivelyVisible);
-        Assert.False(rig.Window.LiveQuality.IsEffectivelyVisible);
+        Assert.False(rig.Window.LiveQualityButton.IsEffectivelyVisible);
     });
 
     [Fact]
@@ -398,6 +401,7 @@ public sealed class TrackQualityLabelTests
 
     // ---------- Dostępność ----------
 
+    /// <summary>Za wykonawcą przycisk toru sygnału, a w nim opis parametrów.</summary>
     [Fact]
     public void CzytnikCzytaWykonawcePotemJakosc() => Ui.Run(() =>
     {
@@ -407,7 +411,8 @@ public sealed class TrackQualityLabelTests
         var artist = order.IndexOf("Wykonawca — Album");
         var quality = order.IndexOf(rig.Player.FormatBadge);
         Assert.True(artist >= 0, string.Join(" | ", order));
-        Assert.Equal(artist + 1, quality);
+        Assert.Equal(Strings.Current["TooltipSignalPath"], order[artist + 1]);
+        Assert.Equal(artist + 2, quality);
     });
 
     [Fact]
@@ -420,6 +425,61 @@ public sealed class TrackQualityLabelTests
         Assert.Equal(live, order.LastIndexOf(Strings.Current["RadioLive"]));
         var quality = order.IndexOf(rig.Player.FormatBadge);
         Assert.True(live >= 0, string.Join(" | ", order));
-        Assert.True(live + 1 == quality, string.Join(" | ", order));
+        Assert.True(live + 2 == quality && order[live + 1] == Strings.Current["TooltipSignalPath"], string.Join(" | ", order));
+    });
+
+    /// <summary>Plik 44,1 kHz zapisany pod ścieżką utworu z zestawu testowego.</summary>
+    private static void WriteWav44(string path)
+    {
+        using var writer = new BinaryWriter(File.Create(path));
+
+        const int rate = 44100;
+        const int dataBytes = 400;
+        writer.Write("RIFF"u8);
+        writer.Write(36 + dataBytes);
+        writer.Write("WAVE"u8);
+        writer.Write("fmt "u8);
+        writer.Write(16);
+        writer.Write((short)1);
+        writer.Write((short)2);
+        writer.Write(rate);
+        writer.Write(rate * 4);
+        writer.Write((short)4);
+        writer.Write((short)16);
+        writer.Write("data"u8);
+        writer.Write(dataBytes);
+        writer.Write(new byte[dataBytes]);
+    }
+
+    /// <summary>
+    /// Częstotliwość próbkowania ma separator dziesiętny języka interfejsu: „44,1 kHz” po polsku,
+    /// „44.1 kHz” po angielsku, także po zmianie języka przy grającym utworze.
+    /// </summary>
+    [Fact]
+    public void CzestotliwoscProbkowaniaMaSeparatorJezykaInterfejsu() => Ui.Run(() =>
+    {
+        var language = Strings.Current.CurrentCode;
+        using var rig = Open();
+
+        try
+        {
+            rig.Player.SetLanguage("pl");
+            var path = rig.Harness.Track("a");
+            WriteWav44(path);
+            rig.Harness.OpenPaths([path]);
+            Assert.True(rig.Harness.PumpUntil(() => rig.Player.FormatBadge.Contains("kHz")), $"opis formatu: „{rig.Player.FormatBadge}”");
+
+            Assert.EndsWith("44,1 kHz", rig.Player.FormatBadge);
+
+            rig.Player.SetLanguage("en");
+            Assert.EndsWith("44.1 kHz", rig.Player.FormatBadge);
+
+            rig.Player.SetLanguage("pl");
+            Assert.EndsWith("44,1 kHz", rig.Player.FormatBadge);
+        }
+        finally
+        {
+            rig.Player.SetLanguage(language);
+        }
     });
 }

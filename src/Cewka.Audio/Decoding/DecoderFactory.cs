@@ -10,6 +10,8 @@ public static class DecoderFactory
     {
         AudioFileFormat.Wav or AudioFileFormat.Mp3 or AudioFileFormat.Flac => true,
         AudioFileFormat.OggVorbis or AudioFileFormat.Opus => true,
+        AudioFileFormat.WavPack => true,
+        AudioFileFormat.Aiff => true,
 
         // Zależne od systemu: Media Foundation w Windows, GStreamer pod Linuksem.
         _ when SystemCodecs.Handles(format) => SystemCodecs.IsAvailable,
@@ -86,6 +88,11 @@ public static class DecoderFactory
 
             AudioFileFormat.Opus =>
                 new OpusDecoder(stream, ownsStream, outputSampleRate, outputChannels, meter),
+
+            AudioFileFormat.WavPack =>
+                new WavPackDecoder(stream, ownsStream, outputSampleRate, outputChannels, meter),
+            AudioFileFormat.Aiff =>
+                new AiffDecoder(stream, ownsStream, outputSampleRate, outputChannels, meter),
 
             _ => throw Unsupported(format),
         };

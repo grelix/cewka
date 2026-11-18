@@ -184,6 +184,9 @@ public static class CoverPalette
     /// </summary>
     public static byte[] Sample(byte[] encoded)
     {
+        if (!CoverImage.FitsAtWidth(encoded, SampleSize))
+            throw new InvalidDataException("okładka poza pułapem wymiarów");
+
         using var stream = new MemoryStream(encoded);
         using var small = Bitmap.DecodeToWidth(stream, SampleSize, BitmapInterpolationMode.MediumQuality);
 

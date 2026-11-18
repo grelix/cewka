@@ -24,7 +24,7 @@ internal static class Program
 
         if (SettingsStore.ReadSingleInstanceFlag())
         {
-            var claim = SingleInstance.Start(Address, args);
+            var claim = SingleInstance.Start(() => Address, args);
 
             // Rola była zajęta i tamta kopia przyjęła wiersz poleceń — ta nie ma nic do roboty.
             if (claim.HandedOver) return;
@@ -33,6 +33,10 @@ internal static class Program
         }
 
         App.Instance = instance;
+
+        // Od tej chwili wiadomo, że ta kopia zbuduje okno. Odczyt biegnie w tle, gdy wątek główny
+        // uruchamia Avalonię; kopia, która tylko oddała ścieżki, do niego nie dochodzi.
+        SettingsStore.Preload();
 
         try
         {

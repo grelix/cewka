@@ -431,6 +431,38 @@ public sealed class RadioWindowTests
         Assert.Equal(["pl-b", "pl-a"], RadioStateStore.Load(h.RadioFile).Favourites.Select(f => f.Id));
     });
 
+    /// <summary>Ulubiona z pustym kodekiem w zapisie i widok ulubionych: wejście w radio nie wywraca programu.</summary>
+    [Fact]
+    public void UlubionaZPustymKodekiemNieWywracaWidoku() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        File.WriteAllText(h.RadioFile, """
+            {"schemaVersion":1,"favourites":[{"id":"x","name":"X","streams":[{"url":"http://a/","codec":null}]}],
+             "context":{"view":"favourites"}}
+            """);
+
+        h.Player.SetSource(SourceMode.Radio);
+
+        Assert.Equal(["x"], h.Player.Radio.Rows.Select(r => r.Station.Id));
+    });
+
+    /// <summary>Po uszkodzonym pliku ulubione dodane w sesji wracają przy następnym uruchomieniu.</summary>
+    [Fact]
+    public void UlubionePoUszkodzonymPlikuPrzetrwajaRestart() => Ui.Run(() =>
+    {
+        string directory;
+        using (var h = new PlayerHarness())
+        {
+            directory = h.Directory;
+            File.WriteAllText(h.RadioFile, "{ uszkodzony");
+            StartRadio(h);
+            h.Player.Radio.ToggleFavourite(Find(h, "pl-a"));
+        }
+
+        using var next = new PlayerHarness(directory: directory);
+        Assert.Equal(["pl-a"], RadioStateStore.Load(next.RadioFile).Favourites.Select(f => f.Id));
+    });
+
     [Fact]
     public void OstatnioSluchaneMajaNajwyzejDziesiecIZapisujaOstatniaStacje() => Ui.Run(() =>
     {
@@ -510,6 +542,27 @@ public sealed class RadioWindowTests
 
         var again = radio.Import(text);
         Assert.Equal(0, again);
+    });
+
+    /// <summary>
+    /// Import biegnie na wątku interfejsu: lista tuż pod limitem rozmiaru pliku nie może zamrozić
+    /// okna, a nadmiar ponad pułap liczy się jako pominięty.
+    /// </summary>
+    [Fact]
+    public void ImportDuzejListyKonczySieSzybkoIPomijaNadmiar() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        StartRadio(h);
+        var radio = h.Player.Radio;
+        var text = string.Join("\n", Enumerable.Range(0, 50_000).Select(i => $"http://a.example.com/{i}"));
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var added = radio.Import(text);
+        clock.Stop();
+
+        Assert.Equal(StationPlaylist.MaxStations, added);
+        Assert.Equal(string.Format(Strings.Current["RadioImportedSkipped"], added, 50_000 - added), h.Player.Notice);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5), $"trwało {clock.ElapsedMilliseconds} ms");
     });
 
     // ---------- Stacje niedozwolone ----------

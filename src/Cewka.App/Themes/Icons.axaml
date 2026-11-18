@@ -66,6 +66,11 @@
   <StreamGeometry x:Key="IconSpeakerMutedStroke">M10.8 6 14.4 9.8M14.4 6 10.8 9.8</StreamGeometry>
   <StreamGeometry x:Key="IconResetStroke">M3.1 8.4A4.9 4.9 0 1 0 4.5 4.5M4.4 1.7V4.6H7.3</StreamGeometry>
 
+  <!-- Rodzaje filtrów korektora parametrycznego: kształt charakterystyki (dzwon, półka dolna, półka górna). -->
+  <StreamGeometry x:Key="IconFilterPeakStroke">M1.5 11.5H3.4C5.6 11.5 6.2 4 8 4S10.4 11.5 12.6 11.5H14.5</StreamGeometry>
+  <StreamGeometry x:Key="IconFilterLowShelfStroke">M1.5 4.5H5C7.6 4.5 8.4 11.5 11 11.5H14.5</StreamGeometry>
+  <StreamGeometry x:Key="IconFilterHighShelfStroke">M1.5 11.5H5C7.6 11.5 8.4 4.5 11 4.5H14.5</StreamGeometry>
+
   <!-- Radio: obudowa z gałką strojenia i głośnikiem, antena od lewej. -->
   <StreamGeometry x:Key="IconRadioStroke">M2,6.2 H14 V13.4 H2 Z M3.6,6.2 L11.4,2.4 M5.4,9.8 A1.6,1.6 0 1 0 8.6,9.8 A1.6,1.6 0 1 0 5.4,9.8 M10.6,8.8 H12.2 M10.6,11 H12.2</StreamGeometry>
 

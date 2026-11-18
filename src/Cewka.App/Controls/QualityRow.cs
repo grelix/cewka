@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Media;
 
 namespace Cewka.App.Controls;
@@ -13,6 +14,10 @@ namespace Cewka.App.Controls;
 /// a etykieta zostaje w całości. Etykieta nigdy nie jest ucinana ani zawijana. Znika w całości dopiero
 /// wtedy, gdy obok niej pierwsze dziecko nie miałoby choćby <see cref="LeadMinEm"/> em swojego pisma
 /// (tekst bez przycinania: całej swojej szerokości) albo gdy sama nie mieści się w wierszu.
+/// </para>
+/// <para>
+/// Etykietą może być też przycisk z napisem w środku: pismo i linię bazową bierze się wtedy z napisu,
+/// z uwzględnieniem marginesu, obramowania i odstępu wewnętrznego przycisku.
 /// </para>
 /// </summary>
 public sealed class QualityRow : Panel
@@ -137,11 +142,15 @@ public sealed class QualityRow : Panel
     private static double MinWidthOf(Control lead, double natural) =>
         IsTrimmable(lead) ? LeadMinEm * FontSizeOf(lead) : natural;
 
-    private static double FontSizeOf(Control control) => control switch
+    private static double FontSizeOf(Control control) => TextOf(control)?.FontSize ?? 0;
+
+    /// <summary>Napis, który wyznacza pismo i linię bazową dziecka.</summary>
+    private static TextBlock? TextOf(Control control) => control switch
     {
-        TextBlock text => text.FontSize,
-        Panel panel => panel.Children.OfType<TextBlock>().FirstOrDefault(t => t.IsVisible)?.FontSize ?? 0,
-        _ => 0,
+        TextBlock text => text,
+        Panel panel => panel.Children.OfType<TextBlock>().FirstOrDefault(t => t.IsVisible),
+        ContentControl { Content: TextBlock text } => text,
+        _ => null,
     };
 
     /// <summary>
@@ -150,12 +159,16 @@ public sealed class QualityRow : Panel
     /// </summary>
     private static double BaselineOf(Control control)
     {
-        var text = control as TextBlock
-                   ?? (control as Panel)?.Children.OfType<TextBlock>().FirstOrDefault(t => t.IsVisible);
+        var text = TextOf(control);
 
-        if (text?.TextLayout is { TextLines.Count: > 0 } layout)
-            return text.Margin.Top + text.Padding.Top + layout.TextLines[0].Baseline;
+        if (text?.TextLayout is not { TextLines.Count: > 0 } layout) return control.DesiredSize.Height;
 
-        return control.DesiredSize.Height;
+        var baseline = text.Margin.Top + text.Padding.Top + layout.TextLines[0].Baseline;
+
+        // Przycisk: napis leży pod marginesem, obramowaniem i odstępem wewnętrznym.
+        if (control is TemplatedControl templated)
+            baseline += templated.Margin.Top + templated.BorderThickness.Top + templated.Padding.Top;
+
+        return baseline;
     }
 }

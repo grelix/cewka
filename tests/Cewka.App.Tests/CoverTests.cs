@@ -37,6 +37,53 @@ public sealed class CoverTests
     public void UszkodzonaOkladkaNieWywracaOdtwarzania() =>
         Assert.Null(MainViewModel.DecodeCover([1, 2, 3, 4, 5]));
 
+    /// <summary>
+    /// Obraz o skrajnych proporcjach zdekodowany do szerokości płyty urósłby do setek megabajtów;
+    /// zostaje okładka zastępcza.
+    /// </summary>
+    [Fact]
+    public void OkladkaOSkrajnychProporcjachNieJestPowiekszana() => Ui.Run(() =>
+    {
+        var cover = MainViewModel.DecodeCover(Png(1, 300, Colors.SteelBlue));
+
+        try
+        {
+            Assert.True(cover is null || (long)cover.Display.PixelSize.Width * cover.Display.PixelSize.Height <= CoverImage.MaxPixels,
+                $"rozmiar {cover?.Display.PixelSize}");
+        }
+        finally
+        {
+            cover?.Discard();
+        }
+    });
+
+    [Fact]
+    public void DuzaOkladkaOSkrajnychProporcjachNieJestPowiekszana() => Ui.Run(() =>
+    {
+        using var bitmap = MainViewModel.DecodeLargeCover(Png(300, 1, Colors.SteelBlue), 600);
+
+        Assert.True(bitmap is null || (long)bitmap.PixelSize.Width * bitmap.PixelSize.Height <= CoverImage.MaxPixels,
+            $"rozmiar {bitmap?.PixelSize}");
+    });
+
+    /// <summary>Wymiary z nagłówka ponad pułap: obraz odrzucony bez dekodowania.</summary>
+    [Fact]
+    public void WymiaryZNaglowkaPonadPulapOdrzucajaObraz() => Ui.Run(() =>
+    {
+        var png = Png(4, 4, Colors.SteelBlue);
+        Assert.Equal((4, 4), CoverImage.Size(png));
+
+        // Pole szerokości i wysokości w IHDR, bez poprawiania sumy kontrolnej: liczy się sam nagłówek.
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(png.AsSpan(16), 30000);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(png.AsSpan(20), 30000);
+
+        Assert.Null(CoverImage.Size(png));
+        Assert.Null(MainViewModel.DecodeCover(png));
+        Assert.Null(MainViewModel.DecodeLargeCover(png, 600));
+        Assert.ThrowsAny<Exception>(() => CoverPalette.Sample(png));
+        Assert.ThrowsAny<Exception>(() => CoverBlur.FromEncoded(png));
+    });
+
     [Fact]
     public void PaletaZProbkiOddajeBarweOkladki() => Ui.Run(() =>
     {
@@ -316,5 +363,22 @@ public sealed class CoverTests
         target.Save(stream);
 #pragma warning restore CS0618
         return stream.ToArray();
+    }
+
+    /// <summary>Okładka BMP też ma wymiary w nagłówku, więc przechodzi tę samą kontrolę co pozostałe.</summary>
+    [Theory]
+    [InlineData(600, 600, true)]
+    [InlineData(600, -600, true)]
+    [InlineData(30000, 30000, false)]
+    [InlineData(0, 600, false)]
+    public void WymiaryOkladkiBmpSaCzytaneZNaglowka(int width, int height, bool accepted)
+    {
+        var header = new byte[54];
+        header[0] = (byte)'B';
+        header[1] = (byte)'M';
+        BitConverter.GetBytes(width).CopyTo(header, 18);
+        BitConverter.GetBytes(height).CopyTo(header, 22);
+
+        Assert.Equal(accepted, Cewka.App.Services.CoverImage.Size(header) is not null);
     }
 }

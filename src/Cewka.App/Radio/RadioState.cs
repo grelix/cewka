@@ -63,7 +63,16 @@ public sealed class RadioState
     [JsonIgnore]
     public bool ReadOnly { get; set; }
 
-    public bool IsFavourite(string id) => Favourites.Any(f => f.Id == id);
+    /// <summary>
+    /// Identyfikatory ulubionych do sprawdzania bez przeglądania listy: import dodaje tysiące
+    /// stacji, a każdy wiersz listy pyta o swoją. Budowany na nowo, gdy lista została podmieniona
+    /// (odczyt pliku stanu) albo zmieniła długość poza metodami tej klasy.
+    /// </summary>
+    private HashSet<string>? _favouriteIds;
+    private List<RadioStation>? _indexedFavourites;
+    private int _indexedCount;
+
+    public bool IsFavourite(string id) => FavouriteIds().Contains(id);
 
     /// <summary>Dodaje na koniec; false, gdy stacja już jest.</summary>
     public bool AddFavourite(RadioStation station)
@@ -72,7 +81,21 @@ public sealed class RadioState
             return false;
 
         Favourites.Add(station.Copy());
+        _favouriteIds!.Add(station.Id);
+        _indexedCount = Favourites.Count;
         return true;
+    }
+
+    private HashSet<string> FavouriteIds()
+    {
+        if (_favouriteIds is null || !ReferenceEquals(_indexedFavourites, Favourites) || _indexedCount != Favourites.Count)
+        {
+            _favouriteIds = new HashSet<string>(Favourites.Select(f => f.Id), StringComparer.Ordinal);
+            _indexedFavourites = Favourites;
+            _indexedCount = Favourites.Count;
+        }
+
+        return _favouriteIds;
     }
 
     /// <summary>Usuwa bez pytania; zwraca indeks i kopię do cofnięcia (Ctrl+Z) albo null, gdy stacji nie było.</summary>
@@ -84,6 +107,9 @@ public sealed class RadioState
 
         var station = Favourites[index];
         Favourites.RemoveAt(index);
+
+        // Ten sam identyfikator mógł być w pliku stanu dwa razy; zbiór zbuduje się od nowa.
+        _favouriteIds = null;
         return (index, station);
     }
 
@@ -94,6 +120,8 @@ public sealed class RadioState
             return false;
 
         Favourites.Insert(Math.Clamp(index, 0, Favourites.Count), station);
+        _favouriteIds!.Add(station.Id);
+        _indexedCount = Favourites.Count;
         return true;
     }
 

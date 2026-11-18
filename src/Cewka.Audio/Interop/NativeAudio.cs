@@ -22,7 +22,7 @@ internal static unsafe partial class NativeAudio
     /// Wersja zestawu funkcji, której oczekuje ten kod; ta sama stała jest w
     /// <c>native/cewka_audio.c</c>. Zmienia się przy każdej zmianie sygnatur lub znaczenia eksportów.
     /// </summary>
-    internal const int AbiVersion = 3;
+    internal const int AbiVersion = 4;
 
     [LibraryImport(Library, EntryPoint = "cewka_abi_version")]
     private static partial int NativeAbiVersion();
@@ -61,6 +61,13 @@ internal static unsafe partial class NativeAudio
     private static partial int UseNullBackend(int on);
 
     private static readonly Lock BackendLock = new();
+
+    /// <summary>
+    /// Lista urządzeń po stronie natywnej jest jedna na proces i każde odświeżenie zapisuje ją od
+    /// nowa, a otwarcie urządzenia bierze z niej identyfikator po numerze. Odczyt listy i otwarcie
+    /// urządzenia z dwóch wątków naraz czytałyby pamięć w trakcie zapisu, więc idą pod tą blokadą.
+    /// </summary>
+    internal static readonly Lock DeviceListLock = new();
     private static bool _nullBackend = Environment.GetEnvironmentVariable(NullOutputVariable) == "1";
     private static bool _backendApplied;
 
@@ -190,21 +197,42 @@ internal static unsafe partial class NativeAudio
         nint handle, byte* input, int inputSize, float* output, int outputCapacitySamples,
         out int consumed, out int sampleRate, out int channels, out int bitrateKbps);
 
-    // ---------- resampler ----------
+    // ---------- dekoder WavPack ----------
 
-    [LibraryImport(Library, EntryPoint = "cewka_resampler_create")]
-    internal static partial int ResamplerCreate(
-        uint channels, uint rateIn, uint rateOut, uint lpfOrder, out nint handle);
+    /// <summary>Wyniki funkcji <c>cewka_wavpack_*</c>; inne niż kody miniaudio.</summary>
+    internal const int WavPackOk = 0;
+    internal const int WavPackDamaged = 3;
 
-    [LibraryImport(Library, EntryPoint = "cewka_resampler_process")]
-    internal static partial int ResamplerProcess(
-        nint handle, float* input, ref ulong frameCountIn, float* output, ref ulong frameCountOut);
+    /// <summary>DSD albo plik sprzed wersji 4.</summary>
+    internal const int WavPackUnsupported = 4;
 
-    [LibraryImport(Library, EntryPoint = "cewka_resampler_required_input")]
-    internal static partial ulong ResamplerRequiredInput(nint handle, ulong outputFrameCount);
+    /// <summary>Liczba kanałów poza granicą biblioteki.</summary>
+    internal const int WavPackChannels = 5;
 
-    [LibraryImport(Library, EntryPoint = "cewka_resampler_destroy")]
-    internal static partial void ResamplerDestroy(nint handle);
+    /// <summary>Tyle bajtów mieści opis błędu biblioteki wraz z zerem końcowym.</summary>
+    internal const int WavPackErrorCapacity = 128;
+
+    [LibraryImport(Library, EntryPoint = "cewka_wavpack_open")]
+    internal static partial int WavPackOpen(
+        delegate* unmanaged<void*, void*, nuint, nuint> read,
+        delegate* unmanaged<void*, long, int, int> seek,
+        delegate* unmanaged<void*, int, long> tell,
+        void* user, byte* error, int errorSize,
+        out nint handle, out uint sampleRate, out uint channels, out uint channelMask,
+        out uint bitsPerSample, out int isFloat, out long totalFrames);
+
+    /// <summary>Ramki float32 z przeplotem; zero na końcu, −1 przy złych argumentach.</summary>
+    [LibraryImport(Library, EntryPoint = "cewka_wavpack_read")]
+    internal static partial int WavPackRead(nint handle, float* output, int frameCount);
+
+    [LibraryImport(Library, EntryPoint = "cewka_wavpack_seek")]
+    internal static partial int WavPackSeek(nint handle, long frame);
+
+    [LibraryImport(Library, EntryPoint = "cewka_wavpack_position")]
+    internal static partial long WavPackPosition(nint handle);
+
+    [LibraryImport(Library, EntryPoint = "cewka_wavpack_close")]
+    internal static partial void WavPackClose(nint handle);
 
     // ---------- diagnostyka ----------
 

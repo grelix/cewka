@@ -31,6 +31,41 @@ public sealed class SystemCodecTests : IDisposable
         Assert.Equal(DecoderFailures.Describe(DecoderFailure.CodecMissing), ex.Message);
     }
 
+    /// <summary>
+    /// Media Foundation dostaje ścieżkę jako adres, więc znaki o znaczeniu w adresach (krzyżyk,
+    /// procent, znak zapytania nie występuje w nazwach Windows) nie mogą zmienić tego, który plik
+    /// się otwiera. Takie nazwy są w zbiorach muzyki zwyczajne: „#1 Hits”, „100% Hits”.
+    /// </summary>
+    [MediaFoundationFact]
+    public void NazwyZeZnakamiAdresowOtwierajaWlasciwyPlik()
+    {
+        var tone = TestAudioFiles.Wav(TestAudioFiles.ToneInChannel(2, 1, 48000, 48000), 2, 48000);
+        var silence = TestAudioFiles.Wav(new float[2 * 48000], 2, 48000);
+
+        // Plik, na który wskazywałaby nazwa po rozkodowaniu procentów, ma ciszę.
+        Write("a b.wav", silence);
+
+        string[] names = ["#1 hity.wav", "100% hity.wav", "a%20b.wav", "zażółć gęślą jaźń.wav", "a&b;c=d.wav", "[live] (2) +1.wav", "50%.wav"];
+        var failures = new List<string>();
+
+        foreach (var name in names)
+        {
+            var path = Write(name, tone);
+            try
+            {
+                using var decoder = SystemCodecs.Open(path, 48000, 2, null);
+                var (_, right) = Rms(decoder);
+                if (right < 0.3) failures.Add($"{name}: prawy kanał {right:0.000}");
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"{name}: {ex.GetType().Name} {ex.Message}");
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join("; ", failures));
+    }
+
     [MediaFoundationFact]
     public void StereoFileDecodesUnchanged()
     {

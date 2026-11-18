@@ -106,6 +106,51 @@ public class RadioCatalogFileTests
         }));
     }
 
+    private const string LogoServer = "https://maciejgrela.pl/apps/cewka/logos/";
+
+    /// <summary>
+    /// Logo pochodzi najpierw z serwera z kopiami: adres stoi pierwszy i nosi identyfikator stacji,
+    /// więc plik da się znaleźć i podmienić bez spisu. Dalsze adresy to źródła, do których program
+    /// sięga, gdy serwer nie odpowiada.
+    /// </summary>
+    [Fact]
+    public void LogoZSerweraKopiiStoiPierwszeIMaAdresZapasowy()
+    {
+        // Każda stacja z logo, bez wyjątków: stacja, której kopii nie da się zrobić, nie ma adresu logo wcale.
+        var hosted = Catalog.Value.Stations.Where(s => s.Logos.Count > 0).ToList();
+
+        Assert.True(hosted.Count >= 640, $"stacji z logo: {hosted.Count}");
+        Assert.All(hosted, s =>
+        {
+            Assert.StartsWith(LogoServer, s.Logos[0], StringComparison.Ordinal);
+            Assert.Equal(s.Id, Path.GetFileNameWithoutExtension(s.Logos[0][LogoServer.Length..]));
+            Assert.Contains(Path.GetExtension(s.Logos[0]), new[] { ".png", ".jpg", ".webp", ".gif" });
+            Assert.DoesNotContain(s.Logos.Skip(1), url => url.StartsWith(LogoServer, StringComparison.Ordinal));
+            Assert.True(s.Logos.Count >= 2, $"{s.Id}: brak adresu zapasowego");
+        });
+    }
+
+    /// <summary>
+    /// Zapasowe adresy Wikimedii zgodne z jej zasadami dla programów: plik wprost z serwera plików,
+    /// oryginał albo miniatura w rozmiarze standardowym, bez stron pośrednich.
+    /// </summary>
+    [Fact]
+    public void ZapasoweAdresyWikimediiSaPlikamiWRozmiarachStandardowych()
+    {
+        var standard = new HashSet<string> { "20", "40", "60", "120", "250", "330", "500", "960", "1280", "1920", "3840" };
+        var addresses = Catalog.Value.Stations.SelectMany(s => s.Logos)
+            .Where(url => new Uri(url).IdnHost.EndsWith("wikimedia.org", StringComparison.OrdinalIgnoreCase)).Distinct().ToList();
+
+        Assert.NotEmpty(addresses);
+        Assert.All(addresses, url =>
+        {
+            Assert.StartsWith("https://upload.wikimedia.org/wikipedia/commons/", url, StringComparison.Ordinal);
+            var thumb = System.Text.RegularExpressions.Regex.Match(url, @"/thumb/.+/(\d+)px-[^/]+$");
+            if (url.Contains("/thumb/", StringComparison.Ordinal))
+                Assert.True(thumb.Success && standard.Contains(thumb.Groups[1].Value), url);
+        });
+    }
+
     [Fact]
     public void PlikNieZawieraPolPopularnosciUwagPrawnychPochodzeniaIGrupyRegulaminu()
     {

@@ -13,6 +13,7 @@ public class DecoderFailureTests
     [Theory]
     [InlineData(AudioFileFormat.OggVorbis)]
     [InlineData(AudioFileFormat.Opus)]
+    [InlineData(AudioFileFormat.WavPack)]
     public void DamagedFileReportsReasonWithoutLibraryText(AudioFileFormat format)
     {
         var ex = Assert.Throws<AudioException>(

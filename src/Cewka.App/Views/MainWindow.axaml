@@ -307,8 +307,14 @@
                       <TextBlock x:Name="TrackArtist" Classes="dim" Text="{Binding ShownLine}" FontSize="17"
                                  IsVisible="{Binding HasShownLine}"
                                  TextTrimming="CharacterEllipsis" />
-                      <TextBlock x:Name="TrackQuality" Classes="faint" Text="{Binding FormatBadge}" FontSize="13.6"
-                                 FontWeight="Light" IsVisible="{Binding ShowsTrackQuality}" />
+                      <!-- Opis parametrów otwiera okienko toru sygnału. -->
+                      <Button x:Name="TrackQualityButton" Classes="quality" Classes.open="{Binding IsSignalPathOpen}"
+                              IsVisible="{Binding ShowsTrackQuality}" Click="OnSignalPathClick"
+                              ToolTip.Tip="{l:Translate TooltipSignalPath}"
+                              AutomationProperties.Name="{l:Translate TooltipSignalPath}">
+                        <TextBlock x:Name="TrackQuality" Classes="faint" Text="{Binding FormatBadge}" FontSize="13.6"
+                                   FontWeight="Light" />
+                      </Button>
                     </c:QualityRow>
 
                     <!-- Radio: błąd stacji z przyciskiem ponowienia, gdy ponowienie ma sens. -->
@@ -423,8 +429,12 @@
                                        IsActive="{Binding IsPlaying}" IsReduced="{Binding ReducedEffects}" />
                             <TextBlock x:Name="LiveCaption" Classes="dim" Text="{l:Translate RadioLive}" FontSize="11" />
                           </StackPanel>
-                          <TextBlock x:Name="LiveQuality" Classes="faint" Text="{Binding FormatBadge}" FontSize="11"
-                                     IsVisible="{Binding HasFormatBadge}" />
+                          <Button x:Name="LiveQualityButton" Classes="quality" Classes.open="{Binding IsSignalPathOpen}"
+                                  IsVisible="{Binding HasFormatBadge}" Click="OnSignalPathClick"
+                                  ToolTip.Tip="{l:Translate TooltipSignalPath}"
+                                  AutomationProperties.Name="{l:Translate TooltipSignalPath}">
+                            <TextBlock x:Name="LiveQuality" Classes="faint" Text="{Binding FormatBadge}" FontSize="11" />
+                          </Button>
                         </c:QualityRow>
                       </StackPanel>
                     </Grid>
@@ -979,6 +989,41 @@
         </Grid>
 
       </DockPanel>
+
+      <!--
+        Okienko toru sygnału pod opisem parametrów. Na warstwie nakładek okna, nie w osobnym oknie:
+        dziedziczy pismo i motyw okna, a w testach bez okien rysuje się w jego obrazie. Przesunięcie
+        w lewo stawia tekst karty w jednej linii z opisem parametrów.
+      -->
+      <Popup x:Name="SignalPathPopup" Placement="BottomEdgeAlignedLeft" VerticalOffset="8" HorizontalOffset="-14"
+             IsLightDismissEnabled="True" ShouldUseOverlayLayer="True"
+             IsOpen="{Binding IsSignalPathOpen, Mode=TwoWay}">
+        <Border x:Name="SignalPathCard" Classes="signal-path" Width="380">
+          <Border Classes="section" AutomationProperties.Name="{l:Translate SignalPathTitle}">
+            <StackPanel Spacing="12">
+              <TextBlock Classes="section-title" Text="{l:Translate SignalPathTitle}" />
+              <ItemsControl x:Name="SignalPathList" ItemsSource="{Binding SignalPathStages}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Spacing="9" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SignalPathStage">
+                    <!-- Wartość dostaje miejsce, którego nie zajęła nazwa; długa nazwa zawija się w swojej kolumnie. -->
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
+                      <TextBlock Classes="setting-label" Text="{Binding Label}" TextWrapping="Wrap" MaxWidth="150" />
+                      <TextBlock Grid.Column="1" Classes="faint signal-value" Text="{Binding Value}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock x:Name="SignalPathUnchangedText" Classes="setting-hint"
+                         Text="{l:Translate SignalPathUnchanged}" IsVisible="{Binding SignalPathUnchanged}" />
+            </StackPanel>
+          </Border>
+        </Border>
+      </Popup>
 
       <!-- ============ Scena pełnoekranowa: na wierzchu, okno pod nią ukryte ============ -->
       <v:SceneView x:Name="Scene" />

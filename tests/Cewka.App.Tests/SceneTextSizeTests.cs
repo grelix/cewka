@@ -293,4 +293,27 @@ public sealed class SceneTextSizeTests
             Render();
         }
     });
+
+    /// <summary>
+    /// Scena, której zabrano model widoku (okno traci treść przy zamykaniu albo przebudowie), nie
+    /// układa napisów według modelu, którego już nie ma.
+    /// </summary>
+    [Fact]
+    public void ScenaBezModeluWidokuNieZglaszaWyjatku() => Ui.Run(() =>
+    {
+        using var h = new PlayerHarness();
+        var window = new MainWindow(false, h.Player);
+
+        try
+        {
+            window.Scene.DataContext = null;
+            window.Scene.DataContext = h.Player;
+
+            Assert.Same(h.Player, window.Scene.DataContext);
+        }
+        finally
+        {
+            window.Close();
+        }
+    });
 }

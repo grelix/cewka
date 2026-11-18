@@ -2,6 +2,77 @@
 
 Każda wersja opisuje tylko to, co zmieniło się od poprzedniej.
 
+## 1.1.0 (2026-11-18)
+
+Dokładniejszy dźwięk, korektor parametryczny, przenikanie utworów, arkusze CUE i dwa nowe formaty. Do tego szybszy start, mniejsze zużycie pamięci i poprawki radia.
+
+### Dźwięk
+
+- Pliki o innej częstotliwości próbkowania niż urządzenie brzmią wierniej: konwersja zachowuje najwyższe tony i nie dodaje do nich zniekształceń. Dotyczy to większości odsłuchów, bo system gra zwykle w 48 kHz, a muzyka ma 44,1 kHz. Najniższy poziom jakości nazywa się teraz „Oszczędna” zamiast „Bez filtru”.
+- Albumy grane bez przerwy zostają ciągłe także wtedy, gdy częstotliwość pliku jest inna niż urządzenia.
+- Normalizacja głośności ma tryb albumowy: utwory jednego albumu zachowują różnice głośności, a poziom nie skacze na granicy utworów granych bez przerwy. Domyślny tryb automatyczny stosuje go, gdy sąsiednie utwory kolejki są z tego samego albumu.
+- Przenikanie utworów: koniec utworu nakłada się na początek następnego przez 2 do 12 sekund. Kolejne utwory tego samego albumu grają wtedy nadal bez przerwy i bez przenikania. Opcja jest wyłączona; włącza się ją w Ustawieniach, w Dźwięk › Odtwarzanie.
+- Kliknięcie opisu parametrów pliku pod tytułem otwiera tor sygnału: listę wszystkiego, co dzieje się z dźwiękiem między plikiem a urządzeniem, od konwersji częstotliwości po ogranicznik.
+- Windows: albumy w plikach M4A grają bez przerw. Dotąd każdy plik zaczynał się i kończył ułamkiem sekundy dodanym przez koder.
+
+### Korektor
+
+- Korektor ma tryb parametryczny: do 20 pasm z wyborem filtru, częstotliwości, wzmocnienia i dobroci oraz z wykresem charakterystyki. Pasma można wczytać z pliku w formacie Equalizer APO, na przykład z profili słuchawek AutoEq, i zapisać do takiego pliku.
+- Korektor i efekty mogą mieć osobne ustawienia dla każdego urządzenia: inne dla słuchawek, inne dla głośników. Opcję włącza się w Ustawieniach, w Dźwięk › Korektor i efekty.
+
+### Pliki i odtwarzanie
+
+- Arkusze CUE: album zapisany w jednym pliku z arkuszem `.cue` pokazuje się w kolejce jako osobne utwory, z tytułami z arkusza, i gra bez przerw między nimi.
+- Nowe formaty plików: AIFF i WavPack.
+- Plik bez dźwięku (sam nagłówek, urwane pobieranie) przy włączonym powtarzaniu nie zawiesza już odtwarzania. Dotąd Cewka otwierała go w kółko i zajmowała cały rdzeń procesora.
+- Pliki Opus kończą się dokładnie tam, gdzie kończy się nagranie. Dotąd na końcu grało jeszcze dopełnienie ostatniego pakietu, do 20 ms, słyszalne między utworami granymi bez przerwy.
+- Przewijanie w plikach Opus trafia dokładnie w wybrane miejsce. Dotąd dźwięk zaczynał się nawet sekundę wcześniej, niż pokazywał pasek postępu.
+
+### Szybkość, pamięć i dysk
+
+- Cewka uruchamia się mniej więcej dwa razy szybciej. Plik programu jest przez to większy o około 19 MB.
+- Pismo chińskie i japońskie wczytuje się dopiero wtedy, gdy na ekranie pojawi się znak, który go wymaga. Do tego czasu Cewka zajmuje około 27 MB pamięci mniej.
+- Pierwsze przeglądanie listy stacji radiowych zużywa mniej pamięci: duży obraz logo pobrany dla wiersza listy jest zwalniany od razu, a nie po czasie, także gdy logo nie da się zapisać na dysku.
+- W trakcie grania Cewka zapisuje na dysk tylko miejsce odtwarzania, a listę utworów dopiero po jej zmianie. Dotąd co pół minuty i po każdym utworze zapisywała całą kolejkę, przy dużej kolejce megabajty za każdym razem.
+- Pamięć podręczna pomiarów głośności jest wielokrotnie mniejsza. Dotąd po każdym nowo zmierzonym utworze Cewka zapisywała od nowa cały plik, który rósł o ponad 5 kB na utwór.
+- Lista stacji radiowych zużywa mniej pamięci i szybciej pokazuje logo: wiersz wczytuje tylko mały obraz, a nie także duży.
+- Po aktualizacji Cewka sama usuwa z dysku pliki poprzednich wersji. Dotąd każda aktualizacja zostawiała w katalogu tymczasowym około 120 MB.
+
+### Radio
+
+- Kolejne stacje radiowe mają logo, między innymi LOS40, esRadio, Radio Opole, Metro FM, Süper FM i programy greckiego radia publicznego ERT.
+- Logo stacji pochodzą z jednego serwera programu, a do serwerów nadawców i Wikimedia Commons Cewka sięga dopiero wtedy, gdy ten nie odpowiada. Lista stacji nie zależy przez to od kilkuset różnych serwerów. Teksty o prywatności w programie i w opisie mówią, skąd logo jest pobierane.
+- Cztery logo, które były za duże, żeby się pokazać (Metro 95.1, Radio Moldova Muzical i Tineret, Radio Żnin FM), oraz logo City FM po zmianie adresu u nadawcy są znów widoczne.
+- Serwer logo, który nie odpowiada, jest pomijany przez kilka minut, zamiast wstrzymywać każde logo z listy na dziesięć sekund.
+- Stacja, która nie dostała logo z powodu chwilowego braku sieci, pobiera je, gdy znów pojawi się na liście. Dotąd zostawała bez logo do zmiany kraju albo filtra.
+- Logo stacji, której serwer chwilowo ograniczył liczbę pobrań, wraca po przerwie podanej przez serwer, zwykle po kwadransie. Dotąd taka stacja zostawała bez logo na tydzień.
+- Logo stacji, którego nie udało się zapisać na dysku, pokazuje się mimo to i zapisuje przy następnej okazji. Dotąd stacja zostawała bez logo na tydzień.
+- Stacja nadająca w HLS, której dźwięku nie da się zdekodować, kończy się komunikatem i próbą adresu zapasowego. Dotąd wisiała w buforowaniu bez końca.
+- Stacja nadająca w HLS, która już gra, łączy się ponownie po pojedynczej złej odpowiedzi serwera. Dotąd stacja z jednym adresem kończyła wtedy odtwarzanie.
+- Po ponownym połączeniu stacja nie jest już skreślana z powodu uszkodzonych danych, na których urwało się poprzednie połączenie.
+
+### Interfejs
+
+- Podpowiedź przycisku pojawia się pod nim albo nad nim, a nie przy kursorze. W zmaksymalizowanym oknie podpowiedź przycisków w stopce panelu kolejki zasłaniała sam przycisk i pierwsze kliknięcie nie działało.
+- Wysuwany panel kolejki zmienia wygląd razem z motywem. Dotąd po przełączeniu między jasnym a ciemnym zostawał z tłem poprzedniego motywu, dopóki się go nie przypięło i nie odpięło.
+- Interfejs po japońsku rysuje znaki kanji krojem japońskim. Dotąd rysował je krój chiński, w którym część znaków ma inny kształt.
+- Częstotliwość próbkowania w opisie pliku ma separator dziesiętny języka interfejsu: „44.1 kHz” po angielsku, japońsku i chińsku zamiast „44,1 kHz”.
+- Po zmianie języka w otwartych Ustawieniach wszystkie teksty są od razu w nowym języku. Dotąd nazwy wizualizacji, kształtu widma i fali, stan panelu multimediów, rozmiar pamięci logo oraz zakładki listy stacji zostawały w poprzednim.
+
+### Odporność na złe dane
+
+- Uszkodzony albo celowo spreparowany plik FLAC, Ogg, Opus lub M4A nie zawiesza już programu, nie zamyka go i nie zajmuje gigabajtów pamięci. Cewka pomija taki plik i gra dalej; dotyczy to odtwarzania, czytania znaczników i okładek oraz pomiaru głośności.
+- Kolejka i ulubione stacje nie przepadają, gdy ich plik był przy starcie chwilowo zablokowany, na przykład przez program antywirusowy. Plik uszkodzony zostaje w kopii obok.
+- Lista odtwarzania pomija wpisy, które nie są plikami dźwiękowymi. Lista pobrana z internetu pomija też adresy sieciowe spoza udziału, na którym sama leży. Import listy stacji radiowych przyjmuje do 2000 pozycji i nie zatrzymuje okna nawet przy bardzo długiej liście.
+- Okładka o skrajnych wymiarach nie zajmuje już pamięci: zamiast niej pokazuje się okładka zastępcza.
+
+### Linux
+
+- Linux: potok nazwany albo urządzenie z rozszerzeniem pliku dźwiękowego w otwieranym folderze nie zatrzymuje odtwarzania.
+- Linux: polecenie przewinięcia o skrajną wartość z panelu multimediów lub innego programu nie zamyka Cewki.
+- Linux: otwarcie kilku tysięcy plików naraz z menedżera plików trafia do działającego okna. Dotąd przy bardzo długiej liście otwierało się drugie okno.
+- Linux: Cewka uruchamia się także wtedy, gdy katalogu sesji nie da się utworzyć.
+
 ## 1.0.0 (2026-11-11)
 
 Scena pełnoekranowa z wizualizacjami, Cewka na telewizorze i radio internetowe.

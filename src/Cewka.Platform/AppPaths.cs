@@ -103,26 +103,42 @@ public static class AppPaths
             return overridden;
         }
 
-        if (!OperatingSystem.IsWindows())
-        {
-            var runtime = Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
-
-            if (!string.IsNullOrWhiteSpace(runtime) && Directory.Exists(runtime))
-            {
-                var root = Path.Combine(runtime, UnixFolderName);
-
-                Directory.CreateDirectory(
-                    root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-
-                return root;
-            }
-        }
+        if (OperatingSystem.IsWindows()) return ConfigDirectory;
 
         // Zapas na wypadek pulpitu bez XDG_RUNTIME_DIR. Katalog ustawień też należy do jednego
         // użytkownika; różnica jest taka, że nie znika przy wylogowaniu, więc plik gniazda
         // potrafi tam przeleżeć do następnego uruchomienia. Nie szkodzi: zakłada je dopiero ta
         // kopia, która zdobyła blokadę, i wtedy stary plik po prostu nadpisuje.
-        return ConfigDirectory;
+        return RuntimeDirectoryUnder(Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR"), () => ConfigDirectory);
+    }
+
+    /// <summary>
+    /// Katalog programu w <paramref name="runtime"/> (<c>XDG_RUNTIME_DIR</c>), a gdy zmiennej
+    /// lub katalogu nie ma albo katalogu programu nie da się w nim utworzyć, <paramref name="fallback"/>.
+    /// Zmienna bywa odziedziczona po innym użytkowniku (<c>su</c> bez „-”), a pod nazwą katalogu
+    /// może leżeć plik; program ma wtedy ruszyć, a nie upaść przed oknem.
+    /// </summary>
+    internal static string RuntimeDirectoryUnder(string? runtime, Func<string> fallback)
+    {
+        if (string.IsNullOrWhiteSpace(runtime) || !Directory.Exists(runtime)) return fallback();
+
+        var root = Path.Combine(runtime, UnixFolderName);
+
+        try
+        {
+            if (OperatingSystem.IsWindows())
+                Directory.CreateDirectory(root);
+            else
+                Directory.CreateDirectory(
+                    root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+            return root;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Console.Error.WriteLine($"[cewka] katalog sesji niedostępny, użyty zostanie katalog ustawień: {ex.Message}");
+            return fallback();
+        }
     }
 
     private static string ResolveCacheDirectory()

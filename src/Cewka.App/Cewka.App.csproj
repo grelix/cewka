@@ -23,15 +23,23 @@
     dziala; kompresja zbija to o ponad polowe.
 
     IncludeAllContentForSelfExtract wypakowuje przy pierwszym starcie danej wersji caly pakunek
-    (okolo 90 MB) do katalogu tymczasowego, a kolejne starty czytaja pliki stamtad zamiast
-    rozpakowywac skompresowane zestawy w pamieci. NativeAudio szuka cewka_audio wlasnie
+    (okolo 170 MB) do katalogu tymczasowego, a kolejne starty czytaja pliki stamtad zamiast
+    rozpakowywac skompresowane zestawy w pamieci. Katalogi poprzednich wersji usuwa
+    Services/BundleExtractionCleanup. NativeAudio szuka cewka_audio wlasnie
     w runtimes/{rid}/native katalogu wypakowania. Pulapka: bez tej opcji biblioteka trafia
     do pakunku pod ta sama sciezka, ale host przeszukuje tylko korzen katalogu wypakowania,
     wiec NativeAudio jej nie znajdzie.
+
+    PublishReadyToRun kompiluje zestawy do kodu maszynowego przy publikacji. Bez tego program
+    przy kazdym starcie kompilowal w locie okolo 15 tysiecy metod (wlasnych i Avalonii, ktorej
+    pakiety przychodza bez kodu maszynowego) i zajmowalo to wiecej niz polowe czasu do pierwszej
+    klatki: 1,3 s zamiast 0,65 s w Windows, 1,15 s zamiast 0,46 s w Linuksie. Cena to plik
+    wiekszy o okolo 19 MB i katalog wypakowania wiekszy o okolo 50 MB.
   -->
   <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
     <SelfContained>true</SelfContained>
     <PublishTrimmed>false</PublishTrimmed>
+    <PublishReadyToRun>true</PublishReadyToRun>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>

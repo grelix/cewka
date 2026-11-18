@@ -219,6 +219,130 @@ public sealed class PlaylistFileTests : IDisposable
     }
 
     /// <summary>
+    /// Lista przechodzi ten sam filtr rozszerzeń co pliki z folderu: inny istniejący plik nie
+    /// trafia do silnika ani do czytnika znaczników.
+    /// </summary>
+    [Fact]
+    public void WpisyBezRozszerzeniaDzwiekowegoSaPomijane()
+    {
+        var utwor = Plik("a.mp3");
+        Plik("notatki.txt");
+        var lista = Path.Combine(_katalog, "lista.m3u8");
+        File.WriteAllText(lista, "#EXTM3U\nnotatki.txt\na.mp3\n");
+        var sprawdzone = new List<string>();
+
+        var wynik = PlaylistFile.Load(lista, null, path => { sprawdzone.Add(path); return File.Exists(path); });
+
+        Assert.Equal([utwor], wynik.Paths);
+        Assert.DoesNotContain(sprawdzone, path => path.EndsWith(".txt", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Samo sprawdzenie istnienia pliku pod adresem sieciowym łączy się z obcym serwerem
+    /// (w Windowsie z przekazaniem poświadczeń), a ścieżka urządzenia nie jest plikiem.
+    /// W liście pobranej z sieci takie wpisy są pomijane bez sprawdzania.
+    /// </summary>
+    [Fact]
+    public void WLisciePobranejZSieciSciezkiSiecioweIUrzadzenNieSaSprawdzane()
+    {
+        var lista = Path.Combine(_katalog, "lista.m3u8");
+        File.WriteAllText(lista, string.Join('\n',
+        [
+            "#EXTM3U",
+            @"\\obcy-serwer\udzial\a.mp3",
+            "//obcy-serwer/udzial/b.mp3",
+            "file://obcy-serwer/udzial/c.mp3",
+            @"\\.\pipe\d.mp3",
+            @"\\?\C:\e.mp3",
+        ]));
+        var sprawdzone = new List<string>();
+
+        var wynik = PlaylistFile.Load(lista, null, path => { sprawdzone.Add(path); return true; }, fromInternet: true);
+
+        Assert.Empty(sprawdzone);
+        Assert.Empty(wynik.Paths);
+    }
+
+    /// <summary>
+    /// Lista ułożona przez słuchacza może wskazywać serwer z muzyką, choć sama leży na dysku
+    /// lokalnym. Ścieżki urządzeń odpadają zawsze.
+    /// </summary>
+    [Fact]
+    public void ListaSluchaczaZachowujeWpisyZSerwera()
+    {
+        var lista = Path.Combine(_katalog, "lista.m3u8");
+        File.WriteAllText(lista, string.Join('\n',
+        [
+            "#EXTM3U",
+            @"\\nas\muzyka\a.mp3",
+            @"\\.\pipe\d.mp3",
+            @"\\?\C:\e.mp3",
+        ]));
+        var sprawdzone = new List<string>();
+
+        var wynik = PlaylistFile.Load(lista, null, path => { sprawdzone.Add(path); return true; }, fromInternet: false);
+
+        var wpis = Assert.Single(wynik.Paths);
+        Assert.EndsWith("a.mp3", wpis);
+        Assert.DoesNotContain(sprawdzone, path => path.Contains("pipe") || path.Contains('?'));
+    }
+
+    /// <summary>Windows oznacza plik pobrany z sieci osobnym strumieniem; po nim poznaje się listę z zewnątrz.</summary>
+    [Fact]
+    public void ListaPobranaZSieciJestRozpoznawanaPoOznaczeniuSystemu()
+    {
+        var lista = Path.Combine(_katalog, "pobrana.m3u8");
+        File.WriteAllText(lista, "#EXTM3U\n");
+
+        Assert.False(PlaylistFile.IsFromInternet(lista));
+
+        if (!OperatingSystem.IsWindows()) return;
+
+        File.WriteAllText(lista + ":Zone.Identifier", "[ZoneTransfer]\r\nZoneId=3\r\n");
+        Assert.True(PlaylistFile.IsFromInternet(lista));
+
+        File.WriteAllText(lista + ":Zone.Identifier", "[ZoneTransfer]\r\nZoneId=1\r\n");
+        Assert.False(PlaylistFile.IsFromInternet(lista));
+    }
+
+    /// <summary>Wpis sieciowy jest dozwolony tylko na tym samym serwerze i udziale co sama lista.</summary>
+    [Theory]
+    [InlineData(@"\\nas\muzyka\album\a.mp3", @"\\nas\muzyka\listy", true)]
+    [InlineData(@"\\NAS\Muzyka\a.mp3", @"\\nas\muzyka", true)]
+    [InlineData(@"\\nas\inny\a.mp3", @"\\nas\muzyka\listy", false)]
+    [InlineData(@"\\obcy\muzyka\a.mp3", @"\\nas\muzyka\listy", false)]
+    [InlineData(@"\\nas\muzyka\a.mp3", @"C:\Muzyka", false)]
+    [InlineData(@"\\.\pipe\a.mp3", @"\\.\pipe", false)]
+    [InlineData(@"\\?\C:\a.mp3", @"\\?\C:\", false)]
+    [InlineData(@"C:\Muzyka\a.mp3", @"\\nas\muzyka", true)]
+    public void WpisSieciowyTylkoZUdzialuListy(string entry, string playlistDirectory, bool allowed)
+    {
+        Assert.Equal(allowed, PlaylistFile.IsAllowedLocation(entry, playlistDirectory));
+    }
+
+    [Fact]
+    public void LiczbaWpisowJestOgraniczona()
+    {
+        var lista = Path.Combine(_katalog, "lista.m3u8");
+        File.WriteAllText(lista, string.Concat(Enumerable.Repeat("a.mp3\n", PlaylistFile.MaxEntries + 500)));
+
+        var wynik = PlaylistFile.Load(lista, null, _ => true);
+
+        Assert.Equal(PlaylistFile.MaxEntries, wynik.Paths.Count);
+    }
+
+    /// <summary>Lista ponad limit rozmiaru idzie drogą błędu odczytu, a nie do pamięci.</summary>
+    [Fact]
+    public void ListaPonadLimitRozmiaruNieJestWczytywana()
+    {
+        var lista = Path.Combine(_katalog, "lista.m3u8");
+        using (var stream = File.Create(lista))
+            stream.SetLength(PlaylistFile.MaxBytes + 1);
+
+        Assert.ThrowsAny<IOException>(() => PlaylistFile.Load(lista, null, _ => true));
+    }
+
+    /// <summary>
     /// Plik zapisany w Windowsie ma się czytać w Linuksie, więc separatorem w liście jest
     /// ukośnik zwykły, niezależnie od tego, czym rozdziela ścieżki system.
     /// </summary>

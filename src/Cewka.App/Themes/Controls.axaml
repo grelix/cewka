@@ -377,6 +377,63 @@
     <Setter Property="CornerRadius" Value="17" />
   </Style>
 
+  <!-- ======================= Opis parametrów pliku ======================= -->
+
+  <!--
+    Opis parametrów pliku i jakości stacji otwiera okienko toru sygnału. W spoczynku wygląda jak sam
+    tekst: odstęp wewnętrzny znosi ujemny margines, więc napis stoi co do piksela tam, gdzie stał.
+    Najechanie, fokus z klawiatury i otwarte okienko podświetlają go jak opcje korektora.
+  -->
+  <Style Selector="Button.quality">
+    <Setter Property="Padding" Value="5,2" />
+    <Setter Property="Margin" Value="-5,-2" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+
+  <Style Selector="Button.quality /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Background" Duration="0:0:0.15" />
+      </Transitions>
+    </Setter>
+  </Style>
+
+  <Style Selector="Button.quality:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.quality:focus-visible /template/ ContentPresenter#PART_ContentPresenter, Button.quality.open /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource GlassBrush}" />
+  </Style>
+
+  <Style Selector="Button.quality:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Glass2Brush}" />
+  </Style>
+
+  <Style Selector="Button.quality:pointerover TextBlock.faint, Button.quality:focus-visible TextBlock.faint, Button.quality.open TextBlock.faint">
+    <Setter Property="Foreground" Value="{DynamicResource Text2Brush}" />
+  </Style>
+
+  <!--
+    Okienko toru sygnału: karta jak sekcja ustawień. Szkło karty leży na nieprzezroczystym tle,
+    bo okienko stoi nad treścią okna, która inaczej prześwitywałaby spod tekstu.
+  -->
+  <Style Selector="Border.signal-path">
+    <Setter Property="Background" Value="{DynamicResource OverlayBrush}" />
+    <Setter Property="CornerRadius" Value="12" />
+    <Setter Property="BoxShadow" Value="0 10 32 0 #59000000" />
+  </Style>
+
+  <Style Selector="Border.signal-path TextBlock.signal-value">
+    <Setter Property="FontSize" Value="12.5" />
+    <Setter Property="Foreground" Value="{DynamicResource Text3Brush}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="TextAlignment" Value="Right" />
+  </Style>
+
   <!-- ======================= Opcje korektora ======================= -->
 
   <Style Selector=":is(Button).option">

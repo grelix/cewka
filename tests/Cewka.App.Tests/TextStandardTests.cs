@@ -192,7 +192,8 @@ public sealed class TextStandardTests
         @"^(Hint[A-Z]|EffectDescription|AudioFailure|DecoderFailure|TrackFailure|MediaPanel[A-Z]" +
         @"|Associations(Current|Stale|Absent|Unsupported|Failed)|Update(Available|Current|Failed|Notice)$" +
         @"|Playlist(Saved|Missing|Empty|LoadFailed|SaveFailed)$|Device(Idle|LostNotice|FallbackNotice)$" +
-        @"|DropHint$|FolderReadFailed$|Latency(Measured|Unknown)$|TracksSkipped$)");
+        @"|DropHint$|FolderReadFailed$|Latency(Measured|Unknown)$|TracksSkipped$" +
+        @"|Equaliser(Imported|ImportedPartly|ImportPreampLimited|ImportPreampLimitedHigh|ImportEmpty|ImportFailed|Exported|ExportFailed|NoBands)$)");
 
     /// <summary>Etykiety, nazwy, podpowiedzi przycisków i skróty: bez kropki na końcu.</summary>
     private static readonly Regex LabelKey = new(
@@ -258,6 +259,8 @@ public sealed class TextStandardTests
         Assert.Matches(SentenceKey, "HintQuality");
         Assert.Matches(SentenceKey, "AudioFailureDevice");
         Assert.Matches(SentenceKey, "TrackFailureDamagedFile");
+        Assert.Matches(SentenceKey, "EqualiserImportedPartly");
+        Assert.DoesNotMatch(SentenceKey, "EqualiserImportTitle");
         Assert.DoesNotMatch(SentenceKey, "AudioRetry");
         Assert.Matches(LabelKey, "SettingQuality");
         Assert.Matches(LabelKey, "TooltipRepeatOff");

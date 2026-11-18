@@ -87,21 +87,25 @@ public sealed unsafe class AudioDevice : IAudioOutput
         var index = -1;
         var fallback = false;
 
-        if (!string.IsNullOrEmpty(deviceName))
+        // Numer jest ważny tylko do następnego odświeżenia listy, więc lista i otwarcie idą razem.
+        lock (NativeAudio.DeviceListLock)
         {
-            try
+            if (!string.IsNullOrEmpty(deviceName))
             {
-                index = AudioDeviceList.Enumerate().FirstOrDefault(d => d.Name == deviceName)?.Index ?? -1;
-            }
-            catch (AudioException ex)
-            {
-                Console.Error.WriteLine($"[cewka] odczyt listy urządzeń: {ex.Message}");
+                try
+                {
+                    index = AudioDeviceList.Enumerate().FirstOrDefault(d => d.Name == deviceName)?.Index ?? -1;
+                }
+                catch (AudioException ex)
+                {
+                    Console.Error.WriteLine($"[cewka] odczyt listy urządzeń: {ex.Message}");
+                }
+
+                fallback = index < 0;
             }
 
-            fallback = index < 0;
+            return new AudioDevice(sampleRate, channels, index, periodSizeInFrames) { IsFallback = fallback };
         }
-
-        return new AudioDevice(sampleRate, channels, index, periodSizeInFrames) { IsFallback = fallback };
     }
 
     /// <summary>Rate the device actually runs at, which may differ from the request.</summary>

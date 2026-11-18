@@ -53,6 +53,13 @@ internal sealed class HlsAudioStream : Stream
 
     private enum SegmentKind { Unknown, Transport, Packed }
 
+    /// <summary>
+    /// Zamknięcie strumienia ma przerwać odczyt tak jak zerwanie zwykłego połączenia. Między
+    /// segmentami nie ma otwartego połączenia, tylko czekanie na playlistę, więc bez tego sygnału
+    /// odczyt trwałby dalej i pobierał kolejne segmenty stacji, którą sesja właśnie porzuciła.
+    /// </summary>
+    private readonly CancellationTokenSource _closed = new();
+
     public HlsAudioStream(IHlsFetcher fetcher, Uri mediaUrl, HlsMedia first)
     {
         _fetcher = fetcher;
@@ -101,8 +108,24 @@ internal sealed class HlsAudioStream : Stream
 
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _closed.Token);
+
+        try
+        {
+            return await ReadCoreAsync(buffer, linked.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_closed.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new ObjectDisposedException(nameof(HlsAudioStream));
+        }
+    }
+
+    private async ValueTask<int> ReadCoreAsync(Memory<byte> buffer, CancellationToken cancellationToken)
+    {
         while (true)
         {
+            ObjectDisposedException.ThrowIf(_closed.IsCancellationRequested, this);
+
             if (_outputRead < _output.WrittenCount)
             {
                 var count = Math.Min(buffer.Length, _output.WrittenCount - _outputRead);
@@ -164,6 +187,11 @@ internal sealed class HlsAudioStream : Stream
 
             throw Transient(e.Failure.Reason, e.Message);
         }
+        catch (Exception e) when (DuringPlay(e) is { } transient)
+        {
+            CloseSegment();
+            throw transient;
+        }
 
         _kind = SegmentKind.Unknown;
         _detected = 0;
@@ -183,6 +211,10 @@ internal sealed class HlsAudioStream : Stream
         catch (LiveOpenException e) when (e.Failure.Reason is not (LiveFailureReason.UrlBlocked or LiveFailureReason.AddressRefused))
         {
             throw Transient(e.Failure.Reason, e.Message);
+        }
+        catch (Exception e) when (DuringPlay(e) is { } transient)
+        {
+            throw transient;
         }
 
         if (HlsPlaylistParser.Parse(content, finalUrl) is not HlsMedia playlist)
@@ -303,6 +335,24 @@ internal sealed class HlsAudioStream : Stream
     private static LiveOpenException Transient(LiveFailureReason reason, string detail) =>
         new(new LiveFailure(reason, Detail: detail), transient: true);
 
+    /// <summary>
+    /// Błąd pobrania w trakcie grania jako przejściowy, także gdy przyszedł wyjątkiem klienta HTTP:
+    /// jedna zła odpowiedź serwera przy otwieraniu skreśla adres, ale stacji, która już gra,
+    /// należy się nowe połączenie. Dotyczy tylko błędów klienta HTTP i odczytu; null zostawia
+    /// wyjątek bez zmian: anulowanie, zamknięcie strumienia, stałą odmowę adresu i certyfikatu
+    /// oraz wszystko, co nie jest błędem sieci, bo ponawianie niczego by tam nie naprawiło.
+    /// </summary>
+    private static LiveOpenException? DuringPlay(Exception e)
+    {
+        if (e is not (HttpRequestException or IOException)) return null;
+
+        var failure = LiveErrors.Classify(e).Failure;
+
+        return failure.Reason is LiveFailureReason.AddressRefused or LiveFailureReason.TlsFailed
+            ? null
+            : new LiveOpenException(new LiveFailure(failure.Reason, Detail: e.Message), transient: true, inner: e);
+    }
+
     public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     public override void Flush() { }
     public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
@@ -311,7 +361,12 @@ internal sealed class HlsAudioStream : Stream
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) CloseSegment();
+        if (disposing)
+        {
+            _closed.Cancel();
+            CloseSegment();
+        }
+
         base.Dispose(disposing);
     }
 }

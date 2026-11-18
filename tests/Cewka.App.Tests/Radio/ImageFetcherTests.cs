@@ -90,6 +90,36 @@ public sealed class ImageFetcherTests
             () => ImageFetcher.ReadAsync(response, 10_000, CancellationToken.None));
     }
 
+    /// <summary>
+    /// Odpowiedź „za dużo żądań” i przekroczenie czasu po stronie serwera to stan chwilowy, a nie brak
+    /// obrazu: serwer, który ogranicza tempo pobierania, odda ten sam plik kilka minut później.
+    /// </summary>
+    [Theory]
+    [InlineData(429, ImageFetchProblem.Throttled)]
+    [InlineData(408, ImageFetchProblem.Throttled)]
+    [InlineData(404, ImageFetchProblem.Missing)]
+    [InlineData(403, ImageFetchProblem.Missing)]
+    [InlineData(410, ImageFetchProblem.Missing)]
+    [InlineData(500, ImageFetchProblem.Unavailable)]
+    [InlineData(503, ImageFetchProblem.Unavailable)]
+    public void KodOdpowiedzi_RozstrzygaJakDlugoPamietacPorazke(int status, ImageFetchProblem expected)
+    {
+        Assert.Equal(expected, ImageFetcher.ProblemFor(LiveFailureReason.OtherHttpStatus, status));
+    }
+
+    /// <summary>Czas, o który prosi serwer w nagłówku Retry-After, dociera do tego, kto pamięta porażkę.</summary>
+    [Fact]
+    public void PrzerwaPodanaPrzezSerwer_TrafiaDoWyniku()
+    {
+        var failure = new LiveOpenException(new LiveFailure(LiveFailureReason.ServerError, 429), TimeSpan.FromSeconds(90));
+
+        var result = ImageFetcher.FromFailure(failure);
+
+        Assert.Equal(ImageFetchProblem.Throttled, result.Problem);
+        Assert.Equal(429, result.Status);
+        Assert.Equal(TimeSpan.FromSeconds(90), result.RetryAfter);
+    }
+
     [Theory]
     [InlineData("http://example.org/logo.png")]
     [InlineData("https://127.0.0.1/logo.png")]

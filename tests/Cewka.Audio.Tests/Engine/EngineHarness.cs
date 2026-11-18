@@ -93,6 +93,14 @@ internal sealed class EngineHarness : IDisposable
         return path;
     }
 
+    /// <summary>Utwór z dowolnego dekodera, np. prawdziwego na pliku z pamięci; zwraca ścieżkę do kolejki.</summary>
+    public string Track(string name, Func<IAudioDecoder> factory)
+    {
+        var path = WriteWav(name + ".wav");
+        _decoders[path] = factory;
+        return path;
+    }
+
     /// <summary>Plik w formacie, którego odtwarzacz nie obsługuje.</summary>
     public string Unsupported(string name)
     {

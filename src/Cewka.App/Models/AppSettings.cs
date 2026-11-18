@@ -26,18 +26,19 @@ public enum EffectsMode
 }
 
 /// <summary>
-/// Jakość konwersji częstotliwości próbkowania — rząd filtru dolnoprzepustowego resamplera.
-/// Ma znaczenie tylko dla plików, których częstotliwość różni się od częstotliwości urządzenia.
+/// Jakość konwersji częstotliwości próbkowania. Ma znaczenie tylko dla plików, których
+/// częstotliwość różni się od częstotliwości urządzenia. Nazwy wartości są zapisane w plikach
+/// ustawień, więc się ich nie zmienia.
 /// </summary>
 public enum ResamplerQuality
 {
-    /// <summary>Bez filtrowania. Najtańsze, kosztem aliasingu.</summary>
+    /// <summary>Poziom oszczędny: krótki filtr, pasmo płaskie do 16 kHz.</summary>
     Off,
 
-    /// <summary>Filtr czwartego rzędu — wartość domyślna miniaudio.</summary>
+    /// <summary>Poziom standardowy, domyślny.</summary>
     Standard,
 
-    /// <summary>Filtr ósmego rzędu, maksimum obsługiwane przez miniaudio.</summary>
+    /// <summary>Poziom wysoki: najdłuższy filtr i najsilniejsze tłumienie.</summary>
     High,
 }
 
@@ -68,6 +69,19 @@ public enum LoudnessTarget
 
     /// <summary>−14 LUFS, poziom przyjęty przez serwisy strumieniowe.</summary>
     Streaming,
+}
+
+/// <summary>Czy głośność wyrównuje się dla każdego utworu osobno, czy dla całego albumu.</summary>
+public enum NormalisationMode
+{
+    /// <summary>Każdy utwór osobno.</summary>
+    Track,
+
+    /// <summary>Cały album, gdy utwór ma znacznik albumu.</summary>
+    Album,
+
+    /// <summary>Album, gdy sąsiedni utwór kolejki jest z tego samego albumu; inaczej utwór.</summary>
+    Auto,
 }
 
 /// <summary>
@@ -446,6 +460,24 @@ public sealed class AppSettings
     /// <summary>Gain per band in decibels, ordered from 32 Hz to 16 kHz.</summary>
     public double[] EqualiserGains { get; set; } = new double[10];
 
+    /// <summary>Który korektor gra; parametryczny ma osobne pasma i osobny przedwzmacniacz.</summary>
+    public EqualiserMode EqualiserMode { get; set; } = EqualiserMode.Graphic;
+
+    /// <summary>Pasma korektora parametrycznego, najwyżej 20, w kolejności z listy.</summary>
+    public List<ParametricBandSettings> ParametricBands { get; set; } = [];
+
+    /// <summary>Przedwzmacniacz trybu parametrycznego w decybelach, −12…+12.</summary>
+    public double ParametricPreamp { get; set; }
+
+    /// <summary>Korektor i efekty zapamiętywane osobno dla każdego urządzenia wyjściowego.</summary>
+    public bool SoundProfilesEnabled { get; set; }
+
+    /// <summary>
+    /// Profile urządzeń, od ostatnio używanego. Pierwszy należy do urządzenia, na którym grano
+    /// ostatnio, więc jego wartości są tymi samymi co wspólne.
+    /// </summary>
+    public List<SoundProfile> SoundProfiles { get; set; } = [];
+
     public bool LimiterEnabled { get; set; } = true;
 
     public bool NormalisationEnabled { get; set; } = true;
@@ -585,6 +617,9 @@ public sealed class AppSettings
 
     public LoudnessTarget LoudnessTarget { get; set; } = LoudnessTarget.Reference;
 
+    /// <summary>Domyślnie automatyczny, także w plikach sprzed tego ustawienia.</summary>
+    public NormalisationMode NormalisationMode { get; set; } = NormalisationMode.Auto;
+
     /// <summary>Whether ReplayGain tags are ignored in favour of the player's own measurement.</summary>
     public bool AlwaysAnalyse { get; set; }
 
@@ -596,6 +631,15 @@ public sealed class AppSettings
 
     /// <summary>Pauza wycisza dźwięk płynnie, a wznowienie podgłaśnia; dotyczy plików.</summary>
     public bool SoftPause { get; set; }
+
+    /// <summary>Koniec pliku nakłada się na początek następnego przy samoczynnym przejściu.</summary>
+    public bool Crossfade { get; set; }
+
+    /// <summary>Czas przenikania w sekundach, jeden z <see cref="AudioPreferences.CrossfadeDurations"/>.</summary>
+    public int CrossfadeSeconds { get; set; } = 5;
+
+    /// <summary>Kolejne utwory jednego albumu przechodzą bez przerwy i bez przenikania.</summary>
+    public bool AlbumsWithoutCrossfade { get; set; } = true;
 
     /// <summary>Whether the multimedia keys on the keyboard control playback.</summary>
     public bool MediaKeys { get; set; } = true;
@@ -661,6 +705,11 @@ public sealed class AppSettings
         EqualiserEnabled = EqualiserEnabled,
         Preamp = Preamp,
         EqualiserGains = (double[])EqualiserGains.Clone(),
+        EqualiserMode = EqualiserMode,
+        ParametricBands = [.. (ParametricBands ?? []).Select(band => band.Clone())],
+        ParametricPreamp = ParametricPreamp,
+        SoundProfilesEnabled = SoundProfilesEnabled,
+        SoundProfiles = [.. (SoundProfiles ?? []).Select(profile => profile.Clone())],
         LimiterEnabled = LimiterEnabled,
         NormalisationEnabled = NormalisationEnabled,
         Effects = Effects,
@@ -708,10 +757,14 @@ public sealed class AppSettings
         ResamplerQuality = ResamplerQuality,
         OutputLatency = OutputLatency,
         LoudnessTarget = LoudnessTarget,
+        NormalisationMode = NormalisationMode,
         AlwaysAnalyse = AlwaysAnalyse,
         RestoreSession = RestoreSession,
         SeekStep = SeekStep,
         SoftPause = SoftPause,
+        Crossfade = Crossfade,
+        CrossfadeSeconds = CrossfadeSeconds,
+        AlbumsWithoutCrossfade = AlbumsWithoutCrossfade,
         MediaKeys = MediaKeys,
         SingleInstance = SingleInstance,
         CheckForUpdates = CheckForUpdates,

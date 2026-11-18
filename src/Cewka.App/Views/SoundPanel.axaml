@@ -4,6 +4,7 @@
              xmlns:l="using:Cewka.App.Localisation"
              xmlns:vm="using:Cewka.App.ViewModels"
              xmlns:v="using:Cewka.App.Views"
+             xmlns:dsp="using:Cewka.Audio.Dsp"
              x:Class="Cewka.App.Views.SoundPanel"
              x:DataType="vm:MainViewModel">
 
@@ -12,32 +13,89 @@
     i w Ustawieniach (karty jedna pod drugą). Karty, przełączniki i suwaki jak w ustawieniach.
     Układ kart ustawia kod według właściwości Stacked.
   -->
+  <UserControl.Styles>
+    <!-- Pola pasm korektora parametrycznego: jak pole wyszukiwania w ustawieniach, tylko niższe. -->
+    <Style Selector="TextBox.number">
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="Padding" Value="5,0" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="FontFeatures" Value="tnum" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Right" />
+      <Setter Property="TextAlignment" Value="Right" />
+      <Setter Property="Background" Value="{DynamicResource Glass2Brush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource StrokeBrush}" />
+    </Style>
+
+    <!-- Wewnętrzne obramowanie pola Fluent ma własną najmniejszą wysokość; niższe pole jej nie dziedziczy. -->
+    <Style Selector="TextBox.number /template/ ScrollViewer#PART_ScrollViewer">
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+
+    <!-- Rodzaj filtru: trzy przyciski opcji z kształtem charakterystyki zamiast napisu. -->
+    <Style Selector="Button.filter">
+      <Setter Property="Width" Value="23" />
+      <Setter Property="Height" Value="24" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="Button.filter Path">
+      <Setter Property="Stroke" Value="{DynamicResource Text3Brush}" />
+    </Style>
+
+    <Style Selector="Button.filter.on Path">
+      <Setter Property="Stroke" Value="{DynamicResource TextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.column">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+  </UserControl.Styles>
+
   <Grid x:Name="Cards" ColumnDefinitions="3*,2*" ColumnSpacing="14" RowSpacing="18">
 
     <!-- ========== Korektor ========== -->
     <Border x:Name="EqualiserCard" Classes="section" Grid.Column="0">
       <DockPanel>
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,14"
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,14"
               MinHeight="{StaticResource PanelHeaderRowHeight}">
-          <TextBlock x:Name="EqHeading" Grid.Column="0" Classes="section-title"
-                     Text="{l:Translate Equaliser}" VerticalAlignment="Center" />
+          <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2" Margin="0,0,10,0">
+            <TextBlock x:Name="EqHeading" Classes="section-title"
+                       Text="{l:Translate Equaliser}" />
+            <!-- Przy osobnych ustawieniach dla urządzeń: czyje ustawienia widać. -->
+            <TextBlock x:Name="EqDevice" Classes="faint" FontSize="10.5"
+                       Text="{Binding SoundProfileDeviceText}"
+                       IsVisible="{Binding ShowSoundProfileDevice}"
+                       TextTrimming="CharacterEllipsis"
+                       ToolTip.Tip="{Binding SoundProfileDeviceText}" />
+          </StackPanel>
+
+          <c:SegmentBar x:Name="EqModeBar" Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0"
+                        Group="{Binding EqualiserModeChoice}"
+                        AutomationProperties.Name="{l:Translate SettingEqualiserMode}" />
 
           <!-- Ikona, bo w wąskim oknie napis nie zmieściłby się obok przełącznika. Aktywna
                tylko wtedy, gdy jest co zerować. -->
-          <Button x:Name="EqResetButton" Grid.Column="1" Classes="icon" Width="28" Height="28"
+          <Button x:Name="EqResetButton" Grid.Column="2" Classes="icon" Width="28" Height="28"
                   VerticalAlignment="Center" Margin="0,0,10,0"
                   Click="OnResetEqualiser"
                   IsEnabled="{Binding CanResetEqualiser}"
-                  ToolTip.Tip="{l:Translate TooltipEqualiserReset}"
+                  ToolTip.Tip="{Binding EqualiserResetTooltip}"
                   ToolTip.ShowOnDisabled="True"
-                  AutomationProperties.Name="{l:Translate TooltipEqualiserReset}">
+                  AutomationProperties.Name="{Binding EqualiserResetTooltip}">
             <Viewbox Width="15" Height="15">
               <Path Classes="stroke" Data="{StaticResource IconResetStroke}"
                     Width="16" Height="16" StrokeThickness="1.3" />
             </Viewbox>
           </Button>
 
-          <c:GlassSwitch x:Name="EqSwitch" Grid.Column="2" VerticalAlignment="Center"
+          <c:GlassSwitch x:Name="EqSwitch" Grid.Column="3" VerticalAlignment="Center"
                          IsChecked="{Binding EqualiserEnabled, Mode=TwoWay}"
                          OffBrush="{DynamicResource TrackBrush}"
                          OnBrush="{DynamicResource AccentBrush}"
@@ -48,13 +106,13 @@
 
         <Grid ColumnDefinitions="Auto,Auto,*" Opacity="{Binding EqualiserOpacity}">
 
-          <!-- Przedwzmacniacz -->
+          <!-- Przedwzmacniacz grającego trybu: każdy tryb ma własny. -->
           <StackPanel Grid.Column="0" Spacing="8" MinWidth="46">
-            <TextBlock Classes="tabular dim" Text="{Binding Preamp.GainText}"
+            <TextBlock Classes="tabular dim" Text="{Binding ActivePreamp.GainText}"
                        FontSize="10.5" HorizontalAlignment="Center" />
-            <c:EqFader Height="116" HorizontalAlignment="Center"
+            <c:EqFader x:Name="PreampFader" Height="116" HorizontalAlignment="Center"
                        Classes="accent" Classes.off="{Binding !EqualiserEnabled}"
-                       Value="{Binding Preamp.Gain, Mode=TwoWay}"
+                       Value="{Binding ActivePreamp.Gain, Mode=TwoWay}"
                        AutomationProperties.Name="{l:Translate PreampName}"
                        ShowCentreLine="False"
                        TrackBrush="{DynamicResource TrackBrush}"
@@ -69,32 +127,179 @@
                      Fill="{DynamicResource StrokeBrush}"
                      VerticalAlignment="Stretch" />
 
-          <!-- Pasma -->
-          <ItemsControl Grid.Column="2" ItemsSource="{Binding Bands}">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <UniformGrid Rows="1" />
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:EqBandViewModel">
-                <StackPanel Spacing="8">
-                  <TextBlock Classes="tabular dim" Text="{Binding GainText}"
-                             FontSize="10.5" HorizontalAlignment="Center" />
-                  <c:EqFader Height="116" HorizontalAlignment="Center"
-                             Value="{Binding Gain, Mode=TwoWay}"
-                             AutomationProperties.Name="{Binding AccessibleName}"
-                             TrackBrush="{DynamicResource TrackBrush}"
-                             FillBrush="{DynamicResource FillBrush}"
-                             CentreLineBrush="{DynamicResource StrokeBrush}"
-                             ThumbBrush="{DynamicResource FaderThumbBrush}"
-                             ThumbBorderBrush="{DynamicResource FaderThumbBorderBrush}" />
-                  <TextBlock Classes="tabular faint" Text="{Binding Label}"
-                             FontSize="9.5" HorizontalAlignment="Center" />
-                </StackPanel>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
+          <Panel Grid.Column="2">
+            <!-- Pasma korektora graficznego -->
+            <ItemsControl x:Name="GraphicBands" ItemsSource="{Binding Bands}" IsVisible="{Binding IsGraphicMode}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <UniformGrid Rows="1" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:EqBandViewModel">
+                  <StackPanel Spacing="8">
+                    <TextBlock Classes="tabular dim" Text="{Binding GainText}"
+                               FontSize="10.5" HorizontalAlignment="Center" />
+                    <c:EqFader Height="116" HorizontalAlignment="Center"
+                               Value="{Binding Gain, Mode=TwoWay}"
+                               AutomationProperties.Name="{Binding AccessibleName}"
+                               TrackBrush="{DynamicResource TrackBrush}"
+                               FillBrush="{DynamicResource FillBrush}"
+                               CentreLineBrush="{DynamicResource StrokeBrush}"
+                               ThumbBrush="{DynamicResource FaderThumbBrush}"
+                               ThumbBorderBrush="{DynamicResource FaderThumbBorderBrush}" />
+                    <TextBlock Classes="tabular faint" Text="{Binding Label}"
+                               FontSize="9.5" HorizontalAlignment="Center" />
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Korektor parametryczny: wykres, lista pasm, stopka z poleceniami i komunikatem. -->
+            <DockPanel x:Name="ParametricArea" IsVisible="{Binding IsParametricMode}">
+              <c:EqResponseChart x:Name="ResponseChart" DockPanel.Dock="Top" Height="96" Margin="0,0,0,8"
+                                 Bands="{Binding Parametric.Curve}"
+                                 Preamp="{Binding Parametric.Preamp.Gain}"
+                                 CurveBrush="{DynamicResource AccentBrush}"
+                                 GridBrush="{DynamicResource StrokeBrush}"
+                                 LabelBrush="{DynamicResource Text3Brush}"
+                                 AutomationProperties.Name="{l:Translate EqualiserResponseName}" />
+
+              <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,8,0,0">
+                <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
+                  <Button x:Name="AddBandButton" Classes="pill" Click="OnAddBand"
+                          IsEnabled="{Binding Parametric.CanAddBand}"
+                          Content="{l:Translate EqualiserAddBand}"
+                          AutomationProperties.Name="{l:Translate EqualiserAddBand}" />
+                  <Button x:Name="ImportButton" Classes="pill" Click="OnImport"
+                          Content="{l:Translate EqualiserImport}"
+                          ToolTip.Tip="{l:Translate TooltipEqualiserImport}"
+                          AutomationProperties.Name="{l:Translate EqualiserImport}"
+                          AutomationProperties.HelpText="{l:Translate TooltipEqualiserImport}" />
+                  <Button x:Name="ExportButton" Classes="pill" Click="OnExport"
+                          IsEnabled="{Binding Parametric.HasBands}"
+                          Content="{l:Translate EqualiserExport}"
+                          ToolTip.Tip="{l:Translate TooltipEqualiserExport}"
+                          ToolTip.ShowOnDisabled="True"
+                          AutomationProperties.Name="{l:Translate EqualiserExport}"
+                          AutomationProperties.HelpText="{l:Translate TooltipEqualiserExport}" />
+                </WrapPanel>
+                <!-- Wiersz komunikatu zostaje także pusty: jego zniknięcie przy następnej zmianie zmieniałoby wysokość okna. -->
+                <TextBlock x:Name="ParametricMessage" Classes="faint" FontSize="10.5" TextWrapping="Wrap"
+                           Text="{Binding Parametric.Message}" />
+              </StackPanel>
+
+              <!-- Nagłówki kolumn nad polami wierszy. Przy pustej liście znikają, ale miejsce zostaje, żeby okno nie zmieniało wysokości. -->
+              <Grid x:Name="BandColumns" DockPanel.Dock="Top" Margin="0,0,0,4" Opacity="{Binding Parametric.ColumnsOpacity}"
+                    ColumnSpacing="5">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="30" />
+                  <ColumnDefinition Width="73" />
+                  <ColumnDefinition Width="1.2*" MinWidth="40" MaxWidth="96" />
+                  <ColumnDefinition Width="1.1*" MinWidth="34" MaxWidth="88" />
+                  <ColumnDefinition Width="*" MinWidth="34" MaxWidth="72" />
+                  <ColumnDefinition Width="22" />
+                  <ColumnDefinition Width="0.001*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="1" Classes="faint column" Text="{l:Translate EqualiserColumnFilter}" />
+                <TextBlock Grid.Column="2" Classes="faint column" Text="{l:Translate EqualiserColumnFrequency}" TextAlignment="Right" />
+                <TextBlock Grid.Column="3" Classes="faint column" Text="{l:Translate EqualiserColumnGain}" TextAlignment="Right" />
+                <TextBlock Grid.Column="4" Classes="faint column" Text="{l:Translate EqualiserColumnQ}" TextAlignment="Right" />
+              </Grid>
+
+              <Panel x:Name="BandArea">
+                <TextBlock x:Name="NoBands" Classes="setting-hint" VerticalAlignment="Top"
+                           Text="{l:Translate EqualiserNoBands}" IsVisible="{Binding !Parametric.HasBands}" />
+
+                <ScrollViewer x:Name="BandScroll" HorizontalScrollBarVisibility="Disabled" Margin="0,0,8,0"
+                              VerticalScrollBarVisibility="Hidden" IsVisible="{Binding Parametric.HasBands}">
+                  <ItemsControl x:Name="ParametricBands" ItemsSource="{Binding Parametric.Bands}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Spacing="4" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:ParametricBandViewModel">
+                        <Grid ColumnSpacing="5" Height="28">
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="30" />
+                            <ColumnDefinition Width="73" />
+                            <ColumnDefinition Width="1.2*" MinWidth="40" MaxWidth="96" />
+                            <ColumnDefinition Width="1.1*" MinWidth="34" MaxWidth="88" />
+                            <ColumnDefinition Width="*" MinWidth="34" MaxWidth="72" />
+                            <ColumnDefinition Width="22" />
+                            <ColumnDefinition Width="0.001*" />
+                          </Grid.ColumnDefinitions>
+                          <LayoutTransformControl Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Left">
+                            <LayoutTransformControl.LayoutTransform>
+                              <ScaleTransform ScaleX="0.72" ScaleY="0.72" />
+                            </LayoutTransformControl.LayoutTransform>
+                            <c:GlassSwitch IsChecked="{Binding Enabled, Mode=TwoWay}"
+                                           OffBrush="{DynamicResource TrackBrush}"
+                                           OnBrush="{DynamicResource AccentBrush}"
+                                           BorderBrush="{DynamicResource StrokeBrush}"
+                                           ToolTip.Tip="{Binding Name}"
+                                           AutomationProperties.Name="{Binding Name}" />
+                          </LayoutTransformControl>
+
+                          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center"
+                                      Opacity="{Binding RowOpacity}"
+                                      AutomationProperties.Name="{Binding FilterName}">
+                            <c:OptionButton Classes="option filter" Classes.on="{Binding IsPeak}" IsSelected="{Binding IsPeak}"
+                                            Tag="{x:Static dsp:ParametricFilterType.Peak}" Click="OnFilterType"
+                                            ToolTip.Tip="{l:Translate FilterPeak}"
+                                            AutomationProperties.Name="{Binding PeakName}">
+                              <Path Data="{StaticResource IconFilterPeakStroke}" Width="16" Height="16" StrokeThickness="1.4"
+                                    StrokeLineCap="Round" />
+                            </c:OptionButton>
+                            <c:OptionButton Classes="option filter" Classes.on="{Binding IsLowShelf}" IsSelected="{Binding IsLowShelf}"
+                                            Tag="{x:Static dsp:ParametricFilterType.LowShelf}" Click="OnFilterType"
+                                            ToolTip.Tip="{l:Translate FilterLowShelf}"
+                                            AutomationProperties.Name="{Binding LowShelfName}">
+                              <Path Data="{StaticResource IconFilterLowShelfStroke}" Width="16" Height="16" StrokeThickness="1.4"
+                                    StrokeLineCap="Round" />
+                            </c:OptionButton>
+                            <c:OptionButton Classes="option filter" Classes.on="{Binding IsHighShelf}" IsSelected="{Binding IsHighShelf}"
+                                            Tag="{x:Static dsp:ParametricFilterType.HighShelf}" Click="OnFilterType"
+                                            ToolTip.Tip="{l:Translate FilterHighShelf}"
+                                            AutomationProperties.Name="{Binding HighShelfName}">
+                              <Path Data="{StaticResource IconFilterHighShelfStroke}" Width="16" Height="16" StrokeThickness="1.4"
+                                    StrokeLineCap="Round" />
+                            </c:OptionButton>
+                          </StackPanel>
+
+                          <c:NumberField Classes="number" Grid.Column="2" Kind="Frequency" Opacity="{Binding RowOpacity}"
+                                         Value="{Binding Frequency, Mode=TwoWay}"
+                                         AutomationProperties.Name="{Binding FrequencyName}" />
+                          <c:NumberField Classes="number" Grid.Column="3" Kind="Gain" Opacity="{Binding RowOpacity}"
+                                         Value="{Binding Gain, Mode=TwoWay}"
+                                         AutomationProperties.Name="{Binding GainName}" />
+                          <c:NumberField Classes="number" Grid.Column="4" Kind="Q" Opacity="{Binding RowOpacity}"
+                                         Value="{Binding Q, Mode=TwoWay}"
+                                         AutomationProperties.Name="{Binding QName}" />
+
+                          <Button Grid.Column="5" Classes="icon" Width="22" Height="22" VerticalAlignment="Center"
+                                  Click="OnRemoveBand"
+                                  ToolTip.Tip="{l:Translate TooltipEqualiserRemoveBand}"
+                                  AutomationProperties.Name="{Binding RemoveName}">
+                            <Viewbox Width="10" Height="10">
+                              <Path Classes="stroke" Data="{StaticResource IconCloseStroke}"
+                                    Width="10" Height="10" StrokeThickness="1.3" />
+                            </Viewbox>
+                          </Button>
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+
+                <c:ThinScrollBar x:Name="BandScrollBar" HorizontalAlignment="Right"
+                                 TrackBrush="{DynamicResource TrackBrush}"
+                                 ThumbBrush="{DynamicResource Text3Brush}" />
+              </Panel>
+            </DockPanel>
+          </Panel>
         </Grid>
       </DockPanel>
     </Border>

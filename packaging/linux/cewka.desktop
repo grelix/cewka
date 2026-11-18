@@ -13,4 +13,4 @@ Keywords=music;audio;player;
 Keywords[pl]=muzyka;dźwięk;odtwarzacz;
 StartupNotify=true
 StartupWMClass=Cewka
-MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/wav;audio/x-wav;audio/ogg;audio/x-vorbis+ogg;audio/opus;audio/x-opus+ogg;audio/mp4;audio/aac;audio/x-m4a;
+MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/wav;audio/x-wav;audio/ogg;audio/x-vorbis+ogg;audio/opus;audio/x-opus+ogg;audio/mp4;audio/aac;audio/x-m4a;audio/x-wavpack;audio/aiff;audio/x-aiff;application/x-cue;

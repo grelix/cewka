@@ -66,6 +66,20 @@ public sealed class ReadmeShotsTests
     /// <summary>Krzywa korektora na zrzucie okna „Korektor i efekty”: lekko podniesiony bas i góra.</summary>
     private static readonly double[] Curve = [3, 2.5, 1.5, 0.5, 0, -0.5, 0, 1, 2, 2.5];
 
+    /// <summary>
+    /// Pasma na tym samym zrzucie: okno pokazuje tryb parametryczny, bo to on ma wykres i listę.
+    /// Wartości przykładowe, sześć pasm, czyli tyle, ile mieści lista bez przewijania.
+    /// </summary>
+    private static readonly ParametricBandSettings[] Bands =
+    [
+        new() { Type = ParametricFilterType.LowShelf, Frequency = 90, Gain = 4, Q = 0.7 },
+        new() { Type = ParametricFilterType.Peak, Frequency = 220, Gain = -2.5, Q = 1.2 },
+        new() { Type = ParametricFilterType.Peak, Frequency = 1500, Gain = 1.5, Q = 1.8 },
+        new() { Type = ParametricFilterType.Peak, Frequency = 3200, Gain = -3, Q = 2.5 },
+        new() { Type = ParametricFilterType.Peak, Frequency = 6500, Gain = 2, Q = 3 },
+        new() { Type = ParametricFilterType.HighShelf, Frequency = 10000, Gain = -1.5, Q = 0.7 },
+    ];
+
     private static string Output => Environment.GetEnvironmentVariable(OutputVariable)!;
 
     private static string Material => Environment.GetEnvironmentVariable(MaterialVariable)!;
@@ -309,6 +323,9 @@ public sealed class ReadmeShotsTests
         {
             s.EqualiserEnabled = true;
             s.EqualiserGains = [.. Curve];
+            s.EqualiserMode = EqualiserMode.Parametric;
+            s.ParametricPreamp = -4;
+            s.ParametricBands = [.. Bands.Select(band => band.Clone())];
         });
 
         var window = new SoundWindow(h.Player) { Width = 900, Height = 470 };

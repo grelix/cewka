@@ -52,6 +52,55 @@ public sealed class PlatformTests : IDisposable
         Assert.Equal([full, "file:///home/u/a.mp3", ""], result);
     }
 
+    // ---------- Katalog sesji ----------
+
+    [Fact]
+    public void KatalogSesjiPowstajeWXdgRuntimeDir()
+    {
+        var runtime = Temporary();
+
+        var result = AppPaths.RuntimeDirectoryUnder(runtime, () => "zapas");
+
+        Assert.Equal(Path.Combine(runtime, AppPaths.UnixFolderName), result);
+        Assert.True(Directory.Exists(result));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void BezXdgRuntimeDirKatalogZapasowy(string? runtime)
+    {
+        Assert.Equal("zapas", AppPaths.RuntimeDirectoryUnder(runtime, () => "zapas"));
+    }
+
+    [Fact]
+    public void NieistniejacyXdgRuntimeDirDajeKatalogZapasowy()
+    {
+        var runtime = Path.Combine(Temporary(), "brak");
+
+        Assert.Equal("zapas", AppPaths.RuntimeDirectoryUnder(runtime, () => "zapas"));
+        Assert.False(Directory.Exists(runtime));
+    }
+
+    /// <summary>Katalogu nie da się utworzyć, bo pod jego nazwą leży plik: program ma ruszyć mimo to.</summary>
+    [Fact]
+    public void KatalogSesjiNieDoUtworzeniaDajeKatalogZapasowy()
+    {
+        var runtime = Temporary();
+        File.WriteAllText(Path.Combine(runtime, AppPaths.UnixFolderName), "");
+
+        Assert.Equal("zapas", AppPaths.RuntimeDirectoryUnder(runtime, () => "zapas"));
+    }
+
+    private string Temporary()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "cewka-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(directory);
+        _directories.Add(directory);
+        return directory;
+    }
+
     // ---------- Język systemu ----------
 
     /// <summary>Angielski interfejs Windows z polskim formatem regionalnym daje Cewkę po angielsku.</summary>
@@ -314,6 +363,44 @@ public sealed class PlatformTests : IDisposable
         Assert.False(MprisRules.IsPositionRequestValid(current, -1, current, length));
         Assert.False(MprisRules.IsPositionRequestValid(current, length + 1, current, length));
         Assert.False(MprisRules.IsPositionRequestValid(MprisRules.NoTrack, 0, MprisRules.NoTrack, 0));
+    }
+
+    /// <summary>Przesunięcie z szyny jest dowolną liczbą; zamiana na czas nie może się przepełnić.</summary>
+    [Theory]
+    [InlineData(long.MaxValue)]
+    [InlineData(long.MaxValue / 10)]
+    [InlineData(long.MinValue)]
+    [InlineData(long.MinValue / 10)]
+    public void SkrajnePrzesuniecieZSzynyJestPrzycinane(long microseconds)
+    {
+        var offset = MprisRules.SeekOffset(microseconds);
+
+        Assert.Equal(Math.Sign(microseconds), Math.Sign(offset.Ticks));
+        Assert.True(offset.Duration() <= TimeSpan.MaxValue / 2, $"{offset}");
+        // Zostaje zapas na dodanie do pozycji odtwarzania.
+        _ = TimeSpan.FromHours(10) + offset;
+    }
+
+    [Fact]
+    public void ZwyklePrzesuniecieZSzynyJestDokladne()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(10), MprisRules.SeekOffset(10_000_000));
+        Assert.Equal(TimeSpan.FromSeconds(-5), MprisRules.SeekOffset(-5_000_000));
+        Assert.Equal(TimeSpan.Zero, MprisRules.SeekOffset(0));
+    }
+
+    /// <summary>Wyjątek na wątku szyny zakończyłby proces; sygnał przepada, a pętla trwa dalej.</summary>
+    [Fact]
+    public void BladEmisjiSygnaluTrafiaDoDziennika()
+    {
+        var log = new StringWriter();
+
+        var sent = MprisRules.TryEmit(() => throw new InvalidOperationException("brak tytułu"), "PropertiesChanged", log);
+
+        Assert.False(sent);
+        Assert.Contains("PropertiesChanged", log.ToString());
+        Assert.Contains("brak tytułu", log.ToString());
+        Assert.True(MprisRules.TryEmit(() => { }, "Seeked", log));
     }
 
     [Fact]

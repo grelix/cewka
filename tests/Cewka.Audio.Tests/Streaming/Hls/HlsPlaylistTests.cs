@@ -154,4 +154,19 @@ public sealed class HlsPlaylistTests
             Parse(text);
         }
     }
+
+    /// <summary>
+    /// Czas docelowy steruje limitem ciszy i odświeżaniem playlisty. Liczba z sieci bez górnej
+    /// granicy wyłączałaby wykrywanie zastoju, a nieskończona wywracała otwarcie.
+    /// </summary>
+    [Theory]
+    [InlineData("100000")]
+    [InlineData("1e300")]
+    [InlineData("Infinity")]
+    public void TargetDurationHasACeiling(string value)
+    {
+        var media = Media($"#EXT-X-TARGETDURATION:{value}\n#EXTINF:4,\na.ts\n");
+
+        Assert.Equal(HlsPlaylistParser.MaxTargetSeconds, media.TargetSeconds);
+    }
 }

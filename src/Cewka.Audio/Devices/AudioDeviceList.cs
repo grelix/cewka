@@ -19,21 +19,25 @@ public static class AudioDeviceList
     public static unsafe IReadOnlyList<AudioDeviceInfo> Enumerate()
     {
         NativeAudio.EnsureBackend();
-        NativeAudio.ThrowIfFailed(NativeAudio.DevicesRefresh(out var count), "Odczyt listy urządzeń");
 
-        var devices = new List<AudioDeviceInfo>(count);
-        var buffer = stackalloc byte[512];
-
-        for (var i = 0; i < count; i++)
+        lock (NativeAudio.DeviceListLock)
         {
-            var length = NativeAudio.DevicesName(i, buffer, 512);
-            var name = length > 0
-                ? Encoding.UTF8.GetString(buffer, length)
-                : $"Urządzenie {i + 1}";
+            NativeAudio.ThrowIfFailed(NativeAudio.DevicesRefresh(out var count), "Odczyt listy urządzeń");
 
-            devices.Add(new AudioDeviceInfo(i, name, NativeAudio.DevicesIsDefault(i) != 0));
+            var devices = new List<AudioDeviceInfo>(count);
+            var buffer = stackalloc byte[512];
+
+            for (var i = 0; i < count; i++)
+            {
+                var length = NativeAudio.DevicesName(i, buffer, 512);
+                var name = length > 0
+                    ? Encoding.UTF8.GetString(buffer, length)
+                    : $"Urządzenie {i + 1}";
+
+                devices.Add(new AudioDeviceInfo(i, name, NativeAudio.DevicesIsDefault(i) != 0));
+            }
+
+            return devices;
         }
-
-        return devices;
     }
 }

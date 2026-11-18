@@ -61,19 +61,55 @@ public sealed class RadioLogoCancelTests
         h.Player.SetSource(SourceMode.Radio);
         h.Player.Radio.SelectedCountry = h.Player.Radio.Countries.First(c => c.Key == "PL");
         foreach (var row in h.Player.Radio.Rows) row.RequestLogo();
-        Assert.True(await Ui.UntilAsync(() => server.Started == 3, 5000));
+
+        // Logo całej listy leżą na jednym serwerze, więc naraz idzie tyle pobrań, ile wolno z jednego serwera.
+        const int atOnce = RadioLogoService.MaxPerHost;
+        Assert.True(await Ui.UntilAsync(() => server.Started == atOnce, 5000));
 
         h.Settings.Current.RadioLogos = false;
         h.Player.Radio.ApplyLogoPolicy();
 
-        Assert.True(await Ui.UntilAsync(() => server.Cancelled >= 3, 5000));
+        Assert.True(await Ui.UntilAsync(() => server.Cancelled >= atOnce, 5000));
         await Task.Delay(200);
-        Assert.Equal(3, server.Started);
-        Assert.Equal(3, server.Cancelled);
+        Assert.Equal(atOnce, server.Started);
+        Assert.Equal(atOnce, server.Cancelled);
 
         h.Settings.Current.RadioLogos = true;
         h.Player.Radio.ApplyLogoPolicy();
 
-        Assert.True(await Ui.UntilAsync(() => server.Started >= 6, 5000));
+        Assert.True(await Ui.UntilAsync(() => server.Started >= 2 * atOnce, 5000));
+    });
+
+    /// <summary>
+    /// Wiersz, który nie dostał logo, pyta ponownie, gdy znów trafia na ekran. Bez tego po chwilowej
+    /// awarii serwera albo starcie bez sieci lista zostawała bez logo do przebudowy.
+    /// </summary>
+    [Fact]
+    public void WierszBezLogoPytaPonownieGdyZnowTrafiaNaEkran() => Ui.RunAsync(async () =>
+    {
+        var down = true;
+        var now = new DateTimeOffset(2026, 11, 5, 12, 0, 0, TimeSpan.Zero);
+
+        Task<ImageFetchResult> Fetch(Uri url, CancellationToken ct) => Task.FromResult(down
+            ? new ImageFetchResult(null, ImageFetchProblem.Unavailable)
+            : new ImageFetchResult(TestLogos.Png(64, 64), ImageFetchProblem.None, 200));
+
+        var logos = new RadioLogoService(TestEnvironment.NewDirectory(), Fetch, () => now);
+        using var h = new PlayerHarness(s => s.RadioPrivacyAcknowledged = true, radioCatalog: Catalog, radioLogos: logos);
+        h.Player.SetSource(SourceMode.Radio);
+        h.Player.Radio.SelectedCountry = h.Player.Radio.Countries.First(c => c.Key == "PL");
+        var rows = h.Player.Radio.Rows.ToList();
+
+        foreach (var row in rows) row.RequestLogo();
+        Assert.True(await Ui.UntilAsync(() => rows.All(r => !r.LogoStarted), 5000));
+        Assert.All(rows, r => Assert.Null(r.Logo));
+
+        // Serwer wraca, a przerwa mija. Dwa adresy, których pobranie trwało w chwili awarii, mają
+        // zapamiętaną porażkę; pozostałe wiersze dostają logo przy ponownym pytaniu.
+        down = false;
+        now += RadioLogoService.HostDownFor + TimeSpan.FromSeconds(1);
+        foreach (var row in rows) row.RequestLogo();
+
+        Assert.True(await Ui.UntilAsync(() => rows.Count(r => r.Logo is not null) >= rows.Count - RadioLogoService.MaxPerHost, 5000));
     });
 }

@@ -178,4 +178,27 @@ public sealed partial class ThirdPartyNoticesTests
         Assert.True(missing.Count == 0,
             $"brak sekcji w {NoticesFile} (wiersz „Plik: nazwa”) dla: {string.Join(", ", missing)}");
     }
+
+    /// <summary>
+    /// Źródła bibliotek natywnych leżą w <c>native/</c>, poza grafem pakietów. Wersja z ich nagłówków
+    /// ma stać w wierszu „Składnik: nazwa wersja” sekcji not.
+    /// </summary>
+    [Fact]
+    public void KazdaBibliotekaNatywnaMaSekcjeWNotachZWersjaZeZrodel()
+    {
+        var root = RepositoryRoot();
+        var notices = Notices(root);
+
+        string Define(string file, string name) =>
+            Regex.Match(File.ReadAllText(Path.Combine(root, "native", file)), $@"#define\s+{name}\s+""?([\w.]+)""?") is { Success: true } m
+                ? m.Groups[1].Value
+                : throw new InvalidOperationException($"Brak {name} w {file}");
+
+        var miniaudio = string.Join('.',
+            new[] { "MA_VERSION_MAJOR", "MA_VERSION_MINOR", "MA_VERSION_REVISION" }.Select(n => Define("miniaudio/miniaudio.h", n)));
+        var wavPack = Define("wavpack/src/wavpack_version.h", "LIBWAVPACK_VERSION_STRING");
+
+        Assert.Contains($"Składnik: miniaudio {miniaudio},", notices);
+        Assert.Contains($"Składnik: WavPack {wavPack} ", notices);
+    }
 }

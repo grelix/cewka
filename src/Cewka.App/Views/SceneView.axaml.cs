@@ -453,6 +453,10 @@ public partial class SceneView : UserControl
         }
 
         QueueRow.PlaceholderFactory = _viewModel is { } player ? player.RenderQueueRowPlaceholder : null;
+
+        // Bez modelu nie ma czego układać: wielkości i napisy biorą się z jego ustawień.
+        if (_viewModel is null) return;
+
         ApplyTextSize();
         ApplyScale(Bounds.Size);
         UpdateTexts();
@@ -742,8 +746,10 @@ public partial class SceneView : UserControl
     /// <summary>Nad wizualizacją przez szerokość treści tekst idzie na górę kadru, obok małej okładki, jeśli jest.</summary>
     private void PlaceStageText()
     {
+        // Napisy układają się według ustawień modelu; scena bywa zamykana już bez niego.
+        if (_viewModel is not { } player) return;
+
         var wide = WideLayout;
-        var player = _viewModel!;
         var inset = player.SceneTextInset == SceneTextInset.Wide ? TextInsetWide : 0;
         var left = (MiniCover.IsVisible ? ContentLeft + MiniCover.Width + MiniCoverGap : ContentLeft) + inset;
         var infoLeft = (Mirrored ? Across(InfoColumnLeft, InfoColumnWidth) : InfoColumnLeft) + inset;

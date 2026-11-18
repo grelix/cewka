@@ -34,7 +34,17 @@ internal sealed class AacFrameDecoder(Func<AdtsHeader, IAacBackend> createBacken
     /// <summary>Ramka HE-AAC po SBR ma 2048 próbek na kanał, a ADTS opisuje najwyżej 8 kanałów.</summary>
     private const int MaxSamples = 2048 * 8;
 
+    /// <summary>
+    /// Tyle razy z rzędu parametry strumienia mogą się zmienić bez ani jednej próbki pomiędzy.
+    /// Zmiana w prawdziwym strumieniu (wstawka reklamowa) zdarza się raz i dalej jest dźwięk;
+    /// strumień, który zmienia je co dwie ramki, każe budować dekoder systemu tysiące razy,
+    /// a każda budowa to potok z własnymi wątkami. Budowa po błędzie dekodera przy tych samych
+    /// parametrach się nie liczy: taką serię kończy dźwięk albo limit bajtów bez dźwięku.
+    /// </summary>
+    internal const int MaxBuildsWithoutSound = 8;
+
     private IAacBackend? _backend;
+    private int _buildsWithoutSound;
     private AdtsHeader _stream;
     private bool _locked;
     private int _kilobits;
@@ -86,7 +96,11 @@ internal sealed class AacFrameDecoder(Func<AdtsHeader, IAacBackend> createBacken
         if (_backend is not { } backend) return 0;
 
         var frames = backend.Drain(output, out var sampleRate, out var channels);
-        if (frames > 0) format = new LiveFrameFormat(sampleRate, channels, _kilobits);
+        if (frames > 0)
+        {
+            format = new LiveFrameFormat(sampleRate, channels, _kilobits);
+            _buildsWithoutSound = 0;
+        }
 
         return frames;
     }
@@ -96,6 +110,7 @@ internal sealed class AacFrameDecoder(Func<AdtsHeader, IAacBackend> createBacken
         CloseBackend();
         Failure = null;
         _locked = false;
+        _buildsWithoutSound = 0;
     }
 
     public void Dispose() => CloseBackend();
@@ -141,6 +156,12 @@ internal sealed class AacFrameDecoder(Func<AdtsHeader, IAacBackend> createBacken
 
         CloseBackend();
 
+        if (!header.SameStreamAs(_stream) && ++_buildsWithoutSound > MaxBuildsWithoutSound)
+        {
+            Failure = new LiveFailure(LiveFailureReason.UndecodableData, Codec: LiveCodec.Aac);
+            return false;
+        }
+
         try
         {
             _backend = createBackend(header);
@@ -161,9 +182,14 @@ internal sealed class AacFrameDecoder(Func<AdtsHeader, IAacBackend> createBacken
         if (_backend is not { } backend) return 0;
 
         var frames = backend.Pull(output, out var sampleRate, out var channels);
-        if (frames > 0) format = new LiveFrameFormat(sampleRate, channels, _kilobits);
+        if (frames > 0)
+        {
+            format = new LiveFrameFormat(sampleRate, channels, _kilobits);
+            _buildsWithoutSound = 0;
+        }
 
-        // Nowy dekoder powstanie przy następnej ramce; strumień bez dźwięku kończy limit bajtów wyżej.
+        // Nowy dekoder powstanie przy następnej ramce; strumień bez dźwięku kończy limit bajtów
+        // u czytającego, a zmieniający bez końca parametry limit budów.
         if (backend.Failed) CloseBackend();
 
         return frames;

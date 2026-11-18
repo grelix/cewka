@@ -170,4 +170,45 @@ public class ContentSnifferTests
             ContentSniffer.Classify(data.AsSpan(0, random.Next(data.Length + 1)), null, out _, out _, round % 2 == 0);
         }
     }
+
+    /// <summary>
+    /// Rozpoznanie biegnie po każdym odczycie z gniazda. Głowa, która jest dźwiękiem, nie może być
+    /// za każdym razem zamieniana w całości na napis: przy znaczniku ID3 na początku to ćwierć
+    /// megabajta na odczyt, tak długo, jak serwer sączy dane.
+    /// </summary>
+    [Fact]
+    public void AudioHeadIsNotTurnedIntoText()
+    {
+        // Znacznik ID3 zapowiadający 256 KB i 200 KB jego treści: rozstrzygnięcia jeszcze nie ma.
+        var tagged = new byte[200 * 1024];
+        "ID3"u8.CopyTo(tagged);
+        tagged[3] = 4;
+        tagged[7] = 0x10;
+
+        var frames = FakeRadio.Mp3Frames(3);
+
+        // Pierwsze wywołania rozgrzewają kod; liczy się to, co zajmuje kolejne.
+        Sniff(tagged);
+        Sniff(frames);
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var waiting = Sniff(tagged).Kind;
+        var audio = Sniff(frames).Kind;
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Equal(SniffKind.NeedMore, waiting);
+        Assert.Equal(SniffKind.Audio, audio);
+        Assert.True(allocated < 4096, $"przydzielono {allocated} B");
+    }
+
+    /// <summary>Białe znaki i znacznik kolejności bajtów przed tekstem nie zmieniają rozpoznania.</summary>
+    [Fact]
+    public void LeadingWhitespaceAndByteOrderMarkStillGiveText()
+    {
+        Assert.Equal(SniffKind.Playlist, Sniff(Text("\r\n \t#EXTM3U\nhttp://a.example/s\n")).Kind);
+        Assert.Equal(SniffKind.Playlist, Sniff([0xEF, 0xBB, 0xBF, .. Text("  [playlist]\nFile1=http://a.example/s\n")]).Kind);
+        Assert.Equal(SniffKind.Playlist, Sniff(Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes("#EXTM3U\nhttp://a.example/s\n")).ToArray()).Kind);
+        Assert.Equal(SniffKind.NeedMore, Sniff(Text(" \r\n\t ")).Kind);
+        Assert.Equal(SniffKind.NeedMore, Sniff([0xEF, 0xBB, 0xBF]).Kind);
+    }
 }

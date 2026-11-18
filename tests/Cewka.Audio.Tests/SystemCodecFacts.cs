@@ -16,6 +16,29 @@ public sealed class MediaFoundationFactAttribute : FactAttribute
     }
 }
 
+/// <summary>Odmiana <see cref="MediaFoundationFactAttribute"/> dla testów z danymi.</summary>
+public sealed class MediaFoundationTheoryAttribute : TheoryAttribute
+{
+    public MediaFoundationTheoryAttribute()
+    {
+        if (!OperatingSystem.IsWindows()) Skip = "Media Foundation jest dostępne tylko w Windows.";
+        else if (!SystemCodecs.IsAvailable) Skip = SystemCodecs.UnavailableReason ?? "Brak Media Foundation.";
+    }
+}
+
+/// <summary>
+/// Plik M4A z AAC przez dekoder systemu, w Windows i pod Linuksem; pomijany bez dekodera AAC
+/// (Windows N, Linux bez gstreamer1.0-libav).
+/// </summary>
+public sealed class SystemAacTheoryAttribute : TheoryAttribute
+{
+    public SystemAacTheoryAttribute()
+    {
+        if (!SystemCodecs.IsAvailable) Skip = SystemCodecs.UnavailableReason ?? "Brak kodeków systemu.";
+        else if (!Decoding.Live.LiveFrameDecoders.IsPlayable(Cewka.Audio.Streaming.LiveCodec.Aac)) Skip = "System nie ma dekodera AAC.";
+    }
+}
+
 /// <summary>Test GStreamera; poza systemem Linux albo bez bibliotek GStreamera pomijany.</summary>
 public sealed class GStreamerFactAttribute : FactAttribute
 {

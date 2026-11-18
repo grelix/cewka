@@ -242,4 +242,101 @@ public sealed class LoudnessServiceTests : IDisposable
         service.TargetLufs = -18;
         return service;
     }
+
+    /// <summary>Dekoder, który gra bez końca i podaje długość, jaką mu wpisano.</summary>
+    private sealed class EndlessDecoder(long reportedFrames) : Cewka.Audio.Decoding.IAudioDecoder
+    {
+        public long FramesRead;
+
+        public int SampleRate => 48000;
+        public int Channels => 2;
+        public long TotalFrames => reportedFrames;
+        public long Position => FramesRead;
+        public bool CanSeek => false;
+        public int SourceSampleRate => 48000;
+        public int SourceChannels => 2;
+        public int InstantaneousBitrate => 0;
+
+        public int Read(Span<float> destination)
+        {
+            destination.Fill(0.1f);
+            FramesRead += destination.Length / 2;
+            return destination.Length / 2;
+        }
+
+        public void Seek(long frame) { }
+        public void Dispose() { }
+    }
+
+    /// <summary>
+    /// Długość utworu to liczba z pliku, a pomiar zajmuje jedyny wątek analizy. Plik zapowiadający
+    /// dni dźwięku nie jest mierzony wcale, a taki, który długości nie podaje, tylko do limitu.
+    /// </summary>
+    [Fact]
+    public void PomiarOdmawiaPlikowiDluzszemuNizLimit()
+    {
+        var announced = new EndlessDecoder(LoudnessService.MaxMeasuredFrames + 1);
+        Assert.Throws<LoudnessService.MeasurementRefusedException>(
+            () => LoudnessService.Measure(announced, CancellationToken.None));
+        Assert.Equal(0, announced.FramesRead);
+
+        var silent = new EndlessDecoder(0);
+        Assert.Throws<LoudnessService.MeasurementRefusedException>(
+            () => LoudnessService.Measure(silent, CancellationToken.None, maxFrames: 48000 * 30));
+        Assert.InRange(silent.FramesRead, 48000 * 30, 48000 * 31);
+    }
+
+    [Fact]
+    public void PlikZbytDlugiNieWracaDoKolejkiPomiaru()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "cewka-loud-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            var file = Path.Combine(dir, "dlugi.wav");
+            File.WriteAllBytes(file, [1, 2, 3]);
+            var calls = 0;
+
+            using var service = new LoudnessService(Path.Combine(dir, "loudness.json"), (_, _) =>
+            {
+                Interlocked.Increment(ref calls);
+                throw new LoudnessService.MeasurementRefusedException();
+            });
+
+            service.RequestEnvelope(file);
+            Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref calls) == 1, TimeSpan.FromSeconds(5)));
+
+            // Odmowa trafia do zbioru po wyjściu z pomiaru; dopiero wtedy drugie żądanie jest pomijane.
+            Thread.Sleep(200);
+            service.RequestEnvelope(file);
+            Thread.Sleep(300);
+
+            Assert.Equal(1, Volatile.Read(ref calls));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Analiza otwiera pliki na poziomie oszczędnym niezależnie od ustawienia, a ustawienie
+    /// dla odtwarzania zostaje nietknięte.
+    /// </summary>
+    [Fact]
+    public void AnalysisUsesTheEconomyLevel()
+    {
+        var path = Path.Combine(_directory, "analiza.wav");
+        File.WriteAllBytes(path, TestAudioFiles.Wav(new float[4410 * 2], 2, 44100));
+
+        // Zakres wątku zamiast ustawienia ogólnego, żeby nie wpływać na testy obok.
+        using (AudioQuality.UseInThisThread(ResamplingLevel.High))
+        {
+            using var decoder = (Decoding.ManagedDecoderBase)LoudnessService.OpenForAnalysis(path);
+
+            Assert.Equal(ResamplingLevel.Economy, decoder.ResamplingLevel);
+            Assert.Equal(ResamplingLevel.High, AudioQuality.Current);
+        }
+    }
 }

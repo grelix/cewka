@@ -164,6 +164,12 @@ public sealed class QueuePanelTests
             configure?.Invoke(s);
         });
         window.QueueClock = () => _now;
+
+        // Podpowiedzi otwiera zegar czasu rzeczywistego, jedyny, którego te testy nie prowadzą same.
+        // Na silniku bez okien podpowiedź przycisku w rogu okna staje pod kursorem i przejmuje
+        // kliknięcie, więc drugie kliknięcie przypinki działało tylko wtedy, gdy od pierwszego
+        // minęło mniej niż 0,4 s; w pełnym przebiegu na wolniejszym procesie przestawało.
+        ToolTip.SetServiceEnabled(window, false);
         return (window, h);
     }
 
@@ -358,6 +364,92 @@ public sealed class QueuePanelTests
         }
         finally { window.Close(); }
     });
+
+    /// <summary>
+    /// Zmiana motywu zmienia też nieprzypięty panel, i wysunięty w tej chwili, i schowany: po zmianie
+    /// wygląda tak samo jak w oknie otwartym od razu w nowym motywie. Kopia tła pod panelem trzymała
+    /// podkład poprzedniego motywu, dopóki panel nie zmienił rozmiaru.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ZmianaMotywuZmieniaNieprzypietyPanel(bool shownDuringChange) => Ui.Run(() =>
+    {
+        // Przez ThemeManager, jak przycisk motywu: zmiana wariantu pociąga za sobą nową paletę tła.
+        var modeBefore = App.Theme.Mode;
+        var other = App.Theme.IsDark ? ThemeMode.Light : ThemeMode.Dark;
+
+        try
+        {
+            Color[] before, afterChange, reference;
+
+            var (window, _) = OpenPeek(tracks: 3);
+            try
+            {
+                Reveal(window);
+                Settle(window);
+                before = PanelSamples(window);
+
+                if (!shownDuringChange)
+                {
+                    Key(window, Avalonia.Input.Key.Escape);
+                    Move(window, Content(window));
+                    Assert.False(window.QueuePanelVisible);
+                }
+
+                App.Theme.SetMode(other);
+                Settle(window);
+
+                // Barwy plam przenikają do palety nowego motywu przez 1,4 s.
+                for (var i = 0; i < 8; i++)
+                {
+                    window.Backdrop.Advance(0.25);
+                    Settle(window);
+                }
+
+                if (!shownDuringChange) Reveal(window);
+                Settle(window);
+                afterChange = PanelSamples(window);
+            }
+            finally { window.Close(); }
+
+            // Odniesienie: okno otwarte już w nowym motywie.
+            var (fresh, _) = OpenPeek(tracks: 3);
+            try
+            {
+                Reveal(fresh);
+                Settle(fresh);
+                reference = PanelSamples(fresh);
+            }
+            finally { fresh.Close(); }
+
+            Assert.True(Distance(reference, before) > 40, $"motyw nie zmienił panelu w ogóle: {Describe(before)} → {Describe(reference)}");
+            Assert.True(Distance(afterChange, reference) < 6,
+                $"panel po zmianie motywu: {Describe(afterChange)}, w oknie otwartym w nowym motywie: {Describe(reference)}, przed zmianą: {Describe(before)}");
+        }
+        finally { App.Theme.SetMode(modeBefore); }
+    });
+
+    /// <summary>Barwy panelu w kilku punktach: nagłówek, środek listy, miejsce nad stopką i stopka.</summary>
+    private static Color[] PanelSamples(MainWindow window)
+    {
+        var bounds = window.QueueColumn.Bounds;
+        Point[] points =
+        [
+            new(bounds.Width / 2, 14),
+            new(bounds.Width - 30, bounds.Height / 2),
+            new(bounds.Width / 2, bounds.Height - 90),
+            new(bounds.Width / 2, bounds.Height - 6),
+        ];
+
+        return points.Select(p => PixelAt(window, window.QueueColumn.TranslatePoint(p, window)!.Value)).ToArray();
+    }
+
+    /// <summary>Największa różnica składowej między dwoma zestawami próbek.</summary>
+    private static int Distance(Color[] a, Color[] b) => a.Zip(b, (x, y) =>
+        Math.Max(Math.Abs(x.R - y.R), Math.Max(Math.Abs(x.G - y.G), Math.Abs(x.B - y.B)))).Max();
+
+    private static string Describe(Color[] samples) => string.Join(" ", samples.Select(c => $"#{c.R:X2}{c.G:X2}{c.B:X2}"));
 
     /// <summary>Barwa piksela wyrenderowanej klatki okna w punkcie w jednostkach okna.</summary>
     private static Color PixelAt(Window window, Point point)

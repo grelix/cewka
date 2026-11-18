@@ -79,6 +79,8 @@ public static class UpdateCheck
 
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(8);
 
+    private const int MaxResponseBytes = 256 * 1024;
+
     /// <summary>
     /// Serwis GitHuba odrzuca żądania bez nagłówka identyfikującego program. Podana jest sama
     /// nazwa i wersja — bez nazwy systemu, nazwy użytkownika czy czegokolwiek o bibliotece.
@@ -128,15 +130,23 @@ public static class UpdateCheck
         return new Version(parsed.Major, parsed.Minor, Math.Max(parsed.Build, 0));
     }
 
-    public static async Task<UpdateResult> LatestAsync(
-        string? repositoryUrl, Version current, CancellationToken token = default)
+    public static Task<UpdateResult> LatestAsync(
+        string? repositoryUrl, Version current, CancellationToken token = default) =>
+        LatestAsync(repositoryUrl, current, null, token);
+
+    internal static async Task<UpdateResult> LatestAsync(
+        string? repositoryUrl, Version current, HttpMessageHandler? handler, CancellationToken token)
     {
         var api = ApiUrl(repositoryUrl);
         if (api is null) return new UpdateResult { Failure = "adres repozytorium nie wskazuje na GitHuba" };
 
         try
         {
-            using var client = new HttpClient { Timeout = Timeout };
+            using var client = handler is null
+                ? new HttpClient { Timeout = Timeout }
+                : new HttpClient(handler, disposeHandler: false) { Timeout = Timeout };
+            // Odpowiedź ma kilka kilobajtów; serwer wysyłający bez końca nie może zająć pamięci.
+            client.MaxResponseContentBufferSize = MaxResponseBytes;
             client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent(current));
             client.DefaultRequestHeaders.Accept.Add(
                 new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
